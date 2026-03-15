@@ -29,7 +29,7 @@ purpose: Amazon has specifically designed their site to be as "sticky" as possib
 for now, give stock images and fake prices and stars and description
 
 ## stack
-- first we will build this in React vite tailwind shadcn supabase. (I did not yet give instructions for db that will come later when i thin more about ux for now we are trying to get a working slice) 
+- first we will build this in React vite tailwind shadcn TanStack Query supabase. (I did not yet give instructions for db that will come later when i thin more about ux for now we are trying to get a working slice) 
 - once i have this working MVP i want to migrate to React native. This may be important when making decicions so it will be easier to migrate
 
 ## TO DO
