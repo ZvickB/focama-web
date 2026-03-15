@@ -1,0 +1,64 @@
+<svg width="560" height="432" viewBox="120 150 560 432" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="focama-f-fill" x1="238" y1="188" x2="553" y2="516" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#365F68" />
+      <stop offset="1" stop-color="#1D363D" />
+    </linearGradient>
+    <linearGradient id="focama-swoosh-fill" x1="146" y1="557" x2="638" y2="367" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F0C96B" />
+      <stop offset="1" stop-color="#D18A1F" />
+    </linearGradient>
+    <filter id="focama-f-glow" x="188" y="150" width="428" height="426" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="10" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="focama-swoosh-glow" x="112" y="332" width="566" height="268" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="10" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g filter="url(#focama-f-glow)">
+    <path
+      d="M333 188H564L552 241C547 262 528 276 507 276H390L380 323H501L489 376C484 397 466 411 444 411H358L345 493L230 531L281 241C287 210 308 188 340 188H333Z"
+      fill="url(#focama-f-fill)"
+      stroke="#69D1E5"
+      stroke-width="7"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M390 276H507"
+      stroke="#D9EEF2"
+      stroke-width="10"
+      stroke-linecap="round"
+      opacity="0.28"
+    />
+    <path
+      d="M380 323H501"
+      stroke="#D9EEF2"
+      stroke-width="10"
+      stroke-linecap="round"
+      opacity="0.2"
+    />
+  </g>
+
+  <g filter="url(#focama-swoosh-glow)">
+    <path
+      d="M146 557C326 555 507 491 638 367C554 476 377 565 146 557Z"
+      fill="url(#focama-swoosh-fill)"
+    />
+    <path
+      d="M146 557C315 547 491 483 638 367"
+      stroke="#BF7918"
+      stroke-width="3"
+      stroke-linecap="round"
+      opacity="0.75"
+    />
+  </g>
+</svg>

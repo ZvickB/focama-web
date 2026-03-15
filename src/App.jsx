@@ -19,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card.jsx'
+import logo from '@/assets/logo_master_version.svg'
 
 const mockCatalog = {
   lego: [
@@ -349,6 +350,19 @@ function App() {
         <section className="rounded-[28px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:rounded-[32px] sm:p-5 lg:p-8">
           <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[1.15fr_0.85fr] lg:items-start lg:gap-8">
             <div className="max-w-3xl space-y-4">
+              <div className="flex items-center gap-3">
+                <img
+                  src={logo}
+                  alt="Focama logo"
+                  className="h-20 w-20 rounded-[22px] bg-stone-50/35 object-contain p-0 shadow-[0_10px_30px_-18px_rgba(15,23,42,0.35)] ring-1 ring-stone-200/35 sm:h-24 sm:w-24"
+                />
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                    Focama
+                  </p>
+                  <p className="text-sm text-slate-600">Distraction-light product search</p>
+                </div>
+              </div>
               <Badge variant="secondary" className="rounded-full px-4 py-1 text-sm">
                 Focused shopping, not endless browsing
               </Badge>
