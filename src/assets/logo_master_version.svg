@@ -5,8 +5,9 @@
       <stop offset="1" stop-color="#1D363D" />
     </linearGradient>
     <linearGradient id="focama-swoosh-fill" x1="146" y1="557" x2="638" y2="367" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F0C96B" />
-      <stop offset="1" stop-color="#D18A1F" />
+      <stop offset="0" stop-color="#F0A126" />
+      <stop offset="0.8" stop-color="#F0A126" />
+      <stop offset="1" stop-color="#CF6F08" />
     </linearGradient>
     <filter id="focama-f-glow" x="188" y="150" width="428" height="426" filterUnits="userSpaceOnUse">
       <feGaussianBlur stdDeviation="10" result="blur" />
@@ -55,10 +56,10 @@
     />
     <path
       d="M146 557C315 547 491 483 638 367"
-      stroke="#BF7918"
+      stroke="#A95906"
       stroke-width="3"
       stroke-linecap="round"
-      opacity="0.75"
+      opacity="0.92"
     />
   </g>
 </svg>

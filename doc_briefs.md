@@ -32,5 +32,9 @@ for now, give stock images and fake prices and stars and description
 - first we will build this in React vite tailwind shadcn TanStack Query supabase. (I did not yet give instructions for db that will come later when i thin more about ux for now we are trying to get a working slice) 
 - once i have this working MVP i want to migrate to React native. This may be important when making decicions so it will be easier to migrate
 
+## workflow preference
+- For small UI or copy changes, prefer using the dev server and manual verification instead of running `npm run build` every time.
+- Reserve `npm run build` for significant changes, routing/layout changes, dependency changes, or meaningful checkpoints before handoff.
+
 ## TO DO
 - decide whether the product detail CTA on mobile should stay sticky at the bottom of the full-screen sheet or scroll naturally with the content
