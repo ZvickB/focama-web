@@ -22,6 +22,7 @@ purpose: Amazon has specifically designed their site to be as "sticky" as possib
 
 ## ui
 - the overall feeling should be one of calm and focus. This directly as opposed to the feeling Amazon gives.
+- UI decisions should be mobile-first. Small-screen layout and usability should be the default starting point, then expand upward for tablet/desktop.
 - there will be a feature for searching history for v1 just put the ui there it wont really work
 - i want it to not look so empty when i start. as i add features it will feel more rounded out. for now put in a couple dummy things maybe nav bar etc.
 - there will be one input for amazon search i.e. "lego" and another one for the chatgpt instructions i.e. "for 9 year old boy with great imagination"
@@ -35,6 +36,8 @@ for now, give stock images and fake prices and stars and description
 ## workflow preference
 - For small UI or copy changes, prefer using the dev server and manual verification instead of running `npm run build` every time.
 - Reserve `npm run build` for significant changes, routing/layout changes, dependency changes, or meaningful checkpoints before handoff.
+- This repo should be treated as a PowerShell environment. Prefer PowerShell-safe commands and avoid Bash-style `&&` chaining.
+- Use `app_flow.md` for the current implemented user flow, temporary MVP behavior, and active integration assumptions. Keep `doc_briefs.md` focused on product intent, UI direction, stack, and longer-term decisions.
 
 ## TO DO
 - decide whether the product detail CTA on mobile should stay sticky at the bottom of the full-screen sheet or scroll naturally with the content

@@ -47,7 +47,7 @@ function Textarea({
         disabled={disabled}
         className="h-12 w-full gap-2 rounded-2xl bg-primary text-base text-primary-foreground hover:bg-primary/90"
       >
-        {disabled ? 'Building brief...' : 'Build buying brief'}
+        {disabled ? 'Finding picks...' : 'Get product picks'}
         {disabled ? <Sparkles className="h-4 w-4 animate-pulse" /> : <Search className="h-4 w-4" />}
       </Button>
     </form>
