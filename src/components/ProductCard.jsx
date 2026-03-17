@@ -35,6 +35,8 @@ function ProductCard({
           className="h-44 w-full object-cover transition duration-500 group-hover:scale-105 sm:h-56"
           src={image}
           alt={title}
+          loading="lazy"
+          decoding="async"
         />
         <Badge className="absolute left-4 top-4 rounded-full bg-white/92 px-3 py-1 text-slate-800 hover:bg-white/92">
           {subtitle}

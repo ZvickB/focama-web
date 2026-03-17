@@ -3,7 +3,7 @@
 ## Purpose of this file
 - This file tracks how the current web app behaves right now.
 - It should hold implementation behavior, temporary adaptations, and MVP assumptions.
-- `doc_briefs.md` should stay focused on product intent, stack direction, and broader decisions.
+- Within `project-notes`, `doc_briefs.md` should stay focused on product intent, stack direction, and broader decisions.
 
 ## Current app structure
 - The site uses React Router with a shared layout shell.
@@ -38,8 +38,10 @@
 - Focama is meant to help users narrow choices before going into a retailer marketplace.
 - Retailer integration should stay flexible.
 - The app should not be tightly designed around one marketplace unless that becomes a stable product decision.
-- Walmart is currently the most practical near-term API direction.
-- Amazon may still be relevant later, but it should be treated as one integration option rather than the identity of the whole app.
+- SerpApi is the current near-term search integration direction.
+- Amazon and Walmart are still likely long-term marketplace destinations.
+- SerpApi is the working integration for now until the search flow is proven and Amazon Creator API access is available.
+- The frontend should not be redesigned around SerpApi because it is a temporary integration layer, not the product identity.
 
 ## UI principles
 - The overall feeling should remain calm, focused, and lower-friction than typical marketplaces.
@@ -57,13 +59,15 @@
   - product-card interaction pattern
 - Placeholder now:
   - search results source
+  - SerpApi integration
   - product ranking logic
   - retailer links
   - persistent history
   - backend and auth flows
 
 ## Next likely implementation steps
-- Replace mocked product results with a real retailer data source.
-- Add server-side API handling for retailer and AI requests.
+- Add a backend route that queries SerpApi.
+- Return the first 4 usable results directly to the frontend before adding AI filtering.
+- After the raw search pipeline works, add AI ranking/filtering on top of a larger result set.
 - Add persistence for search history if it still fits the product direction.
 - Decide how outbound retailer links should work in the modal and cards.

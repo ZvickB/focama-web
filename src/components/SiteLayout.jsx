@@ -12,6 +12,8 @@ const navItems = [
 ]
 
 const mobileMenuItems = navItems.filter((item) => ['/', '/about', '/contact'].includes(item.to))
+const HEADER_COLLAPSE_SCROLL_Y = 72
+const HEADER_EXPAND_SCROLL_Y = 20
 
 function SlidingNav({ items, className = '' }) {
   const location = useLocation()
@@ -50,7 +52,7 @@ function SlidingNav({ items, className = '' }) {
     return () => {
       window.removeEventListener('resize', updateHighlight)
     }
-  }, [location.pathname])
+  }, [items, location.pathname])
 
   return (
     <nav ref={navRef} className={`relative flex flex-wrap items-center gap-2 rounded-full ${className}`}>
@@ -87,12 +89,21 @@ function SlidingNav({ items, className = '' }) {
 
 function SiteLayout() {
   const [isCompact, setIsCompact] = useState(false)
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [mobileMenuOpenPath, setMobileMenuOpenPath] = useState(null)
   const location = useLocation()
+  const isMobileMenuOpen = mobileMenuOpenPath === location.pathname
 
   useEffect(() => {
     function handleScroll() {
-      setIsCompact(window.scrollY > 36)
+      const nextScrollY = window.scrollY
+
+      setIsCompact((currentValue) => {
+        if (currentValue) {
+          return nextScrollY > HEADER_EXPAND_SCROLL_Y
+        }
+
+        return nextScrollY > HEADER_COLLAPSE_SCROLL_Y
+      })
     }
 
     handleScroll()
@@ -102,10 +113,6 @@ function SiteLayout() {
       window.removeEventListener('scroll', handleScroll)
     }
   }, [])
-
-  useEffect(() => {
-    setIsMobileMenuOpen(false)
-  }, [location.pathname])
 
   return (
     <div className="min-h-screen">
@@ -121,6 +128,8 @@ function SiteLayout() {
                 <img
                   src={logo}
                   alt="Focama logo"
+                  width="96"
+                  height="96"
                   className={`rounded-[22px] bg-stone-50/50 object-contain p-1 shadow-[0_10px_30px_-18px_rgba(15,23,42,0.35)] ring-1 ring-stone-200/50 transition-all duration-300 ease-out ${
                     isCompact ? 'h-12 w-12 sm:h-14 sm:w-14' : 'h-20 w-20 sm:h-24 sm:w-24'
                   }`}
@@ -141,7 +150,11 @@ function SiteLayout() {
               type="button"
               aria-expanded={isMobileMenuOpen}
               aria-label="Toggle navigation menu"
-              onClick={() => setIsMobileMenuOpen((open) => !open)}
+              onClick={() =>
+                setMobileMenuOpenPath((openPath) =>
+                  openPath === location.pathname ? null : location.pathname,
+                )
+              }
               className="mt-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/80 bg-white/80 text-slate-700 shadow-[0_12px_30px_-18px_rgba(15,23,42,0.35)] transition hover:text-slate-900 sm:hidden"
             >
               {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
