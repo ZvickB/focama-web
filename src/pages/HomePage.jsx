@@ -19,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card.jsx'
+import { validateSearchInput } from '../../backend/lib/search-data.js'
 
 const starterPrompts = [
   {
@@ -228,11 +229,10 @@ function HomePage() {
   const [hasSearched, setHasSearched] = useState(false)
 
   async function runSearch(nextQuery, nextDetails) {
-    const trimmedQuery = nextQuery.trim()
-    const trimmedDetails = nextDetails.trim()
+    const { error, isValid, normalizedDetails, normalizedQuery } = validateSearchInput(nextQuery, nextDetails)
 
-    if (!trimmedQuery) {
-      setErrorMessage('Please enter a product topic first.')
+    if (!isValid) {
+      setErrorMessage(error)
       return
     }
 
@@ -243,13 +243,13 @@ function HomePage() {
 
     try {
       const nextResults = await fetchSearchResults({
-        query: trimmedQuery,
-        details: trimmedDetails,
+        query: normalizedQuery,
+        details: normalizedDetails,
       })
 
       setResults(nextResults)
-      setSubmittedQuery(trimmedQuery)
-      setSubmittedDetails(trimmedDetails)
+      setSubmittedQuery(normalizedQuery)
+      setSubmittedDetails(normalizedDetails)
     } catch (error) {
       setResults([])
       setErrorMessage(error instanceof Error ? error.message : 'Search failed.')

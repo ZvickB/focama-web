@@ -41,6 +41,21 @@ describe('HomePage', () => {
     expect(screen.getByText('Please enter a product topic first.')).toBeInTheDocument()
   })
 
+  it('shows a validation error for obvious gibberish queries', async () => {
+    const user = userEvent.setup()
+
+    render(<HomePage />)
+
+    const productInput = screen.getByLabelText(/product topic/i)
+    await user.clear(productInput)
+    await user.type(productInput, 'jhljlhl')
+    await user.click(screen.getByRole('button', { name: /get product picks/i }))
+
+    expect(
+      screen.getByText('Try a real product topic, like "lego", "desk lamp", or "travel stroller".'),
+    ).toBeInTheDocument()
+  })
+
   it('shows loading copy while waiting for search results', async () => {
     const user = userEvent.setup()
     let resolveFetch

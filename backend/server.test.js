@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('./lib/search-data.js', () => ({
+vi.mock('./lib/search-data.js', async () => {
+  const actual = await vi.importActual('./lib/search-data.js')
+
+  return {
+    ...actual,
   SERPAPI_ENDPOINT: 'https://serpapi.com/search.json',
   buildCacheKey: vi.fn((productQuery, details) => `${productQuery}|${details}`),
   buildQuery: vi.fn((productQuery, details) => [productQuery, details].filter(Boolean).join(' ').trim()),
   getEnv: vi.fn(),
   getNormalizedResults: vi.fn(),
   readSearchCache: vi.fn(),
-}))
+  }
+})
 
 import { handleCachedSearch, handleLiveSearch } from './server.js'
 import {
@@ -75,6 +80,19 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(500)
     expect(JSON.parse(response.body)).toEqual({
       error: 'SERPAPI_API_KEY is missing from the root .env file.',
+    })
+  })
+
+  it('rejects obvious gibberish product queries before calling SerpApi', async () => {
+    getEnv.mockReturnValue('test-key')
+
+    const response = createResponseRecorder()
+
+    await handleLiveSearch(new URL('http://localhost/api/search/live?query=jhljlhl'), response)
+
+    expect(response.statusCode).toBe(400)
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'Try a real product topic, like "lego", "desk lamp", or "travel stroller".',
     })
   })
 

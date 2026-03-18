@@ -4,6 +4,7 @@ import {
   buildCacheKey,
   getNormalizedResults,
   normalizeResult,
+  validateSearchInput,
 } from './search-data.js'
 
 describe('search-data helpers', () => {
@@ -57,5 +58,23 @@ describe('search-data helpers', () => {
 
     expect(results).toHaveLength(1)
     expect(results[0].title).toBe('Desk Lamp')
+  })
+
+  it('rejects gibberish product queries', () => {
+    expect(validateSearchInput('jhljlhl')).toEqual({
+      isValid: false,
+      error: 'Try a real product topic, like "lego", "desk lamp", or "travel stroller".',
+      normalizedQuery: 'jhljlhl',
+      normalizedDetails: '',
+    })
+  })
+
+  it('normalizes valid query and details input', () => {
+    expect(validateSearchInput('  desk   lamp ', '  for a small office  ')).toEqual({
+      isValid: true,
+      error: '',
+      normalizedQuery: 'desk lamp',
+      normalizedDetails: 'for a small office',
+    })
   })
 })

@@ -7,6 +7,7 @@ import {
   getEnv,
   getNormalizedResults,
   readSearchCache,
+  validateSearchInput,
 } from './lib/search-data.js'
 
 const PORT = Number(process.env.PORT || 8787)
@@ -22,15 +23,15 @@ export function sendJson(response, statusCode, payload) {
 export async function handleCachedSearch(requestUrl, response) {
   const productQuery = requestUrl.searchParams.get('query')?.trim() || ''
   const details = requestUrl.searchParams.get('details')?.trim() || ''
-  const combinedQuery = buildQuery(productQuery, details)
+  const { error, isValid, normalizedDetails, normalizedQuery } = validateSearchInput(productQuery, details)
 
-  if (!combinedQuery) {
-    sendJson(response, 400, { error: 'A product query is required.' })
+  if (!isValid) {
+    sendJson(response, 400, { error })
     return
   }
 
   const cache = readSearchCache()
-  const cacheEntry = cache.entries?.[buildCacheKey(productQuery, details)]
+  const cacheEntry = cache.entries?.[buildCacheKey(normalizedQuery, normalizedDetails)]
 
   if (cacheEntry?.results?.length) {
     sendJson(response, 200, {
@@ -57,16 +58,16 @@ export async function handleLiveSearch(requestUrl, response) {
 
   const productQuery = requestUrl.searchParams.get('query')?.trim() || ''
   const details = requestUrl.searchParams.get('details')?.trim() || ''
-  const combinedQuery = buildQuery(productQuery, details)
+  const { error, isValid, normalizedDetails, normalizedQuery } = validateSearchInput(productQuery, details)
 
-  if (!combinedQuery) {
-    sendJson(response, 400, { error: 'A product query is required.' })
+  if (!isValid) {
+    sendJson(response, 400, { error })
     return
   }
 
   const searchUrl = new URL(SERPAPI_ENDPOINT)
   searchUrl.searchParams.set('engine', 'google_shopping')
-  searchUrl.searchParams.set('q', combinedQuery)
+  searchUrl.searchParams.set('q', buildQuery(normalizedQuery, normalizedDetails))
   searchUrl.searchParams.set('api_key', apiKey)
   searchUrl.searchParams.set('gl', 'us')
   searchUrl.searchParams.set('hl', 'en')
