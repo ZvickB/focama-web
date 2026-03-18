@@ -203,10 +203,10 @@ async function fetchSearchResults({ query, details }) {
     try {
       payload = JSON.parse(rawBody)
     } catch {
-      throw new Error('The backend returned an invalid response. Make sure `npm run server` is running.')
+      throw new Error('The search function returned an invalid response. Check the local server or Vercel function logs.')
     }
   } else {
-    throw new Error('The backend returned an empty response. Make sure `npm run server` is running.')
+    throw new Error('The search function returned an empty response. Check the local server or Vercel function logs.')
   }
 
   if (!response.ok) {
@@ -299,7 +299,7 @@ function HomePage() {
                   <Wand2 className="h-5 w-5 text-primary" />
                   <p className="mt-4 text-sm font-medium text-slate-900">Curated results</p>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Four cached raw results now, with ranking and filtering added later.
+                    Four live raw results now, with ranking and filtering added later.
                   </p>
                 </div>
                 <div className="rounded-3xl border border-stone-200 bg-stone-50/80 p-4">
@@ -318,12 +318,12 @@ function HomePage() {
                   <Badge className="rounded-full bg-primary px-3 py-1 text-primary-foreground hover:bg-primary">
                     Search builder
                   </Badge>
-                  <span className="text-sm text-slate-500">Cached test data</span>
+                  <span className="text-sm text-slate-500">Live search route</span>
                 </div>
                 <CardTitle className="text-2xl text-slate-900">Describe what you need</CardTitle>
                 <CardDescription className="text-base leading-7 text-slate-600">
-                  This testing pass keeps the current UI and reads from a saved 6-item backend
-                  cache so we can avoid burning extra API calls.
+                  This pass keeps the current UI and now pulls live SerpApi results through the
+                  deployed search function shape.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -356,7 +356,7 @@ function HomePage() {
                 </CardTitle>
                 <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
                   {isLoading
-                    ? 'Keeping the existing skeleton flow while the saved test results load.'
+                    ? 'Keeping the existing skeleton flow while the live search results load.'
                     : hasSearched
                       ? submittedDetails
                       : 'Enter a product topic and context, then press Get product picks to test the full flow.'}
@@ -367,7 +367,7 @@ function HomePage() {
                   Tap a card for details
                 </div>
                 <p className="max-w-md text-sm leading-6 text-slate-500 sm:text-right">
-                  These cards now show saved raw search results while retailer links and filtering
+                  These cards now show live raw search results while retailer links and filtering
                   still come later.
                 </p>
               </div>
@@ -403,7 +403,7 @@ function HomePage() {
                   <CardTitle className="text-xl">Starting prompts</CardTitle>
                 </div>
                 <CardDescription className="leading-7 text-slate-600">
-                  Quick examples for the current cached search flow.
+                  Quick examples for the current live search flow.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">

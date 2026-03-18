@@ -55,7 +55,7 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /get product picks/i }))
 
     expect(screen.getByText('Curating your options...')).toBeInTheDocument()
-    expect(screen.getByText(/saved test results load/i)).toBeInTheDocument()
+    expect(screen.getByText(/live search results load/i)).toBeInTheDocument()
 
     resolveFetch({
       ok: true,
@@ -72,7 +72,7 @@ describe('HomePage', () => {
       'fetch',
       vi.fn().mockResolvedValue({
         ok: false,
-        text: async () => JSON.stringify({ error: 'No cached test results exist for this search yet.' }),
+        text: async () => JSON.stringify({ error: 'SerpApi request failed.' }),
       }),
     )
 
@@ -80,7 +80,7 @@ describe('HomePage', () => {
 
     await user.click(screen.getByRole('button', { name: /get product picks/i }))
 
-    expect(await screen.findByText('No cached test results exist for this search yet.')).toBeInTheDocument()
+    expect(await screen.findByText('SerpApi request failed.')).toBeInTheDocument()
   })
 
   it('renders returned results after a successful search', async () => {

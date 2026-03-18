@@ -37,8 +37,11 @@ for now, give stock images and fake prices and stars and description
 ## current implementation direction
 - Keep the current frontend UI mostly as-is.
 - Do not redesign the interface around SerpApi right now.
+- The product should stay vendor-agnostic in both UX and backend structure so different search/data providers can support different tiers over time.
+- The frontend and normalized backend response shape should belong to Focama rather than to any one provider, even if SerpApi remains useful in some plans.
 - The site may eventually point users to Amazon or Walmart, so the frontend should stay flexible for those destinations.
 - SerpApi is the practical interim data source until the product flow is working and Amazon Creator API approval is in place.
+- SerpApi may still remain part of the product later for broader paid-tier search, so it should be treated as a provider option rather than as the identity of the app.
 - The current priority is the simplest backend vertical slice:
   - query SerpApi
   - return 4 results

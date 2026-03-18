@@ -19,7 +19,7 @@ export function sendJson(response, statusCode, payload) {
   response.end(JSON.stringify(payload))
 }
 
-export async function handleSearch(requestUrl, response) {
+export async function handleCachedSearch(requestUrl, response) {
   const productQuery = requestUrl.searchParams.get('query')?.trim() || ''
   const details = requestUrl.searchParams.get('details')?.trim() || ''
   const combinedQuery = buildQuery(productQuery, details)
@@ -116,12 +116,17 @@ export function createApiServer() {
     }
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search') {
-      await handleSearch(requestUrl, response)
+      await handleLiveSearch(requestUrl, response)
       return
     }
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search/live') {
       await handleLiveSearch(requestUrl, response)
+      return
+    }
+
+    if (request.method === 'GET' && requestUrl.pathname === '/api/search/cache') {
+      await handleCachedSearch(requestUrl, response)
       return
     }
 

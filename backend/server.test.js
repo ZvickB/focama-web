@@ -9,7 +9,7 @@ vi.mock('./lib/search-data.js', () => ({
   readSearchCache: vi.fn(),
 }))
 
-import { handleLiveSearch, handleSearch } from './server.js'
+import { handleCachedSearch, handleLiveSearch } from './server.js'
 import {
   getEnv,
   getNormalizedResults,
@@ -55,7 +55,7 @@ describe('server handlers', () => {
 
     const response = createResponseRecorder()
 
-    await handleSearch(new URL('http://localhost/api/search?query=lego&details=for%20kids'), response)
+    await handleCachedSearch(new URL('http://localhost/api/search/cache?query=lego&details=for%20kids'), response)
 
     expect(response.statusCode).toBe(200)
     expect(JSON.parse(response.body)).toEqual({
