@@ -19,7 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card.jsx'
-import { validateSearchInput } from '../../backend/lib/search-data.js'
+import { validateSearchInput } from '../../shared/search-input.js'
 
 const starterPrompts = [
   {
@@ -39,20 +39,36 @@ const starterPrompts = [
   },
 ]
 
+const RESULT_CARD_COUNT = 4
+const RESULT_CARD_SLOTS = Array.from({ length: RESULT_CARD_COUNT }, (_, index) => index)
+
 function ResultSkeleton() {
+  function SkeletonBlock({ className }) {
+    return (
+      <div className={`relative overflow-hidden rounded-full bg-stone-200/80 ${className}`}>
+        <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" />
+      </div>
+    )
+  }
+
   return (
     <div className="h-full overflow-hidden rounded-[24px] border border-stone-200/80 bg-white/85 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] sm:rounded-[28px]">
-      <div className="h-44 animate-pulse bg-stone-200 sm:h-56" />
+      <div className="relative h-44 overflow-hidden bg-stone-200/90 sm:h-56">
+        <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" />
+      </div>
       <div className="space-y-4 p-5 sm:p-6">
-        <div className="h-5 w-24 animate-pulse rounded-full bg-stone-200" />
-        <div className="h-7 w-3/4 animate-pulse rounded-full bg-stone-200" />
-        <div className="h-4 w-1/2 animate-pulse rounded-full bg-stone-200" />
+        <SkeletonBlock className="h-5 w-24" />
+        <SkeletonBlock className="h-7 w-3/4" />
+        <SkeletonBlock className="h-4 w-1/2" />
         <div className="space-y-2 pt-2">
-          <div className="h-4 w-full animate-pulse rounded-full bg-stone-200" />
-          <div className="h-4 w-full animate-pulse rounded-full bg-stone-200" />
-          <div className="h-4 w-2/3 animate-pulse rounded-full bg-stone-200" />
+          <SkeletonBlock className="h-4 w-full" />
+          <SkeletonBlock className="h-4 w-full" />
+          <SkeletonBlock className="h-4 w-2/3" />
         </div>
-        <div className="h-11 w-full animate-pulse rounded-2xl bg-stone-200" />
+        <div className="relative overflow-hidden rounded-2xl bg-stone-200/80">
+          <div className="h-11 w-full" />
+          <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" />
+        </div>
       </div>
     </div>
   )
@@ -280,7 +296,7 @@ function HomePage() {
               </Badge>
               <div className="space-y-3">
                 <h1 className="max-w-2xl text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-                  Search once. Get four calm, useful picks.
+                  Search once. Get {RESULT_CARD_COUNT} calm, useful picks.
                 </h1>
                 <p className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-lg">
                   Focama is designed to help users describe what they need, see a short curated set
@@ -299,7 +315,7 @@ function HomePage() {
                   <Wand2 className="h-5 w-5 text-primary" />
                   <p className="mt-4 text-sm font-medium text-slate-900">Curated results</p>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Four live raw results now, with ranking and filtering added later.
+                    {RESULT_CARD_COUNT} live raw results now, with ranking and filtering added later.
                   </p>
                 </div>
                 <div className="rounded-3xl border border-stone-200 bg-stone-50/80 p-4">
@@ -356,7 +372,7 @@ function HomePage() {
                 </CardTitle>
                 <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
                   {isLoading
-                    ? 'Keeping the existing skeleton flow while the live search results load.'
+                    ? 'Loading live search results into the current card layout.'
                     : hasSearched
                       ? submittedDetails
                       : 'Enter a product topic and context, then press Get product picks to test the full flow.'}
@@ -379,9 +395,24 @@ function HomePage() {
                 </div>
               ) : null}
 
+              {isLoading ? (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="mb-4 flex items-center gap-3 rounded-full border border-stone-200/80 bg-stone-50/90 px-4 py-2.5 text-sm text-slate-600 sm:mb-5"
+                >
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
+                    <span className="relative mt-[1px] h-2.5 w-2.5 rounded-full bg-primary/70" />
+                  </span>
+                  <span>Searching products and preparing the cards...</span>
+                  <span className="hidden h-px flex-1 rounded-full bg-gradient-to-r from-primary/35 via-primary/10 to-transparent animate-soft-pulse sm:block" />
+                </div>
+              ) : null}
+
               <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-3">
                 {isLoading
-                  ? Array.from({ length: 4 }).map((_, index) => (
+                  ? RESULT_CARD_SLOTS.map((index) => (
                       <div key={index}>
                         <ResultSkeleton />
                       </div>
