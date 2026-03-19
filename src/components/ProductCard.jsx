@@ -38,9 +38,12 @@ function ProductCard({
           loading="lazy"
           decoding="async"
         />
-        <Badge className="absolute left-4 top-4 rounded-full bg-white/92 px-3 py-1 text-slate-800 hover:bg-white/92">
-          {subtitle}
-        </Badge>
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-slate-950/24 via-slate-900/8 to-transparent" />
+        <div className="absolute left-4 top-4">
+          <Badge className="rounded-full border border-white/70 bg-white/96 px-3 py-1 text-slate-900 shadow-[0_10px_24px_-16px_rgba(15,23,42,0.8)] backdrop-blur-md hover:bg-white/96">
+            {subtitle}
+          </Badge>
+        </div>
       </div>
       <CardHeader className="space-y-3 p-5 sm:space-y-4 sm:p-6">
         <div className="flex items-start justify-between gap-3">
