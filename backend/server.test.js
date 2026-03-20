@@ -32,6 +32,7 @@ vi.mock('./lib/search-data.js', async () => {
 })
 
 import { handleCachedSearch, handleLiveSearch } from './server.js'
+import { resetRateLimitStore } from './lib/rate-limit.js'
 import { selectAiResults } from './lib/ai-selector.js'
 import { getFilteredSearchArtifacts } from './lib/result-filter.js'
 import {
@@ -58,6 +59,7 @@ describe('server handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllGlobals()
+    resetRateLimitStore()
   })
 
   it('returns cached search results and slices them to four items', async () => {
@@ -127,6 +129,70 @@ describe('server handlers', () => {
     })
   })
 
+  it('rate limits repeated live searches from the same ip address', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'SERPAPI_API_KEY') {
+        return 'serp-key'
+      }
+
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      return ''
+    })
+
+    getFilteredSearchArtifacts.mockReturnValue({
+      candidatePool: {
+        query: 'stroller',
+        details: '',
+        combinedSearchText: 'stroller',
+        searchState: 'Results for exact spelling',
+        similarQueries: [],
+        candidates: [],
+      },
+      results: [{ id: 'live-1', title: 'Travel stroller' }],
+    })
+    selectAiResults.mockResolvedValue({
+      model: 'gpt-5-mini',
+      selectedCandidateIds: ['live-1'],
+      results: [{ id: 'live-1', title: 'Travel stroller', reasons: [], drawbacks: [] }],
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ shopping_results: [{ title: 'Travel stroller' }] }),
+      }),
+    )
+
+    for (let index = 0; index < 5; index += 1) {
+      const response = createResponseRecorder()
+
+      await handleLiveSearch(
+        new URL('http://localhost/api/search/live?query=stroller'),
+        response,
+        { headers: { 'x-forwarded-for': '203.0.113.10' } },
+      )
+
+      expect(response.statusCode).toBe(200)
+    }
+
+    const limitedResponse = createResponseRecorder()
+
+    await handleLiveSearch(
+      new URL('http://localhost/api/search/live?query=stroller'),
+      limitedResponse,
+      { headers: { 'x-forwarded-for': '203.0.113.10' } },
+    )
+
+    expect(limitedResponse.statusCode).toBe(429)
+    expect(JSON.parse(limitedResponse.body)).toEqual({
+      error: 'Too many searches from this connection. Please wait a minute and try again.',
+    })
+  })
+
   it('returns normalized live search results when SerpApi succeeds', async () => {
     getEnv.mockImplementation((name) => {
       if (name === 'SERPAPI_API_KEY') {
@@ -187,6 +253,7 @@ describe('server handlers', () => {
           title: 'Travel stroller',
           subtitle: 'Target',
           reasons: ['AI fit: Best for airport travel'],
+          drawbacks: ['Pricier than some umbrella strollers.'],
         },
       ],
     })
@@ -249,6 +316,7 @@ describe('server handlers', () => {
           title: 'Travel stroller',
           subtitle: 'Target',
           reasons: ['AI fit: Best for airport travel'],
+          drawbacks: ['Pricier than some umbrella strollers.'],
         },
       ],
       selection: {

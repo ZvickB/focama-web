@@ -118,7 +118,7 @@ function ProductDetailModal({ item, onClose }) {
               Product details
             </p>
             <p className="text-sm text-slate-600">
-              Raw search results now fill this preview while retailer links come later
+              AI-picked product details with tradeoffs while retailer links come later
             </p>
           </div>
           <Button
@@ -181,6 +181,22 @@ function ProductDetailModal({ item, onClose }) {
               </CardContent>
             </Card>
 
+            {item.drawbacks?.length ? (
+              <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg text-slate-900">Possible drawbacks</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
+                  {item.drawbacks.map((drawback) => (
+                    <div key={drawback} className="flex items-start gap-3">
+                      <span className="mt-1 h-2.5 w-2.5 rounded-full bg-stone-400" />
+                      <span>{drawback}</span>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ) : null}
+
             <div className="sticky bottom-0 flex flex-col gap-3 border-t border-stone-200/80 bg-[#fcf8f1]/95 py-4 backdrop-blur sm:flex-row">
               <div className="flex-1 space-y-2">
                 <Button
@@ -237,7 +253,10 @@ async function fetchSearchResults({ query, details }) {
     throw new Error(payload.error || 'Search failed.')
   }
 
-  return payload.results || []
+  return {
+    results: payload.results || [],
+    selection: payload.selection || null,
+  }
 }
 
 function HomePage() {
@@ -250,6 +269,7 @@ function HomePage() {
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [hasSearched, setHasSearched] = useState(false)
+  const [selectionMeta, setSelectionMeta] = useState(null)
 
   async function runSearch(nextQuery, nextDetails) {
     const { error, isValid, normalizedDetails, normalizedQuery } = validateSearchInput(nextQuery, nextDetails)
@@ -265,16 +285,16 @@ function HomePage() {
     setHasSearched(true)
 
     try {
-      const nextResults = await fetchSearchResults({
+      const nextPayload = await fetchSearchResults({
         query: normalizedQuery,
         details: normalizedDetails,
       })
 
-      setResults(nextResults)
+      setResults(nextPayload.results)
+      setSelectionMeta(nextPayload.selection)
       setSubmittedQuery(normalizedQuery)
       setSubmittedDetails(normalizedDetails)
     } catch (error) {
-      setResults([])
       setErrorMessage(error instanceof Error ? error.message : 'Search failed.')
     } finally {
       setIsLoading(false)
@@ -345,8 +365,8 @@ function HomePage() {
                 </div>
                 <CardTitle className="text-2xl text-slate-900">Describe what you need</CardTitle>
                 <CardDescription className="text-base leading-7 text-slate-600">
-                  The backend now cleans the shopping results first, then uses AI to choose the
-                  final cards from that candidate pool.
+                  The backend now cleans the shopping results first, then AI chooses the final
+                  cards and calls out the main tradeoffs.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -382,7 +402,7 @@ function HomePage() {
                     ? 'Cleaning candidates and preparing AI-picked cards.'
                     : hasSearched
                       ? submittedDetails
-                      : 'Enter a product topic and context, then press Get product picks to test the full AI selection flow.'}
+                      : 'Enter a product topic and context, then use AI Help to get the final picks.'}
                 </CardDescription>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -391,7 +411,7 @@ function HomePage() {
                 </div>
                 <p className="max-w-md text-sm leading-6 text-slate-500 sm:text-right">
                   These cards now come from a cleaned candidate pool with AI making the final
-                  selection. Retailer links still come later.
+                  selection and calling out the main drawback for each pick.
                 </p>
               </div>
             </CardHeader>
@@ -417,6 +437,15 @@ function HomePage() {
                 </div>
               ) : null}
 
+              {selectionMeta && !isLoading ? (
+                <div className="mb-4 rounded-3xl border border-stone-200/80 bg-stone-50/90 px-4 py-3 text-sm text-slate-600 sm:mb-5">
+                  <span className="font-medium text-slate-800">Selection path:</span> AI Help.
+                  {selectionMeta.mode === 'ai'
+                    ? ' The AI-picked set came from the cleaned candidate pool.'
+                    : ' Rules-only fallback was used because the AI request failed.'}
+                </div>
+              ) : null}
+
               <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-3">
                 {isLoading
                   ? RESULT_CARD_SLOTS.map((index) => (
@@ -424,12 +453,18 @@ function HomePage() {
                         <ResultSkeleton />
                       </div>
                     ))
-                  : results.map((item) => (
-                      <div key={item.id}>
-                        <ProductCard {...item} onSelect={() => setSelectedProduct(item)} />
-                      </div>
-                    ))}
+                  : null}
               </div>
+
+              {!isLoading ? (
+                <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-3">
+                  {results.map((item) => (
+                    <div key={item.id}>
+                      <ProductCard {...item} onSelect={() => setSelectedProduct(item)} />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -473,15 +508,15 @@ function HomePage() {
               <CardContent className="space-y-4 text-sm leading-6 text-white/80">
                 <div className="flex items-start gap-3">
                   <Star className="mt-0.5 h-4 w-4 text-amber-300" />
-                  Amazon, Walmart, or other retailer destinations
+                  AI-selected picks with better context awareness
+                </div>
+                <div className="flex items-start gap-3">
+                  <Star className="mt-0.5 h-4 w-4 text-amber-300" />
+                  Clear tradeoffs so the user sees drawbacks too
                 </div>
                 <div className="flex items-start gap-3">
                   <Star className="mt-0.5 h-4 w-4 text-amber-300" />
                   Better retailer links and richer product detail
-                </div>
-                <div className="flex items-start gap-3">
-                  <Star className="mt-0.5 h-4 w-4 text-amber-300" />
-                  Real outbound links and history persistence
                 </div>
               </CardContent>
             </Card>

@@ -1,6 +1,7 @@
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_OPENAI_MODEL, selectAiResults } from './lib/ai-selector.js'
+import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, takeRateLimitToken } from './lib/rate-limit.js'
 import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './lib/result-filter.js'
 import {
   SERPAPI_ENDPOINT,
@@ -16,6 +17,9 @@ const LIVE_RESULT_FILTER_CONFIG = {
   ...DEFAULT_FILTER_CONFIG,
   candidatePoolSize: 20,
   finalResultLimit: 4,
+}
+const LIVE_SEARCH_RATE_LIMIT = {
+  ...DEFAULT_RATE_LIMIT_CONFIG,
 }
 
 export function sendJson(response, statusCode, payload) {
@@ -54,7 +58,7 @@ export async function handleCachedSearch(requestUrl, response) {
   })
 }
 
-export async function handleLiveSearch(requestUrl, response) {
+export async function handleLiveSearch(requestUrl, response, request = { headers: {} }) {
   const serpApiKey = getEnv('SERPAPI_API_KEY')
   const openAiApiKey = getEnv('OPENAI_API_KEY')
 
@@ -65,6 +69,16 @@ export async function handleLiveSearch(requestUrl, response) {
 
   if (!openAiApiKey) {
     sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
+    return
+  }
+
+  const clientIpAddress = getClientIpAddress(request.headers || {})
+  const rateLimit = takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
+
+  if (!rateLimit.allowed) {
+    sendJson(response, 429, {
+      error: 'Too many searches from this connection. Please wait a minute and try again.',
+    })
     return
   }
 
@@ -145,7 +159,11 @@ export async function handleLiveSearch(requestUrl, response) {
       }
     }
 
-    sendJson(response, 200, { candidatePool, results, selection })
+    sendJson(response, 200, {
+      candidatePool,
+      results,
+      selection,
+    })
   } catch (error) {
     sendJson(response, 500, {
       error: 'Unable to reach SerpApi.',
@@ -169,12 +187,12 @@ export function createApiServer() {
     }
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search') {
-      await handleLiveSearch(requestUrl, response)
+      await handleLiveSearch(requestUrl, response, request)
       return
     }
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search/live') {
-      await handleLiveSearch(requestUrl, response)
+      await handleLiveSearch(requestUrl, response, request)
       return
     }
 

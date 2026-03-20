@@ -53,6 +53,7 @@ function buildSelectionPrompt({ candidatePool, finalResultLimit }) {
     '3. Quality and trust using rating and review count.',
     '4. Diversity across style, merchant, or use case when helpful.',
     '5. Avoid near-duplicates unless they are meaningfully different.',
+    '6. Be honest about tradeoffs. Each pick should include one short drawback or caution.',
     `Return up to ${desiredCount} picks. If there are at least ${desiredCount} strong candidates, return exactly ${desiredCount}.`,
     'Only choose from the provided candidate ids.',
     '',
@@ -85,8 +86,11 @@ function buildSelectionSchema() {
             rationale: {
               type: 'string',
             },
+            drawback: {
+              type: 'string',
+            },
           },
-          required: ['candidate_id', 'rationale'],
+          required: ['candidate_id', 'rationale', 'drawback'],
           additionalProperties: false,
         },
       },
@@ -106,6 +110,7 @@ function buildUiResult(candidate, rationale) {
     reviewCount: candidate.reviewCount,
     description: candidate.description,
     reasons: rationale ? [`AI fit: ${rationale}`, ...candidate.reasons] : candidate.reasons,
+    drawbacks: [],
     image: candidate.image,
     link: candidate.link,
   }
@@ -202,6 +207,7 @@ export async function selectAiResults(
     selected.push({
       candidateId,
       rationale: pick?.rationale?.trim() || '',
+      drawback: pick?.drawback?.trim() || '',
       candidate,
     })
     seen.add(candidateId)
@@ -214,6 +220,9 @@ export async function selectAiResults(
   return {
     model,
     selectedCandidateIds: selected.map((entry) => entry.candidateId),
-    results: selected.map((entry) => buildUiResult(entry.candidate, entry.rationale)),
+    results: selected.map((entry) => ({
+      ...buildUiResult(entry.candidate, entry.rationale),
+      drawbacks: entry.drawback ? [entry.drawback] : [],
+    })),
   }
 }

@@ -43,10 +43,12 @@ describe('ai selector', () => {
             {
               candidate_id: 'prod-2',
               rationale: 'Best fit for airport travel and strong reviews.',
+              drawback: 'Pricier than the cheapest compact options.',
             },
             {
               candidate_id: 'prod-1',
               rationale: 'A solid backup with a similar lightweight profile.',
+              drawback: 'Fewer reviews than the top pick.',
             },
           ],
         }),
@@ -89,6 +91,7 @@ describe('ai selector', () => {
     expect(result.selectedCandidateIds).toEqual(['prod-2', 'prod-1'])
     expect(result.results[0].title).toBe('Compact airport stroller')
     expect(result.results[0].reasons[0]).toBe('AI fit: Best fit for airport travel and strong reviews.')
+    expect(result.results[0].drawbacks).toEqual(['Pricier than the cheapest compact options.'])
   })
 
   it('ignores invalid or duplicate candidate ids from the model output', async () => {
@@ -101,9 +104,9 @@ describe('ai selector', () => {
               {
                 text: JSON.stringify({
                   picks: [
-                    { candidate_id: 'missing-id', rationale: 'Not real.' },
-                    { candidate_id: 'prod-1', rationale: 'Valid.' },
-                    { candidate_id: 'prod-1', rationale: 'Duplicate.' },
+                    { candidate_id: 'missing-id', rationale: 'Not real.', drawback: 'Not real downside.' },
+                    { candidate_id: 'prod-1', rationale: 'Valid.', drawback: 'Some caution.' },
+                    { candidate_id: 'prod-1', rationale: 'Duplicate.', drawback: 'Duplicate caution.' },
                   ],
                 }),
               },
@@ -130,5 +133,6 @@ describe('ai selector', () => {
 
     expect(result.selectedCandidateIds).toEqual(['prod-1'])
     expect(result.results).toHaveLength(1)
+    expect(result.results[0].drawbacks).toEqual(['Some caution.'])
   })
 })

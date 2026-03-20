@@ -9,6 +9,7 @@ import {
 
 function ProductCard({
   description,
+  drawbacks = [],
   image,
   onSelect,
   price,
@@ -71,6 +72,11 @@ function ProductCard({
         <p className="line-clamp-2 text-sm leading-6 text-slate-600 sm:line-clamp-none">
           {description}
         </p>
+        {drawbacks[0] ? (
+          <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-500">
+            <span className="font-medium text-slate-700">Tradeoff:</span> {drawbacks[0]}
+          </p>
+        ) : null}
       </CardContent>
       <CardContent className="flex items-center justify-between p-5 pt-4 text-sm font-medium text-slate-500 sm:p-6 sm:pt-4">
         <span>Tap for details</span>

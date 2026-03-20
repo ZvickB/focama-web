@@ -14,6 +14,7 @@ function createMockResult(overrides = {}) {
     reviewCount: 87,
     description: 'Lightweight and easy to fold.',
     reasons: ['Source: Target', 'Free delivery', 'Listed around $129.99'],
+    drawbacks: ['Pricier than the smallest umbrella stroller options.'],
     image: 'https://example.com/stroller.jpg',
     link: 'https://example.com/stroller',
     ...overrides,
@@ -36,7 +37,7 @@ describe('HomePage', () => {
 
     const productInput = screen.getByLabelText(/product topic/i)
     await user.clear(productInput)
-    await user.click(screen.getByRole('button', { name: /get product picks/i }))
+    await user.click(screen.getByRole('button', { name: /ai help/i }))
 
     expect(screen.getByText('Please enter a product topic first.')).toBeInTheDocument()
   })
@@ -49,7 +50,7 @@ describe('HomePage', () => {
     const productInput = screen.getByLabelText(/product topic/i)
     await user.clear(productInput)
     await user.type(productInput, 'jhljlhl')
-    await user.click(screen.getByRole('button', { name: /get product picks/i }))
+    await user.click(screen.getByRole('button', { name: /ai help/i }))
 
     expect(
       screen.getByText('Try a real product topic, like "lego", "desk lamp", or "travel stroller".'),
@@ -67,20 +68,18 @@ describe('HomePage', () => {
 
     render(<HomePage />)
 
-    await user.click(screen.getByRole('button', { name: /get product picks/i }))
+    await user.click(screen.getByRole('button', { name: /ai help/i }))
 
     expect(screen.getByText('Curating your options...')).toBeInTheDocument()
     expect(screen.getByText(/cleaning candidates and preparing ai-picked cards/i)).toBeInTheDocument()
-    expect(
-      screen.getByText(/searching products, cleaning candidates, and preparing the cards/i),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/searching products, cleaning candidates, and preparing the cards/i)).toBeInTheDocument()
 
     resolveFetch({
       ok: true,
       text: async () => JSON.stringify({ results: [createMockResult()] }),
     })
 
-    await screen.findByText('Travel stroller')
+    expect(await screen.findByText('Travel stroller')).toBeInTheDocument()
   })
 
   it('shows the backend error message when the request fails', async () => {
@@ -96,7 +95,7 @@ describe('HomePage', () => {
 
     render(<HomePage />)
 
-    await user.click(screen.getByRole('button', { name: /get product picks/i }))
+    await user.click(screen.getByRole('button', { name: /ai help/i }))
 
     expect(await screen.findByText('SerpApi request failed.')).toBeInTheDocument()
   })
@@ -115,6 +114,9 @@ describe('HomePage', () => {
               price: '$149.99',
             }),
           ],
+          selection: {
+            mode: 'ai',
+          },
         }),
     })
 
@@ -122,11 +124,13 @@ describe('HomePage', () => {
 
     render(<HomePage />)
 
-    await user.click(screen.getByRole('button', { name: /get product picks/i }))
+    await user.click(screen.getByRole('button', { name: /ai help/i }))
 
     expect(await screen.findByText('Travel stroller')).toBeInTheDocument()
     expect(screen.getByText('Compact airport stroller')).toBeInTheDocument()
     expect(screen.getByText('Top results for "lego"')).toBeInTheDocument()
+    expect(screen.getAllByText('AI Help').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/tradeoff:/i).length).toBeGreaterThan(0)
   })
 
   it('clicking a starter prompt triggers a search with that prompt values', async () => {
