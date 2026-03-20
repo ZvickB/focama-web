@@ -36,9 +36,10 @@
 ## Current backend plan
 1. Read `SERPAPI_API_KEY` from the root `.env`.
 2. Query SerpApi through the live `/api/search` route.
-3. Return the first 4 usable live results to the frontend.
-4. Keep the cache tooling available only as a debugging aid.
-5. Only after the raw pipeline is stable, add AI filtering/reranking.
+3. Use rules to discard junk, duplicates, and weak candidates without treating rules as the final selector.
+4. Keep a larger cleaned candidate pool for the future AI stage instead of collapsing too early to the final 4.
+5. In the later AI step, use the textarea context/details as the main fit signal, with ratings/reviews as supporting quality signals.
+6. Keep the cache tooling available only as a debugging aid.
 
 ## Important scope constraints
 - Do not add AI filtering yet.

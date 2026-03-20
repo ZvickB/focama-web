@@ -1,15 +1,17 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 import {
   SERPAPI_ENDPOINT,
   buildQuery,
   getEnv,
-  getNormalizedResults,
-  writeSearchCacheEntry,
-  writeSearchEvaluationCase,
 } from '../lib/search-data.js'
 
+const FULL_RESPONSE_PATH = resolve(process.cwd(), 'temp-data', 'serp_api_full_response.json')
+
 async function main() {
-  const productQuery = process.argv[2] || 'lego'
-  const details = process.argv[3] || 'For a 9 year old boy who enjoys imagination and building stories.'
+  const productQuery = process.argv[2] || 'ipad cover'
+  const details = process.argv[3] || ''
   const apiKey = getEnv('SERPAPI_API_KEY')
 
   if (!apiKey) {
@@ -30,20 +32,11 @@ async function main() {
   }
 
   const payload = await response.json()
-  const results = getNormalizedResults(payload, 6, 'Returned by the saved SerpApi test cache')
 
-  if (results.length === 0) {
-    throw new Error('No usable SerpApi results were returned.')
-  }
+  mkdirSync(resolve(process.cwd(), 'temp-data'), { recursive: true })
+  writeFileSync(FULL_RESPONSE_PATH, JSON.stringify(payload, null, 2))
 
-  writeSearchCacheEntry({ productQuery, details, results })
-  writeSearchEvaluationCase({
-    productQuery,
-    details,
-    results,
-    source: 'save-serpapi-cache-script',
-  })
-  console.log(`Saved ${results.length} cached results for "${buildQuery(productQuery, details)}"`)
+  console.log(`Saved full SerpApi response to ${FULL_RESPONSE_PATH} for "${buildQuery(productQuery, details)}"`)
 }
 
 main().catch((error) => {

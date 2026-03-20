@@ -46,6 +46,8 @@ for now, give stock images and fake prices and stars and description
   - query SerpApi
   - return 4 results
   - render those 4 results in the existing UI
+- If a local cache or saved query/evaluation dataset is used during development, treat it as temporary only and plan to remove or replace it later rather than letting it become accidental product infrastructure.
+- The rule-based filter should mainly discard junk and weak candidates. The textarea context should be the main reason to use AI later, with ratings/reviews acting as supporting quality signals rather than replacing contextual fit.
 - AI filtering comes after the raw SerpApi pipeline works.
 - Avoid overengineering.
 
@@ -62,6 +64,7 @@ for now, give stock images and fake prices and stars and description
   - the area is likely to be changed or expanded again soon
 - Do not add tests for every small presentational change. Prefer tests where they give real protection, confidence, or faster iteration.
 - Do not run automated tests by default. Only run Vitest when I explicitly ask to test the app.
+- Use a separate git branch for larger or riskier work such as architecture changes, deployment refactors, database integration, AI filtering/reranking, or other changes that may need cleaner review or easier rollback. Small, low-risk support changes can stay on the current flow.
 - This repo should be treated as a PowerShell environment. Prefer PowerShell-safe commands and avoid Bash-style `&&` chaining.
 - Use `project-notes/app_flow.md` for the current implemented user flow, temporary MVP behavior, and active integration assumptions. Keep `project-notes/doc_briefs.md` focused on product intent, UI direction, stack, and longer-term decisions.
 

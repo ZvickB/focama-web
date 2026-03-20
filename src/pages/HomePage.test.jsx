@@ -70,8 +70,10 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /get product picks/i }))
 
     expect(screen.getByText('Curating your options...')).toBeInTheDocument()
-    expect(screen.getByText(/loading live search results into the current card layout/i)).toBeInTheDocument()
-    expect(screen.getByText(/searching products and preparing the cards/i)).toBeInTheDocument()
+    expect(screen.getByText(/cleaning candidates and preparing ai-picked cards/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/searching products, cleaning candidates, and preparing the cards/i),
+    ).toBeInTheDocument()
 
     resolveFetch({
       ok: true,

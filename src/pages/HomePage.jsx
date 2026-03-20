@@ -315,7 +315,7 @@ function HomePage() {
                   <Wand2 className="h-5 w-5 text-primary" />
                   <p className="mt-4 text-sm font-medium text-slate-900">Curated results</p>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
-                    {RESULT_CARD_COUNT} live raw results now, with ranking and filtering added later.
+                    {RESULT_CARD_COUNT} AI-picked cards from a cleaned shopping candidate pool.
                   </p>
                 </div>
                 <div className="rounded-3xl border border-stone-200 bg-stone-50/80 p-4">
@@ -338,8 +338,8 @@ function HomePage() {
                 </div>
                 <CardTitle className="text-2xl text-slate-900">Describe what you need</CardTitle>
                 <CardDescription className="text-base leading-7 text-slate-600">
-                  This pass keeps the current UI and now pulls live SerpApi results through the
-                  deployed search function shape.
+                  The backend now cleans the shopping results first, then uses AI to choose the
+                  final cards from that candidate pool.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -372,10 +372,10 @@ function HomePage() {
                 </CardTitle>
                 <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
                   {isLoading
-                    ? 'Loading live search results into the current card layout.'
+                    ? 'Cleaning candidates and preparing AI-picked cards.'
                     : hasSearched
                       ? submittedDetails
-                      : 'Enter a product topic and context, then press Get product picks to test the full flow.'}
+                      : 'Enter a product topic and context, then press Get product picks to test the full AI selection flow.'}
                 </CardDescription>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -383,8 +383,8 @@ function HomePage() {
                   Tap a card for details
                 </div>
                 <p className="max-w-md text-sm leading-6 text-slate-500 sm:text-right">
-                  These cards now show live raw search results while retailer links and filtering
-                  still come later.
+                  These cards now come from a cleaned candidate pool with AI making the final
+                  selection. Retailer links still come later.
                 </p>
               </div>
             </CardHeader>
@@ -405,7 +405,7 @@ function HomePage() {
                     <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
                     <span className="relative mt-[1px] h-2.5 w-2.5 rounded-full bg-primary/70" />
                   </span>
-                  <span>Searching products and preparing the cards...</span>
+                  <span>Searching products, cleaning candidates, and preparing the cards...</span>
                   <span className="hidden h-px flex-1 rounded-full bg-gradient-to-r from-primary/35 via-primary/10 to-transparent animate-soft-pulse sm:block" />
                 </div>
               ) : null}
@@ -434,7 +434,7 @@ function HomePage() {
                   <CardTitle className="text-xl">Starting prompts</CardTitle>
                 </div>
                 <CardDescription className="leading-7 text-slate-600">
-                  Quick examples for the current live search flow.
+                  Quick examples for the current AI-assisted search flow.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -460,7 +460,7 @@ function HomePage() {
               <CardHeader>
                 <CardTitle className="text-xl">What the live version will add</CardTitle>
                 <CardDescription className="leading-7 text-white/70">
-                  This first backend slice is intentionally narrow.
+                  The live product flow is getting more opinionated with each backend pass.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 text-sm leading-6 text-white/80">
@@ -470,7 +470,7 @@ function HomePage() {
                 </div>
                 <div className="flex items-start gap-3">
                   <Star className="mt-0.5 h-4 w-4 text-amber-300" />
-                  AI reranking with diversity and relevance
+                  Better retailer links and richer product detail
                 </div>
                 <div className="flex items-start gap-3">
                   <Star className="mt-0.5 h-4 w-4 text-amber-300" />

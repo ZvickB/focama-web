@@ -1,16 +1,22 @@
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
+import { DEFAULT_OPENAI_MODEL, selectAiResults } from './lib/ai-selector.js'
+import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './lib/result-filter.js'
 import {
   SERPAPI_ENDPOINT,
   buildCacheKey,
   buildQuery,
   getEnv,
-  getNormalizedResults,
   readSearchCache,
   validateSearchInput,
 } from './lib/search-data.js'
 
 const PORT = Number(process.env.PORT || 8787)
+const LIVE_RESULT_FILTER_CONFIG = {
+  ...DEFAULT_FILTER_CONFIG,
+  candidatePoolSize: 20,
+  finalResultLimit: 4,
+}
 
 export function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, {
@@ -49,10 +55,16 @@ export async function handleCachedSearch(requestUrl, response) {
 }
 
 export async function handleLiveSearch(requestUrl, response) {
-  const apiKey = getEnv('SERPAPI_API_KEY')
+  const serpApiKey = getEnv('SERPAPI_API_KEY')
+  const openAiApiKey = getEnv('OPENAI_API_KEY')
 
-  if (!apiKey) {
+  if (!serpApiKey) {
     sendJson(response, 500, { error: 'SERPAPI_API_KEY is missing from the root .env file.' })
+    return
+  }
+
+  if (!openAiApiKey) {
+    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
     return
   }
 
@@ -68,7 +80,7 @@ export async function handleLiveSearch(requestUrl, response) {
   const searchUrl = new URL(SERPAPI_ENDPOINT)
   searchUrl.searchParams.set('engine', 'google_shopping')
   searchUrl.searchParams.set('q', buildQuery(normalizedQuery, normalizedDetails))
-  searchUrl.searchParams.set('api_key', apiKey)
+  searchUrl.searchParams.set('api_key', serpApiKey)
   searchUrl.searchParams.set('gl', 'us')
   searchUrl.searchParams.set('hl', 'en')
 
@@ -86,14 +98,54 @@ export async function handleLiveSearch(requestUrl, response) {
     }
 
     const payload = await apiResponse.json()
-    const results = getNormalizedResults(payload, 4, 'Returned by the live SerpApi search route')
+    const { candidatePool, results: fallbackResults } = getFilteredSearchArtifacts(payload, {
+      productQuery: normalizedQuery,
+      details: normalizedDetails,
+      candidatePoolSize: LIVE_RESULT_FILTER_CONFIG.candidatePoolSize,
+      finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
+      minimumScore: LIVE_RESULT_FILTER_CONFIG.minimumScore,
+      diversifyPoolMultiplier: LIVE_RESULT_FILTER_CONFIG.diversifyPoolMultiplier,
+      reasonFallback: 'Returned by the live SerpApi search route',
+    })
 
-    if (results.length === 0) {
+    if (fallbackResults.length === 0) {
       sendJson(response, 404, { error: 'No usable shopping results were returned.' })
       return
     }
 
-    sendJson(response, 200, { results })
+    let results = fallbackResults
+    let selection = {
+      mode: 'rules_fallback',
+      model: null,
+      selectedCandidateIds: fallbackResults.map((item) => item.id),
+      details: 'Rules-based fallback was used.',
+    }
+
+    try {
+      const aiSelection = await selectAiResults({
+        candidatePool,
+        finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
+        apiKey: openAiApiKey,
+        model: getEnv('OPENAI_MODEL') || DEFAULT_OPENAI_MODEL,
+      })
+
+      if (aiSelection.results.length > 0) {
+        results = aiSelection.results
+        selection = {
+          mode: 'ai',
+          model: aiSelection.model,
+          selectedCandidateIds: aiSelection.selectedCandidateIds,
+          details: 'AI selected the final recommendations from the cleaned candidate pool.',
+        }
+      }
+    } catch (error) {
+      selection = {
+        ...selection,
+        details: error instanceof Error ? error.message : 'AI selection failed; using fallback results.',
+      }
+    }
+
+    sendJson(response, 200, { candidatePool, results, selection })
   } catch (error) {
     sendJson(response, 500, {
       error: 'Unable to reach SerpApi.',
