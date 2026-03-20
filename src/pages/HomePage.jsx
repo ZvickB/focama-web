@@ -19,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card.jsx'
+import logo from '@/assets/logo_master_version.svg'
 import { validateSearchInput } from '../../shared/search-input.js'
 
 const starterPrompts = [
@@ -54,6 +55,12 @@ function ResultSkeleton() {
   return (
     <div className="h-full overflow-hidden rounded-[24px] border border-stone-200/80 bg-white/85 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] sm:rounded-[28px]">
       <div className="relative h-44 overflow-hidden bg-stone-200/90 sm:h-56">
+        <img
+          src={logo}
+          alt=""
+          aria-hidden="true"
+          className="absolute left-1/2 top-1/2 h-20 w-20 -translate-x-1/2 -translate-y-1/2 object-contain opacity-[0.14] sm:h-24 sm:w-24"
+        />
         <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" />
       </div>
       <div className="space-y-4 p-5 sm:p-6">
