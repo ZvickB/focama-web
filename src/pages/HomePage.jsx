@@ -2,10 +2,8 @@ import { useEffect, useState } from 'react'
 import {
   ArrowUpRight,
   Clock3,
-  Search,
   ShieldCheck,
   Star,
-  Wand2,
   X,
 } from 'lucide-react'
 import ProductCard from '@/components/ProductCard.jsx'
@@ -43,15 +41,15 @@ const starterPrompts = [
 const RESULT_CARD_COUNT = 4
 const RESULT_CARD_SLOTS = Array.from({ length: RESULT_CARD_COUNT }, (_, index) => index)
 
-function ResultSkeleton() {
-  function SkeletonBlock({ className }) {
-    return (
-      <div className={`relative overflow-hidden rounded-full bg-stone-200/80 ${className}`}>
-        <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" />
-      </div>
-    )
-  }
+function SkeletonBlock({ className }) {
+  return (
+    <div className={`relative overflow-hidden rounded-full bg-stone-200/80 ${className}`}>
+      <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" />
+    </div>
+  )
+}
 
+function ResultSkeleton() {
   return (
     <div className="h-full overflow-hidden rounded-[24px] border border-stone-200/80 bg-white/85 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] sm:rounded-[28px]">
       <div className="relative h-44 overflow-hidden bg-stone-200/90 sm:h-56">
@@ -260,8 +258,8 @@ async function fetchSearchResults({ query, details }) {
 }
 
 function HomePage() {
-  const [productQuery, setProductQuery] = useState(starterPrompts[0].query)
-  const [details, setDetails] = useState(starterPrompts[0].details)
+  const [productQuery, setProductQuery] = useState('')
+  const [details, setDetails] = useState('')
   const [results, setResults] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [submittedQuery, setSubmittedQuery] = useState('')
@@ -282,6 +280,8 @@ function HomePage() {
     setIsLoading(true)
     setSelectedProduct(null)
     setErrorMessage('')
+    setResults([])
+    setSelectionMeta(null)
     setHasSearched(true)
 
     try {
@@ -295,6 +295,8 @@ function HomePage() {
       setSubmittedQuery(normalizedQuery)
       setSubmittedDetails(normalizedDetails)
     } catch (error) {
+      setResults([])
+      setSelectionMeta(null)
       setErrorMessage(error instanceof Error ? error.message : 'Search failed.')
     } finally {
       setIsLoading(false)
@@ -308,68 +310,40 @@ function HomePage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-6">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 sm:gap-6">
         <section className="rounded-[28px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:rounded-[32px] sm:p-5 lg:p-8">
-          <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[1.15fr_0.85fr] lg:items-start lg:gap-8">
-            <div className="max-w-3xl space-y-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-                  Focama
-                </p>
-                <p className="mt-1 text-sm text-slate-600">Distraction-light buying guidance</p>
-              </div>
-              <Badge variant="secondary" className="rounded-full px-4 py-1 text-sm">
-                Focused shopping, not endless browsing
-              </Badge>
-              <div className="space-y-3">
-                <h1 className="max-w-2xl text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-                  Search once. Get {RESULT_CARD_COUNT} calm, useful picks.
-                </h1>
-                <p className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-lg">
-                  Focama is designed to help users describe what they need, see a short curated set
-                  of options, and move toward a retailer without the usual noise.
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-3xl border border-stone-200 bg-stone-50/80 p-4">
-                  <Search className="h-5 w-5 text-primary" />
-                  <p className="mt-4 text-sm font-medium text-slate-900">Two-part search</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Product plus context for a more relevant shortlist.
-                  </p>
-                </div>
-                <div className="rounded-3xl border border-stone-200 bg-stone-50/80 p-4">
-                  <Wand2 className="h-5 w-5 text-primary" />
-                  <p className="mt-4 text-sm font-medium text-slate-900">Curated results</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">
-                    {RESULT_CARD_COUNT} AI-picked cards from a cleaned shopping candidate pool.
-                  </p>
-                </div>
-                <div className="rounded-3xl border border-stone-200 bg-stone-50/80 p-4">
-                  <ShieldCheck className="h-5 w-5 text-primary" />
-                  <p className="mt-4 text-sm font-medium text-slate-900">Low-distraction flow</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">
-                    A calmer way to get to the product you already meant to buy.
-                  </p>
-                </div>
-              </div>
+          <div className="mx-auto max-w-3xl space-y-5">
+            <div className="space-y-3 text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                Focama
+              </p>
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
+                Find a few good options without the usual shopping noise.
+              </h1>
+              <p className="mx-auto max-w-2xl text-sm leading-7 text-slate-600 sm:text-lg">
+                Enter what you want and any context that matters. Focama will return a short list
+                of focused picks.
+              </p>
             </div>
 
-            <Card className="w-full rounded-[28px] border-stone-200/80 bg-[#f8f3eb] shadow-none sm:rounded-[32px] lg:max-w-xl">
+            <Card className="rounded-[28px] border-stone-200/80 bg-[#f8f3eb] shadow-none sm:rounded-[32px]">
               <CardHeader className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <Badge className="rounded-full bg-primary px-3 py-1 text-primary-foreground hover:bg-primary">
-                    Search builder
+                    Search
                   </Badge>
-                  <span className="text-sm text-slate-500">Live search route</span>
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <ShieldCheck className="h-4 w-4 text-primary" />
+                    Shortlist first, retailer later
+                  </div>
                 </div>
                 <CardTitle className="text-2xl text-slate-900">Describe what you need</CardTitle>
                 <CardDescription className="text-base leading-7 text-slate-600">
-                  The backend now cleans the shopping results first, then AI chooses the final
-                  cards and calls out the main tradeoffs.
+                  Keep it simple: start with the product, then add anything about the person, use
+                  case, or priorities.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
                 <Textarea
                   productQuery={productQuery}
                   audience={details}
@@ -378,42 +352,59 @@ function HomePage() {
                   onSubmit={handleSubmit}
                   disabled={isLoading}
                 />
+
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Try one
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {starterPrompts.map((item) => (
+                      <button
+                        key={item.label}
+                        type="button"
+                        className="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm text-slate-600 transition hover:border-primary/30 hover:text-slate-900"
+                        onClick={() => {
+                          setProductQuery(item.query)
+                          setDetails(item.details)
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-[1.4fr_0.6fr] lg:gap-6">
-          <Card className="order-2 rounded-[28px] border-white/70 bg-white/72 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:rounded-[32px] lg:order-1">
+        <section>
+          <Card className="rounded-[28px] border-white/70 bg-white/72 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:rounded-[32px]">
             <CardHeader className="flex flex-col gap-4">
               <div className="space-y-2">
                 <Badge variant="outline" className="rounded-full bg-stone-50 px-3 py-1">
-                  Recommended picks
+                  Results
                 </Badge>
                 <CardTitle className="text-2xl text-slate-900 sm:text-3xl">
                   {isLoading
                     ? 'Curating your options...'
                     : hasSearched
                       ? `Top results for "${submittedQuery}"`
-                      : 'Your focused picks will appear here'}
+                      : 'Ready when you are'}
                 </CardTitle>
                 <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
                   {isLoading
                     ? 'Cleaning candidates and preparing AI-picked cards.'
                     : hasSearched
                       ? submittedDetails
-                      : 'Enter a product topic and context, then use AI Help to get the final picks.'}
+                      : 'Use the search form above to get a short list of focused product options.'}
                 </CardDescription>
               </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              {hasSearched || isLoading ? (
                 <div className="inline-flex w-fit items-center gap-2 rounded-full bg-stone-100 px-3 py-2 text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
                   Tap a card for details
                 </div>
-                <p className="max-w-md text-sm leading-6 text-slate-500 sm:text-right">
-                  These cards now come from a cleaned candidate pool with AI making the final
-                  selection and calling out the main drawback for each pick.
-                </p>
-              </div>
+              ) : null}
             </CardHeader>
             <CardContent>
               {errorMessage ? (
@@ -446,17 +437,17 @@ function HomePage() {
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-3">
-                {isLoading
-                  ? RESULT_CARD_SLOTS.map((index) => (
-                      <div key={index}>
-                        <ResultSkeleton />
-                      </div>
-                    ))
-                  : null}
-              </div>
+              {isLoading ? (
+                <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-3">
+                  {RESULT_CARD_SLOTS.map((index) => (
+                    <div key={index}>
+                      <ResultSkeleton />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
 
-              {!isLoading ? (
+              {!isLoading && results.length > 0 ? (
                 <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-3">
                   {results.map((item) => (
                     <div key={item.id}>
@@ -465,79 +456,25 @@ function HomePage() {
                   ))}
                 </div>
               ) : null}
+
+              {!isLoading && !results.length && !errorMessage ? (
+                <div className="rounded-[28px] border border-dashed border-stone-200 bg-stone-50/70 px-6 py-12 text-center sm:px-8">
+                  <div className="mx-auto max-w-xl space-y-3">
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                      <Clock3 className="h-4 w-4 text-slate-500" />
+                    </div>
+                    <p className="text-lg font-medium text-slate-900">
+                      A short list will appear here after you search.
+                    </p>
+                    <p className="text-sm leading-6 text-slate-600 sm:text-base">
+                      Start with a product, add any useful context, and Focama will bring back a
+                      few focused options instead of a crowded marketplace page.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
-
-          <div className="order-1 space-y-4 lg:order-2 lg:space-y-6">
-            <Card className="rounded-[28px] border-white/70 bg-white/72 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:rounded-[32px]">
-              <CardHeader>
-                <div className="flex items-center gap-2 text-slate-700">
-                  <Clock3 className="h-4 w-4 text-primary" />
-                  <CardTitle className="text-xl">Starting prompts</CardTitle>
-                </div>
-                <CardDescription className="leading-7 text-slate-600">
-                  Quick examples for the current AI-assisted search flow.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {starterPrompts.map((item) => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    className="flex w-full items-center justify-between rounded-2xl border border-stone-200 bg-stone-50/80 px-4 py-3 text-left text-sm text-slate-700 transition hover:border-primary/30 hover:bg-white"
-                    onClick={() => {
-                      setProductQuery(item.query)
-                      setDetails(item.details)
-                      runSearch(item.query, item.details)
-                    }}
-                  >
-                    <span>{item.label}</span>
-                    <Search className="h-4 w-4 text-slate-400" />
-                  </button>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-[28px] border-white/70 bg-[#16343a] text-white shadow-[0_30px_120px_-60px_rgba(8,47,73,0.7)] sm:rounded-[32px]">
-              <CardHeader>
-                <CardTitle className="text-xl">What the live version will add</CardTitle>
-                <CardDescription className="leading-7 text-white/70">
-                  The live product flow is getting more opinionated with each backend pass.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm leading-6 text-white/80">
-                <div className="flex items-start gap-3">
-                  <Star className="mt-0.5 h-4 w-4 text-amber-300" />
-                  AI-selected picks with better context awareness
-                </div>
-                <div className="flex items-start gap-3">
-                  <Star className="mt-0.5 h-4 w-4 text-amber-300" />
-                  Clear tradeoffs so the user sees drawbacks too
-                </div>
-                <div className="flex items-start gap-3">
-                  <Star className="mt-0.5 h-4 w-4 text-amber-300" />
-                  Better retailer links and richer product detail
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-[28px] border-white/70 bg-white/72 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:rounded-[32px]">
-              <CardHeader>
-                <div className="flex items-center gap-2 text-slate-700">
-                  <Search className="h-4 w-4 text-primary" />
-                  <CardTitle className="text-xl">Current search topics</CardTitle>
-                </div>
-                <CardDescription className="leading-7 text-slate-600">
-                  The UI stays the same while the results now come from the backend route.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
-                <p>Lego gifts for imaginative 9-year-olds</p>
-                <p>Simple focus-friendly desk accessories</p>
-                <p>Travel stroller recommendations for airport use</p>
-              </CardContent>
-            </Card>
-          </div>
         </section>
       </div>
       {selectedProduct ? (
