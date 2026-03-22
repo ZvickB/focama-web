@@ -1,7 +1,7 @@
 import { HomeExperience } from '@/components/home/HomeExperience.jsx'
 
-function HomePage() {
+function HomePageConcierge() {
   return <HomeExperience variant="concierge" />
 }
 
-export default HomePage
+export default HomePageConcierge

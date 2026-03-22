@@ -5,13 +5,16 @@ import logo from '@/assets/logo_master_version.svg'
 
 const navItems = [
   { to: '/', label: 'Home', end: true },
+  { to: '/ui/flow', label: 'UI Lab' },
   { to: '/about', label: 'About' },
   { to: '/contact', label: 'Contact' },
   { to: '/privacy', label: 'Privacy' },
   { to: '/affiliate-disclosure', label: 'Disclosure' },
 ]
 
-const mobileMenuItems = navItems.filter((item) => ['/', '/about', '/contact'].includes(item.to))
+const mobileMenuItems = navItems.filter((item) =>
+  ['/', '/ui/flow', '/about', '/contact'].includes(item.to),
+)
 const HEADER_COLLAPSE_SCROLL_Y = 72
 const HEADER_EXPAND_SCROLL_Y = 20
 

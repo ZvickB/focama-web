@@ -3,6 +3,10 @@ import { Route, Routes } from 'react-router-dom'
 import SiteLayout from '@/components/SiteLayout.jsx'
 
 const HomePage = lazy(() => import('@/pages/HomePage.jsx'))
+const HomePageHero = lazy(() => import('@/pages/HomePageHero.jsx'))
+const HomePageFlow = lazy(() => import('@/pages/HomePageFlow.jsx'))
+const HomePageConcierge = lazy(() => import('@/pages/HomePageConcierge.jsx'))
+const HomePageInstant = lazy(() => import('@/pages/HomePageInstant.jsx'))
 const AboutPage = lazy(() => import('@/pages/AboutPage.jsx'))
 const AffiliateDisclosurePage = lazy(() => import('@/pages/AffiliateDisclosurePage.jsx'))
 const ContactPage = lazy(() => import('@/pages/ContactPage.jsx'))
@@ -25,6 +29,10 @@ function App() {
       <Routes>
         <Route element={<SiteLayout />}>
           <Route path="/" element={<HomePage />} />
+          <Route path="/ui/hero" element={<HomePageHero />} />
+          <Route path="/ui/flow" element={<HomePageFlow />} />
+          <Route path="/ui/concierge" element={<HomePageConcierge />} />
+          <Route path="/ui/instant" element={<HomePageInstant />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
