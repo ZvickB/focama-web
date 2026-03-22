@@ -6,7 +6,6 @@ import {
   Clock3,
   LoaderCircle,
   Search,
-  ShieldCheck,
   Sparkles,
   Star,
   X,
@@ -411,44 +410,16 @@ function HomePage() {
       <div className="mx-auto grid w-full max-w-7xl gap-4 sm:gap-6 xl:grid-cols-[minmax(360px,460px),minmax(0,1fr)] xl:items-start">
         <section className="rounded-[28px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:rounded-[32px] sm:p-5 lg:p-8">
           <div className="space-y-5">
-            <div className="space-y-3 xl:text-left">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-                Focama
-              </p>
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-                Start with the product. We&apos;ll help you think through the rest.
-              </h1>
-              <p className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-lg">
-                Tell Focama what you&apos;re shopping for. While products load in the background,
-                the AI will help you narrow what matters most.
-              </p>
-            </div>
-
             <Card className="rounded-[28px] border-stone-200/80 bg-[#f8f3eb] shadow-none sm:rounded-[32px]">
               <CardHeader className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <Badge className="rounded-full bg-primary px-3 py-1 text-primary-foreground hover:bg-primary">
-                    Guided search
-                  </Badge>
-                  <div className="flex items-center gap-2 text-sm text-slate-500">
-                    <ShieldCheck className="h-4 w-4 text-primary" />
-                    Search first, refine while it loads
-                  </div>
-                </div>
-                <CardTitle className="text-2xl text-slate-900">What are you shopping for?</CardTitle>
-                <CardDescription className="text-base leading-7 text-slate-600">
-                  Start with the product. After that, Focama will ask a more useful follow-up than
-                  a blank details box.
-                </CardDescription>
+                <CardTitle className="text-2xl text-slate-900">Start product search</CardTitle>
               </CardHeader>
               <CardContent className="space-y-5">
                 <form className="space-y-4" onSubmit={beginGuidedSearch}>
-                  <div className="space-y-2">
-                    <Label htmlFor="product-query" className="text-slate-700">
-                      Product topic
-                    </Label>
+                  <div>
                     <Input
                       id="product-query"
+                      aria-label="Product search"
                       value={productQuery}
                       onChange={(event) => setProductQuery(event.target.value)}
                       placeholder='Example: "office chair", "lego", or "travel stroller"'
@@ -488,7 +459,7 @@ function HomePage() {
                         <Button
                           type="button"
                           disabled={!candidatePool || isFinalizing}
-                          className="h-11 w-full rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
+                          className="h-11 w-full rounded-2xl bg-accent text-accent-foreground hover:bg-accent/80"
                           onClick={handleShowProductsNow}
                         >
                           Show products now
@@ -655,7 +626,7 @@ function HomePage() {
                       <Button
                         type="button"
                         disabled={!candidatePool}
-                        className="h-11 w-full rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
+                        className="h-11 w-full rounded-2xl bg-accent text-accent-foreground hover:bg-accent/80"
                         onClick={handleShowProductsNow}
                       >
                         Show products now
@@ -687,7 +658,49 @@ function HomePage() {
                 </div>
               ) : null}
 
-              {!isLoading && displayedResults.length === 0 && !errorMessage ? (
+              {!hasStartedSearch && !errorMessage ? (
+                <div className="rounded-[28px] border border-dashed border-stone-200 bg-stone-50/70 px-6 py-12 text-center sm:px-8">
+                  <div className="mx-auto max-w-2xl space-y-5 text-left">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        Guided search
+                      </p>
+                      <h2 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+                        Search first, refine while it loads.
+                      </h2>
+                      <p className="text-base leading-7 text-slate-600">
+                        Start with the product. After that, Focama will ask a more useful
+                        follow-up than a blank details box.
+                      </p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-2xl border border-stone-200/80 bg-white/80 px-4 py-4">
+                        <p className="text-sm font-medium text-slate-900">Start simple</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">
+                          Enter the product first instead of filling out a long form up front.
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-stone-200/80 bg-white/80 px-4 py-4">
+                        <p className="text-sm font-medium text-slate-900">Think it through</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">
+                          The AI helps narrow what matters like comfort, price, quality, or style.
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-stone-200/80 bg-white/80 px-4 py-4">
+                        <p className="text-sm font-medium text-slate-900">See focused picks</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">
+                          Products appear after the refinement step, or you can skip and show them now.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {!hasStartedSearch && !errorMessage ? null : !isLoading && displayedResults.length === 0 && !errorMessage ? (
                 <div className="rounded-[28px] border border-dashed border-stone-200 bg-stone-50/70 px-6 py-12 text-center sm:px-8">
                   <div className="mx-auto max-w-xl space-y-3">
                     <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
