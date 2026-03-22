@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
@@ -21,6 +22,25 @@ function createMockResult(overrides = {}) {
   }
 }
 
+function renderHomePage() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+      mutations: {
+        retry: false,
+      },
+    },
+  })
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <HomePage />
+    </QueryClientProvider>,
+  )
+}
+
 describe('HomePage', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -33,7 +53,7 @@ describe('HomePage', () => {
   it('shows a validation error when the product query is blank', async () => {
     const user = userEvent.setup()
 
-    render(<HomePage />)
+    renderHomePage()
 
     const productInput = screen.getByLabelText(/product topic/i)
     await user.clear(productInput)
@@ -45,7 +65,7 @@ describe('HomePage', () => {
   it('shows a validation error for obvious gibberish queries', async () => {
     const user = userEvent.setup()
 
-    render(<HomePage />)
+    renderHomePage()
 
     const productInput = screen.getByLabelText(/product topic/i)
     await user.clear(productInput)
@@ -66,7 +86,7 @@ describe('HomePage', () => {
 
     vi.stubGlobal('fetch', vi.fn(() => fetchPromise))
 
-    render(<HomePage />)
+    renderHomePage()
 
     await user.click(screen.getByRole('button', { name: /ai help/i }))
 
@@ -93,7 +113,7 @@ describe('HomePage', () => {
       }),
     )
 
-    render(<HomePage />)
+    renderHomePage()
 
     await user.click(screen.getByRole('button', { name: /ai help/i }))
 
@@ -122,7 +142,7 @@ describe('HomePage', () => {
 
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<HomePage />)
+    renderHomePage()
 
     await user.click(screen.getByRole('button', { name: /ai help/i }))
 
@@ -142,7 +162,7 @@ describe('HomePage', () => {
 
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<HomePage />)
+    renderHomePage()
 
     await user.click(screen.getByRole('button', { name: /travel stroller for easy airport use/i }))
 

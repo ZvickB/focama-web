@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import {
   ArrowUpRight,
   Clock3,
@@ -263,13 +264,32 @@ function HomePage() {
   const [productQuery, setProductQuery] = useState(starterPrompts[0].query)
   const [details, setDetails] = useState(starterPrompts[0].details)
   const [results, setResults] = useState([])
-  const [isLoading, setIsLoading] = useState(false)
   const [submittedQuery, setSubmittedQuery] = useState('')
   const [submittedDetails, setSubmittedDetails] = useState('')
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [hasSearched, setHasSearched] = useState(false)
   const [selectionMeta, setSelectionMeta] = useState(null)
+
+  const searchMutation = useMutation({
+    mutationFn: fetchSearchResults,
+    onMutate: () => {
+      setSelectedProduct(null)
+      setErrorMessage('')
+      setHasSearched(true)
+    },
+    onSuccess: (nextPayload, variables) => {
+      setResults(nextPayload.results)
+      setSelectionMeta(nextPayload.selection)
+      setSubmittedQuery(variables.query)
+      setSubmittedDetails(variables.details)
+    },
+    onError: (error) => {
+      setErrorMessage(error instanceof Error ? error.message : 'Search failed.')
+    },
+  })
+
+  const isLoading = searchMutation.isPending
 
   async function runSearch(nextQuery, nextDetails) {
     const { error, isValid, normalizedDetails, normalizedQuery } = validateSearchInput(nextQuery, nextDetails)
@@ -279,26 +299,10 @@ function HomePage() {
       return
     }
 
-    setIsLoading(true)
-    setSelectedProduct(null)
-    setErrorMessage('')
-    setHasSearched(true)
-
-    try {
-      const nextPayload = await fetchSearchResults({
-        query: normalizedQuery,
-        details: normalizedDetails,
-      })
-
-      setResults(nextPayload.results)
-      setSelectionMeta(nextPayload.selection)
-      setSubmittedQuery(normalizedQuery)
-      setSubmittedDetails(normalizedDetails)
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Search failed.')
-    } finally {
-      setIsLoading(false)
-    }
+    searchMutation.mutate({
+      query: normalizedQuery,
+      details: normalizedDetails,
+    })
   }
 
   function handleSubmit(event) {

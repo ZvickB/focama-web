@@ -42,13 +42,13 @@ for now, give stock images and fake prices and stars and description
 - The site may eventually point users to Amazon or Walmart, so the frontend should stay flexible for those destinations.
 - SerpApi is the practical interim data source until the product flow is working and Amazon Creator API approval is in place.
 - SerpApi may still remain part of the product later for broader paid-tier search, so it should be treated as a provider option rather than as the identity of the app.
-- The current priority is the simplest backend vertical slice:
+- The current live search flow is:
   - query SerpApi
-  - return 4 results
+  - filter a larger candidate pool with rules
+  - let AI choose the final 4 results using the textarea context as the main fit signal
   - render those 4 results in the existing UI
 - If a local cache or saved query/evaluation dataset is used during development, treat it as temporary only and plan to remove or replace it later rather than letting it become accidental product infrastructure.
-- The rule-based filter should mainly discard junk and weak candidates. The textarea context should be the main reason to use AI later, with ratings/reviews acting as supporting quality signals rather than replacing contextual fit.
-- AI filtering comes after the raw SerpApi pipeline works.
+- The rule-based filter should mainly discard junk and weak candidates. The textarea context is the main reason to use AI, with ratings/reviews acting as supporting quality signals rather than replacing contextual fit.
 - Avoid overengineering.
 
 ## workflow preference
