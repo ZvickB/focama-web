@@ -48,7 +48,10 @@ function countTokenMatches(targetTokens, candidateText) {
 
 function hasWeakMetadata(item) {
   const hasPrice = Number.isFinite(Number(item.extracted_price)) || Boolean(item.price)
-  const hasText = Boolean(item.title?.trim()) && Boolean(item.thumbnail || item.serpapi_thumbnail)
+  const hasImage = Boolean(
+    item.thumbnail || item.thumbnail_hd || item.serpapi_thumbnail || item.product_link,
+  )
+  const hasText = Boolean(item.title?.trim()) && hasImage
   return !hasPrice || !hasText
 }
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import HomePage from './HomePage.jsx'
@@ -68,6 +68,7 @@ describe('HomePage', () => {
 
     render(<HomePage />)
 
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /ai help/i }))
 
     expect(screen.getByText('Curating your options...')).toBeInTheDocument()
@@ -95,6 +96,7 @@ describe('HomePage', () => {
 
     render(<HomePage />)
 
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /ai help/i }))
 
     expect(await screen.findByText('SerpApi request failed.')).toBeInTheDocument()
@@ -124,21 +126,19 @@ describe('HomePage', () => {
 
     render(<HomePage />)
 
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /ai help/i }))
 
     expect(await screen.findByText('Travel stroller')).toBeInTheDocument()
     expect(screen.getByText('Compact airport stroller')).toBeInTheDocument()
-    expect(screen.getByText('Top results for "lego"')).toBeInTheDocument()
+    expect(screen.getByText('Top results for "stroller"')).toBeInTheDocument()
     expect(screen.getAllByText('AI Help').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/tradeoff:/i).length).toBeGreaterThan(0)
   })
 
-  it('clicking a starter prompt triggers a search with that prompt values', async () => {
+  it('clicking a starter prompt fills the form with that prompt values', async () => {
     const user = userEvent.setup()
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      text: async () => JSON.stringify({ results: [createMockResult()] }),
-    })
+    const fetchMock = vi.fn()
 
     vi.stubGlobal('fetch', fetchMock)
 
@@ -146,12 +146,10 @@ describe('HomePage', () => {
 
     await user.click(screen.getByRole('button', { name: /travel stroller for easy airport use/i }))
 
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(1)
-    })
-
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      '/api/search?query=stroller&details=For+airport+travel+with+a+child%2C+where+easy+folding+and+carrying+matter+more+than+extra+accessories.',
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(screen.getByLabelText(/product topic/i)).toHaveValue('stroller')
+    expect(screen.getByLabelText(/buying context/i)).toHaveValue(
+      'For airport travel with a child, where easy folding and carrying matter more than extra accessories.',
     )
   })
 })

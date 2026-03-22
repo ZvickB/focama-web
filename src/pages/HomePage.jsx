@@ -309,18 +309,18 @@ function HomePage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 sm:gap-6">
+    <main className="relative px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <div className="mx-auto grid w-full max-w-7xl gap-4 sm:gap-6 xl:grid-cols-[minmax(320px,380px),minmax(0,1fr)] xl:items-start">
         <section className="rounded-[28px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:rounded-[32px] sm:p-5 lg:p-8">
-          <div className="mx-auto max-w-3xl space-y-5">
-            <div className="space-y-3 text-center">
+          <div className="space-y-5">
+            <div className="space-y-3 xl:text-left">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Focama
               </p>
               <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
                 Find a few good options without the usual shopping noise.
               </h1>
-              <p className="mx-auto max-w-2xl text-sm leading-7 text-slate-600 sm:text-lg">
+              <p className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-lg">
                 Enter what you want and any context that matters. Focama will return a short list
                 of focused picks.
               </p>
@@ -378,8 +378,8 @@ function HomePage() {
           </div>
         </section>
 
-        <section>
-          <Card className="rounded-[28px] border-white/70 bg-white/72 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:rounded-[32px]">
+        <section className="xl:sticky xl:top-6">
+          <Card className="rounded-[28px] border-white/70 bg-white/72 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:rounded-[32px] xl:flex xl:max-h-[calc(100vh-7rem)] xl:min-h-0 xl:flex-col xl:overflow-hidden">
             <CardHeader className="flex flex-col gap-4">
               <div className="space-y-2">
                 <Badge variant="outline" className="rounded-full bg-stone-50 px-3 py-1">
@@ -406,7 +406,7 @@ function HomePage() {
                 </div>
               ) : null}
             </CardHeader>
-            <CardContent>
+            <CardContent className="xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain">
               {errorMessage ? (
                 <div className="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {errorMessage}
@@ -438,7 +438,7 @@ function HomePage() {
               ) : null}
 
               {isLoading ? (
-                <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-3">
+                <div className="mx-auto grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5">
                   {RESULT_CARD_SLOTS.map((index) => (
                     <div key={index}>
                       <ResultSkeleton />
@@ -448,7 +448,7 @@ function HomePage() {
               ) : null}
 
               {!isLoading && results.length > 0 ? (
-                <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-3">
+                <div className="mx-auto grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5">
                   {results.map((item) => (
                     <div key={item.id}>
                       <ProductCard {...item} onSelect={() => setSelectedProduct(item)} />
