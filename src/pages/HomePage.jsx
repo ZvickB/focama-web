@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import {
   ArrowUpRight,
+  Check,
   Clock3,
+  LoaderCircle,
+  Search,
   ShieldCheck,
+  Sparkles,
   Star,
   X,
 } from 'lucide-react'
 import ProductCard from '@/components/ProductCard.jsx'
-import Textarea from '@/components/Textarea.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import {
@@ -18,26 +21,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card.jsx'
+import { Input } from '@/components/ui/input.jsx'
+import { Label } from '@/components/ui/label.jsx'
+import { Textarea } from '@/components/ui/textarea.jsx'
 import logo from '@/assets/logo_master_version.svg'
 import { validateSearchInput } from '../../shared/search-input.js'
-
-const starterPrompts = [
-  {
-    label: 'Lego for a creative 9-year-old',
-    query: 'lego',
-    details: 'For a 9 year old boy who enjoys imagination and building stories.',
-  },
-  {
-    label: 'Comfortable office chair for long learning sessions',
-    query: 'chair',
-    details: 'For long study sessions at a desk with comfort and posture support as the main priority.',
-  },
-  {
-    label: 'Travel stroller for easy airport use',
-    query: 'stroller',
-    details: 'For airport travel with a child, where easy folding and carrying matter more than extra accessories.',
-  },
-]
 
 const RESULT_CARD_COUNT = 4
 const RESULT_CARD_SLOTS = Array.from({ length: RESULT_CARD_COUNT }, (_, index) => index)
@@ -225,16 +213,17 @@ function ProductDetailModal({ item, onClose }) {
   )
 }
 
-async function fetchSearchResults({ query, details }) {
-  const searchParams = new URLSearchParams()
-
-  searchParams.set('query', query)
-
-  if (details) {
-    searchParams.set('details', details)
+function createFallbackRefinementPrompt(productQuery) {
+  return {
+    prompt: `What should we optimize for with this ${productQuery}? Pick any that matter.`,
+    helperText: 'Choose multiple priorities if you want, then add anything else in your own words.',
+    suggestedPriorities: ['price', 'comfort', 'quality', 'durability', 'style', 'ease of use'],
+    followUpPlaceholder:
+      'Examples: for a small apartment, for daily commuting, needs to feel premium, under $200, easy to clean, for a child, or should last a long time.',
   }
+}
 
-  const response = await fetch(`/api/search?${searchParams.toString()}`)
+async function readJsonResponse(response) {
   const rawBody = await response.text()
   let payload = {}
 
@@ -242,79 +231,184 @@ async function fetchSearchResults({ query, details }) {
     try {
       payload = JSON.parse(rawBody)
     } catch {
-      throw new Error('The search function returned an invalid response. Check the local server or Vercel function logs.')
+      throw new Error('The server returned an invalid response. Check the local server or Vercel logs.')
     }
-  } else {
-    throw new Error('The search function returned an empty response. Check the local server or Vercel function logs.')
   }
 
   if (!response.ok) {
-    throw new Error(payload.error || 'Search failed.')
+    throw new Error(payload.error || 'Request failed.')
   }
 
-  return {
-    results: payload.results || [],
-    selection: payload.selection || null,
-  }
+  return payload
+}
+
+async function fetchDiscoveryResults(query) {
+  const searchParams = new URLSearchParams({ query })
+  const response = await fetch(`/api/search/discover?${searchParams.toString()}`)
+  return readJsonResponse(response)
+}
+
+async function fetchRefinementPrompt(query) {
+  const searchParams = new URLSearchParams({ query })
+  const response = await fetch(`/api/search/refine?${searchParams.toString()}`)
+  return readJsonResponse(response)
+}
+
+async function finalizeGuidedSearch({ candidatePool, priorities, followUpNotes }) {
+  const response = await fetch('/api/search/finalize', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      candidatePool,
+      priorities,
+      followUpNotes,
+    }),
+  })
+
+  return readJsonResponse(response)
 }
 
 function HomePage() {
   const [productQuery, setProductQuery] = useState('')
-  const [details, setDetails] = useState('')
-  const [results, setResults] = useState([])
-  const [submittedQuery, setSubmittedQuery] = useState('')
-  const [submittedDetails, setSubmittedDetails] = useState('')
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
-  const [hasSearched, setHasSearched] = useState(false)
+  const [hasStartedSearch, setHasStartedSearch] = useState(false)
+  const [submittedQuery, setSubmittedQuery] = useState('')
+  const [candidatePool, setCandidatePool] = useState(null)
+  const [previewResults, setPreviewResults] = useState([])
+  const [results, setResults] = useState([])
   const [selectionMeta, setSelectionMeta] = useState(null)
+  const [refinementPrompt, setRefinementPrompt] = useState(null)
+  const [selectedPriorities, setSelectedPriorities] = useState([])
+  const [followUpNotes, setFollowUpNotes] = useState('')
+  const [showPreviewResults, setShowPreviewResults] = useState(false)
+  const [isDiscovering, setIsDiscovering] = useState(false)
+  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false)
+  const activeSearchIdRef = useRef(0)
 
-  const searchMutation = useMutation({
-    mutationFn: fetchSearchResults,
+  const finalizeMutation = useMutation({
+    mutationFn: finalizeGuidedSearch,
     onMutate: () => {
-      setSelectedProduct(null)
       setErrorMessage('')
-      setResults([])
-      setSelectionMeta(null)
-      setHasSearched(true)
     },
-    onSuccess: (nextPayload, variables) => {
-      setResults(nextPayload.results)
-      setSelectionMeta(nextPayload.selection)
-      setSubmittedQuery(variables.query)
-      setSubmittedDetails(variables.details)
+    onSuccess: (payload) => {
+      setCandidatePool(payload.candidatePool || null)
+      setResults(payload.results || [])
+      setSelectionMeta(payload.selection || null)
     },
     onError: (error) => {
-      setResults([])
-      setSelectionMeta(null)
-      setErrorMessage(error instanceof Error ? error.message : 'Search failed.')
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to finalize the search.')
     },
   })
 
-  const isLoading = searchMutation.isPending
+  const isFinalizing = finalizeMutation.isPending
+  const isLoading = isDiscovering || isGeneratingPrompt || isFinalizing
+  const hasFinalResults = results.length > 0
+  const displayedResults = hasFinalResults ? results : showPreviewResults ? previewResults : []
 
-  async function runSearch(nextQuery, nextDetails) {
-    const { error, isValid, normalizedDetails, normalizedQuery } = validateSearchInput(nextQuery, nextDetails)
+  function togglePriority(priority) {
+    setSelectedPriorities((currentValue) =>
+      currentValue.includes(priority)
+        ? currentValue.filter((item) => item !== priority)
+        : [...currentValue, priority],
+    )
+  }
+
+  function resetGuidedState(nextSubmittedQuery) {
+    setHasStartedSearch(true)
+    setSubmittedQuery(nextSubmittedQuery)
+    setSelectedProduct(null)
+    setErrorMessage('')
+    setCandidatePool(null)
+    setPreviewResults([])
+    setResults([])
+    setSelectionMeta(null)
+    setSelectedPriorities([])
+    setFollowUpNotes('')
+    setShowPreviewResults(false)
+    setRefinementPrompt(createFallbackRefinementPrompt(nextSubmittedQuery))
+  }
+
+  function beginGuidedSearch(event) {
+    event.preventDefault()
+
+    const { error, isValid, normalizedQuery } = validateSearchInput(productQuery, '')
 
     if (!isValid) {
       setErrorMessage(error)
       return
     }
 
-    searchMutation.mutate({
-      query: normalizedQuery,
-      details: normalizedDetails,
+    const nextSearchId = activeSearchIdRef.current + 1
+    activeSearchIdRef.current = nextSearchId
+
+    resetGuidedState(normalizedQuery)
+    setIsDiscovering(true)
+    setIsGeneratingPrompt(true)
+
+    fetchDiscoveryResults(normalizedQuery)
+      .then((payload) => {
+        if (activeSearchIdRef.current !== nextSearchId) {
+          return
+        }
+
+        setCandidatePool(payload.candidatePool || null)
+        setPreviewResults(payload.previewResults || [])
+      })
+      .catch((error) => {
+        if (activeSearchIdRef.current !== nextSearchId) {
+          return
+        }
+
+        setErrorMessage(error instanceof Error ? error.message : 'Unable to start the search.')
+      })
+      .finally(() => {
+        if (activeSearchIdRef.current === nextSearchId) {
+          setIsDiscovering(false)
+        }
+      })
+
+    fetchRefinementPrompt(normalizedQuery)
+      .then((payload) => {
+        if (activeSearchIdRef.current !== nextSearchId) {
+          return
+        }
+
+        setRefinementPrompt(payload)
+      })
+      .catch(() => {
+        if (activeSearchIdRef.current === nextSearchId) {
+          setRefinementPrompt(createFallbackRefinementPrompt(normalizedQuery))
+        }
+      })
+      .finally(() => {
+        if (activeSearchIdRef.current === nextSearchId) {
+          setIsGeneratingPrompt(false)
+        }
+      })
+  }
+
+  function handleFinalizeRefinement() {
+    if (!candidatePool) {
+      return
+    }
+
+    finalizeMutation.mutate({
+      candidatePool,
+      priorities: selectedPriorities,
+      followUpNotes,
     })
   }
 
-  function handleSubmit(event) {
-    event.preventDefault()
-    runSearch(productQuery, details)
+  function handleShowProductsNow() {
+    setShowPreviewResults(true)
   }
 
   return (
     <main className="relative px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-      <div className="mx-auto grid w-full max-w-7xl gap-4 sm:gap-6 xl:grid-cols-[minmax(320px,380px),minmax(0,1fr)] xl:items-start">
+      <div className="mx-auto grid w-full max-w-7xl gap-4 sm:gap-6 xl:grid-cols-[minmax(360px,460px),minmax(0,1fr)] xl:items-start">
         <section className="rounded-[28px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:rounded-[32px] sm:p-5 lg:p-8">
           <div className="space-y-5">
             <div className="space-y-3 xl:text-left">
@@ -322,11 +416,11 @@ function HomePage() {
                 Focama
               </p>
               <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-                Find a few good options without the usual shopping noise.
+                Start with the product. We&apos;ll help you think through the rest.
               </h1>
               <p className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-lg">
-                Enter what you want and any context that matters. Focama will return a short list
-                of focused picks.
+                Tell Focama what you&apos;re shopping for. While products load in the background,
+                the AI will help you narrow what matters most.
               </p>
             </div>
 
@@ -334,49 +428,142 @@ function HomePage() {
               <CardHeader className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <Badge className="rounded-full bg-primary px-3 py-1 text-primary-foreground hover:bg-primary">
-                    Search
+                    Guided search
                   </Badge>
                   <div className="flex items-center gap-2 text-sm text-slate-500">
                     <ShieldCheck className="h-4 w-4 text-primary" />
-                    Shortlist first, retailer later
+                    Search first, refine while it loads
                   </div>
                 </div>
-                <CardTitle className="text-2xl text-slate-900">Describe what you need</CardTitle>
+                <CardTitle className="text-2xl text-slate-900">What are you shopping for?</CardTitle>
                 <CardDescription className="text-base leading-7 text-slate-600">
-                  Keep it simple: start with the product, then add anything about the person, use
-                  case, or priorities.
+                  Start with the product. After that, Focama will ask a more useful follow-up than
+                  a blank details box.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <Textarea
-                  productQuery={productQuery}
-                  audience={details}
-                  onAudienceChange={setProductQuery}
-                  onDetailsChange={setDetails}
-                  onSubmit={handleSubmit}
-                  disabled={isLoading}
-                />
-
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    Try one
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {starterPrompts.map((item) => (
-                      <button
-                        key={item.label}
-                        type="button"
-                        className="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm text-slate-600 transition hover:border-primary/30 hover:text-slate-900"
-                        onClick={() => {
-                          setProductQuery(item.query)
-                          setDetails(item.details)
-                        }}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
+              <CardContent className="space-y-5">
+                <form className="space-y-4" onSubmit={beginGuidedSearch}>
+                  <div className="space-y-2">
+                    <Label htmlFor="product-query" className="text-slate-700">
+                      Product topic
+                    </Label>
+                    <Input
+                      id="product-query"
+                      value={productQuery}
+                      onChange={(event) => setProductQuery(event.target.value)}
+                      placeholder='Example: "office chair", "lego", or "travel stroller"'
+                      className="h-12 rounded-2xl border-stone-200 bg-white/90 px-4 text-base placeholder:text-slate-400"
+                      disabled={isLoading}
+                    />
                   </div>
-                </div>
+
+                  <Button
+                    type="submit"
+                    disabled={isLoading}
+                    className="h-12 w-full gap-2 rounded-2xl bg-primary text-base text-primary-foreground hover:bg-primary/90"
+                  >
+                    {isLoading ? 'Starting your search...' : 'Start search'}
+                    {isLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  </Button>
+                </form>
+
+                {hasStartedSearch ? (
+                  <Card className="rounded-[24px] border-stone-200/80 bg-white/80 shadow-none">
+                    <CardHeader className="space-y-3 pb-3">
+                      <div className="flex items-center gap-2 text-slate-700">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        <CardTitle className="text-lg">AI refinement</CardTitle>
+                      </div>
+                      <CardDescription className="leading-7 text-slate-600">
+                        {refinementPrompt?.prompt || 'Thinking through what matters most for this search.'}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <p className="text-sm leading-6 text-slate-600">
+                        {refinementPrompt?.helperText ||
+                          'Pick any priorities that matter, then add your own notes if useful.'}
+                      </p>
+
+                      <div className="space-y-2 rounded-2xl border border-stone-200/80 bg-stone-50/80 px-4 py-4">
+                        <Button
+                          type="button"
+                          disabled={!candidatePool || isFinalizing}
+                          className="h-11 w-full rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
+                          onClick={handleShowProductsNow}
+                        >
+                          Show products now
+                        </Button>
+                        <p className="text-xs leading-5 text-slate-500">
+                          Skip AI refinement and view the current product set.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {(refinementPrompt?.suggestedPriorities || []).map((priority) => {
+                          const isSelected = selectedPriorities.includes(priority)
+
+                          return (
+                            <button
+                              key={priority}
+                              type="button"
+                              className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition ${
+                                isSelected
+                                  ? 'border-primary bg-primary text-primary-foreground'
+                                  : 'border-stone-200 bg-stone-50 text-slate-700 hover:border-primary/30 hover:bg-white'
+                              }`}
+                              onClick={() => togglePriority(priority)}
+                            >
+                              {isSelected ? <Check className="h-3.5 w-3.5" /> : null}
+                              {priority}
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="follow-up-notes" className="text-slate-700">
+                          Anything else?
+                        </Label>
+                        <Textarea
+                          id="follow-up-notes"
+                          value={followUpNotes}
+                          onChange={(event) => setFollowUpNotes(event.target.value)}
+                          className="min-h-36 rounded-3xl border-stone-200 bg-white/90 px-4 py-3 text-base leading-7 placeholder:text-slate-400"
+                          placeholder={
+                            refinementPrompt?.followUpPlaceholder ||
+                            'Examples: for a small apartment, for daily commuting, needs to feel premium, under $200, easy to clean, for a child, or should last a long time.'
+                          }
+                          disabled={isFinalizing}
+                        />
+                      </div>
+
+                      <div className="rounded-2xl border border-stone-200/80 bg-stone-50/80 px-4 py-3 text-sm text-slate-600">
+                        <div className="flex items-center gap-2">
+                          {candidatePool ? (
+                            <Check className="h-4 w-4 text-emerald-600" />
+                          ) : (
+                            <LoaderCircle className="h-4 w-4 animate-spin text-primary" />
+                          )}
+                          <span>
+                            {candidatePool
+                              ? 'Products are ready. Apply your priorities when you are.'
+                              : 'Focama is already gathering products in the background.'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        disabled={!candidatePool || isFinalizing}
+                        className="h-12 w-full gap-2 rounded-2xl bg-primary text-base text-primary-foreground hover:bg-primary/90"
+                        onClick={handleFinalizeRefinement}
+                      >
+                        {isFinalizing ? 'Applying your priorities...' : 'Show focused picks'}
+                        {isFinalizing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : null}
               </CardContent>
             </Card>
           </div>
@@ -390,21 +577,21 @@ function HomePage() {
                   Results
                 </Badge>
                 <CardTitle className="text-2xl text-slate-900 sm:text-3xl">
-                  {isLoading
-                    ? 'Curating your options...'
-                    : hasSearched
-                      ? `Top results for "${submittedQuery}"`
+                  {isFinalizing
+                    ? 'Finalizing your picks...'
+                    : hasStartedSearch
+                      ? `Focused picks for "${submittedQuery}"`
                       : 'Ready when you are'}
                 </CardTitle>
                 <CardDescription className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
-                  {isLoading
-                    ? 'Cleaning candidates and preparing AI-picked cards.'
-                    : hasSearched
-                      ? submittedDetails
-                      : 'Use the search form above to get a short list of focused product options.'}
+                  {hasFinalResults
+                    ? 'These picks were finalized after your guided refinement.'
+                    : hasStartedSearch
+                      ? 'Products can load while the AI helps you think through what matters.'
+                      : 'Start with one product topic, then refine the shortlist with AI guidance.'}
                 </CardDescription>
               </div>
-              {hasSearched || isLoading ? (
+              {displayedResults.length > 0 || isLoading ? (
                 <div className="inline-flex w-fit items-center gap-2 rounded-full bg-stone-100 px-3 py-2 text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
                   Tap a card for details
                 </div>
@@ -417,7 +604,7 @@ function HomePage() {
                 </div>
               ) : null}
 
-              {isLoading ? (
+              {isLoading && displayedResults.length === 0 ? (
                 <div
                   role="status"
                   aria-live="polite"
@@ -427,12 +614,12 @@ function HomePage() {
                     <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
                     <span className="relative mt-[1px] h-2.5 w-2.5 rounded-full bg-primary/70" />
                   </span>
-                  <span>Searching products, cleaning candidates, and preparing the cards...</span>
+                  <span>Starting the search and preparing your guided follow-up...</span>
                   <span className="hidden h-px flex-1 rounded-full bg-gradient-to-r from-primary/35 via-primary/10 to-transparent animate-soft-pulse sm:block" />
                 </div>
               ) : null}
 
-              {selectionMeta && !isLoading ? (
+              {selectionMeta && !isFinalizing ? (
                 <div className="mb-4 rounded-3xl border border-stone-200/80 bg-stone-50/90 px-4 py-3 text-sm text-slate-600 sm:mb-5">
                   <span className="font-medium text-slate-800">Selection path:</span> AI Help.
                   {selectionMeta.mode === 'ai'
@@ -441,7 +628,7 @@ function HomePage() {
                 </div>
               ) : null}
 
-              {isLoading ? (
+              {isLoading && displayedResults.length === 0 ? (
                 <div className="mx-auto grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5">
                   {RESULT_CARD_SLOTS.map((index) => (
                     <div key={index}>
@@ -451,28 +638,67 @@ function HomePage() {
                 </div>
               ) : null}
 
-              {!isLoading && results.length > 0 ? (
-                <div className="mx-auto grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5">
-                  {results.map((item) => (
-                    <div key={item.id}>
-                      <ProductCard {...item} onSelect={() => setSelectedProduct(item)} />
+              {!hasFinalResults && !showPreviewResults && hasStartedSearch && !errorMessage && !isLoading ? (
+                <div className="rounded-[28px] border border-dashed border-stone-200 bg-stone-50/70 px-6 py-12 text-center sm:px-8">
+                  <div className="mx-auto max-w-xl space-y-3">
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+                      <Sparkles className="h-4 w-4 text-primary" />
                     </div>
-                  ))}
+                    <p className="text-lg font-medium text-slate-900">
+                      We&apos;re gathering options while you refine what matters.
+                    </p>
+                    <p className="text-sm leading-6 text-slate-600 sm:text-base">
+                      Use the guidance on the left for a more focused final set, or choose to show
+                      the current products right away.
+                    </p>
+                    <div className="mx-auto max-w-sm space-y-2 pt-2">
+                      <Button
+                        type="button"
+                        disabled={!candidatePool}
+                        className="h-11 w-full rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
+                        onClick={handleShowProductsNow}
+                      >
+                        Show products now
+                      </Button>
+                      <p className="text-xs leading-5 text-slate-500">
+                        Skip AI refinement and view the current product set.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
-              {!isLoading && !results.length && !errorMessage ? (
+              {displayedResults.length > 0 ? (
+                <div className="space-y-4">
+                  {!hasFinalResults ? (
+                    <div className="rounded-3xl border border-stone-200/80 bg-stone-50/90 px-4 py-3 text-sm text-slate-600">
+                      Preview products are ready. Use the AI refinement on the left to turn this
+                      into a more focused final set.
+                    </div>
+                  ) : null}
+
+                  <div className="mx-auto grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5">
+                    {displayedResults.map((item) => (
+                      <div key={item.id}>
+                        <ProductCard {...item} onSelect={() => setSelectedProduct(item)} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {!isLoading && displayedResults.length === 0 && !errorMessage ? (
                 <div className="rounded-[28px] border border-dashed border-stone-200 bg-stone-50/70 px-6 py-12 text-center sm:px-8">
                   <div className="mx-auto max-w-xl space-y-3">
                     <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
                       <Clock3 className="h-4 w-4 text-slate-500" />
                     </div>
                     <p className="text-lg font-medium text-slate-900">
-                      A short list will appear here after you search.
+                      Your shortlist will appear here.
                     </p>
                     <p className="text-sm leading-6 text-slate-600 sm:text-base">
-                      Start with a product, add any useful context, and Focama will bring back a
-                      few focused options instead of a crowded marketplace page.
+                      Start with the product. Then Focama can help you think through cost,
+                      comfort, quality, style, or whatever else matters before finalizing the picks.
                     </p>
                   </div>
                 </div>

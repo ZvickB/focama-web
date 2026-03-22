@@ -1,10 +1,10 @@
-import { handleLiveSearch } from '../backend/server.js'
-import { createResponseRecorder } from './_response-recorder.js'
+import { handleRefinementPrompt } from '../../backend/server.js'
+import { createResponseRecorder } from '../_response-recorder.js'
 
 export async function GET(request) {
   const response = createResponseRecorder()
 
-  await handleLiveSearch(new URL(request.url), response)
+  await handleRefinementPrompt(new URL(request.url), response)
 
   return new Response(response.body, {
     status: response.statusCode,
