@@ -1,75 +1,80 @@
 # Current Status
 
 ## Purpose
-- This file is a short handoff for future chats and AI agents.
-- It should capture the current implementation direction, active constraints, and immediate next step.
-- Keep this file brief and update it whenever a meaningful decision changes.
+- This file is the short project snapshot for future chats and handoffs.
+- It should reflect the app as it exists now, not old exploration decisions.
+- Keep it brief and update it when product direction or infrastructure changes in a meaningful way.
 
 ## Current state
-- The frontend is built in Vite + React with React Router, TanStack Query, and Tailwind.
-- The homepage UI is already in place with a search form, loading skeletons, result cards, and a product detail modal.
-- Product results now come from a live `/api/search` route that is shaped to work both locally and as a Vercel function.
-- A separate cache route still exists for debugging and temporary local fallback work, but the homepage now uses the live search path.
-- The live search path now:
+- The frontend is built in Vite + React with React Router, TanStack Query, Tailwind, and Vitest.
+- The default homepage at `/` now uses the `open` layout: spacious, search-first, single-column, and more mobile-friendly than the older split-screen layout.
+- Alternate homepage experiments are still preserved on separate routes for comparison:
+  - `/ui/hero`
+  - `/ui/flow`
+  - `/ui/concierge`
+  - `/ui/instant`
+  - `/ui/open`
+- The open layout now:
+  - uses the PNG wordmark in the hero
+  - removes chips
+  - expands into the AI refinement area after search
+  - keeps skeletons visible but lower-priority
+  - shows products in a 2x3 skeleton layout
+- Product shortlists are now 6 items end to end, not 4.
+- The route fallback in `src/App.jsx` now shows a branded loading state with the PNG wordmark and `Focused shopping` instead of `Loading page...`.
+- The site header uses a sharper small-size logo asset, and logo/favicon colors were adjusted to better match the current wordmark palette.
+
+## Search and backend state
+- Live product results come through `/api/search`.
+- The live search route currently:
   - validates input
-  - checks cache before calling external services
+  - checks cache before external calls
   - queries SerpApi
-  - filters a larger candidate pool
-  - uses AI to choose the final 4 cards
-  - includes drawbacks/tradeoffs in the result data
-- Search cache and history can now use Supabase when configured, with local file fallback for development.
-- Basic IP-based rate limiting now exists on `/api/search` to reduce abuse risk.
-- The app has had a light optimization pass:
-  - route-based lazy loading
-  - removal of unused large PNG assets
-  - lazy-loaded product card images
-  - header scroll behavior smoothed
-- Vitest is set up with backend and homepage flow tests.
-- Lighthouse on the local production build was strong:
-  - Performance 99
-  - Accessibility 94
-  - Best Practices 100
-  - SEO 92
+  - filters/cleans a candidate pool
+  - uses AI to refine and/or select the final shortlist
+  - includes tradeoffs/drawbacks in result data
+- Search cache and search history can use Supabase when configured.
+- Local file-based cache remains as a development/fallback path.
+- Basic IP-based rate limiting exists on `/api/search`.
+- Search history records cache hit/miss status best-effort.
+- Health/debug tooling now exists for the Supabase-backed storage path.
 
 ## Active product decisions
-- Do not redesign the UI right now.
-- Keep the current 4-result card layout and existing homepage flow.
-- Avoid overengineering and prefer the simplest vertical slice first.
-- The main goal is now to keep improving result quality, AI judgment, and deployment safety without changing the calm 4-card UX.
-- The frontend and backend response shape should stay vendor-agnostic even if different providers support different tiers later.
-- Amazon is the likely future priority for the free tier because it has the strongest affiliate opportunity.
-- SerpApi may remain useful later for a paid tier that offers broader search coverage.
-- Walmart is still worth considering because it has an affiliate path, while vendors with no affiliate option should usually only be shown when the user benefit is strong.
-- Work with SerpApi for now until the search pipeline is working and Amazon Creator API access is approved.
-- Future cache direction: cache raw SerpApi search results or candidate pools, not AI-context-specific final selections.
-- Future cache direction: treat the textarea details/context mainly as fresh ranking input for AI, not as the main cache key.
+- Keep the `open` homepage as the default for now.
+- Keep the other homepage variants available until one clear long-term winner emerges.
+- Preserve the beautiful skeletons, but let the AI refinement step own the viewport first.
+- Prefer the PNG wordmark for now rather than forcing a weak SVG recreation.
+- Favor calm, spacious, search-first UX over dashboard-like side-by-side layouts.
+- Keep the product vendor-agnostic at the response-shape level even if Amazon becomes the strongest affiliate path later.
+- Prioritize practical v1 decisions over premature architecture work.
 
 ## Current backend plan
 1. Read `SERPAPI_API_KEY` from the root `.env`.
 2. Read `OPENAI_API_KEY` from the root `.env`.
-3. Query SerpApi through the live `/api/search` route.
-4. Use rules to discard junk, duplicates, and weak candidates without treating rules as the final selector.
-5. Keep a larger cleaned candidate pool and send it to AI for final selection of 4 cards.
-6. Use the textarea context/details as the main fit signal, with ratings/reviews as supporting quality signals.
-7. Use Supabase for cache/history when configured, while keeping local cache fallback for development resilience.
-8. Keep the old debug cache tooling available, but do not treat local JSON cache as product infrastructure.
-9. Keep basic rate limiting in place and strengthen abuse protection later if usage grows.
+3. Read Supabase config from the root `.env` when available.
+4. Check cached search results before calling external services.
+5. Query SerpApi through the live `/api/search` route when cache misses.
+6. Filter junk, duplicates, and weak candidates before final ranking.
+7. Use AI where it improves refinement/selection quality.
+8. Store cache/history in Supabase when configured, with local fallback for development.
+9. Keep rate limiting in place and strengthen abuse protection later if usage grows.
 
 ## Important scope constraints
-- Do not do a major UI redesign for SerpApi.
-- Do not reshape the frontend around SerpApi-specific branding or assumptions.
-- Do not add extra architecture unless it is needed to complete the working slice.
-- Keep the implementation easy to debug so failures can be isolated between frontend, backend, and SerpApi response mapping.
+- Do not remove the alternate homepage variants yet.
+- Do not overengineer scaling work before v1 usage justifies it.
+- Do not force a brand-asset rebuild if the current PNG wordmark is working well.
+- Keep the implementation easy to debug across frontend, backend, storage, and vendor integrations.
 
 ## Environment notes
-- The SerpApi key should live in the root `.env` as `SERPAPI_API_KEY=...`.
-- The OpenAI key should live in the root `.env` as `OPENAI_API_KEY=...`.
-- The OpenAI model can optionally be overridden with `OPENAI_MODEL=...`.
+- `SERPAPI_API_KEY` should live in the root `.env`.
+- `OPENAI_API_KEY` should live in the root `.env`.
+- `OPENAI_MODEL` can optionally override the default model.
 - Supabase can be enabled with `SUPABASE_URL=...` and `SUPABASE_SECRET_KEY=...`.
 - The backend also accepts the legacy `SUPABASE_SERVICE_ROLE_KEY=...` if needed.
-- Search cache TTL can be tuned with `SEARCH_CACHE_TTL_MINUTES=...`.
+- `SEARCH_CACHE_TTL_MINUTES` controls cache TTL and currently defaults to `360` if omitted.
+- For early tester phases, a longer TTL like 24 hours is a reasonable option if stale data is acceptable.
 - The `.env` file is ignored by git.
 - This project is being worked in PowerShell on Windows.
 
 ## Recommended next task
-- Verify the latest Vercel deployment end to end, then keep tightening AI prompt quality, weak-result handling, and abuse protection while preserving vendor-agnostic boundaries.
+- Continue polishing the default `open` homepage, then verify the current deployed search/cache flow end to end and keep tightening result quality, cache behavior, and abuse protection based on real tester feedback.
