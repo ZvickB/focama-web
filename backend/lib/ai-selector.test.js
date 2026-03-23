@@ -19,7 +19,7 @@ function createCandidate(overrides = {}) {
     multipleSources: true,
     link: 'https://example.com/stroller',
     image: 'https://example.com/stroller.jpg',
-    reasons: ['Source: Target', 'Free shipping'],
+    reasons: ['Available from Target', 'Free shipping'],
     matchSignals: {
       titleMatches: 1,
       supportMatches: 1,

@@ -225,7 +225,7 @@ describe('server handlers', () => {
             multipleSources: true,
             link: 'https://example.com/stroller',
             image: 'https://example.com/stroller.jpg',
-            reasons: ['Source: Target'],
+            reasons: ['Available from Target'],
             matchSignals: {
               titleMatches: 1,
               supportMatches: 1,
@@ -293,7 +293,7 @@ describe('server handlers', () => {
             multipleSources: true,
             link: 'https://example.com/stroller',
             image: 'https://example.com/stroller.jpg',
-            reasons: ['Source: Target'],
+            reasons: ['Available from Target'],
             matchSignals: {
               titleMatches: 1,
               supportMatches: 1,

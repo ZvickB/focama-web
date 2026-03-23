@@ -707,11 +707,13 @@ export function HomeExperience({ variant = 'current' }) {
 
   return (
     <>
-      <div className="px-3 pt-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl">
-          <VariantPicker />
+      {variant !== 'open' ? (
+        <div className="px-3 pt-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <VariantPicker />
+          </div>
         </div>
-      </div>
+      ) : null}
       <Layout {...layoutProps} />
       {state.selectedProduct ? (
         <ProductDetailModal item={state.selectedProduct} onClose={() => state.setSelectedProduct(null)} />

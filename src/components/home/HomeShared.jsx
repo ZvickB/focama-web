@@ -103,9 +103,7 @@ export function ProductDetailModal({ item, onClose }) {
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
               Product details
             </p>
-            <p className="text-sm text-slate-600">
-              AI-picked product details with tradeoffs while retailer links come later
-            </p>
+            <p className="text-sm text-slate-600">A closer look at this recommendation.</p>
           </div>
           <Button
             type="button"
@@ -185,15 +183,27 @@ export function ProductDetailModal({ item, onClose }) {
 
             <div className="sticky bottom-0 flex flex-col gap-3 border-t border-stone-200/80 bg-[#fcf8f1]/95 py-4 backdrop-blur sm:flex-row">
               <div className="flex-1 space-y-2">
-                <Button
-                  type="button"
-                  className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
-                >
-                  Retailer links coming next
-                  <ArrowUpRight className="h-4 w-4" />
-                </Button>
+                {item.link ? (
+                  <Button
+                    asChild
+                    className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
+                  >
+                    <a href={item.link} target="_blank" rel="noreferrer">
+                      View on retailer site
+                      <ArrowUpRight className="h-4 w-4" />
+                    </a>
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    disabled
+                    className="h-12 w-full gap-2 rounded-2xl bg-stone-200 text-slate-500 hover:bg-stone-200"
+                  >
+                    Retailer link unavailable
+                  </Button>
+                )}
                 <p className="text-xs leading-5 text-slate-500">
-                  This first backend slice only proves the raw search pipeline.
+                  Prices and availability can change after you leave Focama.
                 </p>
               </div>
               <Button
@@ -446,7 +456,7 @@ export function ResultsSection({
               ? 'These picks were finalized after your guided refinement. You now have six focused options.'
               : hasStartedSearch
                 ? 'The shortlist is being built below while the AI helps narrow what matters.'
-                : 'Once you start, Focama narrows the strongest options and shows clear tradeoffs instead of a noisy marketplace wall.'}
+                : 'Search to see a calmer shortlist with clear tradeoffs instead of a noisy marketplace wall.'}
           </p>
         </div>
       )}
@@ -459,10 +469,10 @@ export function ResultsSection({
 
       {selectionMeta && !isLoading ? (
         <div className="rounded-3xl border border-stone-200/80 bg-stone-50/90 px-4 py-3 text-sm text-slate-600">
-          <span className="font-medium text-slate-800">Selection path:</span> AI Help.
+          <span className="font-medium text-slate-800">How this shortlist was chosen:</span>{' '}
           {selectionMeta.mode === 'ai'
-            ? ' The AI-picked set came from the cleaned candidate pool.'
-            : ' Rules-only fallback was used because the AI request failed.'}
+            ? 'AI helped narrow the strongest options from the full product pool.'
+            : 'A rules-based fallback was used for this shortlist.'}
         </div>
       ) : null}
 
@@ -580,10 +590,10 @@ export function ResultsSection({
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
               <Clock3 className="h-4 w-4 text-slate-500" />
             </div>
-            <p className="text-lg font-medium text-slate-900">Your shortlist will appear here.</p>
+            <p className="text-lg font-medium text-slate-900">No shortlist is ready yet.</p>
             <p className="text-sm leading-6 text-slate-600 sm:text-base">
-              Start with the product, then Focama helps you think through cost, comfort, quality,
-              style, or whatever else matters before finalizing the picks.
+              Try a more specific product search or add a little more context so Focama can narrow
+              the strongest options.
             </p>
           </div>
         </div>

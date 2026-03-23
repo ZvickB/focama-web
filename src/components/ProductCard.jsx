@@ -9,6 +9,7 @@ function ProductCard({
   description,
   drawbacks = [],
   image,
+  link,
   onSelect,
   price,
   rating,
@@ -74,9 +75,22 @@ function ProductCard({
           </p>
         ) : null}
       </CardContent>
-      <CardContent className="flex items-center justify-between border-t border-stone-100 px-4 py-3 text-sm font-medium text-slate-500">
+      <CardContent className="flex items-center justify-between gap-3 border-t border-stone-100 px-4 py-3 text-sm font-medium text-slate-500">
         <span>Tap for details</span>
-        <ChevronRight className="h-4 w-4 text-slate-400" />
+        {link ? (
+          <a
+            href={link}
+            target="_blank"
+            rel="noreferrer"
+            className="relative z-10 inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-stone-300 hover:text-slate-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            View site
+            <ChevronRight className="h-4 w-4 text-slate-400" />
+          </a>
+        ) : (
+          <ChevronRight className="h-4 w-4 text-slate-400" />
+        )}
       </CardContent>
     </Card>
   )

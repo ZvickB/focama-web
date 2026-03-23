@@ -86,7 +86,7 @@ export function normalizeResult(item, index, reasonFallback) {
     reviewCount: Number.isFinite(numericReviews) ? numericReviews : 0,
     description,
     reasons: [
-      `Source: ${source}`,
+      `Available from ${source}`,
       item.delivery || item.second_hand_condition || reasonFallback,
       item.extracted_price ? `Listed around $${item.extracted_price}` : 'Price details were limited in the raw result',
     ],

@@ -37,7 +37,7 @@ describe('search-data helpers', () => {
       rating: 4.4,
       reviewCount: 87,
       description: 'Lightweight and easy to fold.',
-      reasons: ['Source: Target', 'Free delivery', 'Listed around $129.99'],
+      reasons: ['Available from Target', 'Free delivery', 'Listed around $129.99'],
       image: 'https://example.com/stroller.jpg',
       link: 'https://example.com/stroller',
     })
