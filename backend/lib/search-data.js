@@ -150,7 +150,15 @@ export function readSearchEvaluationDataset() {
   }
 }
 
-export function writeSearchCacheEntry({ productQuery, details, results }) {
+export function writeSearchCacheEntry({
+  productQuery,
+  details,
+  results,
+  candidatePool = null,
+  selection = null,
+  source = 'local_file_cache',
+  expiresAt = null,
+}) {
   mkdirSync(resolve(process.cwd(), 'temp-data'), { recursive: true })
 
   const existingCache = readSearchCache()
@@ -162,6 +170,10 @@ export function writeSearchCacheEntry({ productQuery, details, results }) {
         productQuery,
         details,
         cachedAt: new Date().toISOString(),
+        candidatePool,
+        selection,
+        source,
+        expiresAt,
         results,
       },
     },

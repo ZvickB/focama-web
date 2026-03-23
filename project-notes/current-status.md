@@ -12,10 +12,12 @@
 - A separate cache route still exists for debugging and temporary local fallback work, but the homepage now uses the live search path.
 - The live search path now:
   - validates input
+  - checks cache before calling external services
   - queries SerpApi
   - filters a larger candidate pool
   - uses AI to choose the final 4 cards
   - includes drawbacks/tradeoffs in the result data
+- Search cache and history can now use Supabase when configured, with local file fallback for development.
 - Basic IP-based rate limiting now exists on `/api/search` to reduce abuse risk.
 - The app has had a light optimization pass:
   - route-based lazy loading
@@ -39,6 +41,8 @@
 - SerpApi may remain useful later for a paid tier that offers broader search coverage.
 - Walmart is still worth considering because it has an affiliate path, while vendors with no affiliate option should usually only be shown when the user benefit is strong.
 - Work with SerpApi for now until the search pipeline is working and Amazon Creator API access is approved.
+- Future cache direction: cache raw SerpApi search results or candidate pools, not AI-context-specific final selections.
+- Future cache direction: treat the textarea details/context mainly as fresh ranking input for AI, not as the main cache key.
 
 ## Current backend plan
 1. Read `SERPAPI_API_KEY` from the root `.env`.
@@ -47,8 +51,9 @@
 4. Use rules to discard junk, duplicates, and weak candidates without treating rules as the final selector.
 5. Keep a larger cleaned candidate pool and send it to AI for final selection of 4 cards.
 6. Use the textarea context/details as the main fit signal, with ratings/reviews as supporting quality signals.
-7. Keep the cache tooling available only as a debugging aid.
-8. Keep basic rate limiting in place and strengthen abuse protection later if usage grows.
+7. Use Supabase for cache/history when configured, while keeping local cache fallback for development resilience.
+8. Keep the old debug cache tooling available, but do not treat local JSON cache as product infrastructure.
+9. Keep basic rate limiting in place and strengthen abuse protection later if usage grows.
 
 ## Important scope constraints
 - Do not do a major UI redesign for SerpApi.
@@ -60,6 +65,9 @@
 - The SerpApi key should live in the root `.env` as `SERPAPI_API_KEY=...`.
 - The OpenAI key should live in the root `.env` as `OPENAI_API_KEY=...`.
 - The OpenAI model can optionally be overridden with `OPENAI_MODEL=...`.
+- Supabase can be enabled with `SUPABASE_URL=...` and `SUPABASE_SECRET_KEY=...`.
+- The backend also accepts the legacy `SUPABASE_SERVICE_ROLE_KEY=...` if needed.
+- Search cache TTL can be tuned with `SEARCH_CACHE_TTL_MINUTES=...`.
 - The `.env` file is ignored by git.
 - This project is being worked in PowerShell on Windows.
 
