@@ -1,20 +1,20 @@
 <svg width="560" height="432" viewBox="120 150 560 432" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="focama-header-f-fill" x1="238" y1="188" x2="553" y2="516" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#365F68" />
-      <stop offset="1" stop-color="#1D363D" />
+      <stop offset="0" stop-color="#0F6175" />
+      <stop offset="1" stop-color="#0A4F61" />
     </linearGradient>
     <linearGradient id="focama-header-swoosh-fill" x1="146" y1="557" x2="638" y2="367" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F0A126" />
-      <stop offset="0.8" stop-color="#F0A126" />
-      <stop offset="1" stop-color="#CF6F08" />
+      <stop offset="0" stop-color="#E59B26" />
+      <stop offset="0.8" stop-color="#E59B26" />
+      <stop offset="1" stop-color="#C86F0E" />
     </linearGradient>
   </defs>
 
   <path
     d="M333 188H564L552 241C547 262 528 276 507 276H390L380 323H501L489 376C484 397 466 411 444 411H358L345 493L230 531L281 241C287 210 308 188 340 188H333Z"
     fill="url(#focama-header-f-fill)"
-    stroke="#69D1E5"
+    stroke="#58B8D0"
     stroke-width="7"
     stroke-linejoin="round"
   />
@@ -39,7 +39,7 @@
   />
   <path
     d="M146 557C315 547 491 483 638 367"
-    stroke="#A95906"
+    stroke="#9D590B"
     stroke-width="3"
     stroke-linecap="round"
     opacity="0.9"

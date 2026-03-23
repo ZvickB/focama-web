@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Check, ChevronRight, LoaderCircle, Search, Sparkles } from 'lucide-react'
 
+import wordmark from '@/assets/wordmark.PNG'
 import { Button } from '@/components/ui/button.jsx'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Label } from '@/components/ui/label.jsx'
@@ -512,9 +513,11 @@ function OpenLayout(props) {
         <section className="w-full max-w-4xl space-y-6 text-center">
           <div className="space-y-4">
             <div className="space-y-2">
-              <h1 className="text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl lg:text-7xl">
-                Focama
-              </h1>
+              <img
+                src={wordmark}
+                alt="Focama"
+                className="mx-auto h-auto w-full max-w-[240px] sm:max-w-[340px] lg:max-w-[420px]"
+              />
             </div>
             <div className="space-y-3">
               <h2 className="text-2xl font-medium tracking-tight text-slate-900 sm:text-4xl">

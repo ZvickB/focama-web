@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import SiteLayout from '@/components/SiteLayout.jsx'
+import wordmark from '@/assets/wordmark.PNG'
 
 const HomePage = lazy(() => import('@/pages/HomePage.jsx'))
 const HomePageHero = lazy(() => import('@/pages/HomePageHero.jsx'))
@@ -19,7 +20,11 @@ function RouteFallback() {
     <main className="px-4 py-16 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-5xl flex-col items-center gap-8">
         <div className="space-y-3 text-center">
-          <p className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">Focama</p>
+          <img
+            src={wordmark}
+            alt="Focama"
+            className="mx-auto h-auto w-full max-w-[220px] sm:max-w-[300px] lg:max-w-[360px]"
+          />
           <p className="text-sm text-slate-500">Focused shopping</p>
         </div>
         <div className="w-full max-w-3xl rounded-[36px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.28)] backdrop-blur sm:p-5">
