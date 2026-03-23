@@ -1,7 +1,7 @@
 import { buildQuery, normalizeResult } from './search-data.js'
 
 export const DEFAULT_FILTER_CONFIG = {
-  finalResultLimit: 4,
+  finalResultLimit: 6,
   candidatePoolSize: 20,
   minimumScore: 0,
   diversifyPoolMultiplier: 2,

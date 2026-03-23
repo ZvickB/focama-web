@@ -428,7 +428,7 @@ function InstantLayout(props) {
             />
 
             <div className="grid gap-4 sm:grid-cols-2">
-              {RESULT_CARD_SLOTS.slice(0, 4).map((index) => (
+              {RESULT_CARD_SLOTS.map((index) => (
                 <ResultSkeleton key={index} />
               ))}
             </div>

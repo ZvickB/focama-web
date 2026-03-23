@@ -5,11 +5,16 @@ import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, takeRateLimitToken } fro
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
 import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './lib/result-filter.js'
 import {
+  getSupabaseHealth,
+  readStoredSearchCacheEntry,
+  recordSearchHistory,
+  writeStoredSearchCacheEntry,
+} from './lib/search-storage.js'
+import {
   SERPAPI_ENDPOINT,
   buildCacheKey,
   buildQuery,
   getEnv,
-  readSearchCache,
   validateSearchInput,
 } from './lib/search-data.js'
 
@@ -17,7 +22,7 @@ const PORT = Number(process.env.PORT || 8787)
 const LIVE_RESULT_FILTER_CONFIG = {
   ...DEFAULT_FILTER_CONFIG,
   candidatePoolSize: 20,
-  finalResultLimit: 4,
+  finalResultLimit: 6,
 }
 const LIVE_SEARCH_RATE_LIMIT = {
   ...DEFAULT_RATE_LIMIT_CONFIG,
@@ -127,12 +132,14 @@ export async function handleCachedSearch(requestUrl, response) {
     return
   }
 
-  const cache = readSearchCache()
-  const cacheEntry = cache.entries?.[buildCacheKey(normalizedQuery, normalizedDetails)]
+  const cacheEntry = await readStoredSearchCacheEntry({
+    productQuery: normalizedQuery,
+    details: normalizedDetails,
+  })
 
   if (cacheEntry?.results?.length) {
     sendJson(response, 200, {
-      results: cacheEntry.results.slice(0, 4),
+      results: cacheEntry.results.slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit),
       source: 'cache',
       cachedAt: cacheEntry.cachedAt,
     })
@@ -175,6 +182,53 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
 
   if (!isValid) {
     sendJson(response, 400, { error })
+    return
+  }
+
+  const cacheKey = buildCacheKey(normalizedQuery, normalizedDetails)
+
+  const cachedEntry = await readStoredSearchCacheEntry({
+    productQuery: normalizedQuery,
+    details: normalizedDetails,
+  })
+
+  if (cachedEntry?.results?.length) {
+    const cachedSelection = cachedEntry.selection || {
+      mode: 'cache',
+      model: null,
+      selectedCandidateIds: cachedEntry.results.map((item) => item.id),
+      details: 'Cached search results were returned.',
+    }
+
+    await recordSearchHistory({
+      cacheKey,
+      cacheStatus: 'hit',
+      candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
+        ? cachedEntry.candidatePool.candidates.length
+        : cachedEntry.results.length,
+      details: normalizedDetails,
+      productQuery: normalizedQuery,
+      resultCount: cachedEntry.results.length,
+      selectionMode: cachedSelection.mode,
+      source: cachedEntry.source || 'cache',
+    })
+
+    sendJson(response, 200, {
+      candidatePool:
+        cachedEntry.candidatePool ||
+        {
+          query: normalizedQuery,
+          details: normalizedDetails,
+          combinedSearchText: buildQuery(normalizedQuery, normalizedDetails),
+          searchState: 'Cached search results',
+          similarQueries: [],
+          candidates: [],
+        },
+      results: cachedEntry.results,
+      selection: cachedSelection,
+      source: 'cache',
+      cachedAt: cachedEntry.cachedAt,
+    })
     return
   }
 
@@ -223,6 +277,26 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
         details: error instanceof Error ? error.message : 'AI selection failed; using fallback results.',
       }
     }
+
+    await writeStoredSearchCacheEntry({
+      productQuery: normalizedQuery,
+      details: normalizedDetails,
+      candidatePool,
+      results,
+      selection,
+      source: 'live_search',
+    })
+
+    await recordSearchHistory({
+      cacheKey,
+      cacheStatus: 'miss',
+      candidateCount: Array.isArray(candidatePool?.candidates) ? candidatePool.candidates.length : 0,
+      details: normalizedDetails,
+      productQuery: normalizedQuery,
+      resultCount: results.length,
+      selectionMode: selection.mode,
+      source: 'live_search',
+    })
 
     sendJson(response, 200, {
       candidatePool,
@@ -316,6 +390,20 @@ export async function handleRefinementPrompt(requestUrl, response) {
       details: error instanceof Error ? error.message : 'Unknown error',
     })
   }
+}
+
+export async function handleSupabaseHealth(response) {
+  const health = await getSupabaseHealth()
+
+  if (!health.configured) {
+    sendJson(response, 500, {
+      error: 'Supabase is not configured.',
+      details: 'Add SUPABASE_URL and SUPABASE_SECRET_KEY or the legacy SUPABASE_SERVICE_ROLE_KEY.',
+    })
+    return
+  }
+
+  sendJson(response, health.ok ? 200 : 500, health)
 }
 
 export async function handleFinalizeSelection(request, response) {
@@ -437,6 +525,11 @@ export function createApiServer() {
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search/refine') {
       await handleRefinementPrompt(requestUrl, response)
+      return
+    }
+
+    if (request.method === 'GET' && requestUrl.pathname === '/api/health/supabase') {
+      await handleSupabaseHealth(response)
       return
     }
 

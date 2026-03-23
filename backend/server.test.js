@@ -27,17 +27,22 @@ vi.mock('./lib/search-data.js', async () => {
   buildCacheKey: vi.fn((productQuery, details) => `${productQuery}|${details}`),
   buildQuery: vi.fn((productQuery, details) => [productQuery, details].filter(Boolean).join(' ').trim()),
   getEnv: vi.fn(),
-  readSearchCache: vi.fn(),
   }
 })
+
+vi.mock('./lib/search-storage.js', () => ({
+  readStoredSearchCacheEntry: vi.fn(),
+  recordSearchHistory: vi.fn(),
+  writeStoredSearchCacheEntry: vi.fn(),
+}))
 
 import { handleCachedSearch, handleLiveSearch } from './server.js'
 import { resetRateLimitStore } from './lib/rate-limit.js'
 import { selectAiResults } from './lib/ai-selector.js'
 import { getFilteredSearchArtifacts } from './lib/result-filter.js'
+import { readStoredSearchCacheEntry } from './lib/search-storage.js'
 import {
   getEnv,
-  readSearchCache,
 } from './lib/search-data.js'
 
 function createResponseRecorder() {
@@ -60,22 +65,13 @@ describe('server handlers', () => {
     vi.clearAllMocks()
     vi.unstubAllGlobals()
     resetRateLimitStore()
+    readStoredSearchCacheEntry.mockResolvedValue(null)
   })
 
-  it('returns cached search results and slices them to four items', async () => {
-    readSearchCache.mockReturnValue({
-      entries: {
-        'lego|for kids': {
-          cachedAt: '2026-03-17T12:00:00.000Z',
-          results: [
-            { id: '1' },
-            { id: '2' },
-            { id: '3' },
-            { id: '4' },
-            { id: '5' },
-          ],
-        },
-      },
+  it('returns cached search results and slices them to six items', async () => {
+    readStoredSearchCacheEntry.mockResolvedValue({
+      cachedAt: '2026-03-17T12:00:00.000Z',
+      results: [{ id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }, { id: '5' }, { id: '6' }, { id: '7' }],
     })
 
     const response = createResponseRecorder()
@@ -84,7 +80,7 @@ describe('server handlers', () => {
 
     expect(response.statusCode).toBe(200)
     expect(JSON.parse(response.body)).toEqual({
-      results: [{ id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }],
+      results: [{ id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }, { id: '5' }, { id: '6' }],
       source: 'cache',
       cachedAt: '2026-03-17T12:00:00.000Z',
     })
@@ -334,7 +330,7 @@ describe('server handlers', () => {
     expect(requestedUrl.searchParams.get('engine')).toBe('google_shopping')
     expect(selectAiResults).toHaveBeenCalledWith({
       candidatePool: expect.any(Object),
-      finalResultLimit: 4,
+      finalResultLimit: 6,
       apiKey: 'openai-key',
       model: expect.any(String),
     })

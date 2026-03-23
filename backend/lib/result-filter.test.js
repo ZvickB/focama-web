@@ -52,7 +52,7 @@ describe('result filter', () => {
       {
         productQuery: 'ipad cover',
         details: '',
-        finalResultLimit: 4,
+        finalResultLimit: 6,
         reasonFallback: 'Returned by the live SerpApi search route',
       },
     )
@@ -92,7 +92,7 @@ describe('result filter', () => {
       {
         productQuery: 'ipad cover',
         details: '',
-        finalResultLimit: 4,
+        finalResultLimit: 6,
         reasonFallback: 'Returned by the live SerpApi search route',
       },
     )

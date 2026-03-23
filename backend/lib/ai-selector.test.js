@@ -73,7 +73,7 @@ describe('ai selector', () => {
             }),
           ],
         },
-        finalResultLimit: 4,
+        finalResultLimit: 6,
       },
       fetchMock,
     )
@@ -126,7 +126,7 @@ describe('ai selector', () => {
           similarQueries: [],
           candidates: [createCandidate()],
         },
-        finalResultLimit: 4,
+        finalResultLimit: 6,
       },
       fetchMock,
     )
