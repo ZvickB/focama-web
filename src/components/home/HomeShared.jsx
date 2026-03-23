@@ -425,28 +425,31 @@ export function ResultsSection({
   variant = 'default',
 }) {
   const quietLoading = variant === 'flow' || variant === 'hero' || variant === 'concierge'
+  const isOpenVariant = variant === 'open'
 
   return (
     <section className="space-y-5">
-      <div className="space-y-3">
-        <Badge variant="outline" className="w-fit rounded-full bg-stone-50 px-3 py-1">
-          Results
-        </Badge>
-        <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-          {isLoading && !hasFinalResults
-            ? 'Shortlist in progress'
-            : hasStartedSearch
-              ? `Focused picks for "${submittedQuery}"`
-              : 'A calmer shortlist starts here'}
-        </h2>
-        <p className="max-w-3xl text-base leading-7 text-slate-600">
-          {hasFinalResults
-            ? 'These picks were finalized after your guided refinement. You now have six focused options.'
-            : hasStartedSearch
-              ? 'The shortlist is being built below while the AI helps narrow what matters.'
-              : 'Once you start, Focama narrows the strongest options and shows clear tradeoffs instead of a noisy marketplace wall.'}
-        </p>
-      </div>
+      {isOpenVariant && !hasStartedSearch ? null : (
+        <div className="space-y-3">
+          <Badge variant="outline" className="w-fit rounded-full bg-stone-50 px-3 py-1">
+            Results
+          </Badge>
+          <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+            {isLoading && !hasFinalResults
+              ? 'Shortlist in progress'
+              : hasStartedSearch
+                ? `Focused picks for "${submittedQuery}"`
+                : 'A calmer shortlist starts here'}
+          </h2>
+          <p className="max-w-3xl text-base leading-7 text-slate-600">
+            {hasFinalResults
+              ? 'These picks were finalized after your guided refinement. You now have six focused options.'
+              : hasStartedSearch
+                ? 'The shortlist is being built below while the AI helps narrow what matters.'
+                : 'Once you start, Focama narrows the strongest options and shows clear tradeoffs instead of a noisy marketplace wall.'}
+          </p>
+        </div>
+      )}
 
       {errorMessage ? (
         <div className="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import logo from '@/assets/logo_master_version.svg'
+import logo from '@/assets/logo_header_mark.svg'
 
 const navItems = [
   { to: '/', label: 'Home', end: true },
@@ -133,8 +133,8 @@ function SiteLayout() {
                   alt="Focama logo"
                   width="96"
                   height="96"
-                  className={`rounded-[22px] bg-stone-50/50 object-contain p-1 shadow-[0_10px_30px_-18px_rgba(15,23,42,0.35)] ring-1 ring-stone-200/50 transition-all duration-300 ease-out ${
-                    isCompact ? 'h-12 w-12 sm:h-14 sm:w-14' : 'h-20 w-20 sm:h-24 sm:w-24'
+                  className={`rounded-[18px] bg-white/35 object-contain p-0.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)] ring-1 ring-stone-200/35 transition-all duration-300 ease-out ${
+                    isCompact ? 'h-12 w-12 sm:h-14 sm:w-14' : 'h-16 w-16 sm:h-20 sm:w-20'
                   }`}
                 />
                 <span className="text-lg font-semibold tracking-[0.08em] sm:text-xl">FOCAMA</span>

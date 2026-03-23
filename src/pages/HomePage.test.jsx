@@ -109,8 +109,10 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /start search/i }))
 
     expect(await screen.findByText(/what should we optimize for with this stroller/i)).toBeInTheDocument()
-    expect(screen.getByText(/products are ready\. apply your priorities when you are\./i)).toBeInTheDocument()
-    expect(screen.getByText(/we're gathering options while you refine what matters/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/products are ready in the background\. you can refine first or skip ahead\./i),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/skip ai refinement\./i)).toBeInTheDocument()
   })
 
   it('shows the backend error message when discovery fails', async () => {
@@ -211,7 +213,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.click(screen.getByRole('button', { name: /^comfort$/i }))
+    await user.type(screen.getByLabelText(/add context for the ai/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
 
     expect(await screen.findByText('Compact airport stroller')).toBeInTheDocument()
@@ -268,7 +270,7 @@ describe('HomePage', () => {
     await user.click(screen.getAllByRole('button', { name: /show products now/i })[0])
 
     expect(await screen.findByText('Travel stroller')).toBeInTheDocument()
-    expect(screen.getByText(/skip ai refinement and view the current product set/i)).toBeInTheDocument()
+    expect(screen.getByText(/skip ai refinement\./i)).toBeInTheDocument()
   })
 
   it('lets the user type directly into the single product input before starting the search', async () => {

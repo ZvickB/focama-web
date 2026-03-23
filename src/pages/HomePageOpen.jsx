@@ -1,7 +1,7 @@
 import { HomeExperience } from '@/components/home/HomeExperience.jsx'
 
-function HomePage() {
+function HomePageOpen() {
   return <HomeExperience variant="open" />
 }
 
-export default HomePage
+export default HomePageOpen
