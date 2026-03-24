@@ -78,7 +78,7 @@ Status: done
 - Keep privacy and affiliate language aligned with actual behavior.
 
 ### 4.2 Keep project notes in sync after each backend change
-Status: pending
+Status: done
 - Update `app_flow.md`, `current-status.md`, and `session-handoff.md` whenever the backend shape changes meaningfully.
 - Treat stale notes as real cleanup debt, not optional polish.
 - Note: lightly refreshed on 2026-03-24 after the debug/health tooling cleanup, but left pending so future backend changes still trigger another sync pass.

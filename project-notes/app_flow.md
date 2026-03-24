@@ -30,6 +30,7 @@
   - final focused picks come from `/api/search/finalize`
   - this guided flow is the primary backend architecture for the live product experience
   - the legacy `/api/search` route still exists only as a combined backend/debug path and should not shape homepage behavior
+  - the Vercel route wrappers now forward request headers into the backend handlers so IP-based rate limiting can still key off forwarded client IPs in production
 - Backend debug/health tooling should mirror that same split:
   - `/api/search/debug` should describe the guided flow as primary
   - `/api/search` should be treated as legacy/manual
@@ -46,6 +47,11 @@
 - Product data comes from the live search backend path rather than a frontend mock catalog.
 - The backend now filters candidates and uses AI to improve the final shortlist rather than simply returning the first raw usable results.
 - Search history/cache persistence now exists through the storage layer, with Supabase preferred and local fallback for development.
+- Guided finalization is now explicitly guarded:
+  - request bodies larger than 32 KB are rejected
+  - candidate pools are capped at 20 candidates
+  - follow-up notes are truncated to 500 characters before going to OpenAI
+  - priorities are sanitized and capped before they are merged into final selection context
 - Retailer product links can already appear in the modal, but affiliate handling and disclosure strategy are not finalized.
 
 ## Marketplace direction

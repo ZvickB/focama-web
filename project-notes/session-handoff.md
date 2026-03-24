@@ -43,6 +43,8 @@
   - `/api/search/finalize` for the final shortlist
 - This guided flow is the primary backend architecture for the homepage
 - The older direct `/api/search` route still exists only for manual/debug use
+- The Vercel route wrappers now preserve forwarded request headers so backend IP-based rate limiting still works in production deployments
+- Guided `/api/search/finalize` now rejects oversized or malformed payloads before AI selection and caps candidate pool size at 20
 - `/api/search/debug` should be read as guided-primary debug output, with `/api/search` treated as the legacy combined route
 - `/api/health/supabase` now reports local fallback as a supported state when Supabase is not configured
 - Open layout behavior:
@@ -61,6 +63,7 @@
 ## Testing state
 - In the latest backend cleanup pass:
   - `npm test -- backend/server.test.js` passed
+  - `npm test -- api/search/routes.test.js` passed
 
 ## Recent user preferences
 - Prefer minimal copy in the open layout
