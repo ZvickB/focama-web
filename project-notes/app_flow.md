@@ -28,7 +28,8 @@
   - discovery starts through `/api/search/discover`
   - the follow-up prompt comes from `/api/search/refine`
   - final focused picks come from `/api/search/finalize`
-  - the legacy `/api/search` route still exists as a direct backend path, but it is not the main homepage flow
+  - this guided flow is the primary backend architecture for the live product experience
+  - the legacy `/api/search` route still exists only as a combined backend/debug path and should not shape homepage behavior
 - After loading/refinement, the page displays up to 6 normalized product cards.
 - Clicking a product opens a detail modal with:
   - product image
@@ -70,7 +71,7 @@
   - branding and loading fallback
   - product-card interaction pattern
   - live guided search endpoints
-  - legacy direct `/api/search` route
+  - legacy direct `/api/search` route for manual/debug use
   - AI-assisted shortlist selection
   - outbound retailer product links when available
   - Supabase-backed cache/history path

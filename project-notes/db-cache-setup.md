@@ -1,7 +1,7 @@
 # DB and Cache Setup
 
 ## Current direction
-- The live `/api/search` route now supports a real cache layer.
+- The primary guided search flow now uses the shared cache/storage layer through `/api/search/discover` and related backend handlers.
 - If `SUPABASE_URL` and a server-side Supabase key are configured, cache and search-history writes use Supabase.
 - If Supabase is not configured or is temporarily unavailable, the app falls back to the existing local JSON cache in `temp-data/`.
 - This keeps local development easy while giving us a production-ready persistence path.
@@ -81,6 +81,7 @@ create index if not exists search_history_cache_key_idx
 - Expired Supabase rows are ignored but not actively deleted yet.
 - Search history is best-effort analytics/persistence and should not block responses.
 - The old `/api/search/cache` debugging route still works, now through the same storage abstraction.
+- The legacy combined `/api/search` route is still available for manual/debug use, but it is not the primary product path.
 - The current implementation is broader than the preferred future direction because it can cache full search responses; when revisited, narrow this toward SerpApi/raw candidate caching first.
 
 ## Recommended next step

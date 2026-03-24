@@ -47,6 +47,10 @@ describe('Vercel search route wrappers', () => {
     const response = await getSearch(request)
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('x-focama-route-status')).toBe('legacy_combined_search')
+    expect(response.headers.get('x-focama-route-recommended')).toBe(
+      '/api/search/discover -> /api/search/refine -> /api/search/finalize',
+    )
     expect(handleLiveSearch).toHaveBeenCalledWith(
       expect.any(URL),
       expect.any(Object),

@@ -7,7 +7,7 @@
 
 ## Current reality
 - The app is live on Vercel.
-- The homepage uses the live `/api/search` route.
+- The homepage uses the guided `/api/search/discover -> /api/search/refine -> /api/search/finalize` flow.
 - The default homepage is now the `open` layout, with alternate variants preserved for comparison.
 - SerpApi is wired through Vercel functions.
 - The backend prepares a cleaned candidate pool and uses AI to improve the final shortlist.
@@ -16,8 +16,9 @@
 - Input validation now blocks obviously low-signal queries.
 - TanStack Query is installed and used for the homepage search request flow.
 - The result cards and modal surface drawbacks/tradeoffs as well as reasons.
-- Basic IP-based rate limiting exists on `/api/search`.
+- Basic IP-based rate limiting exists on the search endpoints, including `/api/search/finalize`.
 - Supabase-backed cache/history storage and health tooling now exist, with local fallback for development.
+- The legacy combined `/api/search` route still exists only for backend/debug/manual use.
 
 ## Next likely work
 - Verify the live deployment end to end on desktop and mobile.

@@ -3,21 +3,20 @@ import { fileURLToPath } from 'node:url'
 import { DEFAULT_OPENAI_MODEL, selectAiResults } from './lib/ai-selector.js'
 import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, takeRateLimitToken } from './lib/rate-limit.js'
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
-import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './lib/result-filter.js'
+import { DEFAULT_FILTER_CONFIG } from './lib/result-filter.js'
+import {
+  ensureBadges,
+  fetchSearchArtifacts,
+  getValidatedSearchRequest,
+  readCachedSearchSnapshot,
+  recordSearchCacheEvent,
+  writeSearchSnapshot,
+} from './lib/search-pipeline.js'
 import {
   getSupabaseHealth,
   isSupabaseConfigured,
-  readStoredSearchCacheEntry,
-  recordSearchHistory,
-  writeStoredSearchCacheEntry,
 } from './lib/search-storage.js'
-import {
-  SERPAPI_ENDPOINT,
-  buildCacheKey,
-  buildQuery,
-  getEnv,
-  validateSearchInput,
-} from './lib/search-data.js'
+import { buildQuery, getEnv } from './lib/search-data.js'
 
 const PORT = Number(process.env.PORT || 8787)
 const LIVE_RESULT_FILTER_CONFIG = {
@@ -36,23 +35,9 @@ const FINALIZE_MAX_CANDIDATES = LIVE_RESULT_FILTER_CONFIG.candidatePoolSize
 const FINALIZE_MAX_NOTE_LENGTH = 500
 const FINALIZE_MAX_PRIORITIES = 8
 const FINALIZE_MAX_PRIORITY_LENGTH = 80
-
-function ensureBadges(results = []) {
-  if (!Array.isArray(results) || results.length === 0) {
-    return []
-  }
-
-  const hasExplicitBadges = results.some((item) => item?.badgeLabel)
-
-  if (hasExplicitBadges) {
-    return results
-  }
-
-  return results.map((item, index) => ({
-    ...item,
-    badgeLabel: index === 0 ? 'Best match' : '',
-    badgeReason: index === 0 ? 'Top overall fit for this shortlist.' : '',
-  }))
+const LEGACY_ROUTE_HEADERS = {
+  'X-Focama-Route-Status': 'legacy_combined_search',
+  'X-Focama-Route-Recommended': '/api/search/discover -> /api/search/refine -> /api/search/finalize',
 }
 
 export function sendJson(response, statusCode, payload) {
@@ -61,6 +46,22 @@ export function sendJson(response, statusCode, payload) {
     'Access-Control-Allow-Origin': '*',
   })
   response.end(JSON.stringify(payload))
+}
+
+function annotateResponseHeaders(response, extraHeaders) {
+  if (!response || typeof response.writeHead !== 'function') {
+    return response
+  }
+
+  return {
+    ...response,
+    writeHead(statusCode, headers = {}) {
+      response.writeHead(statusCode, {
+        ...headers,
+        ...extraHeaders,
+      })
+    },
+  }
 }
 
 function readRequestBody(request, { maxBytes = Infinity } = {}) {
@@ -241,9 +242,16 @@ function sanitizeFinalizeCandidatePool(candidatePool) {
     }
   }
 
+  if (candidatePool.candidates.length > FINALIZE_MAX_CANDIDATES) {
+    return {
+      error: `Candidate pool cannot include more than ${FINALIZE_MAX_CANDIDATES} candidates.`,
+      isValid: false,
+    }
+  }
+
   const candidates = []
 
-  for (const [index, candidate] of candidatePool.candidates.slice(0, FINALIZE_MAX_CANDIDATES).entries()) {
+  for (const [index, candidate] of candidatePool.candidates.entries()) {
     const sanitized = sanitizeFinalizeCandidate(candidate, index)
 
     if (!sanitized.isValid) {
@@ -266,83 +274,24 @@ function sanitizeFinalizeCandidatePool(candidatePool) {
   }
 }
 
-function getValidatedSearchInput(productQuery, details = '') {
-  const { error, isValid, normalizedDetails, normalizedQuery } = validateSearchInput(productQuery, details)
-
-  if (!isValid) {
-    return {
-      error,
-      isValid,
-    }
-  }
-
-  return {
-    isValid,
-    normalizedDetails,
-    normalizedQuery,
-  }
-}
-
-async function fetchCandidatePool({ productQuery, details = '', serpApiKey, response }) {
-  const searchUrl = new URL(SERPAPI_ENDPOINT)
-  searchUrl.searchParams.set('engine', 'google_shopping')
-  searchUrl.searchParams.set('q', buildQuery(productQuery, details))
-  searchUrl.searchParams.set('api_key', serpApiKey)
-  searchUrl.searchParams.set('gl', 'us')
-  searchUrl.searchParams.set('hl', 'en')
-
-  const apiResponse = await fetch(searchUrl)
-
-  if (!apiResponse.ok) {
-    const errorText = await apiResponse.text()
-
-    sendJson(response, 502, {
-      error: 'SerpApi request failed.',
-      details: errorText.slice(0, 300),
-    })
-    return null
-  }
-
-  const payload = await apiResponse.json()
-  const artifacts = getFilteredSearchArtifacts(payload, {
-    productQuery,
-    details,
-    candidatePoolSize: LIVE_RESULT_FILTER_CONFIG.candidatePoolSize,
-    finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
-    minimumScore: LIVE_RESULT_FILTER_CONFIG.minimumScore,
-    diversifyPoolMultiplier: LIVE_RESULT_FILTER_CONFIG.diversifyPoolMultiplier,
-    reasonFallback: 'Returned by the live SerpApi search route',
-  })
-
-  if (artifacts.results.length === 0) {
-    sendJson(response, 404, { error: 'No usable shopping results were returned.' })
-    return null
-  }
-
-  return artifacts
-}
-
 export async function handleCachedSearch(requestUrl, response) {
-  const productQuery = requestUrl.searchParams.get('query')?.trim() || ''
-  const details = requestUrl.searchParams.get('details')?.trim() || ''
-  const { error, isValid, normalizedDetails, normalizedQuery } = validateSearchInput(productQuery, details)
+  const { error, isValid, normalizedDetails, normalizedQuery } = getValidatedSearchRequest(requestUrl)
 
   if (!isValid) {
     sendJson(response, 400, { error })
     return
   }
 
-  const cacheEntry = await readStoredSearchCacheEntry({
+  const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
   })
 
-  if (cacheEntry?.results?.length) {
-    const normalizedCachedResults = ensureBadges(cacheEntry.results)
+  if (cachedEntry?.results?.length) {
     sendJson(response, 200, {
       results: normalizedCachedResults.slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit),
       source: 'cache',
-      cachedAt: cacheEntry.cachedAt,
+      cachedAt: cachedEntry.cachedAt,
     })
     return
   }
@@ -377,24 +326,18 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
     return
   }
 
-  const productQuery = requestUrl.searchParams.get('query')?.trim() || ''
-  const details = requestUrl.searchParams.get('details')?.trim() || ''
-  const { error, isValid, normalizedDetails, normalizedQuery } = getValidatedSearchInput(productQuery, details)
+  const { cacheKey, error, isValid, normalizedDetails, normalizedQuery } = getValidatedSearchRequest(requestUrl)
 
   if (!isValid) {
     sendJson(response, 400, { error })
     return
   }
-
-  const cacheKey = buildCacheKey(normalizedQuery, normalizedDetails)
-
-  const cachedEntry = await readStoredSearchCacheEntry({
+  const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
   })
 
   if (cachedEntry?.results?.length) {
-    const normalizedCachedResults = ensureBadges(cachedEntry.results)
     const cachedSelection = cachedEntry.selection || {
       mode: 'cache',
       model: null,
@@ -402,7 +345,7 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
       details: 'Cached search results were returned.',
     }
 
-    await recordSearchHistory({
+    await recordSearchCacheEvent({
       cacheKey,
       cacheStatus: 'hit',
       candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
@@ -435,14 +378,19 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
   }
 
   try {
-    const artifacts = await fetchCandidatePool({
+    const { artifacts, error: artifactsError } = await fetchSearchArtifacts({
+      filterConfig: LIVE_RESULT_FILTER_CONFIG,
       productQuery: normalizedQuery,
       details: normalizedDetails,
+      reasonFallback: 'Returned by the live SerpApi search route',
       serpApiKey,
-      response,
     })
 
-    if (!artifacts) {
+    if (artifactsError) {
+      sendJson(response, artifactsError.statusCode, {
+        error: artifactsError.error,
+        ...(artifactsError.details ? { details: artifactsError.details } : {}),
+      })
       return
     }
 
@@ -480,7 +428,7 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
       }
     }
 
-    await writeStoredSearchCacheEntry({
+    await writeSearchSnapshot({
       productQuery: normalizedQuery,
       details: normalizedDetails,
       candidatePool,
@@ -489,7 +437,7 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
       source: 'live_search',
     })
 
-    await recordSearchHistory({
+    await recordSearchCacheEvent({
       cacheKey,
       cacheStatus: 'miss',
       candidateCount: Array.isArray(candidatePool?.candidates) ? candidatePool.candidates.length : 0,
@@ -531,8 +479,9 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
     return
   }
 
-  const productQuery = requestUrl.searchParams.get('query')?.trim() || ''
-  const { error, isValid, normalizedQuery } = getValidatedSearchInput(productQuery)
+  const { cacheKey, error, isValid, normalizedQuery } = getValidatedSearchRequest(requestUrl, {
+    includeDetails: false,
+  })
 
   if (!isValid) {
     sendJson(response, 400, { error })
@@ -540,16 +489,13 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   }
 
   const normalizedDetails = ''
-  const cacheKey = buildCacheKey(normalizedQuery, normalizedDetails)
-  const cachedEntry = await readStoredSearchCacheEntry({
+  const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
   })
 
   if (cachedEntry?.candidatePool && cachedEntry?.results?.length) {
-    const normalizedCachedResults = ensureBadges(cachedEntry.results)
-
-    await recordSearchHistory({
+    await recordSearchCacheEvent({
       cacheKey,
       cacheStatus: 'hit',
       candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
@@ -572,18 +518,23 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   }
 
   try {
-    const artifacts = await fetchCandidatePool({
+    const { artifacts, error: artifactsError } = await fetchSearchArtifacts({
+      filterConfig: LIVE_RESULT_FILTER_CONFIG,
       productQuery: normalizedQuery,
       details: normalizedDetails,
+      reasonFallback: 'Returned by the live SerpApi search route',
       serpApiKey,
-      response,
     })
 
-    if (!artifacts) {
+    if (artifactsError) {
+      sendJson(response, artifactsError.statusCode, {
+        error: artifactsError.error,
+        ...(artifactsError.details ? { details: artifactsError.details } : {}),
+      })
       return
     }
 
-    await writeStoredSearchCacheEntry({
+    await writeSearchSnapshot({
       productQuery: normalizedQuery,
       details: normalizedDetails,
       candidatePool: artifacts.candidatePool,
@@ -597,7 +548,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
       source: 'guided_discovery',
     })
 
-    await recordSearchHistory({
+    await recordSearchCacheEvent({
       cacheKey,
       cacheStatus: 'miss',
       candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
@@ -624,8 +575,9 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
 
 export async function handleRefinementPrompt(requestUrl, response) {
   const openAiApiKey = getEnv('OPENAI_API_KEY')
-  const productQuery = requestUrl.searchParams.get('query')?.trim() || ''
-  const { error, isValid, normalizedQuery } = getValidatedSearchInput(productQuery)
+  const { error, isValid, normalizedQuery } = getValidatedSearchRequest(requestUrl, {
+    includeDetails: false,
+  })
 
   if (!isValid) {
     sendJson(response, 400, { error })
@@ -668,21 +620,17 @@ export async function handleSupabaseHealth(response) {
 }
 
 export async function handleSearchDebug(requestUrl, response) {
-  const productQuery = requestUrl.searchParams.get('query')?.trim() || ''
-  const details = requestUrl.searchParams.get('details')?.trim() || ''
-  const { error, isValid, normalizedDetails, normalizedQuery } = getValidatedSearchInput(productQuery, details)
+  const { cacheKey, error, isValid, normalizedDetails, normalizedQuery } = getValidatedSearchRequest(requestUrl)
 
   if (!isValid) {
     sendJson(response, 400, { error })
     return
   }
 
-  const cacheKey = buildCacheKey(normalizedQuery, normalizedDetails)
-  const cachedEntry = await readStoredSearchCacheEntry({
+  const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
   })
-  const normalizedCachedResults = ensureBadges(cachedEntry?.results || [])
   const hasResults = normalizedCachedResults.length > 0
   const hasCandidatePool = Boolean(cachedEntry?.candidatePool?.candidates)
   const guidedDiscoveryUsesCache = normalizedDetails === '' && hasCandidatePool && hasResults
@@ -846,7 +794,9 @@ export function createApiServer() {
     }
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search') {
-      await handleLiveSearch(requestUrl, response, request)
+      // Keep the combined live route available for debug/manual use,
+      // but the product-facing primary path is the guided flow.
+      await handleLiveSearch(requestUrl, annotateResponseHeaders(response, LEGACY_ROUTE_HEADERS), request)
       return
     }
 

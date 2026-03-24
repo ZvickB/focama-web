@@ -41,7 +41,8 @@
   - `/api/search/discover` for the candidate pool and preview set
   - `/api/search/refine` for the AI follow-up prompt
   - `/api/search/finalize` for the final shortlist
-- The older direct `/api/search` route still exists, but it is not the main homepage path
+- This guided flow is the primary backend architecture for the homepage
+- The older direct `/api/search` route still exists only for manual/debug use
 - Open layout behavior:
   - centered hero
   - search input first

@@ -30,7 +30,7 @@ Status: done
 - Add or update tests for header forwarding and rate-limit behavior.
 
 ### 1.3 Add basic body-size and candidate-size guardrails
-Status: pending
+Status: done
 - Reject finalize requests that exceed reasonable payload-size limits.
 - Reject candidate pools with too many candidates or invalid candidate shapes.
 - Keep the limits explicit in code so future chats do not silently expand them.
@@ -38,13 +38,13 @@ Status: pending
 ## Section 2: Backend Architecture Cleanup
 
 ### 2.1 Choose and document the primary backend flow
-Status: pending
+Status: done
 - Decide whether the guided flow (`/discover`, `/refine`, `/finalize`) is the sole primary path.
 - If yes, clearly demote or remove legacy `/api/search` usage where appropriate.
 - Update project notes so they describe one clear backend architecture.
 
 ### 2.2 Extract shared search pipeline logic
-Status: pending
+Status: done
 - Pull repeated logic out of `backend/server.js` into reusable helpers or services.
 - Consolidate shared steps like validation, cache lookup, SerpApi fetch, filtering, AI selection, and storage writes.
 - Keep handler functions thinner and more obviously route-specific.

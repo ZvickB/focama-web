@@ -618,7 +618,38 @@ describe('server handlers', () => {
     })
   })
 
-  it('caps finalize candidate count and note length before calling OpenAI', async () => {
+  it('rejects finalize candidate pools that exceed the explicit candidate limit', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+
+    const response = createResponseRecorder()
+    const candidates = Array.from({ length: 21 }, (_, index) => createFinalizeCandidate(`id-${index + 1}`))
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          candidatePool: {
+            query: 'stroller',
+            details: '',
+            combinedSearchText: 'stroller',
+            searchState: 'Results for exact spelling',
+            similarQueries: ['compact stroller'],
+            candidates,
+          },
+          followUpNotes: 'keep it lightweight',
+        }),
+        { 'x-forwarded-for': '203.0.113.23' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(400)
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'Candidate pool cannot include more than 20 candidates.',
+    })
+    expect(selectAiResults).not.toHaveBeenCalled()
+  })
+
+  it('caps finalize note length before calling OpenAI', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
     selectAiResults.mockResolvedValue({
       model: 'gpt-5-mini',
@@ -627,7 +658,7 @@ describe('server handlers', () => {
     })
 
     const response = createResponseRecorder()
-    const candidates = Array.from({ length: 25 }, (_, index) => createFinalizeCandidate(`id-${index + 1}`))
+    const candidates = Array.from({ length: 20 }, (_, index) => createFinalizeCandidate(`id-${index + 1}`))
     const longNotes = 'n'.repeat(800)
 
     await handleFinalizeSelection(
@@ -654,7 +685,7 @@ describe('server handlers', () => {
     expect(selectAiResults).toHaveBeenCalledWith({
       candidatePool: expect.objectContaining({
         details: `Priorities: lightweight, easy fold. Notes: ${'n'.repeat(500)}`,
-        candidates: expect.arrayContaining(candidates.slice(0, 20).map((candidate) => expect.objectContaining({ id: candidate.id }))),
+        candidates: expect.arrayContaining(candidates.map((candidate) => expect.objectContaining({ id: candidate.id }))),
       }),
       finalResultLimit: 6,
       apiKey: 'openai-key',

@@ -24,7 +24,8 @@
   - `/api/search/discover` gathers and filters the candidate pool
   - `/api/search/refine` generates the lightweight AI follow-up prompt
   - `/api/search/finalize` selects the final shortlist from the cleaned candidate pool
-- The legacy `/api/search` route still exists as a direct combined path for backend/debug use.
+- This guided flow is the primary backend path for the product.
+- The legacy `/api/search` route still exists only as a direct combined path for backend/debug/manual use.
 - The live search flow currently:
   - validates input
   - checks cache before external calls
@@ -51,11 +52,11 @@
 2. Read `OPENAI_API_KEY` from the root `.env`.
 3. Read Supabase config from the root `.env` when available.
 4. Check cached search results before calling external services.
-5. Query SerpApi through the discovery or direct live search route when cache misses.
+5. Query SerpApi through guided discovery when the primary product flow misses cache.
 6. Filter junk, duplicates, and weak candidates before final ranking.
 7. Use AI where it improves refinement prompt quality and final selection quality.
 8. Store cache/history in Supabase when configured, with local fallback for development.
-9. Keep rate limiting in place and strengthen abuse protection later if usage grows.
+9. Keep the legacy combined route available only for debug/manual use until a later removal decision.
 
 ## Important scope constraints
 - Do not overengineer scaling work before v1 usage justifies it.
