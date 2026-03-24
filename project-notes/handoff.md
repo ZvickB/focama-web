@@ -17,7 +17,7 @@
 - TanStack Query is installed and used for the homepage search request flow.
 - The result cards and modal surface drawbacks/tradeoffs as well as reasons.
 - Basic IP-based rate limiting exists on the search endpoints, including `/api/search/finalize`.
-- Supabase-backed cache/history storage and health tooling now exist, with local fallback for development.
+- Supabase-backed cache/operational-history storage and health tooling now exist, with local fallback for development.
 - The legacy combined `/api/search` route still exists only for backend/debug/manual use.
 
 ## Next likely work
@@ -39,7 +39,7 @@
 - Add outbound retailer links once the search pipeline feels trustworthy enough.
 - Decide how Amazon vs Walmart vs broader-provider support should work by tier without making the product feel provider-specific.
 - Tighten privacy/compliance language if analytics stays enabled and as affiliate behavior becomes real.
-- Decide whether search history should become a fuller product feature beyond the current storage layer.
+- Keep search history operational-only for now; if user-facing saved history is ever added, build it as a separate product feature and data model instead of exposing the current telemetry table.
 - Keep an eye on rate limiting, cache TTL strategy, and API costs once usage increases.
 
 ## Nice-to-have polish
@@ -72,3 +72,4 @@
 - Any local cache, saved query list, or evaluation dataset used during development is temporary tooling only.
 - It is not the long-term product storage model.
 - Before launch or before real user history matters, this temporary data approach should be removed, replaced, or clearly isolated behind the proper persistent design.
+- The existing `search_history` table should stay limited to operational logging and should not quietly become that persistent user-history design.

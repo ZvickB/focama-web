@@ -91,6 +91,7 @@ Status: done
 - If keeping it, mark it clearly as legacy/internal and avoid letting it shape the main app architecture.
 
 ### 5.2 Revisit storage/history product direction
-Status: pending
-- Decide whether search history is purely operational or a future user-facing product feature.
+Status: done
+- Decided that `search_history` remains purely operational/internal for cache, debug, and telemetry visibility.
+- If user-facing saved history is added later, it should use a separate product-oriented schema and API rather than reusing the current operational table.
 - Keep temporary development storage patterns from quietly becoming permanent product design.

@@ -47,7 +47,8 @@
 ## Current MVP assumptions
 - Product data comes from the live search backend path rather than a frontend mock catalog.
 - The backend now filters candidates and uses AI to improve the final shortlist rather than simply returning the first raw usable results.
-- Search history/cache persistence now exists through the storage layer, with Supabase preferred and local fallback for development.
+- Search cache plus operational search-history logging now exists through the storage layer, with Supabase preferred and local fallback for development.
+- `search_history` is currently an internal operational record for cache/debug visibility, not a user-facing saved-history product feature.
 - Guided finalization is now explicitly guarded:
   - request bodies larger than 32 KB are rejected
   - candidate pools are capped at 20 candidates
@@ -91,7 +92,7 @@
   - affiliate-specific linking/disclosure behavior
   - auth flows
   - deeper analytics/observability
-  - fully productized persistent user history
+  - any user-facing saved-history feature built on a dedicated product data model
 
 ## Next likely implementation steps
 - Verify the Vercel deployment using the current cache/storage flow.

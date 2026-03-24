@@ -33,7 +33,8 @@ purpose: Large marketplaces are designed to be sticky and distracting. Focama is
 ## Stack
 - Current stack: React, Vite, Tailwind, React Router, TanStack Query, Supabase, Vercel API routes, Vitest.
 - Deploy on Vercel.
-- Supabase is used for cache/history storage when configured, with local fallback for development resilience.
+- Supabase is used for cache plus operational history storage when configured, with local fallback for development resilience.
+- The current `search_history` path is internal telemetry, not a user-facing saved-history feature.
 - Once the MVP is stable, a future React Native version is plausible, especially using the open-layout flow as the starting point.
 
 ## Current implementation direction

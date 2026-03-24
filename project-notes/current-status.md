@@ -36,7 +36,7 @@
   - includes tradeoffs/drawbacks in result data
 - Guided discovery cache is now scoped separately from legacy live-search cache entries.
 - Guided `/api/search/finalize` reranks the submitted candidate pool and does not reuse cached final result sets.
-- Search cache and search history can use Supabase when configured.
+- Search cache and operational search-history logging can use Supabase when configured.
 - Local file-based cache remains as a development/fallback path.
 - Basic IP-based rate limiting exists on the search handlers.
 - The Vercel API wrappers now forward request headers into the backend handlers so production rate limiting can use forwarded client IP headers.
@@ -46,6 +46,7 @@
   - priorities limit: 8 items, 80 characters each
   - follow-up notes limit: 500 characters before OpenAI selection
 - Search history records cache hit/miss status best-effort.
+- `search_history` is treated as internal operational telemetry for debugging and cache analysis, not as a user-facing saved-search feature.
 - `/api/search/debug` now reports the guided flow as primary, keeps `/api/search` clearly marked as legacy/manual, and shows whether storage is using Supabase or local fallback.
 - `/api/health/supabase` now treats an unconfigured Supabase setup as an optional local-fallback state rather than a backend failure.
 
@@ -65,7 +66,7 @@
 5. Query SerpApi through guided discovery when the primary product flow misses cache.
 6. Filter junk, duplicates, and weak candidates before final ranking.
 7. Use AI where it improves refinement prompt quality and final selection quality.
-8. Store cache/history in Supabase when configured, with local fallback for development.
+8. Store cache/operational history in Supabase when configured, with local fallback for development.
 9. Keep the explicit `/api/search/live` combined route available only for debug/manual use while the bare `/api/search` path stays isolated behind explicit legacy opt-in.
 
 ## Important scope constraints
