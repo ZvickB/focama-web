@@ -28,6 +28,14 @@ const LIVE_RESULT_FILTER_CONFIG = {
 const LIVE_SEARCH_RATE_LIMIT = {
   ...DEFAULT_RATE_LIMIT_CONFIG,
 }
+const FINALIZE_SELECTION_RATE_LIMIT = {
+  ...DEFAULT_RATE_LIMIT_CONFIG,
+}
+const FINALIZE_BODY_LIMIT_BYTES = 32 * 1024
+const FINALIZE_MAX_CANDIDATES = LIVE_RESULT_FILTER_CONFIG.candidatePoolSize
+const FINALIZE_MAX_NOTE_LENGTH = 500
+const FINALIZE_MAX_PRIORITIES = 8
+const FINALIZE_MAX_PRIORITY_LENGTH = 80
 
 function ensureBadges(results = []) {
   if (!Array.isArray(results) || results.length === 0) {
@@ -55,15 +63,34 @@ export function sendJson(response, statusCode, payload) {
   response.end(JSON.stringify(payload))
 }
 
-function readRequestBody(request) {
+function readRequestBody(request, { maxBytes = Infinity } = {}) {
   return new Promise((resolve, reject) => {
     let body = ''
+    let byteLength = 0
+    let aborted = false
 
     request.on('data', (chunk) => {
-      body += chunk
+      if (aborted) {
+        return
+      }
+
+      const chunkText = typeof chunk === 'string' ? chunk : String(chunk)
+      byteLength += Buffer.byteLength(chunkText)
+
+      if (byteLength > maxBytes) {
+        aborted = true
+        reject(new Error('Request body is too large.'))
+        return
+      }
+
+      body += chunkText
     })
 
     request.on('end', () => {
+      if (aborted) {
+        return
+      }
+
       resolve(body)
     })
 
@@ -71,8 +98,8 @@ function readRequestBody(request) {
   })
 }
 
-async function readJsonBody(request) {
-  const rawBody = await readRequestBody(request)
+async function readJsonBody(request, options) {
+  const rawBody = await readRequestBody(request, options)
 
   if (!rawBody.trim()) {
     return {}
@@ -82,6 +109,160 @@ async function readJsonBody(request) {
     return JSON.parse(rawBody)
   } catch {
     throw new Error('Request body must be valid JSON.')
+  }
+}
+
+function truncateText(value, maxLength) {
+  const normalizedValue = typeof value === 'string' ? value.trim() : ''
+
+  if (!normalizedValue) {
+    return ''
+  }
+
+  return normalizedValue.slice(0, maxLength)
+}
+
+function sanitizeStringList(values, { maxItems, maxItemLength }) {
+  if (!Array.isArray(values)) {
+    return []
+  }
+
+  return values
+    .map((value) => truncateText(value, maxItemLength))
+    .filter(Boolean)
+    .slice(0, maxItems)
+}
+
+function sanitizeFinalizeCandidate(candidate, index) {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return {
+      error: `Candidate ${index + 1} must be an object.`,
+      isValid: false,
+    }
+  }
+
+  const id = truncateText(candidate.id, 200)
+  const title = truncateText(candidate.title, 300)
+
+  if (!id || !title) {
+    return {
+      error: `Candidate ${index + 1} must include non-empty id and title fields.`,
+      isValid: false,
+    }
+  }
+
+  const numericPrice =
+    candidate.numericPrice === null || candidate.numericPrice === undefined
+      ? null
+      : Number.isFinite(Number(candidate.numericPrice))
+        ? Number(candidate.numericPrice)
+        : null
+  const rating =
+    candidate.rating === null || candidate.rating === undefined
+      ? null
+      : Number.isFinite(Number(candidate.rating))
+        ? Number(candidate.rating)
+        : null
+  const reviewCount =
+    candidate.reviewCount === null || candidate.reviewCount === undefined
+      ? null
+      : Number.isFinite(Number(candidate.reviewCount))
+        ? Number(candidate.reviewCount)
+        : null
+
+  return {
+    isValid: true,
+    candidate: {
+      id,
+      score: Number.isFinite(Number(candidate.score)) ? Number(candidate.score) : 0,
+      title,
+      description: truncateText(candidate.description, 1200),
+      source: truncateText(candidate.source, 160),
+      price: truncateText(candidate.price, 80),
+      numericPrice,
+      rating,
+      reviewCount,
+      delivery: truncateText(candidate.delivery, 160),
+      tag: truncateText(candidate.tag, 120),
+      extensions: sanitizeStringList(candidate.extensions, { maxItems: 6, maxItemLength: 120 }),
+      multipleSources: Boolean(candidate.multipleSources),
+      link: truncateText(candidate.link, 1000),
+      image: truncateText(candidate.image, 1000),
+      reasons: sanitizeStringList(candidate.reasons, { maxItems: 5, maxItemLength: 240 }),
+      matchSignals:
+        candidate.matchSignals && typeof candidate.matchSignals === 'object' && !Array.isArray(candidate.matchSignals)
+          ? {
+              titleMatches: Number.isFinite(Number(candidate.matchSignals.titleMatches))
+                ? Number(candidate.matchSignals.titleMatches)
+                : 0,
+              supportMatches: Number.isFinite(Number(candidate.matchSignals.supportMatches))
+                ? Number(candidate.matchSignals.supportMatches)
+                : 0,
+              detailMatches: Number.isFinite(Number(candidate.matchSignals.detailMatches))
+                ? Number(candidate.matchSignals.detailMatches)
+                : 0,
+              exactMatchSearchState: Boolean(candidate.matchSignals.exactMatchSearchState),
+              hasMultipleSources: Boolean(candidate.matchSignals.hasMultipleSources),
+              hasDeliveryInfo: Boolean(candidate.matchSignals.hasDeliveryInfo),
+              hasTag: Boolean(candidate.matchSignals.hasTag),
+            }
+          : {
+              titleMatches: 0,
+              supportMatches: 0,
+              detailMatches: 0,
+              exactMatchSearchState: false,
+              hasMultipleSources: false,
+              hasDeliveryInfo: false,
+              hasTag: false,
+            },
+    },
+  }
+}
+
+function sanitizeFinalizeCandidatePool(candidatePool) {
+  if (!candidatePool || typeof candidatePool !== 'object' || Array.isArray(candidatePool)) {
+    return {
+      error: 'A candidate pool is required to finalize the search.',
+      isValid: false,
+    }
+  }
+
+  if (!Array.isArray(candidatePool.candidates)) {
+    return {
+      error: 'A candidate pool with a candidates array is required to finalize the search.',
+      isValid: false,
+    }
+  }
+
+  if (candidatePool.candidates.length === 0) {
+    return {
+      error: 'Candidate pool must include at least one candidate.',
+      isValid: false,
+    }
+  }
+
+  const candidates = []
+
+  for (const [index, candidate] of candidatePool.candidates.slice(0, FINALIZE_MAX_CANDIDATES).entries()) {
+    const sanitized = sanitizeFinalizeCandidate(candidate, index)
+
+    if (!sanitized.isValid) {
+      return sanitized
+    }
+
+    candidates.push(sanitized.candidate)
+  }
+
+  return {
+    isValid: true,
+    candidatePool: {
+      query: truncateText(candidatePool.query, 200),
+      details: truncateText(candidatePool.details, 500),
+      combinedSearchText: truncateText(candidatePool.combinedSearchText, 400),
+      searchState: truncateText(candidatePool.searchState, 200),
+      similarQueries: sanitizeStringList(candidatePool.similarQueries, { maxItems: 8, maxItemLength: 120 }),
+      candidates,
+    },
   }
 }
 
@@ -550,20 +731,38 @@ export async function handleFinalizeSelection(request, response) {
     return
   }
 
+  const clientIpAddress = getClientIpAddress(request.headers || {})
+  const rateLimit = takeRateLimitToken(clientIpAddress, FINALIZE_SELECTION_RATE_LIMIT)
+
+  if (!rateLimit.allowed) {
+    sendJson(response, 429, {
+      error: 'Too many finalize requests from this connection. Please wait a minute and try again.',
+    })
+    return
+  }
+
   let body
 
   try {
-    body = await readJsonBody(request)
+    body = await readJsonBody(request, { maxBytes: FINALIZE_BODY_LIMIT_BYTES })
   } catch (error) {
     sendJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid request body.' })
     return
   }
 
-  const candidatePool = body?.candidatePool
-  const priorities = Array.isArray(body?.priorities)
-    ? body.priorities.map((value) => String(value).trim()).filter(Boolean)
-    : []
-  const followUpNotes = typeof body?.followUpNotes === 'string' ? body.followUpNotes.trim() : ''
+  const sanitizedCandidatePool = sanitizeFinalizeCandidatePool(body?.candidatePool)
+
+  if (!sanitizedCandidatePool.isValid) {
+    sendJson(response, 400, { error: sanitizedCandidatePool.error })
+    return
+  }
+
+  const candidatePool = sanitizedCandidatePool.candidatePool
+  const priorities = sanitizeStringList(body?.priorities, {
+    maxItems: FINALIZE_MAX_PRIORITIES,
+    maxItemLength: FINALIZE_MAX_PRIORITY_LENGTH,
+  })
+  const followUpNotes = truncateText(body?.followUpNotes, FINALIZE_MAX_NOTE_LENGTH)
   const detailParts = []
 
   if (priorities.length > 0) {
@@ -575,11 +774,6 @@ export async function handleFinalizeSelection(request, response) {
   }
 
   const refinedDetails = detailParts.join('. ')
-
-  if (!candidatePool || !Array.isArray(candidatePool.candidates)) {
-    sendJson(response, 400, { error: 'A candidate pool is required to finalize the search.' })
-    return
-  }
 
   const nextCandidatePool = {
     ...candidatePool,

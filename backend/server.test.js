@@ -37,7 +37,13 @@ vi.mock('./lib/search-storage.js', () => ({
   writeStoredSearchCacheEntry: vi.fn(),
 }))
 
-import { handleCachedSearch, handleDiscoverySearch, handleLiveSearch, handleSearchDebug } from './server.js'
+import {
+  handleCachedSearch,
+  handleDiscoverySearch,
+  handleFinalizeSelection,
+  handleLiveSearch,
+  handleSearchDebug,
+} from './server.js'
 import { resetRateLimitStore } from './lib/rate-limit.js'
 import { selectAiResults } from './lib/ai-selector.js'
 import { getFilteredSearchArtifacts } from './lib/result-filter.js'
@@ -57,6 +63,48 @@ function createResponseRecorder() {
     },
     end(body = '') {
       this.body = body
+    },
+  }
+}
+
+function createFinalizeRequest(body, headers = {}) {
+  return {
+    headers,
+    on(eventName, callback) {
+      if (eventName === 'data') {
+        if (body !== undefined && body !== null && body !== '') {
+          callback(body)
+        }
+      }
+
+      if (eventName === 'end') {
+        callback()
+      }
+    },
+  }
+}
+
+function createFinalizeCandidate(id) {
+  return {
+    id,
+    title: `Candidate ${id}`,
+    description: 'Helpful description',
+    source: 'Example Store',
+    price: '$49.99',
+    numericPrice: 49.99,
+    rating: 4.5,
+    reviewCount: 120,
+    reasons: ['Solid overall fit'],
+    image: 'https://example.com/item.jpg',
+    link: 'https://example.com/item',
+    matchSignals: {
+      titleMatches: 1,
+      supportMatches: 1,
+      detailMatches: 1,
+      exactMatchSearchState: true,
+      hasMultipleSources: true,
+      hasDeliveryInfo: true,
+      hasTag: false,
     },
   }
 }
@@ -505,6 +553,153 @@ describe('server handlers', () => {
       finalResultLimit: 6,
       apiKey: 'openai-key',
       model: expect.any(String),
+    })
+  })
+
+  it('rejects malformed finalize request bodies', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest('{not-json', { 'x-forwarded-for': '203.0.113.20' }),
+      response,
+    )
+
+    expect(response.statusCode).toBe(400)
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'Request body must be valid JSON.',
+    })
+  })
+
+  it('rejects oversized finalize request bodies', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+
+    const oversizedNotes = 'x'.repeat(40_000)
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          candidatePool: { candidates: [createFinalizeCandidate('one')] },
+          followUpNotes: oversizedNotes,
+        }),
+        { 'x-forwarded-for': '203.0.113.21' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(400)
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'Request body is too large.',
+    })
+  })
+
+  it('rejects malformed finalize candidate pools', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          candidatePool: {
+            candidates: [{ id: '', title: '' }],
+          },
+        }),
+        { 'x-forwarded-for': '203.0.113.22' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(400)
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'Candidate 1 must include non-empty id and title fields.',
+    })
+  })
+
+  it('caps finalize candidate count and note length before calling OpenAI', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    selectAiResults.mockResolvedValue({
+      model: 'gpt-5-mini',
+      selectedCandidateIds: ['one'],
+      results: [{ id: 'one', title: 'Candidate one', reasons: [], drawbacks: [] }],
+    })
+
+    const response = createResponseRecorder()
+    const candidates = Array.from({ length: 25 }, (_, index) => createFinalizeCandidate(`id-${index + 1}`))
+    const longNotes = 'n'.repeat(800)
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          candidatePool: {
+            query: 'stroller',
+            details: '',
+            combinedSearchText: 'stroller',
+            searchState: 'Results for exact spelling',
+            similarQueries: ['compact stroller'],
+            candidates,
+          },
+          priorities: ['lightweight', 'easy fold'],
+          followUpNotes: longNotes,
+        }),
+        { 'x-forwarded-for': '203.0.113.23' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(selectAiResults).toHaveBeenCalledTimes(1)
+    expect(selectAiResults).toHaveBeenCalledWith({
+      candidatePool: expect.objectContaining({
+        details: `Priorities: lightweight, easy fold. Notes: ${'n'.repeat(500)}`,
+        candidates: expect.arrayContaining(candidates.slice(0, 20).map((candidate) => expect.objectContaining({ id: candidate.id }))),
+      }),
+      finalResultLimit: 6,
+      apiKey: 'openai-key',
+      model: expect.any(String),
+    })
+    expect(selectAiResults.mock.calls[0][0].candidatePool.candidates).toHaveLength(20)
+    expect(selectAiResults.mock.calls[0][0].candidatePool.details.endsWith('n'.repeat(500))).toBe(true)
+  })
+
+  it('rate limits repeated finalize requests from the same ip address', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    selectAiResults.mockResolvedValue({
+      model: 'gpt-5-mini',
+      selectedCandidateIds: ['one'],
+      results: [{ id: 'one', title: 'Candidate one', reasons: [], drawbacks: [] }],
+    })
+
+    const requestBody = JSON.stringify({
+      candidatePool: {
+        candidates: [createFinalizeCandidate('one')],
+      },
+      followUpNotes: 'keep it lightweight',
+    })
+
+    for (let index = 0; index < 5; index += 1) {
+      const response = createResponseRecorder()
+
+      await handleFinalizeSelection(
+        createFinalizeRequest(requestBody, { 'x-forwarded-for': '203.0.113.24' }),
+        response,
+      )
+
+      expect(response.statusCode).toBe(200)
+    }
+
+    const limitedResponse = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(requestBody, { 'x-forwarded-for': '203.0.113.24' }),
+      limitedResponse,
+    )
+
+    expect(limitedResponse.statusCode).toBe(429)
+    expect(JSON.parse(limitedResponse.body)).toEqual({
+      error: 'Too many finalize requests from this connection. Please wait a minute and try again.',
     })
   })
 })
