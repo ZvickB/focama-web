@@ -12,6 +12,10 @@ describe('search-data helpers', () => {
     expect(buildCacheKey('Lego', 'For Kids')).toBe('lego for kids')
   })
 
+  it('supports scoped cache keys for separate search flows', () => {
+    expect(buildCacheKey('Lego', 'For Kids', 'guided_discovery')).toBe('guided_discovery:lego for kids')
+  })
+
   it('normalizes a shopping result into the frontend shape', () => {
     const result = normalizeResult(
       {

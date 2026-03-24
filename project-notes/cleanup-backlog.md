@@ -50,7 +50,7 @@ Status: done
 - Keep handler functions thinner and more obviously route-specific.
 
 ### 2.3 Revisit cache behavior across guided discovery and finalization
-Status: pending
+Status: done
 - Clarify what should be cached for discovery versus final refined results.
 - Reduce overlap between preview caching and finalized-result caching if it is causing confusion or duplication.
 - Keep debug output aligned with the actual chosen cache strategy.

@@ -24,7 +24,9 @@ vi.mock('./lib/search-data.js', async () => {
   return {
     ...actual,
   SERPAPI_ENDPOINT: 'https://serpapi.com/search.json',
-  buildCacheKey: vi.fn((productQuery, details) => `${productQuery}|${details}`),
+  buildCacheKey: vi.fn((productQuery, details, scope = 'default') =>
+    scope === 'default' ? `${productQuery}|${details}` : `${scope}:${productQuery}|${details}`,
+  ),
   buildQuery: vi.fn((productQuery, details) => [productQuery, details].filter(Boolean).join(' ').trim()),
   getEnv: vi.fn(),
   }
@@ -177,6 +179,11 @@ describe('server handlers', () => {
     await handleDiscoverySearch(new URL('http://localhost/api/search/discover?query=thermos'), response)
 
     expect(response.statusCode).toBe(200)
+    expect(readStoredSearchCacheEntry).toHaveBeenCalledWith({
+      productQuery: 'thermos',
+      details: '',
+      scope: 'guided_discovery',
+    })
     expect(JSON.parse(response.body)).toEqual({
       candidatePool: {
         query: 'thermos',
@@ -242,9 +249,10 @@ describe('server handlers', () => {
         mode: 'discovery_preview',
         model: null,
         selectedCandidateIds: ['live-1'],
-        details: 'Discovery preview results were cached for the guided search flow.',
+        details: 'Discovery preview results were cached for the guided search flow. Finalized picks stay request-specific.',
       },
       source: 'guided_discovery',
+      scope: 'guided_discovery',
     })
   })
 
@@ -261,7 +269,7 @@ describe('server handlers', () => {
     })
   })
 
-  it('reports cache usage expectations for the guided and live flows', async () => {
+  it('reports scoped cache usage expectations for the guided, finalize, and live flows', async () => {
     getEnv.mockImplementation((name) => {
       if (name === 'SERPAPI_API_KEY') {
         return 'serp-key'
@@ -274,7 +282,22 @@ describe('server handlers', () => {
       return ''
     })
 
-    readStoredSearchCacheEntry.mockResolvedValue({
+    readStoredSearchCacheEntry.mockResolvedValueOnce({
+      cachedAt: '2026-03-17T12:30:00.000Z',
+      expiresAt: '2026-03-17T18:30:00.000Z',
+      source: 'live_search',
+      selection: { mode: 'ai' },
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Cached live search results',
+        similarQueries: [],
+        candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
+      },
+      results: [{ id: 'live-1', title: 'Thermos bottle' }],
+    })
+    readStoredSearchCacheEntry.mockResolvedValueOnce({
       cachedAt: '2026-03-17T12:00:00.000Z',
       expiresAt: '2026-03-17T18:00:00.000Z',
       source: 'guided_discovery',
@@ -298,15 +321,27 @@ describe('server handlers', () => {
     expect(JSON.parse(response.body)).toEqual({
       query: 'thermos',
       details: '',
-      cacheKey: 'thermos|',
       cache: {
-        hasEntry: true,
-        source: 'guided_discovery',
-        cachedAt: '2026-03-17T12:00:00.000Z',
-        expiresAt: '2026-03-17T18:00:00.000Z',
-        candidateCount: 1,
-        resultCount: 1,
-        selectionMode: 'discovery_preview',
+        guidedDiscovery: {
+          cacheKey: 'guided_discovery:thermos|',
+          hasEntry: true,
+          source: 'guided_discovery',
+          cachedAt: '2026-03-17T12:00:00.000Z',
+          expiresAt: '2026-03-17T18:00:00.000Z',
+          candidateCount: 1,
+          previewResultCount: 1,
+          selectionMode: 'discovery_preview',
+        },
+        liveSearch: {
+          cacheKey: 'live_search:thermos|',
+          hasEntry: true,
+          source: 'live_search',
+          cachedAt: '2026-03-17T12:30:00.000Z',
+          expiresAt: '2026-03-17T18:30:00.000Z',
+          candidateCount: 1,
+          resultCount: 1,
+          selectionMode: 'ai',
+        },
       },
       environment: {
         serpApiConfigured: true,
@@ -319,12 +354,111 @@ describe('server handlers', () => {
           callsSerpApi: false,
           callsOpenAi: false,
         },
+        guidedFinalize: {
+          usesCache: false,
+          callsSerpApi: false,
+          callsOpenAi: true,
+        },
         liveSearch: {
           usesCache: true,
           callsSerpApi: false,
           callsOpenAi: false,
         },
       },
+    })
+  })
+
+  it('keeps guided discovery cache separate from legacy live search cache', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'SERPAPI_API_KEY') {
+        return 'serp-key'
+      }
+
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      return ''
+    })
+
+    readStoredSearchCacheEntry.mockResolvedValueOnce({
+      cachedAt: '2026-03-17T12:00:00.000Z',
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Cached discovery results',
+        similarQueries: [],
+        candidates: [{ id: 'cached-1', title: 'Thermos bottle' }],
+      },
+      results: [{ id: 'cached-1', title: 'Thermos bottle' }],
+      selection: { mode: 'discovery_preview' },
+      source: 'guided_discovery',
+    })
+    readStoredSearchCacheEntry.mockResolvedValueOnce(null)
+    getFilteredSearchArtifacts.mockReturnValue({
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Results for exact spelling',
+        similarQueries: [],
+        candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
+      },
+      results: [{ id: 'live-1', title: 'Thermos bottle' }],
+    })
+    selectAiResults.mockResolvedValue({
+      model: 'gpt-5-mini',
+      selectedCandidateIds: ['live-1'],
+      results: [{ id: 'live-1', title: 'Thermos bottle', reasons: [], drawbacks: [] }],
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ shopping_results: [{ title: 'Thermos bottle' }] }),
+      }),
+    )
+
+    const discoveryResponse = createResponseRecorder()
+    await handleDiscoverySearch(new URL('http://localhost/api/search/discover?query=thermos'), discoveryResponse)
+
+    const liveResponse = createResponseRecorder()
+    await handleLiveSearch(new URL('http://localhost/api/search/live?query=thermos'), liveResponse)
+
+    expect(discoveryResponse.statusCode).toBe(200)
+    expect(liveResponse.statusCode).toBe(200)
+    expect(readStoredSearchCacheEntry).toHaveBeenNthCalledWith(1, {
+      productQuery: 'thermos',
+      details: '',
+      scope: 'guided_discovery',
+    })
+    expect(readStoredSearchCacheEntry).toHaveBeenNthCalledWith(2, {
+      productQuery: 'thermos',
+      details: '',
+      scope: 'live_search',
+    })
+    expect(writeStoredSearchCacheEntry).toHaveBeenLastCalledWith({
+      productQuery: 'thermos',
+      details: '',
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Results for exact spelling',
+        similarQueries: [],
+        candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
+      },
+      results: [{ id: 'live-1', title: 'Thermos bottle', reasons: [], drawbacks: [] }],
+      selection: {
+        mode: 'ai',
+        model: 'gpt-5-mini',
+        selectedCandidateIds: ['live-1'],
+        details: 'AI selected the final recommendations from the cleaned candidate pool.',
+      },
+      source: 'live_search',
+      scope: 'live_search',
     })
   })
 

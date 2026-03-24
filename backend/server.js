@@ -16,7 +16,7 @@ import {
   getSupabaseHealth,
   isSupabaseConfigured,
 } from './lib/search-storage.js'
-import { buildQuery, getEnv } from './lib/search-data.js'
+import { buildCacheKey, buildQuery, getEnv } from './lib/search-data.js'
 
 const PORT = Number(process.env.PORT || 8787)
 const LIVE_RESULT_FILTER_CONFIG = {
@@ -35,6 +35,8 @@ const FINALIZE_MAX_CANDIDATES = LIVE_RESULT_FILTER_CONFIG.candidatePoolSize
 const FINALIZE_MAX_NOTE_LENGTH = 500
 const FINALIZE_MAX_PRIORITIES = 8
 const FINALIZE_MAX_PRIORITY_LENGTH = 80
+const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
+const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 const LEGACY_ROUTE_HEADERS = {
   'X-Focama-Route-Status': 'legacy_combined_search',
   'X-Focama-Route-Recommended': '/api/search/discover -> /api/search/refine -> /api/search/finalize',
@@ -285,6 +287,7 @@ export async function handleCachedSearch(requestUrl, response) {
   const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
+    scope: CACHE_SCOPE_LIVE_SEARCH,
   })
 
   if (cachedEntry?.results?.length) {
@@ -335,6 +338,7 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
   const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
+    scope: CACHE_SCOPE_LIVE_SEARCH,
   })
 
   if (cachedEntry?.results?.length) {
@@ -435,6 +439,7 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
       results,
       selection,
       source: 'live_search',
+      scope: CACHE_SCOPE_LIVE_SEARCH,
     })
 
     await recordSearchCacheEvent({
@@ -492,6 +497,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
+    scope: CACHE_SCOPE_DISCOVERY,
   })
 
   if (cachedEntry?.candidatePool && cachedEntry?.results?.length) {
@@ -543,9 +549,10 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
         mode: 'discovery_preview',
         model: null,
         selectedCandidateIds: artifacts.results.map((item) => item.id),
-        details: 'Discovery preview results were cached for the guided search flow.',
+        details: 'Discovery preview results were cached for the guided search flow. Finalized picks stay request-specific.',
       },
       source: 'guided_discovery',
+      scope: CACHE_SCOPE_DISCOVERY,
     })
 
     await recordSearchCacheEvent({
@@ -620,36 +627,57 @@ export async function handleSupabaseHealth(response) {
 }
 
 export async function handleSearchDebug(requestUrl, response) {
-  const { cacheKey, error, isValid, normalizedDetails, normalizedQuery } = getValidatedSearchRequest(requestUrl)
+  const { error, isValid, normalizedDetails, normalizedQuery } = getValidatedSearchRequest(requestUrl)
 
   if (!isValid) {
     sendJson(response, 400, { error })
     return
   }
 
-  const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
+  const { cachedEntry: liveCachedEntry, normalizedCachedResults: liveCachedResults } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
+    scope: CACHE_SCOPE_LIVE_SEARCH,
   })
-  const hasResults = normalizedCachedResults.length > 0
-  const hasCandidatePool = Boolean(cachedEntry?.candidatePool?.candidates)
-  const guidedDiscoveryUsesCache = normalizedDetails === '' && hasCandidatePool && hasResults
-  const liveSearchUsesCache = hasResults
+  const { cachedEntry: discoveryCachedEntry, normalizedCachedResults: discoveryCachedResults } = await readCachedSearchSnapshot({
+    productQuery: normalizedQuery,
+    details: '',
+    scope: CACHE_SCOPE_DISCOVERY,
+  })
+  const liveSearchUsesCache = liveCachedResults.length > 0
+  const guidedDiscoveryUsesCache =
+    normalizedDetails === '' &&
+    Boolean(discoveryCachedEntry?.candidatePool?.candidates) &&
+    discoveryCachedResults.length > 0
 
   sendJson(response, 200, {
     query: normalizedQuery,
     details: normalizedDetails,
-    cacheKey,
     cache: {
-      hasEntry: Boolean(cachedEntry),
-      source: cachedEntry?.source || null,
-      cachedAt: cachedEntry?.cachedAt || null,
-      expiresAt: cachedEntry?.expiresAt || null,
-      candidateCount: Array.isArray(cachedEntry?.candidatePool?.candidates)
-        ? cachedEntry.candidatePool.candidates.length
-        : 0,
-      resultCount: normalizedCachedResults.length,
-      selectionMode: cachedEntry?.selection?.mode || null,
+      guidedDiscovery: {
+        cacheKey: buildCacheKey(normalizedQuery, '', CACHE_SCOPE_DISCOVERY),
+        hasEntry: Boolean(discoveryCachedEntry),
+        source: discoveryCachedEntry?.source || null,
+        cachedAt: discoveryCachedEntry?.cachedAt || null,
+        expiresAt: discoveryCachedEntry?.expiresAt || null,
+        candidateCount: Array.isArray(discoveryCachedEntry?.candidatePool?.candidates)
+          ? discoveryCachedEntry.candidatePool.candidates.length
+          : 0,
+        previewResultCount: discoveryCachedResults.length,
+        selectionMode: discoveryCachedEntry?.selection?.mode || null,
+      },
+      liveSearch: {
+        cacheKey: buildCacheKey(normalizedQuery, normalizedDetails, CACHE_SCOPE_LIVE_SEARCH),
+        hasEntry: Boolean(liveCachedEntry),
+        source: liveCachedEntry?.source || null,
+        cachedAt: liveCachedEntry?.cachedAt || null,
+        expiresAt: liveCachedEntry?.expiresAt || null,
+        candidateCount: Array.isArray(liveCachedEntry?.candidatePool?.candidates)
+          ? liveCachedEntry.candidatePool.candidates.length
+          : 0,
+        resultCount: liveCachedResults.length,
+        selectionMode: liveCachedEntry?.selection?.mode || null,
+      },
     },
     environment: {
       serpApiConfigured: Boolean(getEnv('SERPAPI_API_KEY')),
@@ -661,6 +689,11 @@ export async function handleSearchDebug(requestUrl, response) {
         usesCache: guidedDiscoveryUsesCache,
         callsSerpApi: !guidedDiscoveryUsesCache,
         callsOpenAi: false,
+      },
+      guidedFinalize: {
+        usesCache: false,
+        callsSerpApi: false,
+        callsOpenAi: true,
       },
       liveSearch: {
         usesCache: liveSearchUsesCache,

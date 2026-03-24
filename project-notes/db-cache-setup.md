@@ -66,15 +66,17 @@ create index if not exists search_history_cache_key_idx
 ```
 
 ## What gets cached
-- Cache key: normalized `productQuery + details`
+- Cache keys are now scoped by flow so guided discovery snapshots and legacy live-search results do not overwrite each other.
+- Guided discovery cache key: `guided_discovery + normalized productQuery`
+- Legacy live-search cache key: `live_search + normalized productQuery + details`
 - Cached payload:
-  - `candidatePool`
-  - final `results`
-  - `selection`
+  - guided discovery stores the `candidatePool`, preview `results`, and a `discovery_preview` selection marker
+  - legacy live search stores its own `candidatePool`, final `results`, and `selection`
   - `cachedAt`
   - `expiresAt`
-- The live route checks cache before calling SerpApi.
-- On cache hit, the API returns the same core response shape the frontend already expects.
+- Guided `/api/search/finalize` does not read or write cache; it reranks the submitted candidate pool with the latest priorities/notes.
+- The legacy live route checks only its own cache scope before calling SerpApi/OpenAI.
+- On cache hit, each route returns the response shape its caller already expects.
 
 ## Current tradeoffs
 - Cache invalidation is TTL-based only for now.
@@ -82,7 +84,7 @@ create index if not exists search_history_cache_key_idx
 - Search history is best-effort analytics/persistence and should not block responses.
 - The old `/api/search/cache` debugging route still works, now through the same storage abstraction.
 - The legacy combined `/api/search` route is still available for manual/debug use, but it is not the primary product path.
-- The current implementation is broader than the preferred future direction because it can cache full search responses; when revisited, narrow this toward SerpApi/raw candidate caching first.
+- The current implementation is still broader than the preferred future direction because the legacy live route can cache full search responses; if revisited again, narrow that path toward SerpApi/raw candidate caching first.
 
 ## Recommended next step
 - After the Supabase project is created and these tables exist, add the two Supabase env vars to Vercel and local `.env`.

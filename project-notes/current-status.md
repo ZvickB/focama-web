@@ -28,11 +28,13 @@
 - The legacy `/api/search` route still exists only as a direct combined path for backend/debug/manual use.
 - The live search flow currently:
   - validates input
-  - checks cache before external calls
+  - checks its own legacy live-search cache scope before external calls
   - queries SerpApi
   - filters/cleans a candidate pool
   - uses AI to generate the refinement prompt and/or select the final shortlist
   - includes tradeoffs/drawbacks in result data
+- Guided discovery cache is now scoped separately from legacy live-search cache entries.
+- Guided `/api/search/finalize` reranks the submitted candidate pool and does not reuse cached final result sets.
 - Search cache and search history can use Supabase when configured.
 - Local file-based cache remains as a development/fallback path.
 - Basic IP-based rate limiting exists on the search handlers.

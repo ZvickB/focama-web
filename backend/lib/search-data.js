@@ -43,8 +43,14 @@ export function buildQuery(productQuery, details) {
   return [productQuery, details].filter(Boolean).join(' ').trim()
 }
 
-export function buildCacheKey(productQuery, details) {
-  return buildQuery(productQuery, details).toLowerCase()
+export function buildCacheKey(productQuery, details, scope = 'default') {
+  const baseKey = buildQuery(productQuery, details).toLowerCase()
+
+  if (!scope || scope === 'default') {
+    return baseKey
+  }
+
+  return `${scope}:${baseKey}`
 }
 
 function createFallbackImage(title) {
@@ -161,11 +167,12 @@ export function writeSearchCacheEntry({
   selection = null,
   source = 'local_file_cache',
   expiresAt = null,
+  scope = 'default',
 }) {
   mkdirSync(resolve(process.cwd(), 'temp-data'), { recursive: true })
 
   const existingCache = readSearchCache()
-  const cacheKey = buildCacheKey(productQuery, details)
+  const cacheKey = buildCacheKey(productQuery, details, scope)
   const nextCache = {
     entries: {
       ...(existingCache.entries || {}),

@@ -130,8 +130,8 @@ function readLocalCacheEntry(cacheKey) {
   }
 }
 
-export async function readStoredSearchCacheEntry({ productQuery, details }) {
-  const cacheKey = buildCacheKey(productQuery, details)
+export async function readStoredSearchCacheEntry({ productQuery, details, scope = 'default' }) {
+  const cacheKey = buildCacheKey(productQuery, details, scope)
 
   if (isSupabaseConfigured()) {
     try {
@@ -166,8 +166,9 @@ export async function writeStoredSearchCacheEntry({
   results,
   selection,
   source = 'live_search',
+  scope = 'default',
 }) {
-  const cacheKey = buildCacheKey(productQuery, details)
+  const cacheKey = buildCacheKey(productQuery, details, scope)
   const cachedAt = new Date()
   const expiresAt = new Date(cachedAt)
   expiresAt.setMinutes(expiresAt.getMinutes() + getCacheTtlMinutes())
@@ -219,6 +220,7 @@ export async function writeStoredSearchCacheEntry({
         selection,
         source,
         expiresAt: entry.expiresAt,
+        scope,
       })
 
       return {
@@ -236,6 +238,7 @@ export async function writeStoredSearchCacheEntry({
     selection,
     source,
     expiresAt: entry.expiresAt,
+    scope,
   })
 
   return {

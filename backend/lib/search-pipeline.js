@@ -34,10 +34,11 @@ export function getValidatedSearchRequest(requestUrl, { includeDetails = true } 
   }
 }
 
-export async function readCachedSearchSnapshot({ productQuery, details }) {
+export async function readCachedSearchSnapshot({ productQuery, details, scope = 'default' }) {
   const cachedEntry = await readStoredSearchCacheEntry({
     productQuery,
     details,
+    scope,
   })
   const normalizedCachedResults = ensureBadges(cachedEntry?.results || [])
 
@@ -132,6 +133,7 @@ export async function writeSearchSnapshot({
   results,
   selection,
   source,
+  scope = 'default',
 }) {
   return writeStoredSearchCacheEntry({
     productQuery,
@@ -140,6 +142,6 @@ export async function writeSearchSnapshot({
     results,
     selection,
     source,
+    scope,
   })
 }
-
