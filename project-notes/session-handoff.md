@@ -43,6 +43,8 @@
   - `/api/search/finalize` for the final shortlist
 - This guided flow is the primary backend architecture for the homepage
 - The older direct `/api/search` route still exists only for manual/debug use
+- `/api/search/debug` should be read as guided-primary debug output, with `/api/search` treated as the legacy combined route
+- `/api/health/supabase` now reports local fallback as a supported state when Supabase is not configured
 - Open layout behavior:
   - centered hero
   - search input first
@@ -57,9 +59,8 @@
 - User noticed the original master logo looked softer on-site because the header version was small and inside extra chrome
 
 ## Testing state
-- At the end of this session:
-  - `npm run test` passed
-  - `npm run lint` passed
+- In the latest backend cleanup pass:
+  - `npm test -- backend/server.test.js` passed
 
 ## Recent user preferences
 - Prefer minimal copy in the open layout

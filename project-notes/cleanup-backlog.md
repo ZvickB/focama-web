@@ -58,13 +58,13 @@ Status: done
 ## Section 3: Backend Quality and Observability
 
 ### 3.1 Tighten finalize and search handler tests
-Status: pending
+Status: done
 - Add focused tests for abuse protection and invalid payload handling.
 - Keep tests aligned with the current guided-search contract instead of older flows.
 - Make sure happy-path guided behavior stays covered while hardening is added.
 
 ### 3.2 Review debug and health tooling
-Status: pending
+Status: done
 - Confirm `/api/search/debug` and `/api/health/supabase` still reflect the current live architecture.
 - Remove or simplify debug assumptions that still reflect older flow expectations.
 - Keep debug output useful for quick manual verification.
@@ -72,7 +72,7 @@ Status: pending
 ## Section 4: Product and Trust Alignment
 
 ### 4.1 Review remaining public copy for backend reality
-Status: pending
+Status: done
 - Recheck trust pages and supporting notes after backend cleanup lands.
 - Make sure no page implies the app is simpler or less data-driven than it really is.
 - Keep privacy and affiliate language aligned with actual behavior.
@@ -81,6 +81,7 @@ Status: pending
 Status: pending
 - Update `app_flow.md`, `current-status.md`, and `session-handoff.md` whenever the backend shape changes meaningfully.
 - Treat stale notes as real cleanup debt, not optional polish.
+- Note: lightly refreshed on 2026-03-24 after the debug/health tooling cleanup, but left pending so future backend changes still trigger another sync pass.
 
 ## Section 5: Optional Later Cleanup
 

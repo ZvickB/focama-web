@@ -14,8 +14,8 @@ function AboutPage() {
       </p>
       <p>
         The current version centers on guided product search. You start with a product topic,
-        Focama gathers a candidate set, asks a lightweight follow-up, and returns a calmer
-        shortlist before you head into a retailer.
+        Focama gathers a candidate set from live product-search data, asks a lightweight follow-up,
+        and returns a calmer shortlist before you head into a retailer.
       </p>
       <p>
         The product is still early, but the direction is consistent: clearer tradeoffs, less noise,

@@ -39,7 +39,8 @@
 - Local file-based cache remains as a development/fallback path.
 - Basic IP-based rate limiting exists on the search handlers.
 - Search history records cache hit/miss status best-effort.
-- Health/debug tooling now exists for the Supabase-backed storage path.
+- `/api/search/debug` now reports the guided flow as primary, keeps `/api/search` clearly marked as legacy/manual, and shows whether storage is using Supabase or local fallback.
+- `/api/health/supabase` now treats an unconfigured Supabase setup as an optional local-fallback state rather than a backend failure.
 
 ## Active product decisions
 - Keep the `open` homepage as the default for now.

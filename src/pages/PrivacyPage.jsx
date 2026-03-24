@@ -9,13 +9,15 @@ function PrivacyPage() {
     >
       <p>
         Focama currently lets visitors enter product topics and optional refinement notes to
-        generate shopping shortlists. That information is used to operate the search flow and
-        improve the reliability of the experience.
+        generate shopping shortlists. That information is used to operate the guided search flow,
+        help refine the final shortlist, and improve the reliability of the experience.
       </p>
       <p>
         The site also uses basic analytics and hosting logs, including Vercel Analytics, to
         understand traffic, diagnose issues, and improve performance. Search requests may also pass
-        through third-party services that power product search, refinement, and storage for the app.
+        through third-party services that power product search, AI refinement, and storage for the
+        app. Depending on the environment, cache and search-history storage may use either
+        Supabase-backed storage or a local development fallback.
       </p>
       <p>
         Focama does not currently offer user accounts, and it does not ask users to submit payment

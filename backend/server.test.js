@@ -33,6 +33,7 @@ vi.mock('./lib/search-data.js', async () => {
 })
 
 vi.mock('./lib/search-storage.js', () => ({
+  getSupabaseHealth: vi.fn(),
   isSupabaseConfigured: vi.fn(() => false),
   readStoredSearchCacheEntry: vi.fn(),
   recordSearchHistory: vi.fn(),
@@ -45,11 +46,12 @@ import {
   handleFinalizeSelection,
   handleLiveSearch,
   handleSearchDebug,
+  handleSupabaseHealth,
 } from './server.js'
 import { resetRateLimitStore } from './lib/rate-limit.js'
 import { selectAiResults } from './lib/ai-selector.js'
 import { getFilteredSearchArtifacts } from './lib/result-filter.js'
-import { readStoredSearchCacheEntry, writeStoredSearchCacheEntry } from './lib/search-storage.js'
+import { getSupabaseHealth, readStoredSearchCacheEntry, writeStoredSearchCacheEntry } from './lib/search-storage.js'
 import {
   getEnv,
 } from './lib/search-data.js'
@@ -348,6 +350,17 @@ describe('server handlers', () => {
         openAiConfigured: true,
         supabaseConfigured: false,
       },
+      architecture: {
+        primaryProductFlow: [
+          '/api/search/discover',
+          '/api/search/refine',
+          '/api/search/finalize',
+        ],
+        legacyRoute: '/api/search',
+        legacyRouteStatus: 'legacy_combined_search',
+        storageMode: 'local_file_fallback',
+        finalizeUsesRequestCandidatePool: true,
+      },
       flowBehavior: {
         guidedDiscovery: {
           usesCache: true,
@@ -365,6 +378,56 @@ describe('server handlers', () => {
           callsOpenAi: false,
         },
       },
+    })
+  })
+
+  it('reports optional Supabase health when local fallback is active', async () => {
+    getSupabaseHealth.mockResolvedValue({
+      configured: false,
+      ok: false,
+      tables: [],
+    })
+
+    const response = createResponseRecorder()
+
+    await handleSupabaseHealth(response)
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({
+      configured: false,
+      ok: false,
+      tables: [],
+      storageMode: 'local_file_fallback',
+      status: 'optional',
+      details: 'Supabase is not configured. The app is using the supported local cache/history fallback for this environment.',
+      setupHint: 'Add SUPABASE_URL and SUPABASE_SECRET_KEY or the legacy SUPABASE_SERVICE_ROLE_KEY to enable Supabase-backed storage.',
+    })
+  })
+
+  it('reports active Supabase health details when Supabase is configured', async () => {
+    getSupabaseHealth.mockResolvedValue({
+      configured: true,
+      ok: true,
+      tables: [
+        { table: 'search_cache', ok: true, error: null },
+        { table: 'search_history', ok: true, error: null },
+      ],
+    })
+
+    const response = createResponseRecorder()
+
+    await handleSupabaseHealth(response)
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({
+      configured: true,
+      ok: true,
+      tables: [
+        { table: 'search_cache', ok: true, error: null },
+        { table: 'search_history', ok: true, error: null },
+      ],
+      storageMode: 'supabase',
+      status: 'ok',
     })
   })
 
@@ -539,6 +602,54 @@ describe('server handlers', () => {
     })
   })
 
+  it('rate limits repeated guided discovery searches from the same ip address', async () => {
+    getEnv.mockReturnValue('serp-key')
+    getFilteredSearchArtifacts.mockReturnValue({
+      candidatePool: {
+        query: 'stroller',
+        details: '',
+        combinedSearchText: 'stroller',
+        searchState: 'Results for exact spelling',
+        similarQueries: [],
+        candidates: [{ id: 'live-1', title: 'Travel stroller' }],
+      },
+      results: [{ id: 'live-1', title: 'Travel stroller' }],
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ shopping_results: [{ title: 'Travel stroller' }] }),
+      }),
+    )
+
+    for (let index = 0; index < 5; index += 1) {
+      const response = createResponseRecorder()
+
+      await handleDiscoverySearch(
+        new URL('http://localhost/api/search/discover?query=stroller'),
+        response,
+        { headers: { 'x-forwarded-for': '203.0.113.11' } },
+      )
+
+      expect(response.statusCode).toBe(200)
+    }
+
+    const limitedResponse = createResponseRecorder()
+
+    await handleDiscoverySearch(
+      new URL('http://localhost/api/search/discover?query=stroller'),
+      limitedResponse,
+      { headers: { 'x-forwarded-for': '203.0.113.11' } },
+    )
+
+    expect(limitedResponse.statusCode).toBe(429)
+    expect(JSON.parse(limitedResponse.body)).toEqual({
+      error: 'Too many searches from this connection. Please wait a minute and try again.',
+    })
+  })
+
   it('returns normalized live search results when SerpApi succeeds', async () => {
     getEnv.mockImplementation((name) => {
       if (name === 'SERPAPI_API_KEY') {
@@ -690,6 +801,70 @@ describe('server handlers', () => {
     })
   })
 
+  it('falls back to filtered live search results when AI returns no picks', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'SERPAPI_API_KEY') {
+        return 'serp-key'
+      }
+
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      return ''
+    })
+    getFilteredSearchArtifacts.mockReturnValue({
+      candidatePool: {
+        query: 'stroller',
+        details: '',
+        combinedSearchText: 'stroller',
+        searchState: 'Results for exact spelling',
+        similarQueries: [],
+        candidates: [{ id: 'live-1', title: 'Travel stroller' }],
+      },
+      results: [{ id: 'live-1', title: 'Travel stroller', badgeLabel: 'Best match', badgeReason: 'Rule-based top result.' }],
+    })
+    selectAiResults.mockResolvedValue({
+      model: 'gpt-5-mini',
+      selectedCandidateIds: [],
+      results: [],
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ shopping_results: [{ title: 'Travel stroller' }] }),
+      }),
+    )
+
+    const response = createResponseRecorder()
+
+    await handleLiveSearch(
+      new URL('http://localhost/api/search/live?query=stroller'),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({
+      candidatePool: {
+        query: 'stroller',
+        details: '',
+        combinedSearchText: 'stroller',
+        searchState: 'Results for exact spelling',
+        similarQueries: [],
+        candidates: [{ id: 'live-1', title: 'Travel stroller' }],
+      },
+      results: [{ id: 'live-1', title: 'Travel stroller', badgeLabel: 'Best match', badgeReason: 'Rule-based top result.' }],
+      selection: {
+        mode: 'rules_fallback',
+        model: null,
+        selectedCandidateIds: ['live-1'],
+        details: 'Rules-based fallback was used.',
+      },
+    })
+  })
+
   it('rejects malformed finalize request bodies', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
 
@@ -703,6 +878,50 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(400)
     expect(JSON.parse(response.body)).toEqual({
       error: 'Request body must be valid JSON.',
+    })
+  })
+
+  it('rejects finalize requests without a candidate pool', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          followUpNotes: 'keep it lightweight',
+        }),
+        { 'x-forwarded-for': '203.0.113.25' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(400)
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'A candidate pool is required to finalize the search.',
+    })
+  })
+
+  it('rejects finalize requests when candidates is not an array', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          candidatePool: {
+            candidates: 'not-an-array',
+          },
+        }),
+        { 'x-forwarded-for': '203.0.113.26' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(400)
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'A candidate pool with a candidates array is required to finalize the search.',
     })
   })
 

@@ -9,8 +9,8 @@ function AffiliateDisclosurePage() {
     >
       <p>
         Focama can already send users to retailer product pages from recommendation results. Those
-        outbound links are part of the current product experience even while the monetization model
-        is still evolving.
+        outbound links are part of the current guided-search experience even while the monetization
+        model is still evolving.
       </p>
       <p>
         In the future, Focama may participate in affiliate programs, including Amazon Associates.

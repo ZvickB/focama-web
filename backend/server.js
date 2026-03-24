@@ -616,14 +616,21 @@ export async function handleSupabaseHealth(response) {
   const health = await getSupabaseHealth()
 
   if (!health.configured) {
-    sendJson(response, 500, {
-      error: 'Supabase is not configured.',
-      details: 'Add SUPABASE_URL and SUPABASE_SECRET_KEY or the legacy SUPABASE_SERVICE_ROLE_KEY.',
+    sendJson(response, 200, {
+      ...health,
+      storageMode: 'local_file_fallback',
+      status: 'optional',
+      details: 'Supabase is not configured. The app is using the supported local cache/history fallback for this environment.',
+      setupHint: 'Add SUPABASE_URL and SUPABASE_SECRET_KEY or the legacy SUPABASE_SERVICE_ROLE_KEY to enable Supabase-backed storage.',
     })
     return
   }
 
-  sendJson(response, health.ok ? 200 : 500, health)
+  sendJson(response, health.ok ? 200 : 500, {
+    ...health,
+    storageMode: 'supabase',
+    status: health.ok ? 'ok' : 'error',
+  })
 }
 
 export async function handleSearchDebug(requestUrl, response) {
@@ -683,6 +690,17 @@ export async function handleSearchDebug(requestUrl, response) {
       serpApiConfigured: Boolean(getEnv('SERPAPI_API_KEY')),
       openAiConfigured: Boolean(getEnv('OPENAI_API_KEY')),
       supabaseConfigured: isSupabaseConfigured(),
+    },
+    architecture: {
+      primaryProductFlow: [
+        '/api/search/discover',
+        '/api/search/refine',
+        '/api/search/finalize',
+      ],
+      legacyRoute: '/api/search',
+      legacyRouteStatus: 'legacy_combined_search',
+      storageMode: isSupabaseConfigured() ? 'supabase' : 'local_file_fallback',
+      finalizeUsesRequestCandidatePool: true,
     },
     flowBehavior: {
       guidedDiscovery: {

@@ -202,8 +202,8 @@ function SiteLayout() {
             <p className="text-base font-semibold text-slate-900">Focama</p>
             <p>
               Focama offers calm buying guidance before you head to a marketplace. The current app
-              focuses on guided product search, shortlist refinement, and clear trust pages while
-              the broader product continues to evolve.
+              focuses on guided product search, AI-assisted shortlist refinement, and clear trust
+              pages while the broader product continues to evolve.
             </p>
           </div>
           <div className="space-y-3">

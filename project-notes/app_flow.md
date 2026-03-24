@@ -30,6 +30,10 @@
   - final focused picks come from `/api/search/finalize`
   - this guided flow is the primary backend architecture for the live product experience
   - the legacy `/api/search` route still exists only as a combined backend/debug path and should not shape homepage behavior
+- Backend debug/health tooling should mirror that same split:
+  - `/api/search/debug` should describe the guided flow as primary
+  - `/api/search` should be treated as legacy/manual
+  - `/api/health/supabase` should treat local file fallback as a supported development/storage mode when Supabase is not configured
 - After loading/refinement, the page displays up to 6 normalized product cards.
 - Clicking a product opens a detail modal with:
   - product image
@@ -75,6 +79,7 @@
   - AI-assisted shortlist selection
   - outbound retailer product links when available
   - Supabase-backed cache/history path
+  - debug output aligned to guided-primary plus legacy-live backend behavior
 - Placeholder now:
   - affiliate-specific linking/disclosure behavior
   - auth flows
