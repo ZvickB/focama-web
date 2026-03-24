@@ -8,9 +8,8 @@ export const RESULT_CARD_SLOTS = Array.from({ length: RESULT_CARD_COUNT }, (_, i
 
 function createFallbackRefinementPrompt(productQuery) {
   return {
-    prompt: `What should we optimize for with this ${productQuery}? Pick any that matter.`,
-    helperText: 'Choose multiple priorities if you want, then add anything else in your own words.',
-    suggestedPriorities: ['price', 'comfort', 'quality', 'durability', 'style', 'ease of use'],
+    prompt: `What should we optimize for with this ${productQuery}?`,
+    helperText: 'Add any context that will help Focama narrow the shortlist more intelligently.',
     followUpPlaceholder:
       'Examples: for a small apartment, for daily commuting, needs to feel premium, under $200, easy to clean, for a child, or should last a long time.',
   }
@@ -47,7 +46,7 @@ async function fetchRefinementPrompt(query) {
   return readJsonResponse(response)
 }
 
-async function finalizeGuidedSearch({ candidatePool, priorities, followUpNotes }) {
+async function finalizeGuidedSearch({ candidatePool, followUpNotes }) {
   const response = await fetch('/api/search/finalize', {
     method: 'POST',
     headers: {
@@ -55,7 +54,6 @@ async function finalizeGuidedSearch({ candidatePool, priorities, followUpNotes }
     },
     body: JSON.stringify({
       candidatePool,
-      priorities,
       followUpNotes,
     }),
   })
@@ -72,9 +70,7 @@ export function useGuidedSearch() {
   const [candidatePool, setCandidatePool] = useState(null)
   const [previewResults, setPreviewResults] = useState([])
   const [results, setResults] = useState([])
-  const [selectionMeta, setSelectionMeta] = useState(null)
   const [refinementPrompt, setRefinementPrompt] = useState(null)
-  const [selectedPriorities, setSelectedPriorities] = useState([])
   const [followUpNotes, setFollowUpNotes] = useState('')
   const [showPreviewResults, setShowPreviewResults] = useState(false)
   const [isDiscovering, setIsDiscovering] = useState(false)
@@ -89,7 +85,6 @@ export function useGuidedSearch() {
     onSuccess: (payload) => {
       setCandidatePool(payload.candidatePool || null)
       setResults(payload.results || [])
-      setSelectionMeta(payload.selection || null)
     },
     onError: (error) => {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to finalize the search.')
@@ -101,14 +96,6 @@ export function useGuidedSearch() {
   const hasFinalResults = results.length > 0
   const displayedResults = hasFinalResults ? results : showPreviewResults ? previewResults : []
 
-  function togglePriority(priority) {
-    setSelectedPriorities((currentValue) =>
-      currentValue.includes(priority)
-        ? currentValue.filter((item) => item !== priority)
-        : [...currentValue, priority],
-    )
-  }
-
   function resetGuidedState(nextSubmittedQuery) {
     setHasStartedSearch(true)
     setSubmittedQuery(nextSubmittedQuery)
@@ -117,8 +104,6 @@ export function useGuidedSearch() {
     setCandidatePool(null)
     setPreviewResults([])
     setResults([])
-    setSelectionMeta(null)
-    setSelectedPriorities([])
     setFollowUpNotes('')
     setShowPreviewResults(false)
     setRefinementPrompt(createFallbackRefinementPrompt(nextSubmittedQuery))
@@ -190,7 +175,6 @@ export function useGuidedSearch() {
 
     finalizeMutation.mutate({
       candidatePool,
-      priorities: selectedPriorities,
       followUpNotes,
     })
   }
@@ -212,9 +196,7 @@ export function useGuidedSearch() {
     isLoading,
     productQuery,
     refinementPrompt,
-    selectedPriorities,
     selectedProduct,
-    selectionMeta,
     showPreviewResults,
     submittedQuery,
     beginGuidedSearch,
@@ -223,6 +205,5 @@ export function useGuidedSearch() {
     setFollowUpNotes,
     setProductQuery,
     setSelectedProduct,
-    togglePriority,
   }
 }

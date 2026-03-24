@@ -201,8 +201,9 @@ function SiteLayout() {
           <div className="space-y-2">
             <p className="text-base font-semibold text-slate-900">Focama</p>
             <p>
-              Focama offers calm buying guidance before you head to a marketplace. The site is
-              currently focused on original recommendation briefs and trust-building content.
+              Focama offers calm buying guidance before you head to a marketplace. The current app
+              focuses on guided product search, shortlist refinement, and clear trust pages while
+              the broader product continues to evolve.
             </p>
           </div>
           <div className="space-y-3">

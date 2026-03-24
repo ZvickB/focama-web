@@ -13,12 +13,13 @@ function AboutPage() {
         buying decision itself.
       </p>
       <p>
-        The current version focuses on short original buying briefs, sample recommendation
-        frameworks, and practical questions that help narrow a search. It is meant to be useful
-        before a user clicks into a store.
+        The current version centers on guided product search. You start with a product topic,
+        Focama gathers a candidate set, asks a lightweight follow-up, and returns a calmer
+        shortlist before you head into a retailer.
       </p>
       <p>
-        Over time, Focama may expand to include broader guided search tools and affiliate links.
+        The product is still early, but the direction is consistent: clearer tradeoffs, less noise,
+        and a more focused path from "I need something" to a small set of sensible options.
         Any affiliate relationships will be disclosed clearly on the site.
       </p>
     </PageShell>

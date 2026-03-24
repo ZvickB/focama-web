@@ -96,7 +96,6 @@ describe('HomePage', () => {
           JSON.stringify({
             prompt: 'What should we optimize for with this stroller?',
             helperText: 'Pick anything that matters.',
-            suggestedPriorities: ['price', 'comfort', 'portability'],
             followUpPlaceholder: 'Anything else?',
           }),
       })
@@ -108,7 +107,9 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
 
-    expect(await screen.findByText(/what should we optimize for with this stroller/i)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/what should we optimize for with this stroller/i),
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /show focused picks/i })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /show products now/i })[0]).toBeInTheDocument()
     expect(screen.getByText(/skip ai refinement\./i)).toBeInTheDocument()
@@ -128,7 +129,6 @@ describe('HomePage', () => {
           JSON.stringify({
             prompt: 'What matters most?',
             helperText: 'Pick priorities.',
-            suggestedPriorities: ['price', 'quality', 'comfort'],
             followUpPlaceholder: 'Anything else?',
           }),
       })
@@ -143,7 +143,7 @@ describe('HomePage', () => {
     expect(await screen.findByText('SerpApi request failed.')).toBeInTheDocument()
   })
 
-  it('finalizes results after the user chooses priorities', async () => {
+  it('finalizes results after the user adds refinement notes', async () => {
     const user = userEvent.setup()
     const fetchMock = vi
       .fn()
@@ -178,7 +178,6 @@ describe('HomePage', () => {
           JSON.stringify({
             prompt: 'What should we optimize for with this stroller?',
             helperText: 'Pick anything that matters.',
-            suggestedPriorities: ['price', 'comfort', 'portability'],
             followUpPlaceholder: 'Anything else?',
           }),
       })
@@ -188,7 +187,7 @@ describe('HomePage', () => {
           JSON.stringify({
             candidatePool: {
               query: 'stroller',
-              details: 'Priorities: comfort',
+              details: 'Notes: comfort matters most',
               candidates: [],
             },
             results: [
@@ -216,7 +215,9 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
 
     expect(await screen.findByText('Compact airport stroller')).toBeInTheDocument()
-    expect(screen.getByText(/these picks were finalized after your guided refinement/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/these picks were finalized after your guided refinement/i),
+    ).toBeInTheDocument()
   })
 
   it('submits focused picks when the user presses enter in the AI textarea', async () => {
@@ -254,7 +255,6 @@ describe('HomePage', () => {
           JSON.stringify({
             prompt: 'What should we optimize for with this stroller?',
             helperText: 'Pick anything that matters.',
-            suggestedPriorities: ['price', 'comfort', 'portability'],
             followUpPlaceholder: 'Anything else?',
           }),
       })
@@ -331,7 +331,6 @@ describe('HomePage', () => {
           JSON.stringify({
             prompt: 'What should we optimize for with this stroller?',
             helperText: 'Pick anything that matters.',
-            suggestedPriorities: ['price', 'comfort', 'portability'],
             followUpPlaceholder: 'Anything else?',
           }),
       })

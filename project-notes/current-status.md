@@ -8,7 +8,7 @@
 ## Current state
 - The frontend is built in Vite + React with React Router, TanStack Query, Tailwind, and Vitest.
 - The default homepage at `/` now uses the `open` layout: spacious, search-first, single-column, and more mobile-friendly than the older split-screen layout.
-- Older homepage experiments are now archived outside the live app in `archive/ui-screen-choices-rejects/`.
+- Older homepage experiments were removed after the open layout became the clear direction.
 - The open layout now:
   - uses the PNG wordmark in the hero
   - removes chips
@@ -20,23 +20,26 @@
 - The site header uses a sharper small-size logo asset, and logo/favicon colors were adjusted to better match the current wordmark palette.
 
 ## Search and backend state
-- Live product results come through `/api/search`.
-- The live search route currently:
+- The homepage now uses a guided search flow:
+  - `/api/search/discover` gathers and filters the candidate pool
+  - `/api/search/refine` generates the lightweight AI follow-up prompt
+  - `/api/search/finalize` selects the final shortlist from the cleaned candidate pool
+- The legacy `/api/search` route still exists as a direct combined path for backend/debug use.
+- The live search flow currently:
   - validates input
   - checks cache before external calls
   - queries SerpApi
   - filters/cleans a candidate pool
-  - uses AI to refine and/or select the final shortlist
+  - uses AI to generate the refinement prompt and/or select the final shortlist
   - includes tradeoffs/drawbacks in result data
 - Search cache and search history can use Supabase when configured.
 - Local file-based cache remains as a development/fallback path.
-- Basic IP-based rate limiting exists on `/api/search`.
+- Basic IP-based rate limiting exists on the search handlers.
 - Search history records cache hit/miss status best-effort.
 - Health/debug tooling now exists for the Supabase-backed storage path.
 
 ## Active product decisions
 - Keep the `open` homepage as the default for now.
-- Keep the other homepage variants available until one clear long-term winner emerges.
 - Preserve the beautiful skeletons, but let the AI refinement step own the viewport first.
 - Prefer the PNG wordmark for now rather than forcing a weak SVG recreation.
 - Favor calm, spacious, search-first UX over dashboard-like side-by-side layouts.
@@ -48,14 +51,13 @@
 2. Read `OPENAI_API_KEY` from the root `.env`.
 3. Read Supabase config from the root `.env` when available.
 4. Check cached search results before calling external services.
-5. Query SerpApi through the live `/api/search` route when cache misses.
+5. Query SerpApi through the discovery or direct live search route when cache misses.
 6. Filter junk, duplicates, and weak candidates before final ranking.
-7. Use AI where it improves refinement/selection quality.
+7. Use AI where it improves refinement prompt quality and final selection quality.
 8. Store cache/history in Supabase when configured, with local fallback for development.
 9. Keep rate limiting in place and strengthen abuse protection later if usage grows.
 
 ## Important scope constraints
-- Keep archived homepage variants available for reference, but out of the live bundle.
 - Do not overengineer scaling work before v1 usage justifies it.
 - Do not force a brand-asset rebuild if the current PNG wordmark is working well.
 - Keep the implementation easy to debug across frontend, backend, storage, and vendor integrations.

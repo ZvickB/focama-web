@@ -28,7 +28,6 @@ purpose: Large marketplaces are designed to be sticky and distracting. Focama is
   - one strong central input
   - refinement area revealed after search
   - skeletons still visible, but not the primary focus
-- Keep the alternate homepage experiments available until the long-term winner is obvious.
 - Prefer the PNG wordmark for now rather than forcing an SVG recreation that feels off-brand.
 
 ## Stack

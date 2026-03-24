@@ -31,19 +31,11 @@ function buildPromptSchema() {
       helper_text: {
         type: 'string',
       },
-      suggested_priorities: {
-        type: 'array',
-        items: {
-          type: 'string',
-        },
-        minItems: 3,
-        maxItems: 6,
-      },
       follow_up_placeholder: {
         type: 'string',
       },
     },
-    required: ['prompt', 'helper_text', 'suggested_priorities', 'follow_up_placeholder'],
+    required: ['prompt', 'helper_text', 'follow_up_placeholder'],
     additionalProperties: false,
   }
 }
@@ -52,8 +44,8 @@ function buildPromptInput(productQuery) {
   return [
     'You are helping a shopper clarify what matters before picking products.',
     'Keep the tone calm, practical, and lightweight.',
-    'Return one short question, one short helper text, 3 to 6 selectable priorities, and one placeholder for optional free text.',
-    'The priorities should help the shopper think through tradeoffs like comfort, durability, portability, price, style, size, safety, or ease of use when relevant.',
+    'Return one short question, one short helper text, and one placeholder for optional free text.',
+    'Do not suggest chips, toggles, or selectable priorities.',
     'Do not ask more than one question in this step.',
     `Product request: ${productQuery}`,
   ].join('\n')
@@ -117,7 +109,6 @@ export async function generateRefinementPrompt(
   return {
     prompt: parsed.prompt,
     helperText: parsed.helper_text,
-    suggestedPriorities: parsed.suggested_priorities,
     followUpPlaceholder: parsed.follow_up_placeholder,
   }
 }

@@ -1,29 +1,16 @@
-import { useEffect, useId } from 'react'
+import { useEffect } from 'react'
 import {
   ArrowUpRight,
-  Check,
   Clock3,
-  LoaderCircle,
-  Search,
   Sparkles,
   Star,
-  WandSparkles,
   X,
 } from 'lucide-react'
 
 import ProductCard from '@/components/ProductCard.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Button } from '@/components/ui/button.jsx'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card.jsx'
-import { Input } from '@/components/ui/input.jsx'
-import { Label } from '@/components/ui/label.jsx'
-import { Textarea } from '@/components/ui/textarea.jsx'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import logo from '@/assets/logo_master_version.svg'
 import { RESULT_CARD_SLOTS } from '@/components/home/useGuidedSearch.js'
 
@@ -37,18 +24,6 @@ function getUserFacingReasons(reasons = []) {
 
     return !/serpapi search route/i.test(normalizedReason)
   })
-}
-
-function handleRefinementTextareaKeyDown(event, { canSubmit, onSubmit }) {
-  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) {
-    return
-  }
-
-  event.preventDefault()
-
-  if (canSubmit) {
-    onSubmit()
-  }
 }
 
 function SkeletonBlock({ className }) {
@@ -259,212 +234,6 @@ export function ProductDetailModal({ item, onClose }) {
   )
 }
 
-export function SearchForm({
-  accentBadge,
-  ctaLabel = 'Start search',
-  helperText,
-  heroTitle,
-  isLoading,
-  onSubmit,
-  productQuery,
-  setProductQuery,
-  showTrustRow = true,
-  suggestions = [],
-}) {
-  const inputId = useId()
-
-  return (
-    <div className="space-y-6">
-      <div className="space-y-4">
-        {accentBadge ? (
-          <Badge className="rounded-full bg-white/80 px-3 py-1 text-slate-700 hover:bg-white/80">
-            {accentBadge}
-          </Badge>
-        ) : null}
-        <div className="space-y-3">
-          <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
-            {heroTitle}
-          </h1>
-          <p className="max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">{helperText}</p>
-        </div>
-      </div>
-
-      <form className="space-y-4" onSubmit={onSubmit}>
-        <div className="rounded-[28px] border border-white/70 bg-white/78 p-3 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:p-4">
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="flex-1">
-              <Label htmlFor={inputId} className="sr-only">
-                Product topic
-              </Label>
-              <Input
-                id={inputId}
-                aria-label="Product topic"
-                value={productQuery}
-                onChange={(event) => setProductQuery(event.target.value)}
-                placeholder='Try "office chair", "lego set", or "travel stroller"'
-                className="h-14 rounded-2xl border-stone-200 bg-white/90 px-4 text-base placeholder:text-slate-400"
-                disabled={isLoading}
-              />
-            </div>
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="h-14 gap-2 rounded-2xl bg-primary px-6 text-base text-primary-foreground hover:bg-primary/90"
-            >
-              {isLoading ? 'Starting your search...' : ctaLabel}
-              {isLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-            </Button>
-          </div>
-        </div>
-      </form>
-
-      {suggestions.length ? (
-        <div className="flex flex-wrap gap-2">
-          {suggestions.map((suggestion) => (
-            <button
-              key={suggestion}
-              type="button"
-              className="rounded-full border border-white/75 bg-white/70 px-3 py-2 text-sm text-slate-600 transition hover:bg-white hover:text-slate-900"
-              onClick={() => setProductQuery(suggestion)}
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {showTrustRow ? (
-        <div className="flex flex-wrap gap-3 text-sm text-slate-600">
-          <span className="rounded-full bg-white/70 px-3 py-2">No endless filters</span>
-          <span className="rounded-full bg-white/70 px-3 py-2">Tradeoffs, not clutter</span>
-          <span className="rounded-full bg-white/70 px-3 py-2">Focused shortlist of 6 picks</span>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-export function RefinementCard({
-  candidatePool,
-  followUpNotes,
-  isFinalizing,
-  onFinalize,
-  onShowNow,
-  prompt,
-  selectedPriorities,
-  setFollowUpNotes,
-  tone = 'default',
-  togglePriority,
-}) {
-  const cardClassName =
-    tone === 'concierge'
-      ? 'rounded-[32px] border-stone-200/80 bg-[#fffaf2] shadow-[0_24px_80px_-52px_rgba(15,23,42,0.3)]'
-      : 'rounded-[28px] border-stone-200/80 bg-white/82 shadow-[0_24px_80px_-52px_rgba(15,23,42,0.24)]'
-
-  return (
-    <Card className={cardClassName}>
-      <CardHeader className="space-y-3">
-        <div className="flex items-center gap-2 text-slate-700">
-          <WandSparkles className="h-4 w-4 text-primary" />
-          <CardTitle className="text-xl">AI refinement</CardTitle>
-        </div>
-        <CardDescription className="leading-7 text-slate-600">
-          {prompt?.prompt || 'Thinking through what matters most for this search.'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="rounded-2xl border border-stone-200/80 bg-stone-50/80 px-4 py-3 text-sm text-slate-600">
-          <div className="flex items-center gap-2">
-            {candidatePool ? (
-              <Check className="h-4 w-4 text-emerald-600" />
-            ) : (
-              <LoaderCircle className="h-4 w-4 animate-spin text-primary" />
-            )}
-            <span>
-              {candidatePool
-                ? 'Products are ready. Apply your priorities when you are.'
-                : 'Focama is already gathering products in the background.'}
-            </span>
-          </div>
-        </div>
-
-        <p className="text-sm leading-6 text-slate-600">
-          {prompt?.helperText || 'Pick any priorities that matter, then add your own notes if useful.'}
-        </p>
-
-        <div className="flex flex-wrap gap-2">
-          {(prompt?.suggestedPriorities || []).map((priority) => {
-            const isSelected = selectedPriorities.includes(priority)
-
-            return (
-              <button
-                key={priority}
-                type="button"
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition ${
-                  isSelected
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-stone-200 bg-stone-50 text-slate-700 hover:border-primary/30 hover:bg-white'
-                }`}
-                onClick={() => togglePriority(priority)}
-              >
-                {isSelected ? <Check className="h-3.5 w-3.5" /> : null}
-                {priority}
-              </button>
-            )
-          })}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="follow-up-notes" className="text-slate-700">
-            Anything else?
-          </Label>
-          <Textarea
-            id="follow-up-notes"
-            value={followUpNotes}
-            onChange={(event) => setFollowUpNotes(event.target.value)}
-            onKeyDown={(event) =>
-              handleRefinementTextareaKeyDown(event, {
-                canSubmit: Boolean(candidatePool) && !isFinalizing,
-                onSubmit: onFinalize,
-              })
-            }
-            className="min-h-32 resize-none rounded-3xl border-stone-200 bg-white/90 px-4 py-3 text-base leading-7 placeholder:text-slate-400"
-            placeholder={
-              prompt?.followUpPlaceholder ||
-              'Examples: under $200, easy to clean, small space, premium feel, or should last a long time.'
-            }
-            disabled={isFinalizing}
-          />
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-          <Button
-            type="button"
-            disabled={!candidatePool || isFinalizing}
-            className="h-12 gap-2 rounded-2xl bg-primary text-base text-primary-foreground hover:bg-primary/90"
-            onClick={onFinalize}
-          >
-            {isFinalizing ? 'Applying your priorities...' : 'Show focused picks'}
-            {isFinalizing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!candidatePool || isFinalizing}
-            className="h-12 rounded-2xl border-stone-300 bg-white text-slate-700"
-            onClick={onShowNow}
-          >
-            Show products now
-          </Button>
-        </div>
-        <p className="text-xs leading-5 text-slate-500">
-          Skip AI refinement and view the current product set.
-        </p>
-      </CardContent>
-    </Card>
-  )
-}
-
 export function ResultsSection({
   displayedResults,
   errorMessage,
@@ -474,15 +243,12 @@ export function ResultsSection({
   onSelectProduct,
   showPreviewResults,
   submittedQuery,
-  variant = 'default',
 }) {
-  const quietLoading = variant === 'flow' || variant === 'hero' || variant === 'concierge'
-  const isOpenVariant = variant === 'open'
   const hasExplicitBadges = displayedResults.some((item) => item.badgeLabel)
 
   return (
     <section className="space-y-5">
-      {isOpenVariant && !hasStartedSearch ? null : (
+      {!hasStartedSearch ? null : (
         <div className="space-y-3">
           <Badge variant="outline" className="w-fit rounded-full bg-stone-50 px-3 py-1">
             Results
@@ -521,18 +287,14 @@ export function ResultsSection({
               <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
               <span className="relative mt-[1px] h-2.5 w-2.5 rounded-full bg-primary/70" />
             </span>
-            <span>
-              {quietLoading
-                ? 'Gathering options while the refinement step leads the way.'
-                : 'Starting the search and preparing your guided follow-up...'}
-            </span>
+            <span>Starting the search and preparing your guided follow-up...</span>
           </div>
 
-          <div className={quietLoading ? 'max-h-[340px] overflow-hidden' : ''}>
+          <div>
             <div className="mx-auto grid max-w-6xl grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 sm:gap-5">
               {RESULT_CARD_SLOTS.map((index) => (
                 <div key={index}>
-                  <ResultSkeleton className={quietLoading ? 'opacity-90' : ''} />
+                  <ResultSkeleton />
                 </div>
               ))}
             </div>

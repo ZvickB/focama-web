@@ -7,13 +7,12 @@
 
 ## Current homepage direction
 - The default homepage at `/` now uses the `open` layout variant.
-- Older UI variants were removed from the live app and archived in `archive/ui-screen-choices-rejects/`.
+- Older UI variants were removed after the open layout direction was chosen.
 - The current product direction is the spacious, search-first open layout rather than the older split-screen or chip-heavy flows.
 
 ## Important files
 - Main app routes and loading fallback: `/src/App.jsx`
 - Active homepage layout: `/src/components/home/HomeExperience.jsx`
-- Archived multi-variant homepage layouts: `/archive/ui-screen-choices-rejects/components/home/HomeExperience.multivariant.jsx`
 - Shared homepage UI blocks: `/src/components/home/HomeShared.jsx`
 - Shared guided-search logic/state: `/src/components/home/useGuidedSearch.js`
 - Site header/nav/logo usage: `/src/components/SiteLayout.jsx`
@@ -38,6 +37,11 @@
 ## Search/result behavior
 - Shortlist count is now 6 end-to-end, not 4
 - This was updated in both frontend and backend logic
+- The homepage now uses the guided flow:
+  - `/api/search/discover` for the candidate pool and preview set
+  - `/api/search/refine` for the AI follow-up prompt
+  - `/api/search/finalize` for the final shortlist
+- The older direct `/api/search` route still exists, but it is not the main homepage path
 - Open layout behavior:
   - centered hero
   - search input first
@@ -72,5 +76,4 @@
 ## If continuing from here
 - First inspect `/src/components/home/HomeExperience.jsx`
 - Then inspect `/src/App.jsx` and `/src/components/SiteLayout.jsx`
-- Check `archive/ui-screen-choices-rejects/` only if you want to restore or reference old homepage concepts
 - Treat `wordmark.PNG` as the preferred current wordmark asset unless the user explicitly wants another attempt

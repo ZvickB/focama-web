@@ -47,7 +47,6 @@
 - Continue polishing the default open homepage based on tester feedback.
 - Add a clearer empty / no-good-results state.
 - Add a tiny admin/debug view or lightweight internal tool for checking cache hit/miss behavior without one-off scripts.
-- Revisit whether the alternate homepage variants should stay available once the open layout settles.
 
 ## Filtering direction
 - Rule-based filtering should clean the raw SerpApi pool first:

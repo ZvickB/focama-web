@@ -15,7 +15,7 @@
   - Privacy
   - Affiliate Disclosure
 - The default homepage is the `open` variant.
-- Older homepage UI concepts are archived in `archive/ui-screen-choices-rejects/` and are no longer part of the live app routes.
+- Older homepage UI concepts were removed after the `open` layout direction was chosen.
 
 ## Current homepage behavior
 - The homepage is the main product experience.
@@ -24,20 +24,24 @@
   - the same area expands into the AI refinement state
   - the results area begins shimmering below
   - the refinement step stays visually higher-priority than the skeletons
-- The homepage sends the search to the live `/api/search` route.
+- The homepage now uses a guided search flow:
+  - discovery starts through `/api/search/discover`
+  - the follow-up prompt comes from `/api/search/refine`
+  - final focused picks come from `/api/search/finalize`
+  - the legacy `/api/search` route still exists as a direct backend path, but it is not the main homepage flow
 - After loading/refinement, the page displays up to 6 normalized product cards.
 - Clicking a product opens a detail modal with:
   - product image
   - short explanation
   - price and ratings
   - drawbacks/tradeoffs
-  - a placeholder CTA for future marketplace linking
+  - an outbound retailer link when one is available
 
 ## Current MVP assumptions
 - Product data comes from the live search backend path rather than a frontend mock catalog.
 - The backend now filters candidates and uses AI to improve the final shortlist rather than simply returning the first raw usable results.
 - Search history/cache persistence now exists through the storage layer, with Supabase preferred and local fallback for development.
-- The product modal CTA is not yet a live affiliate or retailer link.
+- Retailer product links can already appear in the modal, but affiliate handling and disclosure strategy are not finalized.
 
 ## Marketplace direction
 - Focama is meant to help users narrow choices before going into a retailer marketplace.
@@ -62,15 +66,16 @@
 - Real now:
   - site shell
   - routing
-  - multiple homepage variants
   - open-layout default homepage
   - branding and loading fallback
   - product-card interaction pattern
-  - live `/api/search` route
+  - live guided search endpoints
+  - legacy direct `/api/search` route
   - AI-assisted shortlist selection
+  - outbound retailer product links when available
   - Supabase-backed cache/history path
 - Placeholder now:
-  - outbound retailer links
+  - affiliate-specific linking/disclosure behavior
   - auth flows
   - deeper analytics/observability
   - fully productized persistent user history
@@ -78,5 +83,5 @@
 ## Next likely implementation steps
 - Verify the Vercel deployment using the current cache/storage flow.
 - Keep tightening weak-result handling and AI judgment quality.
-- Decide how outbound retailer links should work in the modal and cards.
-- Refine the default open homepage based on tester feedback while keeping alternate variants available for comparison.
+- Decide how affiliate-ready outbound retailer links and disclosures should work in the modal and cards.
+- Refine the default open homepage based on tester feedback.

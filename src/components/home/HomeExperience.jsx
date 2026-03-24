@@ -273,7 +273,6 @@ function OpenLayout(props) {
                 onSelectProduct={onSelectProduct}
                 showPreviewResults={showPreviewResults}
                 submittedQuery={submittedQuery}
-                variant="open"
               />
             </div>
           )}
