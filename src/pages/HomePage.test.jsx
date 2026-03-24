@@ -109,9 +109,8 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /start search/i }))
 
     expect(await screen.findByText(/what should we optimize for with this stroller/i)).toBeInTheDocument()
-    expect(
-      screen.getByText(/products are ready in the background\. you can refine first or skip ahead\./i),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /show focused picks/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /show products now/i })[0]).toBeInTheDocument()
     expect(screen.getByText(/skip ai refinement\./i)).toBeInTheDocument()
   })
 
@@ -218,6 +217,83 @@ describe('HomePage', () => {
 
     expect(await screen.findByText('Compact airport stroller')).toBeInTheDocument()
     expect(screen.getByText(/these picks were finalized after your guided refinement/i)).toBeInTheDocument()
+  })
+
+  it('submits focused picks when the user presses enter in the AI textarea', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            candidatePool: {
+              query: 'stroller',
+              details: '',
+              candidates: [
+                {
+                  id: 'result-1',
+                  title: 'Travel stroller',
+                  source: 'Target',
+                  price: '$129.99',
+                  rating: 4.4,
+                  reviewCount: 87,
+                  description: 'Lightweight and easy to fold.',
+                  reasons: ['Available from Target'],
+                  image: 'https://example.com/stroller.jpg',
+                  link: 'https://example.com/stroller',
+                },
+              ],
+            },
+            previewResults: [createMockResult()],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            prompt: 'What should we optimize for with this stroller?',
+            helperText: 'Pick anything that matters.',
+            suggestedPriorities: ['price', 'comfort', 'portability'],
+            followUpPlaceholder: 'Anything else?',
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            candidatePool: {
+              query: 'stroller',
+              details: 'Notes: comfort matters most',
+              candidates: [],
+            },
+            results: [
+              createMockResult(),
+              createMockResult({
+                id: 'result-2',
+                title: 'Compact airport stroller',
+                price: '$149.99',
+              }),
+            ],
+            selection: {
+              mode: 'ai',
+            },
+          }),
+      })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+    await screen.findByText(/what should we optimize for with this stroller/i)
+
+    const refinementTextarea = screen.getByLabelText(/add context for the ai/i)
+    await user.type(refinementTextarea, 'comfort matters most')
+    await user.keyboard('{Enter}')
+
+    expect(await screen.findByText('Compact airport stroller')).toBeInTheDocument()
   })
 
   it('lets the user show the current product set without AI refinement', async () => {

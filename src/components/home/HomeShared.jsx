@@ -27,6 +27,30 @@ import { Textarea } from '@/components/ui/textarea.jsx'
 import logo from '@/assets/logo_master_version.svg'
 import { RESULT_CARD_SLOTS } from '@/components/home/useGuidedSearch.js'
 
+function getUserFacingReasons(reasons = []) {
+  return reasons.filter((reason) => {
+    const normalizedReason = String(reason || '').trim()
+
+    if (!normalizedReason) {
+      return false
+    }
+
+    return !/serpapi search route/i.test(normalizedReason)
+  })
+}
+
+function handleRefinementTextareaKeyDown(event, { canSubmit, onSubmit }) {
+  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) {
+    return
+  }
+
+  event.preventDefault()
+
+  if (canSubmit) {
+    onSubmit()
+  }
+}
+
 function SkeletonBlock({ className }) {
   return (
     <div className={`relative overflow-hidden rounded-full bg-stone-200/80 ${className}`}>
@@ -89,6 +113,8 @@ export function ProductDetailModal({ item, onClose }) {
     return null
   }
 
+  const userFacingReasons = getUserFacingReasons(item.reasons)
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end bg-slate-950/45 lg:items-center lg:justify-center"
@@ -131,6 +157,11 @@ export function ProductDetailModal({ item, onClose }) {
                 {item.title}
               </h2>
               <div className="flex flex-wrap items-center gap-3">
+                {item.badgeLabel ? (
+                  <Badge className="rounded-full bg-primary px-3 py-1 text-primary-foreground hover:bg-primary">
+                    {item.badgeLabel}
+                  </Badge>
+                ) : null}
                 <p className="text-2xl font-semibold text-primary">{item.price}</p>
                 <div className="flex items-center gap-1 text-sm text-amber-600">
                   {Array.from({ length: 5 }).map((_, index) => (
@@ -148,6 +179,12 @@ export function ProductDetailModal({ item, onClose }) {
                   {item.rating.toFixed(1)} ({item.reviewCount} reviews)
                 </span>
               </div>
+              {item.badgeReason ? (
+                <p className="rounded-2xl border border-stone-200/80 bg-stone-50/90 px-4 py-3 text-sm leading-6 text-slate-600">
+                  <span className="font-medium text-slate-800">{item.badgeLabel}:</span>{' '}
+                  {item.badgeReason}
+                </p>
+              ) : null}
               <p className="text-base leading-7 text-slate-600">{item.description}</p>
             </div>
 
@@ -156,7 +193,7 @@ export function ProductDetailModal({ item, onClose }) {
                 <CardTitle className="text-lg text-slate-900">Why this pick stands out</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
-                {item.reasons.map((reason) => (
+                {userFacingReasons.map((reason) => (
                   <div key={reason} className="flex items-start gap-3">
                     <Star className="mt-1 h-4 w-4 text-amber-500" />
                     <span>{reason}</span>
@@ -385,7 +422,13 @@ export function RefinementCard({
             id="follow-up-notes"
             value={followUpNotes}
             onChange={(event) => setFollowUpNotes(event.target.value)}
-            className="min-h-32 rounded-3xl border-stone-200 bg-white/90 px-4 py-3 text-base leading-7 placeholder:text-slate-400"
+            onKeyDown={(event) =>
+              handleRefinementTextareaKeyDown(event, {
+                canSubmit: Boolean(candidatePool) && !isFinalizing,
+                onSubmit: onFinalize,
+              })
+            }
+            className="min-h-32 resize-none rounded-3xl border-stone-200 bg-white/90 px-4 py-3 text-base leading-7 placeholder:text-slate-400"
             placeholder={
               prompt?.followUpPlaceholder ||
               'Examples: under $200, easy to clean, small space, premium feel, or should last a long time.'
@@ -429,13 +472,13 @@ export function ResultsSection({
   hasStartedSearch,
   isLoading,
   onSelectProduct,
-  selectionMeta,
   showPreviewResults,
   submittedQuery,
   variant = 'default',
 }) {
   const quietLoading = variant === 'flow' || variant === 'hero' || variant === 'concierge'
   const isOpenVariant = variant === 'open'
+  const hasExplicitBadges = displayedResults.some((item) => item.badgeLabel)
 
   return (
     <section className="space-y-5">
@@ -464,15 +507,6 @@ export function ResultsSection({
       {errorMessage ? (
         <div className="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {errorMessage}
-        </div>
-      ) : null}
-
-      {selectionMeta && !isLoading ? (
-        <div className="rounded-3xl border border-stone-200/80 bg-stone-50/90 px-4 py-3 text-sm text-slate-600">
-          <span className="font-medium text-slate-800">How this shortlist was chosen:</span>{' '}
-          {selectionMeta.mode === 'ai'
-            ? 'AI helped narrow the strongest options from the full product pool.'
-            : 'A rules-based fallback was used for this shortlist.'}
         </div>
       ) : null}
 
@@ -533,9 +567,19 @@ export function ResultsSection({
           ) : null}
 
           <div className="mx-auto grid max-w-6xl grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 sm:gap-5">
-            {displayedResults.map((item) => (
+            {displayedResults.map((item, index) => (
               <div key={item.id}>
-                <ProductCard {...item} onSelect={() => onSelectProduct(item)} />
+                <ProductCard
+                  {...item}
+                  badgeLabel={
+                    item.badgeLabel || (!hasExplicitBadges && index === 0 ? 'Best match' : '')
+                  }
+                  badgeReason={
+                    item.badgeReason ||
+                    (!hasExplicitBadges && index === 0 ? 'Top overall fit for this shortlist.' : '')
+                  }
+                  onSelect={() => onSelectProduct(item)}
+                />
               </div>
             ))}
           </div>

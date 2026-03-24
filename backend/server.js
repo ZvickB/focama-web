@@ -6,6 +6,7 @@ import { generateRefinementPrompt } from './lib/refinement-assistant.js'
 import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './lib/result-filter.js'
 import {
   getSupabaseHealth,
+  isSupabaseConfigured,
   readStoredSearchCacheEntry,
   recordSearchHistory,
   writeStoredSearchCacheEntry,
@@ -26,6 +27,24 @@ const LIVE_RESULT_FILTER_CONFIG = {
 }
 const LIVE_SEARCH_RATE_LIMIT = {
   ...DEFAULT_RATE_LIMIT_CONFIG,
+}
+
+function ensureBadges(results = []) {
+  if (!Array.isArray(results) || results.length === 0) {
+    return []
+  }
+
+  const hasExplicitBadges = results.some((item) => item?.badgeLabel)
+
+  if (hasExplicitBadges) {
+    return results
+  }
+
+  return results.map((item, index) => ({
+    ...item,
+    badgeLabel: index === 0 ? 'Best match' : '',
+    badgeReason: index === 0 ? 'Top overall fit for this shortlist.' : '',
+  }))
 }
 
 export function sendJson(response, statusCode, payload) {
@@ -138,8 +157,9 @@ export async function handleCachedSearch(requestUrl, response) {
   })
 
   if (cacheEntry?.results?.length) {
+    const normalizedCachedResults = ensureBadges(cacheEntry.results)
     sendJson(response, 200, {
-      results: cacheEntry.results.slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit),
+      results: normalizedCachedResults.slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit),
       source: 'cache',
       cachedAt: cacheEntry.cachedAt,
     })
@@ -193,10 +213,11 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
   })
 
   if (cachedEntry?.results?.length) {
+    const normalizedCachedResults = ensureBadges(cachedEntry.results)
     const cachedSelection = cachedEntry.selection || {
       mode: 'cache',
       model: null,
-      selectedCandidateIds: cachedEntry.results.map((item) => item.id),
+      selectedCandidateIds: normalizedCachedResults.map((item) => item.id),
       details: 'Cached search results were returned.',
     }
 
@@ -205,10 +226,10 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
       cacheStatus: 'hit',
       candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
         ? cachedEntry.candidatePool.candidates.length
-        : cachedEntry.results.length,
+        : normalizedCachedResults.length,
       details: normalizedDetails,
       productQuery: normalizedQuery,
-      resultCount: cachedEntry.results.length,
+      resultCount: normalizedCachedResults.length,
       selectionMode: cachedSelection.mode,
       source: cachedEntry.source || 'cache',
     })
@@ -224,7 +245,7 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
           similarQueries: [],
           candidates: [],
         },
-      results: cachedEntry.results,
+      results: normalizedCachedResults,
       selection: cachedSelection,
       source: 'cache',
       cachedAt: cachedEntry.cachedAt,
@@ -337,10 +358,42 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
     return
   }
 
+  const normalizedDetails = ''
+  const cacheKey = buildCacheKey(normalizedQuery, normalizedDetails)
+  const cachedEntry = await readStoredSearchCacheEntry({
+    productQuery: normalizedQuery,
+    details: normalizedDetails,
+  })
+
+  if (cachedEntry?.candidatePool && cachedEntry?.results?.length) {
+    const normalizedCachedResults = ensureBadges(cachedEntry.results)
+
+    await recordSearchHistory({
+      cacheKey,
+      cacheStatus: 'hit',
+      candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
+        ? cachedEntry.candidatePool.candidates.length
+        : normalizedCachedResults.length,
+      details: normalizedDetails,
+      productQuery: normalizedQuery,
+      resultCount: normalizedCachedResults.length,
+      selectionMode: cachedEntry.selection?.mode || 'discovery_cache',
+      source: cachedEntry.source || 'cache',
+    })
+
+    sendJson(response, 200, {
+      candidatePool: cachedEntry.candidatePool,
+      previewResults: normalizedCachedResults,
+      source: 'cache',
+      cachedAt: cachedEntry.cachedAt,
+    })
+    return
+  }
+
   try {
     const artifacts = await fetchCandidatePool({
       productQuery: normalizedQuery,
-      details: '',
+      details: normalizedDetails,
       serpApiKey,
       response,
     })
@@ -348,6 +401,33 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
     if (!artifacts) {
       return
     }
+
+    await writeStoredSearchCacheEntry({
+      productQuery: normalizedQuery,
+      details: normalizedDetails,
+      candidatePool: artifacts.candidatePool,
+      results: artifacts.results,
+      selection: {
+        mode: 'discovery_preview',
+        model: null,
+        selectedCandidateIds: artifacts.results.map((item) => item.id),
+        details: 'Discovery preview results were cached for the guided search flow.',
+      },
+      source: 'guided_discovery',
+    })
+
+    await recordSearchHistory({
+      cacheKey,
+      cacheStatus: 'miss',
+      candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
+        ? artifacts.candidatePool.candidates.length
+        : 0,
+      details: normalizedDetails,
+      productQuery: normalizedQuery,
+      resultCount: artifacts.results.length,
+      selectionMode: 'discovery_preview',
+      source: 'guided_discovery',
+    })
 
     sendJson(response, 200, {
       candidatePool: artifacts.candidatePool,
@@ -406,6 +486,62 @@ export async function handleSupabaseHealth(response) {
   sendJson(response, health.ok ? 200 : 500, health)
 }
 
+export async function handleSearchDebug(requestUrl, response) {
+  const productQuery = requestUrl.searchParams.get('query')?.trim() || ''
+  const details = requestUrl.searchParams.get('details')?.trim() || ''
+  const { error, isValid, normalizedDetails, normalizedQuery } = getValidatedSearchInput(productQuery, details)
+
+  if (!isValid) {
+    sendJson(response, 400, { error })
+    return
+  }
+
+  const cacheKey = buildCacheKey(normalizedQuery, normalizedDetails)
+  const cachedEntry = await readStoredSearchCacheEntry({
+    productQuery: normalizedQuery,
+    details: normalizedDetails,
+  })
+  const normalizedCachedResults = ensureBadges(cachedEntry?.results || [])
+  const hasResults = normalizedCachedResults.length > 0
+  const hasCandidatePool = Boolean(cachedEntry?.candidatePool?.candidates)
+  const guidedDiscoveryUsesCache = normalizedDetails === '' && hasCandidatePool && hasResults
+  const liveSearchUsesCache = hasResults
+
+  sendJson(response, 200, {
+    query: normalizedQuery,
+    details: normalizedDetails,
+    cacheKey,
+    cache: {
+      hasEntry: Boolean(cachedEntry),
+      source: cachedEntry?.source || null,
+      cachedAt: cachedEntry?.cachedAt || null,
+      expiresAt: cachedEntry?.expiresAt || null,
+      candidateCount: Array.isArray(cachedEntry?.candidatePool?.candidates)
+        ? cachedEntry.candidatePool.candidates.length
+        : 0,
+      resultCount: normalizedCachedResults.length,
+      selectionMode: cachedEntry?.selection?.mode || null,
+    },
+    environment: {
+      serpApiConfigured: Boolean(getEnv('SERPAPI_API_KEY')),
+      openAiConfigured: Boolean(getEnv('OPENAI_API_KEY')),
+      supabaseConfigured: isSupabaseConfigured(),
+    },
+    flowBehavior: {
+      guidedDiscovery: {
+        usesCache: guidedDiscoveryUsesCache,
+        callsSerpApi: !guidedDiscoveryUsesCache,
+        callsOpenAi: false,
+      },
+      liveSearch: {
+        usesCache: liveSearchUsesCache,
+        callsSerpApi: !liveSearchUsesCache,
+        callsOpenAi: !liveSearchUsesCache,
+      },
+    },
+  })
+}
+
 export async function handleFinalizeSelection(request, response) {
   const openAiApiKey = getEnv('OPENAI_API_KEY')
 
@@ -460,7 +596,7 @@ export async function handleFinalizeSelection(request, response) {
 
     const fallbackResults = candidatePool.candidates
       .slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit)
-      .map((candidate) => ({
+      .map((candidate, index) => ({
         id: candidate.id,
         title: candidate.title,
         subtitle: candidate.source,
@@ -471,6 +607,8 @@ export async function handleFinalizeSelection(request, response) {
         reasons: candidate.reasons,
         image: candidate.image,
         link: candidate.link,
+        badgeLabel: index === 0 ? 'Best match' : '',
+        badgeReason: index === 0 ? 'Top overall fit from the refined product pool.' : '',
       }))
 
     const results = aiSelection.results.length > 0 ? aiSelection.results : fallbackResults
@@ -530,6 +668,11 @@ export function createApiServer() {
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/health/supabase') {
       await handleSupabaseHealth(response)
+      return
+    }
+
+    if (request.method === 'GET' && requestUrl.pathname === '/api/search/debug') {
+      await handleSearchDebug(requestUrl, response)
       return
     }
 

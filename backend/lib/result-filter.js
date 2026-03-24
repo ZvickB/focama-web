@@ -250,7 +250,7 @@ export function getFilteredSearchArtifacts(
       similarQueries: getSimilarQueries(payload),
       candidates: aiCandidates,
     },
-    results: aiCandidates.slice(0, finalResultLimit).map((candidate) => ({
+    results: aiCandidates.slice(0, finalResultLimit).map((candidate, index) => ({
       id: candidate.id,
       title: candidate.title,
       subtitle: candidate.source,
@@ -261,6 +261,8 @@ export function getFilteredSearchArtifacts(
       reasons: candidate.reasons,
       image: candidate.image,
       link: candidate.link,
+      badgeLabel: index === 0 ? 'Best match' : '',
+      badgeReason: index === 0 ? 'Top overall fit from the cleaned product pool.' : '',
     })),
   }
 }

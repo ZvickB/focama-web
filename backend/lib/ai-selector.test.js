@@ -44,11 +44,15 @@ describe('ai selector', () => {
               candidate_id: 'prod-2',
               rationale: 'Best fit for airport travel and strong reviews.',
               drawback: 'Pricier than the cheapest compact options.',
+              badge_label: 'Best match',
+              badge_reason: 'Strongest overall fit for airport travel and review confidence.',
             },
             {
               candidate_id: 'prod-1',
               rationale: 'A solid backup with a similar lightweight profile.',
               drawback: 'Fewer reviews than the top pick.',
+              badge_label: 'Best value',
+              badge_reason: 'Lower price while keeping a similar lightweight profile.',
             },
           ],
         }),
@@ -92,6 +96,8 @@ describe('ai selector', () => {
     expect(result.results[0].title).toBe('Compact airport stroller')
     expect(result.results[0].reasons[0]).toBe('AI fit: Best fit for airport travel and strong reviews.')
     expect(result.results[0].drawbacks).toEqual(['Pricier than the cheapest compact options.'])
+    expect(result.results[0].badgeLabel).toBe('Best match')
+    expect(result.results[1].badgeLabel).toBe('Best value')
   })
 
   it('ignores invalid or duplicate candidate ids from the model output', async () => {
@@ -105,8 +111,20 @@ describe('ai selector', () => {
                 text: JSON.stringify({
                   picks: [
                     { candidate_id: 'missing-id', rationale: 'Not real.', drawback: 'Not real downside.' },
-                    { candidate_id: 'prod-1', rationale: 'Valid.', drawback: 'Some caution.' },
-                    { candidate_id: 'prod-1', rationale: 'Duplicate.', drawback: 'Duplicate caution.' },
+                    {
+                      candidate_id: 'prod-1',
+                      rationale: 'Valid.',
+                      drawback: 'Some caution.',
+                      badge_label: null,
+                      badge_reason: null,
+                    },
+                    {
+                      candidate_id: 'prod-1',
+                      rationale: 'Duplicate.',
+                      drawback: 'Duplicate caution.',
+                      badge_label: 'Best match',
+                      badge_reason: 'Duplicate.',
+                    },
                   ],
                 }),
               },
@@ -134,5 +152,74 @@ describe('ai selector', () => {
     expect(result.selectedCandidateIds).toEqual(['prod-1'])
     expect(result.results).toHaveLength(1)
     expect(result.results[0].drawbacks).toEqual(['Some caution.'])
+    expect(result.results[0].badgeLabel).toBe('Best match')
+  })
+
+  it('caps badges at three total and deduplicates secondary labels', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          picks: [
+            {
+              candidate_id: 'prod-1',
+              rationale: 'Top fit.',
+              drawback: 'A bit expensive.',
+              badge_label: 'Best value',
+              badge_reason: 'Well priced for the feature set.',
+            },
+            {
+              candidate_id: 'prod-2',
+              rationale: 'Premium option.',
+              drawback: 'Highest price here.',
+              badge_label: 'Best premium pick',
+              badge_reason: 'Top-end materials.',
+            },
+            {
+              candidate_id: 'prod-3',
+              rationale: 'Small-space option.',
+              drawback: 'Less roomy.',
+              badge_label: 'Best for small spaces',
+              badge_reason: 'Compact footprint.',
+            },
+            {
+              candidate_id: 'prod-4',
+              rationale: 'Comfort-focused.',
+              drawback: 'Bulkier.',
+              badge_label: 'Best for comfort',
+              badge_reason: 'Extra cushioning.',
+            },
+          ],
+        }),
+      }),
+    })
+
+    const result = await selectAiResults(
+      {
+        apiKey: 'test-key',
+        candidatePool: {
+          query: 'office chair',
+          details: 'small office',
+          searchState: '',
+          similarQueries: [],
+          candidates: [
+            createCandidate(),
+            createCandidate({ id: 'prod-2', title: 'Premium office chair' }),
+            createCandidate({ id: 'prod-3', title: 'Compact office chair' }),
+            createCandidate({ id: 'prod-4', title: 'Cushioned office chair' }),
+          ],
+        },
+        finalResultLimit: 6,
+      },
+      fetchMock,
+    )
+
+    expect(result.results.filter((item) => item.badgeLabel)).toHaveLength(3)
+    expect(result.results[0].badgeLabel).toBe('Best match')
+    expect(result.results.map((item) => item.badgeLabel).filter(Boolean)).toEqual([
+      'Best match',
+      'Best premium pick',
+      'Best for small spaces',
+    ])
   })
 })

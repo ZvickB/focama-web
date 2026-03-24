@@ -1,482 +1,30 @@
 import { useEffect, useRef } from 'react'
-import { Check, ChevronRight, LoaderCircle, Search, Sparkles } from 'lucide-react'
+import { LoaderCircle, Search, Sparkles } from 'lucide-react'
 
 import wordmark from '@/assets/wordmark.PNG'
+import { ProductDetailModal, ResultsSection, ResultSkeleton } from '@/components/home/HomeShared.jsx'
+import { RESULT_CARD_SLOTS, useGuidedSearch } from '@/components/home/useGuidedSearch.js'
 import { Button } from '@/components/ui/button.jsx'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
-import { ProductDetailModal, RefinementCard, ResultsSection, ResultSkeleton, SearchForm } from '@/components/home/HomeShared.jsx'
-import { RESULT_CARD_SLOTS, useGuidedSearch } from '@/components/home/useGuidedSearch.js'
 
-function VariantPicker() {
-  const variants = [
-    { href: '/', label: 'Current split' },
-    { href: '/ui/hero', label: 'Strong hero' },
-    { href: '/ui/flow', label: 'Flowing' },
-    { href: '/ui/concierge', label: 'Concierge' },
-    { href: '/ui/instant', label: 'Instant results' },
-    { href: '/ui/open', label: 'Open canvas' },
-  ]
+function handleRefinementTextareaKeyDown(event, { canSubmit, onSubmit }) {
+  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) {
+    return
+  }
 
-  return (
-    <div className="flex flex-wrap gap-2">
-      {variants.map((variant) => (
-        <a
-          key={variant.href}
-          href={variant.href}
-          className="inline-flex items-center gap-2 rounded-full border border-white/75 bg-white/72 px-3 py-2 text-sm text-slate-700 transition hover:bg-white"
-        >
-          {variant.label}
-          <ChevronRight className="h-4 w-4 text-slate-400" />
-        </a>
-      ))}
-    </div>
-  )
-}
+  event.preventDefault()
 
-function CurrentLayout(props) {
-  const {
-    displayedResults,
-    errorMessage,
-    hasFinalResults,
-    hasStartedSearch,
-    isLoading,
-    onFinalize,
-    onSelectProduct,
-    onShowProductsNow,
-    prompt,
-    selectionMeta,
-    selectedPriorities,
-    setFollowUpNotes,
-    setProductQuery,
-    showPreviewResults,
-    state,
-    submittedQuery,
-    togglePriority,
-  } = props
-
-  return (
-    <main className="relative px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-      <div className="mx-auto grid w-full max-w-7xl gap-4 sm:gap-6 xl:grid-cols-[minmax(360px,460px),minmax(0,1fr)] xl:items-start">
-        <section className="rounded-[28px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:rounded-[32px] sm:p-5 lg:p-8">
-          <Card className="rounded-[28px] border-stone-200/80 bg-[#f8f3eb] shadow-none sm:rounded-[32px]">
-            <CardHeader className="space-y-3">
-              <CardTitle className="text-2xl text-slate-900">Start product search</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <SearchForm
-                helperText="Enter one product topic, then refine the shortlist while Focama gathers the options."
-                heroTitle="Search smarter without opening twenty tabs."
-                isLoading={isLoading}
-                onSubmit={state.beginGuidedSearch}
-                productQuery={state.productQuery}
-                setProductQuery={setProductQuery}
-                showTrustRow={false}
-                suggestions={['office chair', 'lego set', 'travel stroller']}
-              />
-
-              {hasStartedSearch ? (
-                <RefinementCard
-                  candidatePool={state.candidatePool}
-                  followUpNotes={state.followUpNotes}
-                  isFinalizing={state.isFinalizing}
-                  onFinalize={onFinalize}
-                  onShowNow={onShowProductsNow}
-                  prompt={prompt}
-                  selectedPriorities={selectedPriorities}
-                  setFollowUpNotes={setFollowUpNotes}
-                  togglePriority={togglePriority}
-                />
-              ) : null}
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className="xl:sticky xl:top-6">
-          <Card className="rounded-[28px] border-white/70 bg-white/72 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:rounded-[32px] xl:flex xl:max-h-[calc(100vh-7rem)] xl:min-h-0 xl:flex-col xl:overflow-hidden">
-            <CardContent className="p-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain sm:p-8">
-              <ResultsSection
-                displayedResults={displayedResults}
-                errorMessage={errorMessage}
-                hasFinalResults={hasFinalResults}
-                hasStartedSearch={hasStartedSearch}
-                isLoading={isLoading}
-                onSelectProduct={onSelectProduct}
-                selectionMeta={selectionMeta}
-                showPreviewResults={showPreviewResults}
-                submittedQuery={submittedQuery}
-                variant="current"
-              />
-            </CardContent>
-          </Card>
-        </section>
-      </div>
-    </main>
-  )
-}
-
-function HeroLayout(props) {
-  const {
-    displayedResults,
-    errorMessage,
-    hasFinalResults,
-    hasStartedSearch,
-    isLoading,
-    onFinalize,
-    onSelectProduct,
-    onShowProductsNow,
-    prompt,
-    selectionMeta,
-    selectedPriorities,
-    setFollowUpNotes,
-    setProductQuery,
-    showPreviewResults,
-    state,
-    submittedQuery,
-    togglePriority,
-  } = props
-
-  return (
-    <main className="px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <section className="rounded-[36px] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.88),rgba(248,243,235,0.86))] p-6 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.35)] backdrop-blur sm:p-8 lg:p-10">
-          <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-            <SearchForm
-              accentBadge="Strong hero variant"
-              ctaLabel="Build my shortlist"
-              helperText="Tell Focama what you are shopping for and it will narrow the strongest options based on what actually matters to you."
-              heroTitle="Find the right product before the marketplace noise takes over."
-              isLoading={isLoading}
-              onSubmit={state.beginGuidedSearch}
-              productQuery={state.productQuery}
-              setProductQuery={setProductQuery}
-              suggestions={['office chair', 'air fryer', 'travel stroller']}
-            />
-
-            <div className="space-y-4 rounded-[32px] border border-stone-200/70 bg-white/82 p-5 shadow-[0_24px_80px_-52px_rgba(15,23,42,0.24)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                What users get
-              </p>
-              <div className="space-y-4">
-                {[
-                  'A focused shortlist of six products',
-                  'Clear reasons and tradeoffs for each pick',
-                  'An AI follow-up that narrows what actually matters',
-                ].map((item) => (
-                  <div key={item} className="flex items-start gap-3">
-                    <span className="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <Check className="h-3.5 w-3.5" />
-                    </span>
-                    <p className="text-sm leading-6 text-slate-700">{item}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {RESULT_CARD_SLOTS.slice(0, 2).map((index) => (
-                  <ResultSkeleton key={index} />
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {hasStartedSearch ? (
-          <section className="rounded-[32px] border border-white/70 bg-white/74 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.28)] backdrop-blur sm:p-6">
-            <RefinementCard
-              candidatePool={state.candidatePool}
-              followUpNotes={state.followUpNotes}
-              isFinalizing={state.isFinalizing}
-              onFinalize={onFinalize}
-              onShowNow={onShowProductsNow}
-              prompt={prompt}
-              selectedPriorities={selectedPriorities}
-              setFollowUpNotes={setFollowUpNotes}
-              togglePriority={togglePriority}
-            />
-          </section>
-        ) : null}
-
-        <section className="rounded-[32px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.28)] backdrop-blur sm:p-6">
-          <ResultsSection
-            displayedResults={displayedResults}
-            errorMessage={errorMessage}
-            hasFinalResults={hasFinalResults}
-            hasStartedSearch={hasStartedSearch}
-            isLoading={isLoading}
-            onSelectProduct={onSelectProduct}
-            selectionMeta={selectionMeta}
-            showPreviewResults={showPreviewResults}
-            submittedQuery={submittedQuery}
-            variant="hero"
-          />
-        </section>
-      </div>
-    </main>
-  )
-}
-
-function FlowLayout(props) {
-  const refinementRef = useRef(null)
-  const {
-    displayedResults,
-    errorMessage,
-    hasFinalResults,
-    hasStartedSearch,
-    isLoading,
-    onFinalize,
-    onSelectProduct,
-    onShowProductsNow,
-    prompt,
-    selectionMeta,
-    selectedPriorities,
-    setFollowUpNotes,
-    setProductQuery,
-    showPreviewResults,
-    state,
-    submittedQuery,
-    togglePriority,
-  } = props
-
-  useEffect(() => {
-    if (hasStartedSearch && refinementRef.current) {
-      refinementRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }, [hasStartedSearch])
-
-  return (
-    <main className="px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <section className="rounded-[36px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.8),rgba(248,243,235,0.92))] p-6 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.3)] backdrop-blur sm:p-8 lg:p-10">
-          <SearchForm
-            accentBadge="Flowing variant"
-            ctaLabel="Start the guided flow"
-            helperText="Start with the product. Focama asks the next useful question while the shortlist quietly forms underneath."
-            heroTitle="A calmer buying journey that unfolds one step at a time."
-            isLoading={isLoading}
-            onSubmit={state.beginGuidedSearch}
-            productQuery={state.productQuery}
-            setProductQuery={setProductQuery}
-            suggestions={['desk lamp', 'running shoes', 'robot vacuum']}
-          />
-        </section>
-
-        <section ref={refinementRef} className="space-y-4">
-          <div className="space-y-2 px-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Step 2
-            </p>
-            <h2 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-              Narrow what matters before the shortlist takes center stage.
-            </h2>
-          </div>
-          <RefinementCard
-            candidatePool={state.candidatePool}
-            followUpNotes={state.followUpNotes}
-            isFinalizing={state.isFinalizing}
-            onFinalize={onFinalize}
-            onShowNow={onShowProductsNow}
-            prompt={prompt}
-            selectedPriorities={selectedPriorities}
-            setFollowUpNotes={setFollowUpNotes}
-            togglePriority={togglePriority}
-          />
-        </section>
-
-        <section className="space-y-4">
-          <div className="space-y-2 px-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Step 3
-            </p>
-            <h2 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-              Reveal the shortlist when you are ready.
-            </h2>
-          </div>
-          <div className="rounded-[32px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.28)] backdrop-blur sm:p-6">
-            <ResultsSection
-              displayedResults={displayedResults}
-              errorMessage={errorMessage}
-              hasFinalResults={hasFinalResults}
-              hasStartedSearch={hasStartedSearch}
-              isLoading={isLoading}
-              onSelectProduct={onSelectProduct}
-              selectionMeta={selectionMeta}
-              showPreviewResults={showPreviewResults}
-              submittedQuery={submittedQuery}
-              variant="flow"
-            />
-          </div>
-        </section>
-      </div>
-    </main>
-  )
-}
-
-function ConciergeLayout(props) {
-  const {
-    displayedResults,
-    errorMessage,
-    hasFinalResults,
-    hasStartedSearch,
-    isLoading,
-    onFinalize,
-    onSelectProduct,
-    onShowProductsNow,
-    prompt,
-    selectionMeta,
-    selectedPriorities,
-    setFollowUpNotes,
-    setProductQuery,
-    showPreviewResults,
-    state,
-    submittedQuery,
-    togglePriority,
-  } = props
-
-  return (
-    <main className="px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <section className="rounded-[36px] border border-white/70 bg-[linear-gradient(135deg,rgba(255,248,238,0.9),rgba(255,255,255,0.76))] p-6 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.28)] backdrop-blur sm:p-8 lg:p-10">
-          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
-            <SearchForm
-              accentBadge="Concierge variant"
-              ctaLabel="Start search"
-              helperText="More like a calm personal shopper than a search box. Start with the product, then let Focama help you sort the tradeoffs."
-              heroTitle="What are you shopping for today?"
-              isLoading={isLoading}
-              onSubmit={state.beginGuidedSearch}
-              productQuery={state.productQuery}
-              setProductQuery={setProductQuery}
-              suggestions={['carry-on suitcase', 'coffee grinder', 'kids tablet']}
-            />
-
-            <div className="rounded-[32px] border border-stone-200/70 bg-white/82 p-5">
-              <p className="text-sm leading-7 text-slate-700">
-                Focama is strongest when the product search feels thoughtful, not frantic.
-                Shoppers tell us they want fewer tabs, clearer tradeoffs, and enough choice to feel
-                confident. That is why this experiment keeps the shortlist generous at six items.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {hasStartedSearch ? (
-          <RefinementCard
-            candidatePool={state.candidatePool}
-            followUpNotes={state.followUpNotes}
-            isFinalizing={state.isFinalizing}
-            onFinalize={onFinalize}
-            onShowNow={onShowProductsNow}
-            prompt={prompt}
-            selectedPriorities={selectedPriorities}
-            setFollowUpNotes={setFollowUpNotes}
-            togglePriority={togglePriority}
-            tone="concierge"
-          />
-        ) : null}
-
-        <div className="rounded-[32px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.28)] backdrop-blur sm:p-6">
-          <ResultsSection
-            displayedResults={displayedResults}
-            errorMessage={errorMessage}
-            hasFinalResults={hasFinalResults}
-            hasStartedSearch={hasStartedSearch}
-            isLoading={isLoading}
-            onSelectProduct={onSelectProduct}
-            selectionMeta={selectionMeta}
-            showPreviewResults={showPreviewResults}
-            submittedQuery={submittedQuery}
-            variant="concierge"
-          />
-        </div>
-      </div>
-    </main>
-  )
-}
-
-function InstantLayout(props) {
-  const {
-    displayedResults,
-    errorMessage,
-    hasFinalResults,
-    hasStartedSearch,
-    isLoading,
-    onFinalize,
-    onSelectProduct,
-    onShowProductsNow,
-    prompt,
-    selectionMeta,
-    selectedPriorities,
-    setFollowUpNotes,
-    setProductQuery,
-    showPreviewResults,
-    state,
-    submittedQuery,
-    togglePriority,
-  } = props
-
-  return (
-    <main className="px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <section className="rounded-[36px] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.84),rgba(241,247,246,0.9))] p-6 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.3)] backdrop-blur sm:p-8 lg:p-10">
-          <div className="grid gap-8 lg:grid-cols-[1fr_1fr] lg:items-center">
-            <SearchForm
-              accentBadge="Instant results variant"
-              ctaLabel="See picks faster"
-              helperText="This version sells speed first. Shoppers see what kind of shortlist they will get before they ever start."
-              heroTitle="Skip the tab chaos and get to a sharper shortlist faster."
-              isLoading={isLoading}
-              onSubmit={state.beginGuidedSearch}
-              productQuery={state.productQuery}
-              setProductQuery={setProductQuery}
-              suggestions={['standing desk', 'wireless earbuds', 'air purifier']}
-            />
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              {RESULT_CARD_SLOTS.map((index) => (
-                <ResultSkeleton key={index} />
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {hasStartedSearch ? (
-          <div className="rounded-[32px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.28)] backdrop-blur sm:p-6">
-            <RefinementCard
-              candidatePool={state.candidatePool}
-              followUpNotes={state.followUpNotes}
-              isFinalizing={state.isFinalizing}
-              onFinalize={onFinalize}
-              onShowNow={onShowProductsNow}
-              prompt={prompt}
-              selectedPriorities={selectedPriorities}
-              setFollowUpNotes={setFollowUpNotes}
-              togglePriority={togglePriority}
-            />
-          </div>
-        ) : null}
-
-        <div className="rounded-[32px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.28)] backdrop-blur sm:p-6">
-          <ResultsSection
-            displayedResults={displayedResults}
-            errorMessage={errorMessage}
-            hasFinalResults={hasFinalResults}
-            hasStartedSearch={hasStartedSearch}
-            isLoading={isLoading}
-            onSelectProduct={onSelectProduct}
-            selectionMeta={selectionMeta}
-            showPreviewResults={showPreviewResults}
-            submittedQuery={submittedQuery}
-            variant="instant"
-          />
-        </div>
-      </div>
-    </main>
-  )
+  if (canSubmit) {
+    onSubmit()
+  }
 }
 
 function OpenLayout(props) {
   const refinementRef = useRef(null)
+  const resultsViewportRef = useRef(null)
+  const lastRefinementScrollQueryRef = useRef('')
+  const lastResultsScrollQueryRef = useRef('')
   const {
     displayedResults,
     errorMessage,
@@ -487,7 +35,6 @@ function OpenLayout(props) {
     onSelectProduct,
     onShowProductsNow,
     prompt,
-    selectionMeta,
     setFollowUpNotes,
     setProductQuery,
     showPreviewResults,
@@ -504,6 +51,70 @@ function OpenLayout(props) {
       refinementRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
   }, [hasStartedSearch])
+
+  useEffect(() => {
+    if (
+      !hasStartedSearch ||
+      !submittedQuery ||
+      lastRefinementScrollQueryRef.current === submittedQuery ||
+      !refinementRef.current
+    ) {
+      return
+    }
+
+    const scrollTimer = window.setTimeout(() => {
+      const refinementElement = refinementRef.current
+
+      if (!refinementElement) {
+        return
+      }
+
+      const absoluteTop = window.scrollY + refinementElement.getBoundingClientRect().top
+      const targetTop = Math.max(0, absoluteTop - 96)
+
+      window.scrollTo({
+        top: targetTop,
+        behavior: 'smooth',
+      })
+      lastRefinementScrollQueryRef.current = submittedQuery
+    }, 220)
+
+    return () => {
+      window.clearTimeout(scrollTimer)
+    }
+  }, [hasStartedSearch, submittedQuery])
+
+  useEffect(() => {
+    if (
+      !hasFinalResults ||
+      !submittedQuery ||
+      lastResultsScrollQueryRef.current === submittedQuery ||
+      !resultsViewportRef.current
+    ) {
+      return
+    }
+
+    const scrollTimer = window.setTimeout(() => {
+      const resultsElement = resultsViewportRef.current
+
+      if (!resultsElement) {
+        return
+      }
+
+      const absoluteTop = window.scrollY + resultsElement.getBoundingClientRect().top
+      const targetTop = Math.max(0, absoluteTop - 96)
+
+      window.scrollTo({
+        top: targetTop,
+        behavior: 'smooth',
+      })
+      lastResultsScrollQueryRef.current = submittedQuery
+    }, 180)
+
+    return () => {
+      window.clearTimeout(scrollTimer)
+    }
+  }, [hasFinalResults, submittedQuery])
 
   const hasDiscoveryResults = Boolean(state.candidatePool)
 
@@ -588,7 +199,13 @@ function OpenLayout(props) {
                       id="open-follow-up-notes"
                       value={state.followUpNotes}
                       onChange={(event) => setFollowUpNotes(event.target.value)}
-                      className="min-h-36 rounded-[28px] border-stone-200 bg-[#fffdf9] px-5 py-4 text-base leading-7 placeholder:text-slate-400"
+                      onKeyDown={(event) =>
+                        handleRefinementTextareaKeyDown(event, {
+                          canSubmit: hasDiscoveryResults && !state.isFinalizing,
+                          onSubmit: onFinalize,
+                        })
+                      }
+                      className="min-h-36 resize-none rounded-[28px] border-stone-200 bg-[#fffdf9] px-5 py-4 text-base leading-7 placeholder:text-slate-400"
                       placeholder={
                         prompt?.followUpPlaceholder ||
                         'Examples: for a 6 year old, under $200, small apartment, should feel premium, or easy to clean.'
@@ -597,7 +214,7 @@ function OpenLayout(props) {
                     />
                   </div>
 
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-end">
                     <Button
                       type="button"
                       disabled={!hasDiscoveryResults || state.isFinalizing}
@@ -611,7 +228,7 @@ function OpenLayout(props) {
                         <Sparkles className="ml-2 h-4 w-4" />
                       )}
                     </Button>
-                    <div className="space-y-1">
+                    <div className="space-y-1 text-right sm:flex sm:min-h-[56px] sm:flex-col sm:justify-between">
                       <Button
                         type="button"
                         disabled={!hasDiscoveryResults || state.isFinalizing}
@@ -624,14 +241,8 @@ function OpenLayout(props) {
                       >
                         Show products now
                       </Button>
-                      <p className="pl-1 text-xs text-slate-500">Skip AI refinement.</p>
+                      <p className="text-xs text-slate-500">Skip AI refinement.</p>
                     </div>
-                  </div>
-
-                  <div className="rounded-[24px] border border-stone-200/80 bg-stone-50/80 px-4 py-3 text-sm text-slate-600">
-                    {hasDiscoveryResults
-                      ? 'Products are ready in the background. You can refine first or skip ahead.'
-                      : 'Focama is gathering products in the background while this space stays focused on refinement.'}
                   </div>
                 </div>
               ) : null}
@@ -641,7 +252,7 @@ function OpenLayout(props) {
 
         <section className="w-full max-w-5xl space-y-4">
           {isLoading && displayedResults.length === 0 ? (
-            <div className="max-h-[360px] overflow-hidden">
+            <div ref={resultsViewportRef} className="max-h-[360px] overflow-hidden">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {RESULT_CARD_SLOTS.map((index) => (
                   <ResultSkeleton key={index} className="opacity-95" />
@@ -649,7 +260,10 @@ function OpenLayout(props) {
               </div>
             </div>
           ) : (
-            <div className="rounded-[32px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.28)] backdrop-blur sm:p-6">
+            <div
+              ref={resultsViewportRef}
+              className="rounded-[32px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.28)] backdrop-blur sm:p-6"
+            >
               <ResultsSection
                 displayedResults={displayedResults}
                 errorMessage={errorMessage}
@@ -657,21 +271,19 @@ function OpenLayout(props) {
                 hasStartedSearch={hasStartedSearch}
                 isLoading={isLoading}
                 onSelectProduct={onSelectProduct}
-                selectionMeta={selectionMeta}
                 showPreviewResults={showPreviewResults}
                 submittedQuery={submittedQuery}
                 variant="open"
               />
             </div>
           )}
-
         </section>
       </div>
     </main>
   )
 }
 
-export function HomeExperience({ variant = 'current' }) {
+export function HomeExperience() {
   const state = useGuidedSearch()
 
   const layoutProps = {
@@ -684,39 +296,21 @@ export function HomeExperience({ variant = 'current' }) {
     onSelectProduct: state.setSelectedProduct,
     onShowProductsNow: state.handleShowProductsNow,
     prompt: state.refinementPrompt,
-    selectionMeta: state.selectionMeta,
-    selectedPriorities: state.selectedPriorities,
     setFollowUpNotes: state.setFollowUpNotes,
     setProductQuery: state.setProductQuery,
     showPreviewResults: state.showPreviewResults,
     state,
     submittedQuery: state.submittedQuery,
-    togglePriority: state.togglePriority,
   }
-
-  const layouts = {
-    concierge: ConciergeLayout,
-    current: CurrentLayout,
-    flow: FlowLayout,
-    hero: HeroLayout,
-    instant: InstantLayout,
-    open: OpenLayout,
-  }
-
-  const Layout = layouts[variant] || CurrentLayout
 
   return (
     <>
-      {variant !== 'open' ? (
-        <div className="px-3 pt-4 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <VariantPicker />
-          </div>
-        </div>
-      ) : null}
-      <Layout {...layoutProps} />
+      <OpenLayout {...layoutProps} />
       {state.selectedProduct ? (
-        <ProductDetailModal item={state.selectedProduct} onClose={() => state.setSelectedProduct(null)} />
+        <ProductDetailModal
+          item={state.selectedProduct}
+          onClose={() => state.setSelectedProduct(null)}
+        />
       ) : null}
     </>
   )

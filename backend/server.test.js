@@ -31,16 +31,17 @@ vi.mock('./lib/search-data.js', async () => {
 })
 
 vi.mock('./lib/search-storage.js', () => ({
+  isSupabaseConfigured: vi.fn(() => false),
   readStoredSearchCacheEntry: vi.fn(),
   recordSearchHistory: vi.fn(),
   writeStoredSearchCacheEntry: vi.fn(),
 }))
 
-import { handleCachedSearch, handleLiveSearch } from './server.js'
+import { handleCachedSearch, handleDiscoverySearch, handleLiveSearch, handleSearchDebug } from './server.js'
 import { resetRateLimitStore } from './lib/rate-limit.js'
 import { selectAiResults } from './lib/ai-selector.js'
 import { getFilteredSearchArtifacts } from './lib/result-filter.js'
-import { readStoredSearchCacheEntry } from './lib/search-storage.js'
+import { readStoredSearchCacheEntry, writeStoredSearchCacheEntry } from './lib/search-storage.js'
 import {
   getEnv,
 } from './lib/search-data.js'
@@ -80,7 +81,14 @@ describe('server handlers', () => {
 
     expect(response.statusCode).toBe(200)
     expect(JSON.parse(response.body)).toEqual({
-      results: [{ id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }, { id: '5' }, { id: '6' }],
+      results: [
+        { id: '1', badgeLabel: 'Best match', badgeReason: 'Top overall fit for this shortlist.' },
+        { id: '2', badgeLabel: '', badgeReason: '' },
+        { id: '3', badgeLabel: '', badgeReason: '' },
+        { id: '4', badgeLabel: '', badgeReason: '' },
+        { id: '5', badgeLabel: '', badgeReason: '' },
+        { id: '6', badgeLabel: '', badgeReason: '' },
+      ],
       source: 'cache',
       cachedAt: '2026-03-17T12:00:00.000Z',
     })
@@ -99,6 +107,99 @@ describe('server handlers', () => {
     })
   })
 
+  it('returns cached guided discovery results when present', async () => {
+    getEnv.mockReturnValue('serp-key')
+    readStoredSearchCacheEntry.mockResolvedValue({
+      cachedAt: '2026-03-17T12:00:00.000Z',
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Cached search results',
+        similarQueries: [],
+        candidates: [{ id: 'cached-1', title: 'Thermos bottle' }],
+      },
+      results: [{ id: 'cached-1', title: 'Thermos bottle' }],
+      selection: { mode: 'discovery_preview' },
+      source: 'guided_discovery',
+    })
+
+    const response = createResponseRecorder()
+
+    await handleDiscoverySearch(new URL('http://localhost/api/search/discover?query=thermos'), response)
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Cached search results',
+        similarQueries: [],
+        candidates: [{ id: 'cached-1', title: 'Thermos bottle' }],
+      },
+      previewResults: [
+        {
+          id: 'cached-1',
+          title: 'Thermos bottle',
+          badgeLabel: 'Best match',
+          badgeReason: 'Top overall fit for this shortlist.',
+        },
+      ],
+      source: 'cache',
+      cachedAt: '2026-03-17T12:00:00.000Z',
+    })
+  })
+
+  it('writes guided discovery results to cache after a miss', async () => {
+    getEnv.mockReturnValue('serp-key')
+    getFilteredSearchArtifacts.mockReturnValue({
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Results for exact spelling',
+        similarQueries: [],
+        candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
+      },
+      results: [{ id: 'live-1', title: 'Thermos bottle' }],
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ shopping_results: [{ title: 'Thermos bottle' }] }),
+      }),
+    )
+
+    const response = createResponseRecorder()
+
+    await handleDiscoverySearch(new URL('http://localhost/api/search/discover?query=thermos'), response)
+
+    expect(response.statusCode).toBe(200)
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith({
+      productQuery: 'thermos',
+      details: '',
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Results for exact spelling',
+        similarQueries: [],
+        candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
+      },
+      results: [{ id: 'live-1', title: 'Thermos bottle' }],
+      selection: {
+        mode: 'discovery_preview',
+        model: null,
+        selectedCandidateIds: ['live-1'],
+        details: 'Discovery preview results were cached for the guided search flow.',
+      },
+      source: 'guided_discovery',
+    })
+  })
+
   it('returns a server error when the OpenAI API key is missing', async () => {
     getEnv.mockImplementation((name) => (name === 'SERPAPI_API_KEY' ? 'serp-key' : ''))
 
@@ -109,6 +210,73 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(500)
     expect(JSON.parse(response.body)).toEqual({
       error: 'OPENAI_API_KEY is missing from the root .env file.',
+    })
+  })
+
+  it('reports cache usage expectations for the guided and live flows', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'SERPAPI_API_KEY') {
+        return 'serp-key'
+      }
+
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      return ''
+    })
+
+    readStoredSearchCacheEntry.mockResolvedValue({
+      cachedAt: '2026-03-17T12:00:00.000Z',
+      expiresAt: '2026-03-17T18:00:00.000Z',
+      source: 'guided_discovery',
+      selection: { mode: 'discovery_preview' },
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Cached search results',
+        similarQueries: [],
+        candidates: [{ id: 'cached-1', title: 'Thermos bottle' }],
+      },
+      results: [{ id: 'cached-1', title: 'Thermos bottle' }],
+    })
+
+    const response = createResponseRecorder()
+
+    await handleSearchDebug(new URL('http://localhost/api/search/debug?query=thermos'), response)
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({
+      query: 'thermos',
+      details: '',
+      cacheKey: 'thermos|',
+      cache: {
+        hasEntry: true,
+        source: 'guided_discovery',
+        cachedAt: '2026-03-17T12:00:00.000Z',
+        expiresAt: '2026-03-17T18:00:00.000Z',
+        candidateCount: 1,
+        resultCount: 1,
+        selectionMode: 'discovery_preview',
+      },
+      environment: {
+        serpApiConfigured: true,
+        openAiConfigured: true,
+        supabaseConfigured: false,
+      },
+      flowBehavior: {
+        guidedDiscovery: {
+          usesCache: true,
+          callsSerpApi: false,
+          callsOpenAi: false,
+        },
+        liveSearch: {
+          usesCache: true,
+          callsSerpApi: false,
+          callsOpenAi: false,
+        },
+      },
     })
   })
 
@@ -250,6 +418,8 @@ describe('server handlers', () => {
           subtitle: 'Target',
           reasons: ['AI fit: Best for airport travel'],
           drawbacks: ['Pricier than some umbrella strollers.'],
+          badgeLabel: 'Best match',
+          badgeReason: 'Strongest overall fit for airport travel.',
         },
       ],
     })
@@ -313,6 +483,8 @@ describe('server handlers', () => {
           subtitle: 'Target',
           reasons: ['AI fit: Best for airport travel'],
           drawbacks: ['Pricier than some umbrella strollers.'],
+          badgeLabel: 'Best match',
+          badgeReason: 'Strongest overall fit for airport travel.',
         },
       ],
       selection: {

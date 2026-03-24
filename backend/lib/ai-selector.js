@@ -1,5 +1,19 @@
 export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses'
 export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini'
+export const ALLOWED_RESULT_BADGES = [
+  'Best match',
+  'Best value',
+  'Best budget pick',
+  'Best premium pick',
+  'Best for durability',
+  'Best for comfort',
+  'Best for small spaces',
+  'Best for beginners',
+  'Best lightweight option',
+  'Best all-rounder',
+]
+const REQUIRED_PRIMARY_BADGE = 'Best match'
+const MAX_BADGED_RESULTS = 3
 
 function getResponseText(payload) {
   if (typeof payload?.output_text === 'string' && payload.output_text.trim()) {
@@ -54,8 +68,10 @@ function buildSelectionPrompt({ candidatePool, finalResultLimit }) {
     '4. Diversity across style, merchant, or use case when helpful.',
     '5. Avoid near-duplicates unless they are meaningfully different.',
     '6. Be honest about tradeoffs. Each pick should include one short drawback or caution.',
+    `7. Badge strategy: exactly one pick must use "${REQUIRED_PRIMARY_BADGE}". You may assign up to ${MAX_BADGED_RESULTS - 1} additional unique badges from the allowed list when they are genuinely helpful. Never assign more than ${MAX_BADGED_RESULTS} badges total.`,
     `Return up to ${desiredCount} picks. If there are at least ${desiredCount} strong candidates, return exactly ${desiredCount}.`,
     'Only choose from the provided candidate ids.',
+    `Allowed badge labels: ${ALLOWED_RESULT_BADGES.join(', ')}.`,
     '',
     `Product query: ${candidatePool.query}`,
     `Extra context: ${candidatePool.details || 'None provided.'}`,
@@ -89,8 +105,29 @@ function buildSelectionSchema() {
             drawback: {
               type: 'string',
             },
+            badge_label: {
+              anyOf: [
+                {
+                  type: 'string',
+                  enum: ALLOWED_RESULT_BADGES,
+                },
+                {
+                  type: 'null',
+                },
+              ],
+            },
+            badge_reason: {
+              anyOf: [
+                {
+                  type: 'string',
+                },
+                {
+                  type: 'null',
+                },
+              ],
+            },
           },
-          required: ['candidate_id', 'rationale', 'drawback'],
+          required: ['candidate_id', 'rationale', 'drawback', 'badge_label', 'badge_reason'],
           additionalProperties: false,
         },
       },
@@ -100,7 +137,7 @@ function buildSelectionSchema() {
   }
 }
 
-function buildUiResult(candidate, rationale) {
+function buildUiResult(candidate, rationale, badge = null) {
   return {
     id: candidate.id,
     title: candidate.title,
@@ -113,7 +150,69 @@ function buildUiResult(candidate, rationale) {
     drawbacks: [],
     image: candidate.image,
     link: candidate.link,
+    badgeLabel: badge?.label || '',
+    badgeReason: badge?.reason || '',
   }
+}
+
+function normalizeBadgeAssignments(selected) {
+  const normalized = []
+  const usedLabels = new Set()
+  let hasBestMatch = false
+
+  for (const entry of selected) {
+    if (normalized.length >= MAX_BADGED_RESULTS) {
+      break
+    }
+
+    const label = typeof entry.badgeLabel === 'string' ? entry.badgeLabel.trim() : ''
+
+    if (!label || !ALLOWED_RESULT_BADGES.includes(label) || usedLabels.has(label)) {
+      continue
+    }
+
+    normalized.push({
+      candidateId: entry.candidateId,
+      label,
+      reason: typeof entry.badgeReason === 'string' ? entry.badgeReason.trim() : '',
+    })
+    usedLabels.add(label)
+
+    if (label === REQUIRED_PRIMARY_BADGE) {
+      hasBestMatch = true
+    }
+  }
+
+  if (!hasBestMatch && selected.length > 0) {
+    const fallbackIndex = normalized.findIndex((entry) => entry.candidateId === selected[0].candidateId)
+
+    if (fallbackIndex >= 0) {
+      normalized[fallbackIndex] = {
+        ...normalized[fallbackIndex],
+        label: REQUIRED_PRIMARY_BADGE,
+      }
+    } else {
+      normalized.unshift({
+        candidateId: selected[0].candidateId,
+        label: REQUIRED_PRIMARY_BADGE,
+        reason: 'Top overall fit for this search.',
+      })
+    }
+  }
+
+  const deduped = []
+  const seenLabels = new Set()
+
+  for (const entry of normalized) {
+    if (deduped.length >= MAX_BADGED_RESULTS || seenLabels.has(entry.label)) {
+      continue
+    }
+
+    deduped.push(entry)
+    seenLabels.add(entry.label)
+  }
+
+  return deduped.slice(0, MAX_BADGED_RESULTS)
 }
 
 export async function selectAiResults(
@@ -208,6 +307,8 @@ export async function selectAiResults(
       candidateId,
       rationale: pick?.rationale?.trim() || '',
       drawback: pick?.drawback?.trim() || '',
+      badgeLabel: typeof pick?.badge_label === 'string' ? pick.badge_label : '',
+      badgeReason: typeof pick?.badge_reason === 'string' ? pick.badge_reason : '',
       candidate,
     })
     seen.add(candidateId)
@@ -217,11 +318,22 @@ export async function selectAiResults(
     }
   }
 
+  const badgeAssignments = normalizeBadgeAssignments(selected)
+  const badgeByCandidateId = new Map(
+    badgeAssignments.map((entry) => [
+      entry.candidateId,
+      {
+        label: entry.label,
+        reason: entry.reason,
+      },
+    ]),
+  )
+
   return {
     model,
     selectedCandidateIds: selected.map((entry) => entry.candidateId),
     results: selected.map((entry) => ({
-      ...buildUiResult(entry.candidate, entry.rationale),
+      ...buildUiResult(entry.candidate, entry.rationale, badgeByCandidateId.get(entry.candidateId)),
       drawbacks: entry.drawback ? [entry.drawback] : [],
     })),
   }

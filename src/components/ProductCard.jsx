@@ -5,7 +5,31 @@ import {
   CardContent,
 } from '@/components/ui/card.jsx'
 
+function ProductBadge({ label }) {
+  if (!label) {
+    return null
+  }
+
+  const isPrimary = label === 'Best match'
+
+  return (
+    <div className="pointer-events-none absolute left-4 top-4 z-10">
+      <div
+        className={`inline-flex max-w-[min(220px,calc(100vw-4rem))] items-center gap-2 rounded-[20px] border px-3 py-2 font-sans text-xs font-medium leading-4 tracking-[0.01em] shadow-[0_14px_34px_-20px_rgba(15,23,42,0.45)] backdrop-blur ${
+          isPrimary
+            ? 'border-primary/60 bg-primary text-primary-foreground'
+            : 'border-stone-200/90 bg-[rgba(252,248,241,0.94)] text-slate-800'
+        }`}
+      >
+        <span className="whitespace-normal break-words">{label}</span>
+      </div>
+    </div>
+  )
+}
+
 function ProductCard({
+  badgeLabel = '',
+  badgeReason = '',
   description,
   drawbacks = [],
   image,
@@ -30,7 +54,8 @@ function ProductCard({
         }
       }}
     >
-      <div className="overflow-hidden border-b border-stone-100 bg-stone-50">
+      <div className="relative overflow-hidden border-b border-stone-100 bg-stone-50">
+        <ProductBadge label={badgeLabel} />
         <img
           className="aspect-square w-full object-contain bg-stone-50 p-4 transition duration-300 group-hover:scale-[1.02]"
           src={image}
@@ -66,9 +91,12 @@ function ProductCard({
           <span className="font-medium text-slate-700">{rating.toFixed(1)}</span>
           <span className="text-slate-500">({reviewCount} reviews)</span>
         </div>
-        <p className="line-clamp-2 text-sm leading-5 text-slate-600">
-          {description}
-        </p>
+        {badgeReason ? (
+          <p className="line-clamp-2 rounded-2xl border border-stone-200/80 bg-stone-50/85 px-3 py-2 text-sm leading-5 text-slate-600">
+            <span className="font-medium text-slate-800">{badgeLabel}:</span> {badgeReason}
+          </p>
+        ) : null}
+        <p className="line-clamp-2 text-sm leading-5 text-slate-600">{description}</p>
         {drawbacks[0] ? (
           <p className="line-clamp-2 text-sm leading-5 text-slate-500">
             <span className="font-medium text-slate-700">Tradeoff:</span> {drawbacks[0]}

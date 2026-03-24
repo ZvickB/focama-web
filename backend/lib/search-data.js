@@ -61,7 +61,8 @@ function createFallbackImage(title) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
-export function normalizeResult(item, index, reasonFallback) {
+export function normalizeResult(item, index, _reasonFallback) {
+  void _reasonFallback
   const title = item.title?.trim()
 
   if (!title) {
@@ -77,6 +78,12 @@ export function normalizeResult(item, index, reasonFallback) {
     item.extensions?.filter(Boolean).join(' - ') ||
     `Live product result returned for "${title}".`
 
+  const reasons = [
+    `Available from ${source}`,
+    item.delivery || item.second_hand_condition || '',
+    item.extracted_price ? `Listed around $${item.extracted_price}` : 'Price details were limited in the raw result',
+  ].filter(Boolean)
+
   return {
     id: item.product_id || item.position || `${title}-${index}`,
     title,
@@ -85,11 +92,7 @@ export function normalizeResult(item, index, reasonFallback) {
     rating: Number.isFinite(numericRating) ? numericRating : 0,
     reviewCount: Number.isFinite(numericReviews) ? numericReviews : 0,
     description,
-    reasons: [
-      `Available from ${source}`,
-      item.delivery || item.second_hand_condition || reasonFallback,
-      item.extracted_price ? `Listed around $${item.extracted_price}` : 'Price details were limited in the raw result',
-    ],
+    reasons,
     image,
     link: item.product_link || item.link || '',
   }

@@ -14,7 +14,8 @@
   - Contact
   - Privacy
   - Affiliate Disclosure
-- The default homepage is the `open` variant, with alternate UI concepts preserved on separate routes.
+- The default homepage is the `open` variant.
+- Older homepage UI concepts are archived in `archive/ui-screen-choices-rejects/` and are no longer part of the live app routes.
 
 ## Current homepage behavior
 - The homepage is the main product experience.

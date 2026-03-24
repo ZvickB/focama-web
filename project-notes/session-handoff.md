@@ -7,12 +7,13 @@
 
 ## Current homepage direction
 - The default homepage at `/` now uses the `open` layout variant.
-- Other UI variants are still preserved on separate routes for comparison.
+- Older UI variants were removed from the live app and archived in `archive/ui-screen-choices-rejects/`.
 - The current product direction is the spacious, search-first open layout rather than the older split-screen or chip-heavy flows.
 
 ## Important files
 - Main app routes and loading fallback: `/src/App.jsx`
-- Homepage variant layouts: `/src/components/home/HomeExperience.jsx`
+- Active homepage layout: `/src/components/home/HomeExperience.jsx`
+- Archived multi-variant homepage layouts: `/archive/ui-screen-choices-rejects/components/home/HomeExperience.multivariant.jsx`
 - Shared homepage UI blocks: `/src/components/home/HomeShared.jsx`
 - Shared guided-search logic/state: `/src/components/home/useGuidedSearch.js`
 - Site header/nav/logo usage: `/src/components/SiteLayout.jsx`
@@ -20,12 +21,6 @@
 
 ## Current UI state
 - `/` is the `open` variant.
-- Other routes still exist:
-  - `/ui/hero`
-  - `/ui/flow`
-  - `/ui/concierge`
-  - `/ui/instant`
-  - `/ui/open`
 - The open layout is intentionally more minimal and mobile-friendly.
 - The homepage hero in the open layout now uses the PNG wordmark instead of plain `Focama` text.
 
@@ -77,4 +72,5 @@
 ## If continuing from here
 - First inspect `/src/components/home/HomeExperience.jsx`
 - Then inspect `/src/App.jsx` and `/src/components/SiteLayout.jsx`
+- Check `archive/ui-screen-choices-rejects/` only if you want to restore or reference old homepage concepts
 - Treat `wordmark.PNG` as the preferred current wordmark asset unless the user explicitly wants another attempt

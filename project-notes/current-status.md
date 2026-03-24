@@ -8,12 +8,7 @@
 ## Current state
 - The frontend is built in Vite + React with React Router, TanStack Query, Tailwind, and Vitest.
 - The default homepage at `/` now uses the `open` layout: spacious, search-first, single-column, and more mobile-friendly than the older split-screen layout.
-- Alternate homepage experiments are still preserved on separate routes for comparison:
-  - `/ui/hero`
-  - `/ui/flow`
-  - `/ui/concierge`
-  - `/ui/instant`
-  - `/ui/open`
+- Older homepage experiments are now archived outside the live app in `archive/ui-screen-choices-rejects/`.
 - The open layout now:
   - uses the PNG wordmark in the hero
   - removes chips
@@ -60,7 +55,7 @@
 9. Keep rate limiting in place and strengthen abuse protection later if usage grows.
 
 ## Important scope constraints
-- Do not remove the alternate homepage variants yet.
+- Keep archived homepage variants available for reference, but out of the live bundle.
 - Do not overengineer scaling work before v1 usage justifies it.
 - Do not force a brand-asset rebuild if the current PNG wordmark is working well.
 - Keep the implementation easy to debug across frontend, backend, storage, and vendor integrations.
