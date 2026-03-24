@@ -42,7 +42,8 @@
   - `/api/search/refine` for the AI follow-up prompt
   - `/api/search/finalize` for the final shortlist
 - This guided flow is the primary backend architecture for the homepage
-- The older direct `/api/search` route still exists only for manual/debug use
+- `/api/search/live` is the explicit manual/debug combined route
+- The older bare `/api/search` route is now legacy-only and requires `?legacy=1`
 - The Vercel route wrappers now preserve forwarded request headers so backend IP-based rate limiting still works in production deployments
 - Guided `/api/search/finalize` now rejects oversized or malformed payloads before AI selection and caps candidate pool size at 20
 - `/api/search/debug` should be read as guided-primary debug output, with `/api/search` treated as the legacy combined route

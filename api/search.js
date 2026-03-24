@@ -1,10 +1,26 @@
-import { handleLiveSearch } from '../backend/server.js'
+import {
+  handleLiveSearch,
+  isLegacyRouteExplicitlyEnabled,
+  sendLegacyRouteOptInRequired,
+} from '../backend/server.js'
 import { createResponseRecorder } from './_response-recorder.js'
 
 export async function GET(request) {
+  const requestUrl = new URL(request.url)
+
+  if (!isLegacyRouteExplicitlyEnabled(requestUrl)) {
+    const response = createResponseRecorder()
+    sendLegacyRouteOptInRequired(response)
+
+    return new Response(response.body, {
+      status: response.statusCode,
+      headers: response.headers,
+    })
+  }
+
   const response = createResponseRecorder()
 
-  await handleLiveSearch(new URL(request.url), response, request)
+  await handleLiveSearch(requestUrl, response, request)
 
   response.headers = {
     ...response.headers,

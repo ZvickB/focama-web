@@ -25,7 +25,8 @@
   - `/api/search/refine` generates the lightweight AI follow-up prompt
   - `/api/search/finalize` selects the final shortlist from the cleaned candidate pool
 - This guided flow is the primary backend path for the product.
-- The legacy `/api/search` route still exists only as a direct combined path for backend/debug/manual use.
+- `/api/search/live` is the explicit combined-path endpoint for backend/debug/manual use.
+- The older bare `/api/search` route is now legacy-only and requires `?legacy=1` so it does not behave like a normal product endpoint by accident.
 - The live search flow currently:
   - validates input
   - checks its own legacy live-search cache scope before external calls
@@ -65,7 +66,7 @@
 6. Filter junk, duplicates, and weak candidates before final ranking.
 7. Use AI where it improves refinement prompt quality and final selection quality.
 8. Store cache/history in Supabase when configured, with local fallback for development.
-9. Keep the legacy combined route available only for debug/manual use until a later removal decision.
+9. Keep the explicit `/api/search/live` combined route available only for debug/manual use while the bare `/api/search` path stays isolated behind explicit legacy opt-in.
 
 ## Important scope constraints
 - Do not overengineer scaling work before v1 usage justifies it.

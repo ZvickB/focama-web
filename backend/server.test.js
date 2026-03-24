@@ -41,6 +41,7 @@ vi.mock('./lib/search-storage.js', () => ({
 }))
 
 import {
+  createApiServer,
   handleCachedSearch,
   handleDiscoverySearch,
   handleFinalizeSelection,
@@ -157,6 +158,29 @@ describe('server handlers', () => {
     expect(JSON.parse(response.body)).toEqual({
       error: 'SERPAPI_API_KEY is missing from the root .env file.',
     })
+  })
+
+  it('requires explicit opt-in before serving the legacy combined /api/search route', async () => {
+    const server = createApiServer()
+
+    await new Promise((resolve) => server.listen(0, resolve))
+
+    const address = server.address()
+    const port = typeof address === 'object' && address ? address.port : null
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/search?query=lego`)
+
+      expect(response.status).toBe(410)
+      expect(response.headers.get('x-focama-route-status')).toBe('legacy_combined_search')
+      expect(response.headers.get('x-focama-route-access')).toBe('explicit_opt_in_required')
+      await expect(response.json()).resolves.toMatchObject({
+        error: 'The combined /api/search route is legacy-only.',
+        legacyOptIn: 'Add ?legacy=1 to /api/search if you intentionally want the legacy combined route.',
+      })
+    } finally {
+      await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+    }
   })
 
   it('returns cached guided discovery results when present', async () => {

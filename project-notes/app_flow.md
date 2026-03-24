@@ -29,7 +29,8 @@
   - the follow-up prompt comes from `/api/search/refine`
   - final focused picks come from `/api/search/finalize`
   - this guided flow is the primary backend architecture for the live product experience
-  - the legacy `/api/search` route still exists only as a combined backend/debug path and should not shape homepage behavior
+  - `/api/search/live` is the explicit manual/debug combined-search endpoint
+  - the older bare `/api/search` route is now legacy-only and requires explicit opt-in with `?legacy=1`
   - the Vercel route wrappers now forward request headers into the backend handlers so IP-based rate limiting can still key off forwarded client IPs in production
 - Backend debug/health tooling should mirror that same split:
   - `/api/search/debug` should describe the guided flow as primary
@@ -81,7 +82,7 @@
   - branding and loading fallback
   - product-card interaction pattern
   - live guided search endpoints
-  - legacy direct `/api/search` route for manual/debug use
+  - explicit legacy/manual combined search through `/api/search/live`
   - AI-assisted shortlist selection
   - outbound retailer product links when available
   - Supabase-backed cache/history path

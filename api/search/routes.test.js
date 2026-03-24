@@ -24,6 +24,21 @@ vi.mock('../../backend/server.js', () => ({
   handleDiscoverySearch,
   handleFinalizeSelection,
   handleLiveSearch,
+  isLegacyRouteExplicitlyEnabled: vi.fn((requestUrl) => requestUrl.searchParams.get('legacy') === '1'),
+  sendLegacyRouteOptInRequired: vi.fn((response) => {
+    response.writeHead(410, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'X-Focama-Route-Status': 'legacy_combined_search',
+      'X-Focama-Route-Recommended': '/api/search/discover -> /api/search/refine -> /api/search/finalize',
+      'X-Focama-Route-Access': 'explicit_opt_in_required',
+    })
+    response.end(
+      JSON.stringify({
+        error: 'The combined /api/search route is legacy-only.',
+        legacyOptIn: 'Add ?legacy=1 to /api/search if you intentionally want the legacy combined route.',
+      }),
+    )
+  }),
 }))
 
 const { GET: getSearch } = await import('../search.js')
@@ -36,8 +51,31 @@ describe('Vercel search route wrappers', () => {
     vi.clearAllMocks()
   })
 
-  it('forwards request headers into the root /api/search wrapper', async () => {
+  it('requires an explicit opt-in before using the root /api/search wrapper', async () => {
     const request = new Request('https://example.com/api/search?query=stroller', {
+      headers: {
+        'x-forwarded-for': '198.51.100.10',
+        'x-real-ip': '198.51.100.11',
+      },
+    })
+
+    const response = await getSearch(request)
+
+    expect(response.status).toBe(410)
+    expect(response.headers.get('x-focama-route-status')).toBe('legacy_combined_search')
+    expect(response.headers.get('x-focama-route-recommended')).toBe(
+      '/api/search/discover -> /api/search/refine -> /api/search/finalize',
+    )
+    expect(response.headers.get('x-focama-route-access')).toBe('explicit_opt_in_required')
+    expect(await response.json()).toMatchObject({
+      error: 'The combined /api/search route is legacy-only.',
+      legacyOptIn: 'Add ?legacy=1 to /api/search if you intentionally want the legacy combined route.',
+    })
+    expect(handleLiveSearch).not.toHaveBeenCalled()
+  })
+
+  it('forwards request headers into the root /api/search wrapper when legacy opt-in is present', async () => {
+    const request = new Request('https://example.com/api/search?query=stroller&legacy=1', {
       headers: {
         'x-forwarded-for': '198.51.100.10',
         'x-real-ip': '198.51.100.11',

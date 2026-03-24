@@ -37,15 +37,39 @@ const FINALIZE_MAX_PRIORITIES = 8
 const FINALIZE_MAX_PRIORITY_LENGTH = 80
 const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
 const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
+export const LEGACY_ROUTE_OPT_IN_PARAM = 'legacy'
 const LEGACY_ROUTE_HEADERS = {
   'X-Focama-Route-Status': 'legacy_combined_search',
   'X-Focama-Route-Recommended': '/api/search/discover -> /api/search/refine -> /api/search/finalize',
+}
+const LEGACY_ROUTE_OPT_IN_RESPONSE_HEADERS = {
+  ...LEGACY_ROUTE_HEADERS,
+  'X-Focama-Route-Access': 'explicit_opt_in_required',
 }
 
 export function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
+  })
+  response.end(JSON.stringify(payload))
+}
+
+export function isLegacyRouteExplicitlyEnabled(requestUrl) {
+  return requestUrl?.searchParams?.get(LEGACY_ROUTE_OPT_IN_PARAM) === '1'
+}
+
+export function sendLegacyRouteOptInRequired(response) {
+  const payload = {
+    error: 'The combined /api/search route is legacy-only.',
+    details: 'Use /api/search/discover -> /api/search/refine -> /api/search/finalize for the product flow, or /api/search/live for explicit combined-route checks.',
+    legacyOptIn: `Add ?${LEGACY_ROUTE_OPT_IN_PARAM}=1 to /api/search if you intentionally want the legacy combined route.`,
+  }
+
+  response.writeHead(410, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+    ...LEGACY_ROUTE_OPT_IN_RESPONSE_HEADERS,
   })
   response.end(JSON.stringify(payload))
 }
@@ -845,6 +869,11 @@ export function createApiServer() {
     }
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search') {
+      if (!isLegacyRouteExplicitlyEnabled(requestUrl)) {
+        sendLegacyRouteOptInRequired(response)
+        return
+      }
+
       // Keep the combined live route available for debug/manual use,
       // but the product-facing primary path is the guided flow.
       await handleLiveSearch(requestUrl, annotateResponseHeaders(response, LEGACY_ROUTE_HEADERS), request)

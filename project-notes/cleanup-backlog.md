@@ -86,7 +86,7 @@ Status: done
 ## Section 5: Optional Later Cleanup
 
 ### 5.1 Revisit legacy `/api/search` removal or isolation
-Status: pending
+Status: done
 - Once the guided flow is clearly stable, decide whether to remove the legacy combined search route entirely.
 - If keeping it, mark it clearly as legacy/internal and avoid letting it shape the main app architecture.
 
