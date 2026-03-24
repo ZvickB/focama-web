@@ -87,8 +87,8 @@ Status: done
 
 ### 5.1 Revisit legacy `/api/search` removal or isolation
 Status: done
-- Once the guided flow is clearly stable, decide whether to remove the legacy combined search route entirely.
-- If keeping it, mark it clearly as legacy/internal and avoid letting it shape the main app architecture.
+- The bare `/api/search` route was removed once the guided flow and `/api/search/live` covered the needed behavior.
+- Keep `/api/search/live` clearly marked as manual/internal so it does not shape the main app architecture.
 
 ### 5.2 Revisit storage/history product direction
 Status: done

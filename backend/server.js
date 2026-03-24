@@ -16,7 +16,7 @@ import {
   getSupabaseHealth,
   isSupabaseConfigured,
 } from './lib/search-storage.js'
-import { buildCacheKey, buildQuery, getEnv } from './lib/search-data.js'
+import { buildCacheKey, getEnv } from './lib/search-data.js'
 
 const PORT = Number(process.env.PORT || 8787)
 const LIVE_RESULT_FILTER_CONFIG = {
@@ -37,15 +37,6 @@ const FINALIZE_MAX_PRIORITIES = 8
 const FINALIZE_MAX_PRIORITY_LENGTH = 80
 const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
 const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
-export const LEGACY_ROUTE_OPT_IN_PARAM = 'legacy'
-const LEGACY_ROUTE_HEADERS = {
-  'X-Focama-Route-Status': 'legacy_combined_search',
-  'X-Focama-Route-Recommended': '/api/search/discover -> /api/search/refine -> /api/search/finalize',
-}
-const LEGACY_ROUTE_OPT_IN_RESPONSE_HEADERS = {
-  ...LEGACY_ROUTE_HEADERS,
-  'X-Focama-Route-Access': 'explicit_opt_in_required',
-}
 
 export function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, {
@@ -53,41 +44,6 @@ export function sendJson(response, statusCode, payload) {
     'Access-Control-Allow-Origin': '*',
   })
   response.end(JSON.stringify(payload))
-}
-
-export function isLegacyRouteExplicitlyEnabled(requestUrl) {
-  return requestUrl?.searchParams?.get(LEGACY_ROUTE_OPT_IN_PARAM) === '1'
-}
-
-export function sendLegacyRouteOptInRequired(response) {
-  const payload = {
-    error: 'The combined /api/search route is legacy-only.',
-    details: 'Use /api/search/discover -> /api/search/refine -> /api/search/finalize for the product flow, or /api/search/live for explicit combined-route checks.',
-    legacyOptIn: `Add ?${LEGACY_ROUTE_OPT_IN_PARAM}=1 to /api/search if you intentionally want the legacy combined route.`,
-  }
-
-  response.writeHead(410, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    ...LEGACY_ROUTE_OPT_IN_RESPONSE_HEADERS,
-  })
-  response.end(JSON.stringify(payload))
-}
-
-function annotateResponseHeaders(response, extraHeaders) {
-  if (!response || typeof response.writeHead !== 'function') {
-    return response
-  }
-
-  return {
-    ...response,
-    writeHead(statusCode, headers = {}) {
-      response.writeHead(statusCode, {
-        ...headers,
-        ...extraHeaders,
-      })
-    },
-  }
 }
 
 function readRequestBody(request, { maxBytes = Infinity } = {}) {
@@ -359,51 +315,6 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
     sendJson(response, 400, { error })
     return
   }
-  const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
-    productQuery: normalizedQuery,
-    details: normalizedDetails,
-    scope: CACHE_SCOPE_LIVE_SEARCH,
-  })
-
-  if (cachedEntry?.results?.length) {
-    const cachedSelection = cachedEntry.selection || {
-      mode: 'cache',
-      model: null,
-      selectedCandidateIds: normalizedCachedResults.map((item) => item.id),
-      details: 'Cached search results were returned.',
-    }
-
-    await recordSearchCacheEvent({
-      cacheKey,
-      cacheStatus: 'hit',
-      candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
-        ? cachedEntry.candidatePool.candidates.length
-        : normalizedCachedResults.length,
-      details: normalizedDetails,
-      productQuery: normalizedQuery,
-      resultCount: normalizedCachedResults.length,
-      selectionMode: cachedSelection.mode,
-      source: cachedEntry.source || 'cache',
-    })
-
-    sendJson(response, 200, {
-      candidatePool:
-        cachedEntry.candidatePool ||
-        {
-          query: normalizedQuery,
-          details: normalizedDetails,
-          combinedSearchText: buildQuery(normalizedQuery, normalizedDetails),
-          searchState: 'Cached search results',
-          similarQueries: [],
-          candidates: [],
-        },
-      results: normalizedCachedResults,
-      selection: cachedSelection,
-      source: 'cache',
-      cachedAt: cachedEntry.cachedAt,
-    })
-    return
-  }
 
   try {
     const { artifacts, error: artifactsError } = await fetchSearchArtifacts({
@@ -456,19 +367,9 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
       }
     }
 
-    await writeSearchSnapshot({
-      productQuery: normalizedQuery,
-      details: normalizedDetails,
-      candidatePool,
-      results,
-      selection,
-      source: 'live_search',
-      scope: CACHE_SCOPE_LIVE_SEARCH,
-    })
-
     await recordSearchCacheEvent({
       cacheKey,
-      cacheStatus: 'miss',
+      cacheStatus: 'bypass',
       candidateCount: Array.isArray(candidatePool?.candidates) ? candidatePool.candidates.length : 0,
       details: normalizedDetails,
       productQuery: normalizedQuery,
@@ -665,17 +566,11 @@ export async function handleSearchDebug(requestUrl, response) {
     return
   }
 
-  const { cachedEntry: liveCachedEntry, normalizedCachedResults: liveCachedResults } = await readCachedSearchSnapshot({
-    productQuery: normalizedQuery,
-    details: normalizedDetails,
-    scope: CACHE_SCOPE_LIVE_SEARCH,
-  })
   const { cachedEntry: discoveryCachedEntry, normalizedCachedResults: discoveryCachedResults } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: '',
     scope: CACHE_SCOPE_DISCOVERY,
   })
-  const liveSearchUsesCache = liveCachedResults.length > 0
   const guidedDiscoveryUsesCache =
     normalizedDetails === '' &&
     Boolean(discoveryCachedEntry?.candidatePool?.candidates) &&
@@ -697,18 +592,6 @@ export async function handleSearchDebug(requestUrl, response) {
         previewResultCount: discoveryCachedResults.length,
         selectionMode: discoveryCachedEntry?.selection?.mode || null,
       },
-      liveSearch: {
-        cacheKey: buildCacheKey(normalizedQuery, normalizedDetails, CACHE_SCOPE_LIVE_SEARCH),
-        hasEntry: Boolean(liveCachedEntry),
-        source: liveCachedEntry?.source || null,
-        cachedAt: liveCachedEntry?.cachedAt || null,
-        expiresAt: liveCachedEntry?.expiresAt || null,
-        candidateCount: Array.isArray(liveCachedEntry?.candidatePool?.candidates)
-          ? liveCachedEntry.candidatePool.candidates.length
-          : 0,
-        resultCount: liveCachedResults.length,
-        selectionMode: liveCachedEntry?.selection?.mode || null,
-      },
     },
     environment: {
       serpApiConfigured: Boolean(getEnv('SERPAPI_API_KEY')),
@@ -721,8 +604,7 @@ export async function handleSearchDebug(requestUrl, response) {
         '/api/search/refine',
         '/api/search/finalize',
       ],
-      legacyRoute: '/api/search',
-      legacyRouteStatus: 'legacy_combined_search',
+      manualCombinedRoute: '/api/search/live',
       storageMode: isSupabaseConfigured() ? 'supabase' : 'local_file_fallback',
       finalizeUsesRequestCandidatePool: true,
     },
@@ -738,9 +620,9 @@ export async function handleSearchDebug(requestUrl, response) {
         callsOpenAi: true,
       },
       liveSearch: {
-        usesCache: liveSearchUsesCache,
-        callsSerpApi: !liveSearchUsesCache,
-        callsOpenAi: !liveSearchUsesCache,
+        usesCache: false,
+        callsSerpApi: true,
+        callsOpenAi: true,
       },
     },
   })
@@ -865,18 +747,6 @@ export function createApiServer() {
         'Access-Control-Allow-Headers': 'Content-Type',
       })
       response.end()
-      return
-    }
-
-    if (request.method === 'GET' && requestUrl.pathname === '/api/search') {
-      if (!isLegacyRouteExplicitlyEnabled(requestUrl)) {
-        sendLegacyRouteOptInRequired(response)
-        return
-      }
-
-      // Keep the combined live route available for debug/manual use,
-      // but the product-facing primary path is the guided flow.
-      await handleLiveSearch(requestUrl, annotateResponseHeaders(response, LEGACY_ROUTE_HEADERS), request)
       return
     }
 

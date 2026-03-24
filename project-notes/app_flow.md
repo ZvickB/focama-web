@@ -30,11 +30,10 @@
   - final focused picks come from `/api/search/finalize`
   - this guided flow is the primary backend architecture for the live product experience
   - `/api/search/live` is the explicit manual/debug combined-search endpoint
-  - the older bare `/api/search` route is now legacy-only and requires explicit opt-in with `?legacy=1`
   - the Vercel route wrappers now forward request headers into the backend handlers so IP-based rate limiting can still key off forwarded client IPs in production
 - Backend debug/health tooling should mirror that same split:
   - `/api/search/debug` should describe the guided flow as primary
-  - `/api/search` should be treated as legacy/manual
+  - `/api/search/live` should be treated as the manual combined route
   - `/api/health/supabase` should treat local file fallback as a supported development/storage mode when Supabase is not configured
 - After loading/refinement, the page displays up to 6 normalized product cards.
 - Clicking a product opens a detail modal with:
@@ -49,6 +48,7 @@
 - The backend now filters candidates and uses AI to improve the final shortlist rather than simply returning the first raw usable results.
 - Search cache plus operational search-history logging now exists through the storage layer, with Supabase preferred and local fallback for development.
 - `search_history` is currently an internal operational record for cache/debug visibility, not a user-facing saved-history product feature.
+- Guided discovery is the reusable persistent cache layer; `/api/search/live` and guided finalization stay request-specific.
 - Guided finalization is now explicitly guarded:
   - request bodies larger than 32 KB are rejected
   - candidate pools are capped at 20 candidates

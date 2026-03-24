@@ -26,15 +26,13 @@
   - `/api/search/finalize` selects the final shortlist from the cleaned candidate pool
 - This guided flow is the primary backend path for the product.
 - `/api/search/live` is the explicit combined-path endpoint for backend/debug/manual use.
-- The older bare `/api/search` route is now legacy-only and requires `?legacy=1` so it does not behave like a normal product endpoint by accident.
 - The live search flow currently:
   - validates input
-  - checks its own legacy live-search cache scope before external calls
   - queries SerpApi
   - filters/cleans a candidate pool
   - uses AI to generate the refinement prompt and/or select the final shortlist
   - includes tradeoffs/drawbacks in result data
-- Guided discovery cache is now scoped separately from legacy live-search cache entries.
+- Guided discovery cache is now the only persistent search cache scope used by the product/backend flow.
 - Guided `/api/search/finalize` reranks the submitted candidate pool and does not reuse cached final result sets.
 - Search cache and operational search-history logging can use Supabase when configured.
 - Local file-based cache remains as a development/fallback path.
@@ -45,9 +43,9 @@
   - candidate pool limit: 20 candidates
   - priorities limit: 8 items, 80 characters each
   - follow-up notes limit: 500 characters before OpenAI selection
-- Search history records cache hit/miss status best-effort.
+- Search history records cache status best-effort, including guided cache hits/misses and uncached live-route runs.
 - `search_history` is treated as internal operational telemetry for debugging and cache analysis, not as a user-facing saved-search feature.
-- `/api/search/debug` now reports the guided flow as primary, keeps `/api/search` clearly marked as legacy/manual, and shows whether storage is using Supabase or local fallback.
+- `/api/search/debug` now reports the guided flow as primary, shows guided discovery cache status, and keeps `/api/search/live` clearly marked as the uncached manual combined route.
 - `/api/health/supabase` now treats an unconfigured Supabase setup as an optional local-fallback state rather than a backend failure.
 
 ## Active product decisions
@@ -67,7 +65,7 @@
 6. Filter junk, duplicates, and weak candidates before final ranking.
 7. Use AI where it improves refinement prompt quality and final selection quality.
 8. Store cache/operational history in Supabase when configured, with local fallback for development.
-9. Keep the explicit `/api/search/live` combined route available only for debug/manual use while the bare `/api/search` path stays isolated behind explicit legacy opt-in.
+9. Keep the explicit `/api/search/live` combined route available only for debug/manual use while guided discovery remains the only persistent cache path.
 
 ## Important scope constraints
 - Do not overengineer scaling work before v1 usage justifies it.
@@ -80,8 +78,8 @@
 - `OPENAI_MODEL` can optionally override the default model.
 - Supabase can be enabled with `SUPABASE_URL=...` and `SUPABASE_SECRET_KEY=...`.
 - The backend also accepts the legacy `SUPABASE_SERVICE_ROLE_KEY=...` if needed.
-- `SEARCH_CACHE_TTL_MINUTES` controls cache TTL and currently defaults to `360` if omitted.
-- For early tester phases, a longer TTL like 24 hours is a reasonable option if stale data is acceptable.
+- `SEARCH_CACHE_TTL_MINUTES` controls cache TTL and currently defaults to `1440` if omitted.
+- For early tester phases, a 24-hour TTL is the default and is reasonable while traffic is still low.
 - The `.env` file is ignored by git.
 - This project is being worked in PowerShell on Windows.
 

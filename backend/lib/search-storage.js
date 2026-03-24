@@ -8,7 +8,7 @@ import {
 
 const SEARCH_CACHE_TABLE = 'search_cache'
 const SEARCH_HISTORY_TABLE = 'search_history'
-const DEFAULT_CACHE_TTL_MINUTES = 360
+const DEFAULT_CACHE_TTL_MINUTES = 1440
 
 let supabaseAdminClient = null
 

@@ -50,6 +50,7 @@ purpose: Large marketplaces are designed to be sticky and distracting. Focama is
   - filter a larger candidate pool with rules
   - let AI improve the final shortlist using the user’s context as the main fit signal
   - render up to 6 results in the current UI
+- Persistent caching should stay focused on discovery/candidate work rather than final AI-selected result sets.
 - If local cache or saved query/evaluation data is used during development, treat it as temporary only and plan to remove or replace it later rather than letting it become accidental product infrastructure.
 - The rule-based filter should mainly discard junk and weak candidates. User context is the main reason to use AI, with ratings/reviews acting as supporting quality signals rather than replacing contextual fit.
 - Avoid overengineering.

@@ -7,6 +7,7 @@
 - This keeps local development easy while giving us a production-ready persistence path.
 - Future product note: the preferred cache target is raw SerpApi results or cleaned candidate pools, not AI-context-specific final result sets.
 - Future product note: detailed user context should usually remain a fresh AI-ranking input rather than the main cache identity.
+- Current product choice: guided discovery is the only persistent cache path; `/api/search/live` remains uncached manual/debug execution.
 
 ## Environment variables
 Add these to the root `.env`:
@@ -17,14 +18,14 @@ OPENAI_API_KEY=your-openai-key
 OPENAI_MODEL=gpt-5-mini
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SECRET_KEY=your-supabase-secret-key
-SEARCH_CACHE_TTL_MINUTES=360
+SEARCH_CACHE_TTL_MINUTES=1440
 ```
 
 Notes:
 - `SUPABASE_SECRET_KEY` is the preferred server-side key for this setup.
 - If your project only shows the older key type, the backend also accepts `SUPABASE_SERVICE_ROLE_KEY` as a legacy fallback.
 - Do not expose either server-side key to the browser.
-- `SEARCH_CACHE_TTL_MINUTES` defaults to `360` if omitted.
+- `SEARCH_CACHE_TTL_MINUTES` defaults to `1440` if omitted.
 
 ## SQL schema
 Run this in the Supabase SQL editor:
@@ -66,17 +67,15 @@ create index if not exists search_history_cache_key_idx
 ```
 
 ## What gets cached
-- Cache keys are now scoped by flow so guided discovery snapshots and legacy live-search results do not overwrite each other.
+- Cache keys are now scoped by flow so guided discovery snapshots stay isolated and reusable.
 - Guided discovery cache key: `guided_discovery + normalized productQuery`
-- Legacy live-search cache key: `live_search + normalized productQuery + details`
 - Cached payload:
   - guided discovery stores the `candidatePool`, preview `results`, and a `discovery_preview` selection marker
-  - legacy live search stores its own `candidatePool`, final `results`, and `selection`
   - `cachedAt`
   - `expiresAt`
 - Guided `/api/search/finalize` does not read or write cache; it reranks the submitted candidate pool with the latest priorities/notes.
-- The legacy live route checks only its own cache scope before calling SerpApi/OpenAI.
-- On cache hit, each route returns the response shape its caller already expects.
+- `/api/search/live` is intentionally uncached so manual/debug combined runs stay fresh and do not broaden persistent storage scope.
+- On cache hit, guided discovery returns the response shape its caller already expects.
 
 ## Current tradeoffs
 - Cache invalidation is TTL-based only for now.
@@ -84,8 +83,7 @@ create index if not exists search_history_cache_key_idx
 - Search history is best-effort operational analytics/persistence and should not block responses.
 - The `search_history` table is an internal telemetry table for cache/debug analysis, not the schema for a future user-facing saved-history feature.
 - The old `/api/search/cache` debugging route still works, now through the same storage abstraction.
-- The legacy combined `/api/search` route is still available for manual/debug use, but it is not the primary product path.
-- The current implementation is still broader than the preferred future direction because the legacy live route can cache full search responses; if revisited again, narrow that path toward SerpApi/raw candidate caching first.
+- The removed bare `/api/search` route should stay removed so the guided flow and `/api/search/live` are the only public search entry points.
 
 ## Recommended next step
 - After the Supabase project is created and these tables exist, add the two Supabase env vars to Vercel and local `.env`.

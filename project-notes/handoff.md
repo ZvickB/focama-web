@@ -18,7 +18,7 @@
 - The result cards and modal surface drawbacks/tradeoffs as well as reasons.
 - Basic IP-based rate limiting exists on the search endpoints, including `/api/search/finalize`.
 - Supabase-backed cache/operational-history storage and health tooling now exist, with local fallback for development.
-- The legacy combined `/api/search` route still exists only for backend/debug/manual use.
+- Guided discovery is the only persistent cache path; `/api/search/live` remains only as the explicit manual/debug combined route.
 
 ## Next likely work
 - Verify the live deployment end to end on desktop and mobile.

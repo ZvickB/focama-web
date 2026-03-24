@@ -41,7 +41,6 @@ vi.mock('./lib/search-storage.js', () => ({
 }))
 
 import {
-  createApiServer,
   handleCachedSearch,
   handleDiscoverySearch,
   handleFinalizeSelection,
@@ -160,29 +159,6 @@ describe('server handlers', () => {
     })
   })
 
-  it('requires explicit opt-in before serving the legacy combined /api/search route', async () => {
-    const server = createApiServer()
-
-    await new Promise((resolve) => server.listen(0, resolve))
-
-    const address = server.address()
-    const port = typeof address === 'object' && address ? address.port : null
-
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/search?query=lego`)
-
-      expect(response.status).toBe(410)
-      expect(response.headers.get('x-focama-route-status')).toBe('legacy_combined_search')
-      expect(response.headers.get('x-focama-route-access')).toBe('explicit_opt_in_required')
-      await expect(response.json()).resolves.toMatchObject({
-        error: 'The combined /api/search route is legacy-only.',
-        legacyOptIn: 'Add ?legacy=1 to /api/search if you intentionally want the legacy combined route.',
-      })
-    } finally {
-      await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
-    }
-  })
-
   it('returns cached guided discovery results when present', async () => {
     getEnv.mockReturnValue('serp-key')
     readStoredSearchCacheEntry.mockResolvedValue({
@@ -295,7 +271,7 @@ describe('server handlers', () => {
     })
   })
 
-  it('reports scoped cache usage expectations for the guided, finalize, and live flows', async () => {
+  it('reports guided-discovery cache usage expectations for the guided, finalize, and live flows', async () => {
     getEnv.mockImplementation((name) => {
       if (name === 'SERPAPI_API_KEY') {
         return 'serp-key'
@@ -308,21 +284,6 @@ describe('server handlers', () => {
       return ''
     })
 
-    readStoredSearchCacheEntry.mockResolvedValueOnce({
-      cachedAt: '2026-03-17T12:30:00.000Z',
-      expiresAt: '2026-03-17T18:30:00.000Z',
-      source: 'live_search',
-      selection: { mode: 'ai' },
-      candidatePool: {
-        query: 'thermos',
-        details: '',
-        combinedSearchText: 'thermos',
-        searchState: 'Cached live search results',
-        similarQueries: [],
-        candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
-      },
-      results: [{ id: 'live-1', title: 'Thermos bottle' }],
-    })
     readStoredSearchCacheEntry.mockResolvedValueOnce({
       cachedAt: '2026-03-17T12:00:00.000Z',
       expiresAt: '2026-03-17T18:00:00.000Z',
@@ -358,16 +319,6 @@ describe('server handlers', () => {
           previewResultCount: 1,
           selectionMode: 'discovery_preview',
         },
-        liveSearch: {
-          cacheKey: 'live_search:thermos|',
-          hasEntry: true,
-          source: 'live_search',
-          cachedAt: '2026-03-17T12:30:00.000Z',
-          expiresAt: '2026-03-17T18:30:00.000Z',
-          candidateCount: 1,
-          resultCount: 1,
-          selectionMode: 'ai',
-        },
       },
       environment: {
         serpApiConfigured: true,
@@ -380,8 +331,7 @@ describe('server handlers', () => {
           '/api/search/refine',
           '/api/search/finalize',
         ],
-        legacyRoute: '/api/search',
-        legacyRouteStatus: 'legacy_combined_search',
+        manualCombinedRoute: '/api/search/live',
         storageMode: 'local_file_fallback',
         finalizeUsesRequestCandidatePool: true,
       },
@@ -397,9 +347,9 @@ describe('server handlers', () => {
           callsOpenAi: true,
         },
         liveSearch: {
-          usesCache: true,
-          callsSerpApi: false,
-          callsOpenAi: false,
+          usesCache: false,
+          callsSerpApi: true,
+          callsOpenAi: true,
         },
       },
     })
@@ -455,7 +405,7 @@ describe('server handlers', () => {
     })
   })
 
-  it('keeps guided discovery cache separate from legacy live search cache', async () => {
+  it('keeps guided discovery cache separate from uncached live search responses', async () => {
     getEnv.mockImplementation((name) => {
       if (name === 'SERPAPI_API_KEY') {
         return 'serp-key'
@@ -516,37 +466,13 @@ describe('server handlers', () => {
 
     expect(discoveryResponse.statusCode).toBe(200)
     expect(liveResponse.statusCode).toBe(200)
-    expect(readStoredSearchCacheEntry).toHaveBeenNthCalledWith(1, {
+    expect(readStoredSearchCacheEntry).toHaveBeenCalledTimes(1)
+    expect(readStoredSearchCacheEntry).toHaveBeenCalledWith({
       productQuery: 'thermos',
       details: '',
       scope: 'guided_discovery',
     })
-    expect(readStoredSearchCacheEntry).toHaveBeenNthCalledWith(2, {
-      productQuery: 'thermos',
-      details: '',
-      scope: 'live_search',
-    })
-    expect(writeStoredSearchCacheEntry).toHaveBeenLastCalledWith({
-      productQuery: 'thermos',
-      details: '',
-      candidatePool: {
-        query: 'thermos',
-        details: '',
-        combinedSearchText: 'thermos',
-        searchState: 'Results for exact spelling',
-        similarQueries: [],
-        candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
-      },
-      results: [{ id: 'live-1', title: 'Thermos bottle', reasons: [], drawbacks: [] }],
-      selection: {
-        mode: 'ai',
-        model: 'gpt-5-mini',
-        selectedCandidateIds: ['live-1'],
-        details: 'AI selected the final recommendations from the cleaned candidate pool.',
-      },
-      source: 'live_search',
-      scope: 'live_search',
-    })
+    expect(writeStoredSearchCacheEntry).not.toHaveBeenCalled()
   })
 
   it('rejects obvious gibberish product queries before calling SerpApi', async () => {

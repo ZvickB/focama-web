@@ -41,7 +41,6 @@ Read this file first at the start of every chat.
   - `/api/search/refine`
   - `/api/search/finalize`
 - `/api/search/live` is the explicit manual/debug combined route.
-- The older bare `/api/search` route is legacy-only and requires `?legacy=1`.
 - Product shortlists are 6 items end to end.
 - Prefer the PNG wordmark for now instead of forcing a weak SVG recreation.
 - Keep the product vendor-agnostic even if Amazon becomes the strongest affiliate path later.
