@@ -82,7 +82,7 @@ export function normalizeResult(item, index, _reasonFallback) {
   const description =
     item.snippet?.trim() ||
     item.extensions?.filter(Boolean).join(' - ') ||
-    `Live product result returned for "${title}".`
+    `A shopping option we found for "${title}".`
 
   const reasons = [
     `Available from ${source}`,

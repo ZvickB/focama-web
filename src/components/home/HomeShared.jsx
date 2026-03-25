@@ -14,6 +14,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.j
 import logo from '@/assets/logo_master_version.svg'
 import { RESULT_CARD_SLOTS } from '@/components/home/useGuidedSearch.js'
 
+const BADGE_DISPLAY_PRIORITY = new Map([
+  ['Best match', 0],
+  ['Best value', 1],
+  ['Best budget pick', 1],
+  ['Best premium pick', 1],
+  ['Best for durability', 1],
+  ['Best for comfort', 1],
+  ['Best for small spaces', 1],
+  ['Best for beginners', 1],
+  ['Best lightweight option', 1],
+  ['Best all-rounder', 1],
+])
+
 function getUserFacingReasons(reasons = []) {
   return reasons.filter((reason) => {
     const normalizedReason = String(reason || '').trim()
@@ -244,11 +257,27 @@ export function ResultsSection({
   showPreviewResults,
   submittedQuery,
 }) {
+  const orderedResults = displayedResults
+    .map((item, index) => ({
+      item,
+      index,
+      priority: BADGE_DISPLAY_PRIORITY.get(item.badgeLabel || '') ?? 2,
+    }))
+    .sort((left, right) => {
+      if (left.priority !== right.priority) {
+        return left.priority - right.priority
+      }
+
+      return left.index - right.index
+    })
+    .map((entry) => entry.item)
   const hasExplicitBadges = displayedResults.some((item) => item.badgeLabel)
+  const hasDisplayedResults = orderedResults.length > 0
+  const shouldShowResultsIntro = !hasDisplayedResults || hasFinalResults
 
   return (
     <section className="space-y-5">
-      {!hasStartedSearch ? null : (
+      {!hasStartedSearch || !shouldShowResultsIntro ? null : (
         <div className="space-y-3">
           <Badge variant="outline" className="w-fit rounded-full bg-stone-50 px-3 py-1">
             Results
@@ -319,17 +348,10 @@ export function ResultsSection({
         </div>
       ) : null}
 
-      {displayedResults.length > 0 ? (
+      {hasDisplayedResults ? (
         <div className="space-y-4">
-          {!hasFinalResults ? (
-            <div className="rounded-3xl border border-stone-200/80 bg-stone-50/90 px-4 py-3 text-sm text-slate-600">
-              Preview products are ready. Use the AI refinement to turn this into a more focused
-              final set.
-            </div>
-          ) : null}
-
           <div className="mx-auto grid max-w-6xl grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 sm:gap-5">
-            {displayedResults.map((item, index) => (
+            {orderedResults.map((item, index) => (
               <div key={item.id}>
                 <ProductCard
                   {...item}

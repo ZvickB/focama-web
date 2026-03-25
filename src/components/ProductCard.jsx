@@ -18,7 +18,7 @@ function ProductBadge({ label }) {
         className={`inline-flex max-w-[min(220px,calc(100vw-4rem))] items-center gap-2 rounded-[20px] border px-3 py-2 font-sans text-xs font-medium leading-4 tracking-[0.01em] shadow-[0_14px_34px_-20px_rgba(15,23,42,0.45)] backdrop-blur ${
           isPrimary
             ? 'border-primary/60 bg-primary text-primary-foreground'
-            : 'border-stone-200/90 bg-[rgba(252,248,241,0.94)] text-slate-800'
+            : 'border-[#d9c4a6] bg-[rgba(244,231,210,0.94)] text-slate-800'
         }`}
       >
         <span className="whitespace-normal break-words">{label}</span>
