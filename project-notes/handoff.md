@@ -19,9 +19,11 @@
 - Basic IP-based rate limiting exists on the search endpoints, including `/api/search/finalize`.
 - Supabase-backed cache/operational-history storage and health tooling now exist, with local fallback for development.
 - Guided discovery is the only persistent cache path; `/api/search/live` remains only as the explicit manual/debug combined route.
+- Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`.
+- Guided `/api/search/finalize` and `/api/search/live` remain intentionally uncached.
 
 ## Next likely work
-- Verify the live deployment end to end on desktop and mobile.
+- Watch the live deployment on desktop and mobile for cache behavior, result quality, and any Supabase/storage regressions.
 - Watch for weak-result cases and improve result-quality handling without overcomplicating the flow.
 - Refine the AI prompt and selection behavior based on real searches.
 - Decide whether the next product milestone is:
@@ -33,6 +35,7 @@
 - Let the user start a brand-new search for a different product after completing a search; this repeat-search path does not exist yet in the current UI flow.
 - After results are shown, add a guided fallback such as `Didn't find anything you like? Tell us why.` so the user can explain what was wrong with the shortlist and send that feedback back into AI for another pass.
 - Do not turn this into a generic `load more` pattern; additional results should only be available when the user gives a reason the current options failed, so the product stays recommendation-focused instead of becoming endless search pagination.
+- Consider preserving a broader cleaned candidate set behind the scenes so the future `Didn't find anything you like? Tell us why.` follow-up flow can reuse that larger pool for a smarter second pass before paying for another SerpApi request; do not let this quietly turn the product into a generic `show more results` marketplace-style browse flow.
 - Replace the current `About` destination with a `Why Focama` page that explains what the product is for and how to use it.
 - Make sure any header/nav link that currently points people to `About` lands on `Why Focama` instead.
 - The `Why Focama` page should include a clear home button so users can easily return to the homepage.

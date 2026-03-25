@@ -61,6 +61,63 @@ async function finalizeGuidedSearch({ candidatePool, followUpNotes }) {
   return readJsonResponse(response)
 }
 
+function buildFinalizeCandidatePool(candidatePool) {
+  if (!candidatePool || typeof candidatePool !== 'object') {
+    return null
+  }
+
+  return {
+    query: candidatePool.query,
+    details: candidatePool.details,
+    combinedSearchText: candidatePool.combinedSearchText,
+    searchState: candidatePool.searchState,
+    similarQueries: candidatePool.similarQueries,
+    candidates: Array.isArray(candidatePool.candidates)
+      ? candidatePool.candidates.map((candidate) => ({
+          id: candidate.id,
+          score: candidate.score,
+          title: candidate.title,
+          description: candidate.description,
+          source: candidate.source,
+          price: candidate.price,
+          numericPrice: candidate.numericPrice,
+          rating: candidate.rating,
+          reviewCount: candidate.reviewCount,
+          delivery: candidate.delivery,
+          tag: candidate.tag,
+          extensions: candidate.extensions,
+          multipleSources: candidate.multipleSources,
+          reasons: candidate.reasons,
+          matchSignals: candidate.matchSignals,
+        }))
+      : [],
+  }
+}
+
+function mergeFinalizeResults(results, sourceCandidatePool) {
+  if (!Array.isArray(results) || !sourceCandidatePool?.candidates) {
+    return Array.isArray(results) ? results : []
+  }
+
+  const candidateById = new Map(
+    sourceCandidatePool.candidates.map((candidate) => [String(candidate.id), candidate]),
+  )
+
+  return results.map((result) => {
+    const sourceCandidate = candidateById.get(String(result.id))
+
+    if (!sourceCandidate) {
+      return result
+    }
+
+    return {
+      ...result,
+      image: sourceCandidate.image || result.image,
+      link: sourceCandidate.link || result.link,
+    }
+  })
+}
+
 export function useGuidedSearch() {
   const [productQuery, setProductQuery] = useState('')
   const [selectedProduct, setSelectedProduct] = useState(null)
@@ -82,9 +139,9 @@ export function useGuidedSearch() {
     onMutate: () => {
       setErrorMessage('')
     },
-    onSuccess: (payload) => {
-      setCandidatePool(payload.candidatePool || null)
-      setResults(payload.results || [])
+    onSuccess: (payload, variables) => {
+      setCandidatePool(variables.originalCandidatePool || null)
+      setResults(mergeFinalizeResults(payload.results, variables.originalCandidatePool))
     },
     onError: (error) => {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to finalize the search.')
@@ -173,8 +230,11 @@ export function useGuidedSearch() {
       return
     }
 
+    const finalizeCandidatePool = buildFinalizeCandidatePool(candidatePool)
+
     finalizeMutation.mutate({
-      candidatePool,
+      candidatePool: finalizeCandidatePool,
+      originalCandidatePool: candidatePool,
       followUpNotes,
     })
   }

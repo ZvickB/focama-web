@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { LoaderCircle, Search, Sparkles } from 'lucide-react'
 
 import wordmark from '@/assets/wordmark.PNG'
@@ -20,11 +20,25 @@ function handleRefinementTextareaKeyDown(event, { canSubmit, onSubmit }) {
   }
 }
 
+function smoothScrollIntoView(element) {
+  if (!element || typeof element.scrollIntoView !== 'function') {
+    return
+  }
+
+  element.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+  })
+}
+
 function OpenLayout(props) {
   const refinementRef = useRef(null)
   const resultsViewportRef = useRef(null)
   const lastRefinementScrollQueryRef = useRef('')
   const lastResultsScrollQueryRef = useRef('')
+  const lastPreviewScrollQueryRef = useRef('')
+  const lastFinalizeScrollQueryRef = useRef('')
+  const [showHeroCopy, setShowHeroCopy] = useState(false)
   const {
     displayedResults,
     errorMessage,
@@ -43,14 +57,14 @@ function OpenLayout(props) {
   } = props
 
   useEffect(() => {
-    if (
-      hasStartedSearch &&
-      refinementRef.current &&
-      typeof refinementRef.current.scrollIntoView === 'function'
-    ) {
-      refinementRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const revealTimer = window.setTimeout(() => {
+      setShowHeroCopy(true)
+    }, 360)
+
+    return () => {
+      window.clearTimeout(revealTimer)
     }
-  }, [hasStartedSearch])
+  }, [])
 
   useEffect(() => {
     if (
@@ -69,20 +83,56 @@ function OpenLayout(props) {
         return
       }
 
-      const absoluteTop = window.scrollY + refinementElement.getBoundingClientRect().top
-      const targetTop = Math.max(0, absoluteTop - 96)
-
-      window.scrollTo({
-        top: targetTop,
-        behavior: 'smooth',
-      })
+      smoothScrollIntoView(refinementElement)
       lastRefinementScrollQueryRef.current = submittedQuery
-    }, 220)
+    }, 180)
 
     return () => {
       window.clearTimeout(scrollTimer)
     }
   }, [hasStartedSearch, submittedQuery])
+
+  useEffect(() => {
+    if (
+      !showPreviewResults ||
+      !submittedQuery ||
+      lastPreviewScrollQueryRef.current === submittedQuery ||
+      !resultsViewportRef.current
+    ) {
+      return
+    }
+
+    const scrollTimer = window.setTimeout(() => {
+      const resultsElement = resultsViewportRef.current
+
+      if (!resultsElement) {
+        return
+      }
+
+      smoothScrollIntoView(resultsElement)
+      lastPreviewScrollQueryRef.current = submittedQuery
+    }, 140)
+
+    return () => {
+      window.clearTimeout(scrollTimer)
+    }
+  }, [showPreviewResults, submittedQuery])
+
+  useEffect(() => {
+    if (
+      !state.isFinalizing ||
+      !submittedQuery ||
+      lastFinalizeScrollQueryRef.current === submittedQuery ||
+      !resultsViewportRef.current
+    ) {
+      return
+    }
+
+    const resultsElement = resultsViewportRef.current
+
+    smoothScrollIntoView(resultsElement)
+    lastFinalizeScrollQueryRef.current = submittedQuery
+  }, [state.isFinalizing, submittedQuery])
 
   useEffect(() => {
     if (
@@ -101,13 +151,7 @@ function OpenLayout(props) {
         return
       }
 
-      const absoluteTop = window.scrollY + resultsElement.getBoundingClientRect().top
-      const targetTop = Math.max(0, absoluteTop - 96)
-
-      window.scrollTo({
-        top: targetTop,
-        behavior: 'smooth',
-      })
+      smoothScrollIntoView(resultsElement)
       lastResultsScrollQueryRef.current = submittedQuery
     }, 180)
 
@@ -117,6 +161,7 @@ function OpenLayout(props) {
   }, [hasFinalResults, submittedQuery])
 
   const hasDiscoveryResults = Boolean(state.candidatePool)
+  const showLoadingResults = (isLoading && displayedResults.length === 0) || state.isFinalizing
 
   return (
     <main className="px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
@@ -131,7 +176,11 @@ function OpenLayout(props) {
               />
             </div>
             <div className="space-y-3">
-              <h2 className="text-2xl font-medium tracking-tight text-slate-900 sm:text-4xl">
+              <h2
+                className={`text-2xl font-medium tracking-tight text-slate-900 transition-opacity duration-300 sm:text-4xl ${
+                  showHeroCopy ? 'opacity-100' : 'opacity-0'
+                }`}
+              >
                 What are you looking for today?
               </h2>
             </div>
@@ -140,7 +189,7 @@ function OpenLayout(props) {
           <form className="flex justify-center" onSubmit={state.beginGuidedSearch}>
             <div
               ref={refinementRef}
-              className={`w-full max-w-3xl rounded-[36px] border p-4 text-left shadow-[0_28px_120px_-72px_rgba(15,23,42,0.45)] backdrop-blur transition-all duration-300 sm:p-5 ${
+              className={`scroll-mt-28 w-full max-w-3xl rounded-[36px] border p-4 text-left shadow-[0_28px_120px_-72px_rgba(15,23,42,0.45)] backdrop-blur transition-all duration-300 sm:p-5 ${
                 hasStartedSearch
                   ? 'border-primary/25 bg-white/92 shadow-[0_36px_140px_-68px_rgba(15,23,42,0.5)]'
                   : 'border-white/70 bg-white/80'
@@ -251,8 +300,8 @@ function OpenLayout(props) {
         </section>
 
         <section className="w-full max-w-5xl space-y-4">
-          {isLoading && displayedResults.length === 0 ? (
-            <div ref={resultsViewportRef} className="max-h-[360px] overflow-hidden">
+          {showLoadingResults ? (
+            <div ref={resultsViewportRef} className="max-h-[360px] scroll-mt-28 overflow-hidden">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {RESULT_CARD_SLOTS.map((index) => (
                   <ResultSkeleton key={index} className="opacity-95" />
@@ -262,7 +311,7 @@ function OpenLayout(props) {
           ) : (
             <div
               ref={resultsViewportRef}
-              className="rounded-[32px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.28)] backdrop-blur sm:p-6"
+              className="scroll-mt-28 rounded-[32px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.28)] backdrop-blur sm:p-6"
             >
               <ResultsSection
                 displayedResults={displayedResults}

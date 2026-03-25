@@ -30,9 +30,10 @@
 - Attempted SVG wordmark exists but user did not like it: `/src/assets/wordmark.svg`
 
 ## Loading / fallback state
-- Route fallback in `/src/App.jsx` no longer says `Loading page...`
-- It now shows the PNG wordmark plus the line `Focused shopping`
-- This is just for first-load route fallback during lazy loading
+- A true boot splash now starts from `/index.html`, so slow or throttled loads show branding before React finishes loading
+- It shows the PNG wordmark plus the line `Focused shopping`
+- It fades away only after the app is ready and the splash has been visible for about 1 second total
+- The boot splash now includes a static header shell to keep the hero closer to the real homepage position during handoff
 
 ## Search/result behavior
 - Shortlist count is now 6 end-to-end, not 4
@@ -47,10 +48,14 @@
 - Guided `/api/search/finalize` now rejects oversized or malformed payloads before AI selection and caps candidate pool size at 20
 - `/api/search/debug` should be read as guided-primary debug output, with `/api/search/live` treated as the manual combined route
 - `/api/health/supabase` now reports local fallback as a supported state when Supabase is not configured
+- Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`
+- Guided `/api/search/finalize` and `/api/search/live` remain intentionally uncached
 - Open layout behavior:
   - centered hero
   - search input first
   - refinement area expands after submit
+  - scroll transitions between refinement and results should move once without overshooting
+  - pressing `Show focused picks` now scrolls to the results region immediately and shows skeletons while final AI selection runs
   - no chips
   - `Show products now` stays disabled until discovery is ready
   - skeletons show in a 2x3 layout and only peek into view

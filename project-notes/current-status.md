@@ -13,10 +13,14 @@
   - uses the PNG wordmark in the hero
   - removes chips
   - expands into the AI refinement area after search
+  - scrolls more directly between search, refinement, and results states
+  - scrolls to results immediately when final AI picks are requested and shows skeletons during finalization
   - keeps skeletons visible but lower-priority
   - shows products in a 2x3 skeleton layout
 - Product shortlists are now 6 items end to end, not 4.
-- The route fallback in `src/App.jsx` now shows a branded loading state with the PNG wordmark and `Focused shopping` instead of `Loading page...`.
+- A true boot splash now starts in `index.html` so throttled/slow loads show branding before React finishes loading.
+- The splash still shows the PNG wordmark plus `Focused shopping`, and it now fades only after the app is ready and the splash has been visible for about 1 second total.
+- That boot splash now includes a static header shell so the hero aligns more closely with the real homepage during the fade.
 - The site header uses a sharper small-size logo asset, and logo/favicon colors were adjusted to better match the current wordmark palette.
 
 ## Search and backend state
@@ -35,6 +39,7 @@
 - Guided discovery cache is now the only persistent search cache scope used by the product/backend flow.
 - Guided `/api/search/finalize` reranks the submitted candidate pool and does not reuse cached final result sets.
 - Search cache and operational search-history logging can use Supabase when configured.
+- Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`.
 - Local file-based cache remains as a development/fallback path.
 - Basic IP-based rate limiting exists on the search handlers.
 - The Vercel API wrappers now forward request headers into the backend handlers so production rate limiting can use forwarded client IP headers.
@@ -84,4 +89,4 @@
 - This project is being worked in PowerShell on Windows.
 
 ## Recommended next task
-- Continue polishing the default `open` homepage, then verify the current deployed search/cache flow end to end and keep tightening result quality, cache behavior, and abuse protection based on real tester feedback.
+- Continue polishing the default `open` homepage, then keep tightening result quality, cache behavior, and abuse protection based on real tester feedback from the current deployed flow.

@@ -9,8 +9,315 @@
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Focama</title>
+    <style>
+      :root {
+        color: rgb(20 34 43);
+        background:
+          radial-gradient(circle at top left, rgba(29, 121, 126, 0.12), transparent 28%),
+          radial-gradient(circle at top right, rgba(222, 126, 74, 0.16), transparent 25%),
+          linear-gradient(180deg, rgba(252, 249, 243, 0.98), rgba(244, 238, 229, 1));
+        font-family: Georgia, "Times New Roman", serif;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: transparent;
+      }
+
+      #root {
+        min-height: 100vh;
+      }
+
+      #app-boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background:
+          radial-gradient(circle at top left, rgba(29, 121, 126, 0.12), transparent 28%),
+          radial-gradient(circle at top right, rgba(222, 126, 74, 0.16), transparent 25%),
+          linear-gradient(180deg, rgba(252, 249, 243, 0.98), rgba(244, 238, 229, 1));
+        opacity: 1;
+        visibility: visible;
+        transition:
+          opacity 340ms ease,
+          visibility 340ms ease;
+      }
+
+      #app-boot-splash.is-hidden {
+        opacity: 0;
+        visibility: hidden;
+      }
+
+      .boot-shell {
+        min-height: 100vh;
+      }
+
+      .boot-header {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+        background: rgba(252, 249, 243, 0.88);
+        backdrop-filter: blur(12px);
+      }
+
+      .boot-header-inner {
+        margin: 0 auto;
+        display: flex;
+        width: 100%;
+        max-width: 80rem;
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+      }
+
+      .boot-brand-row {
+        display: flex;
+        width: 100%;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .boot-brand-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+
+      .boot-brand-link {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: rgb(15 23 42);
+        text-decoration: none;
+      }
+
+      .boot-header-logo {
+        width: 4rem;
+        height: 4rem;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.35);
+        object-fit: contain;
+        padding: 0.125rem;
+        box-shadow: 0 8px 24px -18px rgba(15, 23, 42, 0.28);
+        outline: 1px solid rgba(231, 229, 228, 0.35);
+      }
+
+      .boot-brand-name {
+        font-size: 1.125rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+      }
+
+      .boot-brand-tagline {
+        font-size: 0.875rem;
+        color: rgb(100 116 139);
+      }
+
+      .boot-mobile-button {
+        margin-top: 0.25rem;
+        display: inline-flex;
+        width: 2.75rem;
+        height: 2.75rem;
+        flex-shrink: 0;
+        border-radius: 9999px;
+        border: 1px solid rgba(255, 255, 255, 0.8);
+        background: rgba(255, 255, 255, 0.8);
+        box-shadow: 0 12px 30px -18px rgba(15, 23, 42, 0.35);
+      }
+
+      .boot-nav {
+        display: none;
+      }
+
+      .boot-nav-track {
+        position: relative;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .boot-nav-pill {
+        position: relative;
+        z-index: 1;
+        border-radius: 9999px;
+        border: 1px solid transparent;
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        color: rgb(71 85 105);
+      }
+
+      .boot-nav-pill.is-active {
+        border-color: rgb(24 101 121);
+        background: rgb(24 101 121);
+        color: rgb(252 249 243);
+        box-shadow: 0 12px 30px -18px rgba(15, 23, 42, 0.55);
+      }
+
+      .boot-main {
+        padding: 0.5rem 0.75rem 1.5rem;
+      }
+
+      .boot-container {
+        margin: 0 auto;
+        display: flex;
+        max-width: 56rem;
+        flex-direction: column;
+        align-items: center;
+        gap: 2rem;
+      }
+
+      .boot-hero {
+        width: 100%;
+        max-width: 56rem;
+        text-align: center;
+      }
+
+      .boot-wordmark {
+        display: block;
+        width: 100%;
+        max-width: 240px;
+        height: auto;
+        margin: 0 auto;
+      }
+
+      .boot-title {
+        margin: 0.75rem 0 0;
+        min-height: 2rem;
+        font-size: 1.5rem;
+        font-weight: 500;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+      }
+
+      .boot-input-shell {
+        width: 100%;
+        max-width: 48rem;
+        border: 1px solid rgba(255, 255, 255, 0.7);
+        border-radius: 36px;
+        background: rgba(255, 255, 255, 0.72);
+        padding: 1rem;
+        box-shadow: 0 30px 120px -60px rgba(15, 23, 42, 0.28);
+        backdrop-filter: blur(16px);
+      }
+
+      .boot-input-placeholder {
+        height: 4rem;
+        border: 1px solid rgba(214, 211, 209, 1);
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.9);
+      }
+
+      @media (min-width: 640px) {
+        .boot-header-inner {
+          padding-left: 1.5rem;
+          padding-right: 1.5rem;
+        }
+
+        .boot-mobile-button {
+          display: none;
+        }
+
+        .boot-nav {
+          display: block;
+        }
+
+        .boot-main {
+          padding: 2rem 1.5rem;
+        }
+
+        .boot-header-logo {
+          width: 5rem;
+          height: 5rem;
+        }
+
+        .boot-brand-name {
+          font-size: 1.25rem;
+        }
+
+        .boot-wordmark {
+          max-width: 340px;
+        }
+
+        .boot-title {
+          min-height: 3rem;
+          font-size: 2.25rem;
+        }
+
+        .boot-input-shell {
+          padding: 1.25rem;
+        }
+      }
+
+      @media (min-width: 1024px) {
+        .boot-header-inner {
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+          padding-left: 2rem;
+          padding-right: 2rem;
+        }
+
+        .boot-brand-row {
+          width: auto;
+        }
+
+        .boot-main {
+          padding-left: 2rem;
+          padding-right: 2rem;
+        }
+
+        .boot-wordmark {
+          max-width: 420px;
+        }
+      }
+    </style>
+    <script>
+      window.__focamaSplashStartedAt = performance.now()
+    </script>
   </head>
   <body>
+    <div id="app-boot-splash" aria-hidden="true">
+      <main class="boot-shell">
+        <header class="boot-header">
+          <div class="boot-header-inner">
+            <div class="boot-brand-row">
+              <div class="boot-brand-copy">
+                <a class="boot-brand-link" href="/" tabindex="-1" aria-hidden="true">
+                  <img class="boot-header-logo" src="./src/assets/logo_header_mark.svg" alt="" />
+                  <span class="boot-brand-name">FOCAMA</span>
+                </a>
+                <div class="boot-brand-tagline">Calm buying guidance before the marketplace.</div>
+              </div>
+              <div class="boot-mobile-button" aria-hidden="true"></div>
+            </div>
+            <div class="boot-nav" aria-hidden="true">
+              <div class="boot-nav-track">
+                <span class="boot-nav-pill is-active">Home</span>
+                <span class="boot-nav-pill">About</span>
+                <span class="boot-nav-pill">Contact</span>
+                <span class="boot-nav-pill">Privacy</span>
+                <span class="boot-nav-pill">Disclosure</span>
+              </div>
+            </div>
+          </div>
+        </header>
+        <div class="boot-main">
+          <div class="boot-container">
+            <section class="boot-hero">
+              <img class="boot-wordmark" src="./src/assets/wordmark.PNG" alt="Focama" />
+              <h1 class="boot-title">Focused shopping</h1>
+            </section>
+            <div class="boot-input-shell">
+              <div class="boot-input-placeholder"></div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

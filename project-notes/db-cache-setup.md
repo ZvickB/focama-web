@@ -5,6 +5,7 @@
 - If `SUPABASE_URL` and a server-side Supabase key are configured, cache and operational search-history writes use Supabase.
 - If Supabase is not configured or is temporarily unavailable, the app falls back to the existing local JSON cache in `temp-data/`.
 - This keeps local development easy while giving us a production-ready persistence path.
+- Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`.
 - Future product note: the preferred cache target is raw SerpApi results or cleaned candidate pools, not AI-context-specific final result sets.
 - Future product note: detailed user context should usually remain a fresh AI-ranking input rather than the main cache identity.
 - Current product choice: guided discovery is the only persistent cache path; `/api/search/live` remains uncached manual/debug execution.
@@ -86,5 +87,5 @@ create index if not exists search_history_cache_key_idx
 - The removed bare `/api/search` route should stay removed so the guided flow and `/api/search/live` are the only public search entry points.
 
 ## Recommended next step
-- After the Supabase project is created and these tables exist, add the two Supabase env vars to Vercel and local `.env`.
+- Keep monitoring cache hit/miss behavior and Supabase table health in production while guided discovery remains the only persistent cache scope.
 - If a user-facing saved-history feature is ever added, create a separate product-oriented history table and API instead of reading directly from `search_history`.

@@ -20,10 +20,14 @@
 ## Current homepage behavior
 - The homepage is the main product experience.
 - The user lands on a spacious search-first screen with the wordmark, a central input, and minimal copy.
+- On first load, a true HTML boot splash now shows `Focused shopping` immediately before React loads, then fades away once the app is ready and the splash has been visible for about 1 second total.
 - After the user submits a product query:
   - the same area expands into the AI refinement state
   - the results area begins shimmering below
   - the refinement step stays visually higher-priority than the skeletons
+  - the page should scroll cleanly to the refinement area once, without bouncing past it
+- When preview or final results are revealed from the guided flow, the page should scroll down to that results region without needing a manual swipe.
+- When the user presses `Show focused picks`, the page should immediately scroll to the results region and swap into loading skeletons while final AI selection is in progress.
 - The homepage now uses a guided search flow:
   - discovery starts through `/api/search/discover`
   - the follow-up prompt comes from `/api/search/refine`
@@ -49,6 +53,7 @@
 - Search cache plus operational search-history logging now exists through the storage layer, with Supabase preferred and local fallback for development.
 - `search_history` is currently an internal operational record for cache/debug visibility, not a user-facing saved-history product feature.
 - Guided discovery is the reusable persistent cache layer; `/api/search/live` and guided finalization stay request-specific.
+- The production deployment at `focama.vercel.app` is now successfully using Supabase-backed guided discovery caching.
 - Guided finalization is now explicitly guarded:
   - request bodies larger than 32 KB are rejected
   - candidate pools are capped at 20 candidates
@@ -95,7 +100,7 @@
   - any user-facing saved-history feature built on a dedicated product data model
 
 ## Next likely implementation steps
-- Verify the Vercel deployment using the current cache/storage flow.
+- Keep watching the Vercel deployment using the current cache/storage flow.
 - Keep tightening weak-result handling and AI judgment quality.
 - Decide how affiliate-ready outbound retailer links and disclosures should work in the modal and cards.
 - Refine the default open homepage based on tester feedback.
