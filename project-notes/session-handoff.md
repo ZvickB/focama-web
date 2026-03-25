@@ -54,6 +54,11 @@
   - centered hero
   - search input first
   - refinement area expands after submit
+  - `Start a new search` resets the homepage back to a clean blank search state
+  - final results now include a `Didn't find anything you like? Tell us why.` retry path
+  - retrying requires feedback and is capped at 2 follow-up retries
+  - retrying excludes the previously rejected shortlist from reselection
+  - earlier rejected shortlists collapse into a `Previous picks` section after a retry
   - scroll transitions between refinement and results should move once without overshooting
   - pressing `Show focused picks` now scrolls to the results region immediately and shows skeletons while final AI selection runs
   - no chips

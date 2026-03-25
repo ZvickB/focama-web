@@ -47,6 +47,37 @@ describe('search-data helpers', () => {
     })
   })
 
+  it('strips technical live-route copy from normalized descriptions and reasons', () => {
+    const result = normalizeResult(
+      {
+        title: 'Thermos Stainless King Vacuum-Insulated Drink Bottle',
+        source: 'Amazon',
+        extracted_price: 34.99,
+        rating: '4.7',
+        reviews: '1200',
+        snippet: 'Live product result returned for "Thermos Stainless King Vacuum-Insulated Drink Bottle".',
+        delivery: 'Returned by the live SerpApi search route',
+        thumbnail: 'https://example.com/thermos.jpg',
+        product_link: 'https://example.com/thermos',
+      },
+      0,
+      'Fallback reason',
+    )
+
+    expect(result).toEqual({
+      id: 'Thermos Stainless King Vacuum-Insulated Drink Bottle-0',
+      title: 'Thermos Stainless King Vacuum-Insulated Drink Bottle',
+      subtitle: 'Amazon',
+      price: '$34.99',
+      rating: 4.7,
+      reviewCount: 1200,
+      description: 'A shopping option we found for "Thermos Stainless King Vacuum-Insulated Drink Bottle".',
+      reasons: ['Available from Amazon', 'Listed around $34.99'],
+      image: 'https://example.com/thermos.jpg',
+      link: 'https://example.com/thermos',
+    })
+  })
+
   it('filters invalid shopping results and respects the limit', () => {
     const results = getNormalizedResults(
       {

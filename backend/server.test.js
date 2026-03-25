@@ -998,6 +998,102 @@ describe('server handlers', () => {
     expect(selectAiResults.mock.calls[0][0].candidatePool.details.endsWith('n'.repeat(500))).toBe(true)
   })
 
+  it('passes retry feedback into finalize selection details and returns the retry count', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    selectAiResults.mockResolvedValue({
+      model: 'gpt-5-mini',
+      selectedCandidateIds: ['one'],
+      results: [{ id: 'one', title: 'Candidate one', reasons: [], drawbacks: [] }],
+    })
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          candidatePool: {
+            query: 'stroller',
+            details: '',
+            combinedSearchText: 'stroller',
+            searchState: 'Results for exact spelling',
+            similarQueries: ['compact stroller'],
+            candidates: [createFinalizeCandidate('one'), createFinalizeCandidate('two')],
+          },
+          followUpNotes: 'keep it lightweight',
+          rejectionFeedback: 'These picks still feel too bulky for city travel.',
+          excludedCandidateIds: ['one'],
+          retryCount: 1,
+        }),
+        { 'x-forwarded-for': '203.0.113.27' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(selectAiResults).toHaveBeenCalledTimes(1)
+    expect(selectAiResults.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        candidatePool: expect.objectContaining({
+          details:
+            'Notes: keep it lightweight. Retry feedback: These picks still feel too bulky for city travel.. Excluded previous picks: one',
+          candidates: [expect.objectContaining({ id: 'two' })],
+        }),
+        finalResultLimit: 6,
+        apiKey: 'openai-key',
+        model: expect.any(String),
+      }),
+    )
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        retryCount: 1,
+      }),
+    )
+  })
+
+  it('returns an honest empty retry response when all previous picks are excluded', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          candidatePool: {
+            query: 'stroller',
+            details: '',
+            candidates: [createFinalizeCandidate('one')],
+          },
+          rejectionFeedback: 'Not right for city travel',
+          excludedCandidateIds: ['one'],
+          retryCount: 1,
+        }),
+        { 'x-forwarded-for': '203.0.113.28' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(selectAiResults).not.toHaveBeenCalled()
+    expect(JSON.parse(response.body)).toEqual({
+      candidatePool: {
+        query: 'stroller',
+        details: 'Retry feedback: Not right for city travel. Excluded previous picks: one',
+        combinedSearchText: '',
+        searchState: '',
+        similarQueries: [],
+        candidates: [],
+      },
+      retryCount: 1,
+      results: [],
+      selection: {
+        mode: 'retry_exhausted',
+        model: null,
+        selectedCandidateIds: [],
+        details: 'No new candidates remained after excluding the previously rejected picks.',
+      },
+    })
+  })
+
   it('rate limits repeated finalize requests from the same ip address', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
     selectAiResults.mockResolvedValue({

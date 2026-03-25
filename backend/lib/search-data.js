@@ -67,6 +67,20 @@ function createFallbackImage(title) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
+function isTechnicalShoppingCopy(value) {
+  return /live product result returned|returned by the live serpapi search route/i.test(value)
+}
+
+function cleanUserFacingText(value) {
+  const normalized = typeof value === 'string' ? value.trim() : ''
+
+  if (!normalized || isTechnicalShoppingCopy(normalized)) {
+    return ''
+  }
+
+  return normalized
+}
+
 export function normalizeResult(item, index, _reasonFallback) {
   void _reasonFallback
   const title = item.title?.trim()
@@ -80,13 +94,13 @@ export function normalizeResult(item, index, _reasonFallback) {
   const source = item.source?.trim() || item.store?.trim() || 'Marketplace result'
   const image = item.thumbnail || item.thumbnail_hd || item.serpapi_thumbnail || createFallbackImage(title)
   const description =
-    item.snippet?.trim() ||
-    item.extensions?.filter(Boolean).join(' - ') ||
+    cleanUserFacingText(item.snippet) ||
+    cleanUserFacingText(item.extensions?.filter(Boolean).join(' - ')) ||
     `A shopping option we found for "${title}".`
 
   const reasons = [
     `Available from ${source}`,
-    item.delivery || item.second_hand_condition || '',
+    cleanUserFacingText(item.delivery) || cleanUserFacingText(item.second_hand_condition) || '',
     item.extracted_price ? `Listed around $${item.extracted_price}` : 'Price details were limited in the raw result',
   ].filter(Boolean)
 

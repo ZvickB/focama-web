@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import {
   ArrowUpRight,
+  ChevronDown,
   Clock3,
   Sparkles,
   Star,
@@ -8,11 +9,13 @@ import {
 } from 'lucide-react'
 
 import ProductCard from '@/components/ProductCard.jsx'
+import { MAX_REFINEMENT_RETRIES, RESULT_CARD_SLOTS } from '@/components/home/useGuidedSearch.js'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import logo from '@/assets/logo_master_version.svg'
-import { RESULT_CARD_SLOTS } from '@/components/home/useGuidedSearch.js'
+import { Label } from '@/components/ui/label.jsx'
+import { Textarea } from '@/components/ui/textarea.jsx'
 
 const BADGE_DISPLAY_PRIORITY = new Map([
   ['Best match', 0],
@@ -27,6 +30,18 @@ const BADGE_DISPLAY_PRIORITY = new Map([
   ['Best all-rounder', 1],
 ])
 
+function handleRetryFeedbackKeyDown(event, { canSubmit, onSubmit }) {
+  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) {
+    return
+  }
+
+  event.preventDefault()
+
+  if (canSubmit) {
+    onSubmit()
+  }
+}
+
 function getUserFacingReasons(reasons = []) {
   return reasons.filter((reason) => {
     const normalizedReason = String(reason || '').trim()
@@ -35,8 +50,22 @@ function getUserFacingReasons(reasons = []) {
       return false
     }
 
-    return !/serpapi search route/i.test(normalizedReason)
+    return !/serpapi search route|live product result returned/i.test(normalizedReason)
   })
+}
+
+function getUserFacingDescription(description) {
+  const normalizedDescription = String(description || '').trim()
+
+  if (!normalizedDescription) {
+    return ''
+  }
+
+  if (/serpapi search route|live product result returned/i.test(normalizedDescription)) {
+    return ''
+  }
+
+  return normalizedDescription
 }
 
 function SkeletonBlock({ className }) {
@@ -102,6 +131,7 @@ export function ProductDetailModal({ item, onClose }) {
   }
 
   const userFacingReasons = getUserFacingReasons(item.reasons)
+  const userFacingDescription = getUserFacingDescription(item.description)
 
   return (
     <div
@@ -173,7 +203,9 @@ export function ProductDetailModal({ item, onClose }) {
                   {item.badgeReason}
                 </p>
               ) : null}
-              <p className="text-base leading-7 text-slate-600">{item.description}</p>
+              {userFacingDescription ? (
+                <p className="text-base leading-7 text-slate-600">{userFacingDescription}</p>
+              ) : null}
             </div>
 
             <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
@@ -253,7 +285,15 @@ export function ResultsSection({
   hasFinalResults,
   hasStartedSearch,
   isLoading,
+  isRetryReady,
+  isRetrying,
   onSelectProduct,
+  onRetryFeedbackChange,
+  onRetryWithFeedback,
+  previousResults = [],
+  selectionState,
+  retryCount,
+  retryFeedback,
   showPreviewResults,
   submittedQuery,
 }) {
@@ -274,6 +314,20 @@ export function ResultsSection({
   const hasExplicitBadges = displayedResults.some((item) => item.badgeLabel)
   const hasDisplayedResults = orderedResults.length > 0
   const shouldShowResultsIntro = !hasDisplayedResults || hasFinalResults
+  const orderedPreviousResults = previousResults
+    .map((item, index) => ({
+      item,
+      index,
+      priority: BADGE_DISPLAY_PRIORITY.get(item.badgeLabel || '') ?? 2,
+    }))
+    .sort((left, right) => {
+      if (left.priority !== right.priority) {
+        return left.priority - right.priority
+      }
+
+      return left.index - right.index
+    })
+    .map((entry) => entry.item)
 
   return (
     <section className="space-y-5">
@@ -338,11 +392,11 @@ export function ResultsSection({
               <Sparkles className="h-4 w-4 text-primary" />
             </div>
             <p className="text-lg font-medium text-slate-900">
-              We&apos;re gathering options while you refine what matters.
+              Your shortlist is taking shape.
             </p>
             <p className="text-sm leading-6 text-slate-600 sm:text-base">
-              The six product cards will settle here as soon as you refine the shortlist or choose
-              to skip ahead.
+              Add a little context for a more focused set of picks, or skip ahead to see products
+              now.
             </p>
           </div>
         </div>
@@ -368,6 +422,92 @@ export function ResultsSection({
             ))}
           </div>
         </div>
+      ) : null}
+
+      {orderedPreviousResults.length > 0 ? (
+        <details className="group rounded-[28px] border border-stone-200/80 bg-stone-50/70 px-5 py-4">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-slate-900">Previous picks</p>
+              <p className="text-sm leading-6 text-slate-600">
+                These were the picks you rejected before the latest retry.
+              </p>
+            </div>
+            <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-180" />
+          </summary>
+          <div className="mt-4 grid max-w-6xl grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 sm:gap-5">
+            {orderedPreviousResults.map((item) => (
+              <div key={`previous-${item.id}`}>
+                <ProductCard {...item} onSelect={() => onSelectProduct(item)} />
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+
+      {selectionState?.mode === 'retry_exhausted' ? (
+        <div className="rounded-[28px] border border-dashed border-stone-200 bg-stone-50/70 px-6 py-8 text-center sm:px-8">
+          <div className="mx-auto max-w-xl space-y-3">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
+              <Clock3 className="h-4 w-4 text-slate-500" />
+            </div>
+            <p className="text-lg font-medium text-slate-900">No new picks were left after that feedback.</p>
+            <p className="text-sm leading-6 text-slate-600 sm:text-base">
+              The earlier shortlist is still available above, or you can start a new search with a
+              different direction.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {hasFinalResults ? (
+        <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
+          <CardHeader className="space-y-2 pb-3">
+            <CardTitle className="text-lg text-slate-900">
+              Didn&apos;t find anything you like? Tell us why.
+            </CardTitle>
+            <p className="text-sm leading-6 text-slate-600">
+              We&apos;ll use your feedback for a more deliberate second pass instead of showing endless
+              extra results.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="results-retry-feedback" className="text-slate-700">
+                What felt off about these picks?
+              </Label>
+              <Textarea
+                id="results-retry-feedback"
+                value={retryFeedback}
+                onChange={(event) => onRetryFeedbackChange(event.target.value)}
+                onKeyDown={(event) =>
+                  handleRetryFeedbackKeyDown(event, {
+                    canSubmit: isRetryReady && !isRetrying && Boolean(retryFeedback.trim()),
+                    onSubmit: onRetryWithFeedback,
+                  })
+                }
+                disabled={!isRetryReady || isRetrying}
+                className="min-h-28 resize-none rounded-[24px] border-stone-200 bg-[#fffdf9] px-4 py-3 text-sm leading-6 placeholder:text-slate-400"
+                placeholder="Examples: too expensive, too bulky, wrong style, not for the right use case, or not premium enough."
+              />
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs leading-5 text-slate-500">
+                {retryCount >= MAX_REFINEMENT_RETRIES
+                  ? 'You can start a new search if this needs a different direction.'
+                  : `Retry ${retryCount + 1} of ${MAX_REFINEMENT_RETRIES}. Each retry needs a reason, so this stays focused.`}
+              </p>
+              <Button
+                type="button"
+                disabled={!isRetryReady || isRetrying || !retryFeedback.trim()}
+                className="h-11 rounded-2xl bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90"
+                onClick={onRetryWithFeedback}
+              >
+                {isRetrying ? 'Refreshing your picks...' : 'Try again with this feedback'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       ) : null}
 
       {!hasStartedSearch && !errorMessage ? (
@@ -418,10 +558,9 @@ export function ResultsSection({
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
               <Clock3 className="h-4 w-4 text-slate-500" />
             </div>
-            <p className="text-lg font-medium text-slate-900">No shortlist is ready yet.</p>
+            <p className="text-lg font-medium text-slate-900">We couldn&apos;t build a strong shortlist yet.</p>
             <p className="text-sm leading-6 text-slate-600 sm:text-base">
-              Try a more specific product search or add a little more context so Focama can narrow
-              the strongest options.
+              Try a more specific search or add more context so Focama can narrow the best options.
             </p>
           </div>
         </div>

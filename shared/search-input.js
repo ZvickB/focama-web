@@ -31,7 +31,7 @@ export function validateSearchInput(productQuery, details = '') {
   if (!normalizedQuery) {
     return {
       isValid: false,
-      error: 'Please enter a product topic first.',
+      error: 'Enter a product topic to get started.',
       normalizedQuery,
       normalizedDetails,
     }

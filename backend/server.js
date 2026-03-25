@@ -33,8 +33,10 @@ const FINALIZE_SELECTION_RATE_LIMIT = {
 const FINALIZE_BODY_LIMIT_BYTES = 32 * 1024
 const FINALIZE_MAX_CANDIDATES = LIVE_RESULT_FILTER_CONFIG.candidatePoolSize
 const FINALIZE_MAX_NOTE_LENGTH = 500
+const FINALIZE_MAX_REJECTION_FEEDBACK_LENGTH = 300
 const FINALIZE_MAX_PRIORITIES = 8
 const FINALIZE_MAX_PRIORITY_LENGTH = 80
+const FINALIZE_MAX_RETRY_COUNT = 2
 const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
 const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 
@@ -114,6 +116,13 @@ function sanitizeStringList(values, { maxItems, maxItemLength }) {
     .map((value) => truncateText(value, maxItemLength))
     .filter(Boolean)
     .slice(0, maxItems)
+}
+
+function sanitizeExcludedCandidateIds(values) {
+  return sanitizeStringList(values, {
+    maxItems: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
+    maxItemLength: 200,
+  })
 }
 
 function sanitizeFinalizeCandidate(candidate, index) {
@@ -668,6 +677,14 @@ export async function handleFinalizeSelection(request, response) {
     maxItemLength: FINALIZE_MAX_PRIORITY_LENGTH,
   })
   const followUpNotes = truncateText(body?.followUpNotes, FINALIZE_MAX_NOTE_LENGTH)
+  const rejectionFeedback = truncateText(
+    body?.rejectionFeedback,
+    FINALIZE_MAX_REJECTION_FEEDBACK_LENGTH,
+  )
+  const excludedCandidateIds = sanitizeExcludedCandidateIds(body?.excludedCandidateIds)
+  const retryCount = Number.isFinite(Number(body?.retryCount))
+    ? Math.max(0, Math.min(FINALIZE_MAX_RETRY_COUNT, Number(body.retryCount)))
+    : 0
   const detailParts = []
 
   if (priorities.length > 0) {
@@ -678,11 +695,40 @@ export async function handleFinalizeSelection(request, response) {
     detailParts.push(`Notes: ${followUpNotes}`)
   }
 
+  if (rejectionFeedback) {
+    detailParts.push(`Retry feedback: ${rejectionFeedback}`)
+  }
+
+  if (excludedCandidateIds.length > 0) {
+    detailParts.push(`Excluded previous picks: ${excludedCandidateIds.join(', ')}`)
+  }
+
   const refinedDetails = detailParts.join('. ')
+  const exclusionSet = new Set(excludedCandidateIds.map((value) => String(value)))
+  const eligibleCandidates =
+    exclusionSet.size > 0
+      ? candidatePool.candidates.filter((candidate) => !exclusionSet.has(String(candidate.id)))
+      : candidatePool.candidates
 
   const nextCandidatePool = {
     ...candidatePool,
     details: refinedDetails,
+    candidates: eligibleCandidates,
+  }
+
+  if (retryCount > 0 && nextCandidatePool.candidates.length === 0) {
+    sendJson(response, 200, {
+      candidatePool: nextCandidatePool,
+      retryCount,
+      results: [],
+      selection: {
+        mode: 'retry_exhausted',
+        model: null,
+        selectedCandidateIds: [],
+        details: 'No new candidates remained after excluding the previously rejected picks.',
+      },
+    })
+    return
   }
 
   try {
@@ -693,7 +739,7 @@ export async function handleFinalizeSelection(request, response) {
       model: getEnv('OPENAI_MODEL') || DEFAULT_OPENAI_MODEL,
     })
 
-    const fallbackResults = candidatePool.candidates
+    const fallbackResults = nextCandidatePool.candidates
       .slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit)
       .map((candidate, index) => ({
         id: candidate.id,
@@ -714,6 +760,7 @@ export async function handleFinalizeSelection(request, response) {
 
     sendJson(response, 200, {
       candidatePool: nextCandidatePool,
+      retryCount,
       results,
       selection: {
         mode: aiSelection.results.length > 0 ? 'ai' : 'rules_fallback',

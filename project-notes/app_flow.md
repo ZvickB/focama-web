@@ -28,6 +28,12 @@
   - the page should scroll cleanly to the refinement area once, without bouncing past it
 - When preview or final results are revealed from the guided flow, the page should scroll down to that results region without needing a manual swipe.
 - When the user presses `Show focused picks`, the page should immediately scroll to the results region and swap into loading skeletons while final AI selection is in progress.
+- Once a search has started, the homepage now includes a `Start a new search` action that resets the guided state back to a clean blank search.
+- After final results appear, the homepage now offers a feedback-based retry path through `Didn't find anything you like? Tell us why.`
+- Retry passes reuse the existing candidate pool through `/api/search/finalize` and require feedback before another shortlist is generated.
+- The retry path is intentionally capped at 2 follow-up retries so the product stays guided instead of becoming endless browsing.
+- On retry, the previously rejected shortlist is excluded from AI reselection rather than merely down-ranked.
+- After a retry succeeds, the earlier shortlist moves into a collapsed `Previous picks` section so the newest shortlist stays primary.
 - The homepage now uses a guided search flow:
   - discovery starts through `/api/search/discover`
   - the follow-up prompt comes from `/api/search/refine`

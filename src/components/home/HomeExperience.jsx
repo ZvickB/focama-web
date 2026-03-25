@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button.jsx'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
 
+const HERO_SUBLINE = 'From too many choices to yours'
+
 function handleRefinementTextareaKeyDown(event, { canSubmit, onSubmit }) {
   if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) {
     return
@@ -31,6 +33,11 @@ function smoothScrollIntoView(element) {
   })
 }
 
+function handleNewSearchClick(event, resetToNewSearch) {
+  event.preventDefault()
+  resetToNewSearch()
+}
+
 function OpenLayout(props) {
   const refinementRef = useRef(null)
   const resultsViewportRef = useRef(null)
@@ -49,6 +56,7 @@ function OpenLayout(props) {
     onSelectProduct,
     onShowProductsNow,
     prompt,
+    resetToNewSearch,
     setFollowUpNotes,
     setProductQuery,
     showPreviewResults,
@@ -183,6 +191,14 @@ function OpenLayout(props) {
               >
                 What are you looking for today?
               </h2>
+              <p
+                className={`mx-auto max-w-xl text-[13px] italic font-medium tracking-[0.01em] text-slate-500 transition-opacity duration-300 sm:text-[15px] ${
+                  showHeroCopy ? 'opacity-100' : 'opacity-0'
+                }`}
+                style={{ fontFamily: '"Manrope", sans-serif' }}
+              >
+                {HERO_SUBLINE}
+              </p>
             </div>
           </div>
 
@@ -211,11 +227,24 @@ function OpenLayout(props) {
                   />
                 </div>
                 <Button
-                  type="submit"
+                  type={hasStartedSearch ? 'button' : 'submit'}
                   disabled={isLoading}
-                  className="h-16 rounded-[28px] bg-primary px-6 text-base text-primary-foreground hover:bg-primary/90"
+                  className={`h-16 rounded-[28px] px-6 text-base text-primary-foreground ${
+                    hasStartedSearch
+                      ? 'bg-primary/70 hover:bg-primary/80'
+                      : 'bg-primary hover:bg-primary/90'
+                  }`}
+                  onClick={
+                    hasStartedSearch
+                      ? (event) => handleNewSearchClick(event, resetToNewSearch)
+                      : undefined
+                  }
                 >
-                  {isLoading ? 'Starting your search...' : 'Start search'}
+                  {isLoading
+                    ? 'Starting your search...'
+                    : hasStartedSearch
+                      ? 'New search'
+                      : 'Start search'}
                   {isLoading ? (
                     <LoaderCircle className="ml-2 h-4 w-4 animate-spin" />
                   ) : (
@@ -232,11 +261,15 @@ function OpenLayout(props) {
                       AI refinement
                     </div>
                     <p className="text-xl font-medium leading-8 text-slate-900">
-                      {prompt?.prompt || `What should we optimize for with this ${submittedQuery}?`}
+                      {state.isGeneratingPrompt
+                        ? 'Shaping your next question...'
+                        : prompt?.prompt || `What should we optimize for with this ${submittedQuery}?`}
                     </p>
                     <p className="max-w-2xl text-sm leading-7 text-slate-600">
-                      {prompt?.helperText ||
-                        'Add any context that will help Focama narrow the shortlist more intelligently.'}
+                      {state.isGeneratingPrompt
+                        ? 'We’re preparing a more useful follow-up before you refine the shortlist.'
+                        : prompt?.helperText ||
+                          'Add any context that will help Focama narrow the shortlist more intelligently.'}
                     </p>
                   </div>
 
@@ -256,18 +289,26 @@ function OpenLayout(props) {
                       }
                       className="min-h-36 resize-none rounded-[28px] border-stone-200 bg-[#fffdf9] px-5 py-4 text-base leading-7 placeholder:text-slate-400"
                       placeholder={
-                        prompt?.followUpPlaceholder ||
-                        'Examples: for a 6 year old, under $200, small apartment, should feel premium, or easy to clean.'
+                        state.isGeneratingPrompt
+                          ? 'Shaping your next question...'
+                          : prompt?.followUpPlaceholder ||
+                            'Examples: for a 6 year old, under $200, small apartment, should feel premium, or easy to clean.'
                       }
-                      disabled={state.isFinalizing}
+                      disabled={state.isFinalizing || state.isGeneratingPrompt}
                     />
+                    {state.isGeneratingPrompt ? (
+                      <div className="relative overflow-hidden rounded-full bg-stone-200/80">
+                        <div className="h-2.5 w-full" />
+                        <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" />
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-end">
                     <Button
                       type="button"
                       disabled={!hasDiscoveryResults || state.isFinalizing}
-                      className="h-13 rounded-[24px] bg-primary px-5 text-base text-primary-foreground hover:bg-primary/90"
+                      className="h-13 w-full rounded-[24px] bg-primary px-5 text-base text-primary-foreground hover:bg-primary/90 sm:w-auto"
                       onClick={onFinalize}
                     >
                       {state.isFinalizing ? 'Applying your priorities...' : 'Show focused picks'}
@@ -281,7 +322,7 @@ function OpenLayout(props) {
                       <Button
                         type="button"
                         disabled={!hasDiscoveryResults || state.isFinalizing}
-                        className={`h-13 rounded-[24px] px-5 text-base transition ${
+                        className={`h-13 w-full rounded-[24px] px-5 text-base transition sm:w-auto ${
                           hasDiscoveryResults && !state.isFinalizing
                             ? 'bg-accent/70 text-accent-foreground hover:bg-accent/80'
                             : 'bg-stone-200 text-slate-500 hover:bg-stone-200'
@@ -319,7 +360,15 @@ function OpenLayout(props) {
                 hasFinalResults={hasFinalResults}
                 hasStartedSearch={hasStartedSearch}
                 isLoading={isLoading}
+                isRetryReady={state.retryCount < 2}
+                isRetrying={state.isFinalizing}
                 onSelectProduct={onSelectProduct}
+                onRetryFeedbackChange={state.setRetryFeedback}
+                onRetryWithFeedback={state.handleRetryWithFeedback}
+                previousResults={state.previousResults}
+                selectionState={state.selectionState}
+                retryCount={state.retryCount}
+                retryFeedback={state.retryFeedback}
                 showPreviewResults={showPreviewResults}
                 submittedQuery={submittedQuery}
               />
@@ -344,6 +393,11 @@ export function HomeExperience() {
     onSelectProduct: state.setSelectedProduct,
     onShowProductsNow: state.handleShowProductsNow,
     prompt: state.refinementPrompt,
+    previousResults: state.previousResults,
+    resetToNewSearch: state.resetToNewSearch,
+    selectionState: state.selectionState,
+    retryCount: state.retryCount,
+    retryFeedback: state.retryFeedback,
     setFollowUpNotes: state.setFollowUpNotes,
     setProductQuery: state.setProductQuery,
     showPreviewResults: state.showPreviewResults,

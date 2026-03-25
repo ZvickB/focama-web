@@ -5,6 +5,7 @@ import { validateSearchInput } from '../../../shared/search-input.js'
 
 export const RESULT_CARD_COUNT = 6
 export const RESULT_CARD_SLOTS = Array.from({ length: RESULT_CARD_COUNT }, (_, index) => index)
+export const MAX_REFINEMENT_RETRIES = 2
 
 function createFallbackRefinementPrompt(productQuery) {
   return {
@@ -46,7 +47,13 @@ async function fetchRefinementPrompt(query) {
   return readJsonResponse(response)
 }
 
-async function finalizeGuidedSearch({ candidatePool, followUpNotes }) {
+async function finalizeGuidedSearch({
+  candidatePool,
+  followUpNotes,
+  rejectionFeedback,
+  retryCount,
+  excludedCandidateIds,
+}) {
   const response = await fetch('/api/search/finalize', {
     method: 'POST',
     headers: {
@@ -55,6 +62,9 @@ async function finalizeGuidedSearch({ candidatePool, followUpNotes }) {
     body: JSON.stringify({
       candidatePool,
       followUpNotes,
+      rejectionFeedback,
+      retryCount,
+      excludedCandidateIds,
     }),
   })
 
@@ -127,8 +137,12 @@ export function useGuidedSearch() {
   const [candidatePool, setCandidatePool] = useState(null)
   const [previewResults, setPreviewResults] = useState([])
   const [results, setResults] = useState([])
+  const [previousResults, setPreviousResults] = useState([])
   const [refinementPrompt, setRefinementPrompt] = useState(null)
   const [followUpNotes, setFollowUpNotes] = useState('')
+  const [retryFeedback, setRetryFeedback] = useState('')
+  const [retryCount, setRetryCount] = useState(0)
+  const [selectionState, setSelectionState] = useState(null)
   const [showPreviewResults, setShowPreviewResults] = useState(false)
   const [isDiscovering, setIsDiscovering] = useState(false)
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false)
@@ -141,7 +155,15 @@ export function useGuidedSearch() {
     },
     onSuccess: (payload, variables) => {
       setCandidatePool(variables.originalCandidatePool || null)
+      setPreviousResults(
+        variables.retryCount > 0 && Array.isArray(variables.previousResults)
+          ? variables.previousResults
+          : [],
+      )
       setResults(mergeFinalizeResults(payload.results, variables.originalCandidatePool))
+      setRetryFeedback('')
+      setRetryCount(payload.retryCount ?? variables.retryCount ?? 0)
+      setSelectionState(payload.selection || null)
     },
     onError: (error) => {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to finalize the search.')
@@ -161,9 +183,35 @@ export function useGuidedSearch() {
     setCandidatePool(null)
     setPreviewResults([])
     setResults([])
+    setPreviousResults([])
     setFollowUpNotes('')
+    setRetryFeedback('')
+    setRetryCount(0)
+    setSelectionState(null)
     setShowPreviewResults(false)
-    setRefinementPrompt(createFallbackRefinementPrompt(nextSubmittedQuery))
+    setRefinementPrompt(null)
+  }
+
+  function resetToNewSearch() {
+    activeSearchIdRef.current += 1
+    finalizeMutation.reset()
+    setProductQuery('')
+    setSelectedProduct(null)
+    setErrorMessage('')
+    setHasStartedSearch(false)
+    setSubmittedQuery('')
+    setCandidatePool(null)
+    setPreviewResults([])
+    setResults([])
+    setRefinementPrompt(null)
+    setFollowUpNotes('')
+    setRetryFeedback('')
+    setRetryCount(0)
+    setSelectionState(null)
+    setPreviousResults([])
+    setShowPreviewResults(false)
+    setIsDiscovering(false)
+    setIsGeneratingPrompt(false)
   }
 
   function beginGuidedSearch(event) {
@@ -236,11 +284,33 @@ export function useGuidedSearch() {
       candidatePool: finalizeCandidatePool,
       originalCandidatePool: candidatePool,
       followUpNotes,
+      rejectionFeedback: '',
+      retryCount: 0,
+      excludedCandidateIds: [],
+      previousResults: [],
     })
   }
 
   function handleShowProductsNow() {
     setShowPreviewResults(true)
+  }
+
+  function handleRetryWithFeedback() {
+    if (!candidatePool || !retryFeedback.trim() || retryCount >= MAX_REFINEMENT_RETRIES) {
+      return
+    }
+
+    const finalizeCandidatePool = buildFinalizeCandidatePool(candidatePool)
+
+    finalizeMutation.mutate({
+      candidatePool: finalizeCandidatePool,
+      originalCandidatePool: candidatePool,
+      followUpNotes,
+      rejectionFeedback: retryFeedback.trim(),
+      retryCount: retryCount + 1,
+      excludedCandidateIds: results.map((result) => result.id),
+      previousResults: results,
+    })
   }
 
   return {
@@ -254,14 +324,21 @@ export function useGuidedSearch() {
     isFinalizing,
     isGeneratingPrompt,
     isLoading,
+    previousResults,
     productQuery,
     refinementPrompt,
+    selectionState,
+    retryCount,
+    retryFeedback,
     selectedProduct,
     showPreviewResults,
     submittedQuery,
     beginGuidedSearch,
     handleFinalizeRefinement,
+    handleRetryWithFeedback,
     handleShowProductsNow,
+    resetToNewSearch,
+    setRetryFeedback,
     setFollowUpNotes,
     setProductQuery,
     setSelectedProduct,

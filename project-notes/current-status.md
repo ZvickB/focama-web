@@ -13,6 +13,11 @@
   - uses the PNG wordmark in the hero
   - removes chips
   - expands into the AI refinement area after search
+  - offers a `Start a new search` reset path once a search is in progress
+  - lets the user retry a weak shortlist with feedback after final results
+  - caps that retry loop at 2 guided follow-up retries
+  - excludes the previously rejected shortlist from retry reselection
+  - tucks rejected shortlists into a collapsed `Previous picks` section after a retry succeeds
   - scrolls more directly between search, refinement, and results states
   - scrolls to results immediately when final AI picks are requested and shows skeletons during finalization
   - keeps skeletons visible but lower-priority

@@ -5,6 +5,32 @@ import {
   CardContent,
 } from '@/components/ui/card.jsx'
 
+function getUserFacingReasons(reasons = []) {
+  return reasons.filter((reason) => {
+    const normalizedReason = String(reason || '').trim()
+
+    if (!normalizedReason) {
+      return false
+    }
+
+    return !/serpapi search route|live product result returned/i.test(normalizedReason)
+  })
+}
+
+function getUserFacingDescription(description) {
+  const normalizedDescription = String(description || '').trim()
+
+  if (!normalizedDescription) {
+    return ''
+  }
+
+  if (/serpapi search route|live product result returned/i.test(normalizedDescription)) {
+    return ''
+  }
+
+  return normalizedDescription
+}
+
 function ProductBadge({ label }) {
   if (!label) {
     return null
@@ -15,11 +41,12 @@ function ProductBadge({ label }) {
   return (
     <div className="pointer-events-none absolute left-4 top-4 z-10">
       <div
-        className={`inline-flex max-w-[min(220px,calc(100vw-4rem))] items-center gap-2 rounded-[20px] border px-3 py-2 font-sans text-xs font-medium leading-4 tracking-[0.01em] shadow-[0_14px_34px_-20px_rgba(15,23,42,0.45)] backdrop-blur ${
+        className={`inline-flex max-w-[min(220px,calc(100vw-4rem))] items-center gap-2 rounded-[20px] border px-3 py-2 text-xs font-medium leading-4 tracking-[0.01em] shadow-[0_14px_34px_-20px_rgba(15,23,42,0.45)] backdrop-blur ${
           isPrimary
             ? 'border-primary/60 bg-primary text-primary-foreground'
             : 'border-[#d9c4a6] bg-[rgba(244,231,210,0.94)] text-slate-800'
         }`}
+        style={{ fontFamily: '"Manrope", sans-serif', fontWeight: 500 }}
       >
         <span className="whitespace-normal break-words">{label}</span>
       </div>
@@ -37,10 +64,14 @@ function ProductCard({
   onSelect,
   price,
   rating,
+  reasons = [],
   reviewCount,
   subtitle,
   title,
 }) {
+  const primaryReason = getUserFacingReasons(reasons)[0] || ''
+  const userFacingDescription = getUserFacingDescription(description)
+
   return (
     <Card
       className="group h-full overflow-hidden rounded-[22px] border-stone-200/80 bg-white/90 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur transition hover:-translate-y-1"
@@ -68,7 +99,7 @@ function ProductCard({
         <div className="space-y-2">
           <Badge
             variant="outline"
-            className="rounded-full border-stone-200 bg-stone-50 px-2.5 py-0.5 text-[11px] text-slate-600 hover:bg-stone-50"
+            className="hidden rounded-full border-stone-200 bg-stone-50 px-2.5 py-0.5 text-[11px] text-slate-600 hover:bg-stone-50 sm:inline-flex"
           >
             {subtitle}
           </Badge>
@@ -92,13 +123,22 @@ function ProductCard({
           <span className="text-slate-500">({reviewCount} reviews)</span>
         </div>
         {badgeReason ? (
-          <p className="line-clamp-2 rounded-2xl border border-stone-200/80 bg-stone-50/85 px-3 py-2 text-sm leading-5 text-slate-600">
+          <p className="hidden line-clamp-2 rounded-2xl border border-stone-200/80 bg-stone-50/85 px-3 py-2 text-sm leading-5 text-slate-600 sm:block">
             <span className="font-medium text-slate-800">{badgeLabel}:</span> {badgeReason}
           </p>
         ) : null}
-        <p className="line-clamp-2 text-sm leading-5 text-slate-600">{description}</p>
+        {userFacingDescription ? (
+          <p className="hidden line-clamp-2 text-sm leading-5 text-slate-600 sm:block">
+            {userFacingDescription}
+          </p>
+        ) : null}
+        {primaryReason ? (
+          <p className="hidden line-clamp-2 text-sm leading-5 text-slate-600 sm:block">
+            {primaryReason}
+          </p>
+        ) : null}
         {drawbacks[0] ? (
-          <p className="line-clamp-2 text-sm leading-5 text-slate-500">
+          <p className="hidden line-clamp-2 text-sm leading-5 text-slate-500 sm:block">
             <span className="font-medium text-slate-700">Tradeoff:</span> {drawbacks[0]}
           </p>
         ) : null}

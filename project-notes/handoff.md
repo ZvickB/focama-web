@@ -32,10 +32,9 @@
   - post-selection tuning and retailer linking
 
 ## Known remaining work
-- Let the user start a brand-new search for a different product after completing a search; this repeat-search path does not exist yet in the current UI flow.
-- After results are shown, add a guided fallback such as `Didn't find anything you like? Tell us why.` so the user can explain what was wrong with the shortlist and send that feedback back into AI for another pass.
-- Do not turn this into a generic `load more` pattern; additional results should only be available when the user gives a reason the current options failed, so the product stays recommendation-focused instead of becoming endless search pagination.
-- Consider preserving a broader cleaned candidate set behind the scenes so the future `Didn't find anything you like? Tell us why.` follow-up flow can reuse that larger pool for a smarter second pass before paying for another SerpApi request; do not let this quietly turn the product into a generic `show more results` marketplace-style browse flow.
+- Watch how the new feedback-based retry loop performs with real searches and tighten the copy, friction, and retry cap only if testers start treating it like a browse loop.
+- Watch whether hard exclusion of rejected picks is too strict in small candidate pools, and decide later whether to broaden discovery rather than reusing rejected items.
+- Consider whether a later version of the retry path should preserve or expose a broader cleaned candidate set for smarter follow-up passes before paying for another SerpApi request; do not let this quietly turn the product into a generic `show more results` marketplace-style browse flow.
 - Replace the current `About` destination with a `Why Focama` page that explains what the product is for and how to use it.
 - Make sure any header/nav link that currently points people to `About` lands on `Why Focama` instead.
 - The `Why Focama` page should include a clear home button so users can easily return to the homepage.
