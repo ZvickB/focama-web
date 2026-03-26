@@ -11,6 +11,7 @@
 - Older homepage experiments were removed after the open layout became the clear direction.
 - The open layout now:
   - uses the PNG wordmark in the hero
+  - uses Instrument Sans as the primary UI typeface instead of the older serif base
   - removes chips
   - expands into the AI refinement area after search
   - offers a `Start a new search` reset path once a search is in progress

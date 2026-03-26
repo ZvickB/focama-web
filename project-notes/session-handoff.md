@@ -22,6 +22,7 @@
 - `/` is the `open` variant.
 - The open layout is intentionally more minimal and mobile-friendly.
 - The homepage hero in the open layout now uses the PNG wordmark instead of plain `Focamai` text.
+- The app and boot splash now use Instrument Sans as the primary UI font instead of the older serif base.
 
 ## Brand assets
 - Master logo: `/src/assets/logo_master_version.svg`

@@ -46,7 +46,7 @@ function ProductBadge({ label }) {
             ? 'border-primary/60 bg-primary text-primary-foreground'
             : 'border-[#d9c4a6] bg-[rgba(244,231,210,0.94)] text-slate-800'
         }`}
-        style={{ fontFamily: '"Manrope", sans-serif', fontWeight: 500 }}
+        style={{ fontFamily: '"Instrument Sans", sans-serif', fontWeight: 500 }}
       >
         <span className="whitespace-normal break-words">{label}</span>
       </div>

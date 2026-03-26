@@ -260,7 +260,7 @@ function OpenLayout(props) {
                 className={`mx-auto max-w-xl text-[13px] italic font-medium tracking-[0.01em] text-slate-500 transition-opacity duration-300 sm:text-[15px] ${
                   showHeroCopy ? 'opacity-100' : 'opacity-0'
                 }`}
-                style={{ fontFamily: '"Manrope", sans-serif' }}
+                style={{ fontFamily: '"Instrument Sans", sans-serif' }}
               >
                 {HERO_SUBLINE}
               </p>
