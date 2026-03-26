@@ -196,5 +196,52 @@ describe('result filter', () => {
         detailMatches: expect.any(Number),
       }),
     )
+    expect(artifacts.candidatePool.candidates[0]).toEqual(
+      expect.objectContaining({
+        attributes: expect.any(Array),
+        duplicateFamilyKey: expect.any(String),
+        trustSignals: expect.objectContaining({
+          score: expect.any(Number),
+          ratingBand: expect.any(String),
+          reviewBand: expect.any(String),
+        }),
+        variantTokens: expect.any(Array),
+      }),
+    )
+  })
+
+  it('groups duplicate-family metadata and variant tokens for near-duplicate products', () => {
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: [
+          createShoppingResult({
+            title: 'On Cloud 6 Waterproof Running Shoe',
+            product_id: 'prod-1',
+            source: 'Nordstrom',
+            snippet: 'Waterproof running shoe with lightweight feel',
+          }),
+          createShoppingResult({
+            position: 2,
+            title: 'On Cloud 6 Running Shoe',
+            product_id: 'prod-2',
+            source: 'REI',
+            snippet: 'Lightweight running shoe for everyday wear',
+          }),
+        ],
+      },
+      {
+        productQuery: 'mens on cloud dress shoes',
+        details: '',
+        candidatePoolSize: 20,
+        finalResultLimit: 2,
+        reasonFallback: 'Returned by the live SerpApi search route',
+      },
+    )
+
+    expect(artifacts.candidatePool.candidates).toHaveLength(2)
+    expect(artifacts.candidatePool.candidates[0].duplicateFamilyKey).toBe(
+      artifacts.candidatePool.candidates[1].duplicateFamilyKey,
+    )
+    expect(artifacts.candidatePool.candidates[0].variantTokens).toContain('waterproof')
   })
 })

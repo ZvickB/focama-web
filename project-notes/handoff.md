@@ -27,6 +27,7 @@
 - Watch for weak-result cases and improve result-quality handling without overcomplicating the flow.
 - Refine the AI prompt and selection behavior based on real searches.
 - Keep using real-query inspection to tighten weak candidate descriptions, duplicate-heavy pools, and ambiguous searches before accepting any meaningful quality downgrade.
+- The backend now has a richer provider-agnostic candidate layer; the next safe step is to use that structure for smarter narrowing or duplicate-family handling only after checking real-query quality.
 - Decide whether the next product milestone is:
   - better raw result quality and fallback handling
   - outbound retailer links

@@ -53,6 +53,7 @@
 - Guided `/api/search/finalize` body limit is back to 32 KB now that the finalize payload is lightweight again
 - Guided discover/refine/finalize now expose backend stage timing through `Server-Timing` headers, and the homepage shows the timing panel in development or when `?timing=1` is present for quick latency checks
 - Promo-only shopping snippets such as `20% OFF` / `LOW PRICE` are now ignored as normalized descriptions, and finalize AI summaries now omit empty/generic filler descriptions plus redundant source/price/delivery boilerplate to cut prompt waste
+- The backend candidate pool now includes provider-agnostic duplicate-family keys, variant tokens, compact attribute tags, and trust signals before finalize so future search-provider changes can reuse the same internal model more easily
 - `/api/search/debug` should be read as guided-primary debug output, with `/api/search/live` treated as the manual combined route
 - `/api/health/supabase` now reports local fallback as a supported state when Supabase is not configured
 - Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`

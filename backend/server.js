@@ -241,6 +241,7 @@ function sanitizeFinalizeCandidate(candidate, index) {
       link: truncateText(candidate.link, 1000),
       image: truncateText(candidate.image, 1000),
       reasons: sanitizeStringList(candidate.reasons, { maxItems: 5, maxItemLength: 240 }),
+      duplicateFamilyKey: truncateText(candidate.duplicateFamilyKey, 240),
       matchSignals:
         candidate.matchSignals && typeof candidate.matchSignals === 'object' && !Array.isArray(candidate.matchSignals)
           ? {
@@ -267,6 +268,26 @@ function sanitizeFinalizeCandidate(candidate, index) {
               hasDeliveryInfo: false,
               hasTag: false,
             },
+      attributes: sanitizeStringList(candidate.attributes, { maxItems: 6, maxItemLength: 60 }),
+      trustSignals:
+        candidate.trustSignals && typeof candidate.trustSignals === 'object' && !Array.isArray(candidate.trustSignals)
+          ? {
+              hasMultipleSources: Boolean(candidate.trustSignals.hasMultipleSources),
+              hasRealDescription: Boolean(candidate.trustSignals.hasRealDescription),
+              ratingBand: truncateText(candidate.trustSignals.ratingBand, 40),
+              reviewBand: truncateText(candidate.trustSignals.reviewBand, 40),
+              score: Number.isFinite(Number(candidate.trustSignals.score))
+                ? Number(candidate.trustSignals.score)
+                : 0,
+            }
+          : {
+              hasMultipleSources: false,
+              hasRealDescription: false,
+              ratingBand: '',
+              reviewBand: '',
+              score: 0,
+            },
+      variantTokens: sanitizeStringList(candidate.variantTokens, { maxItems: 4, maxItemLength: 40 }),
     },
   }
 }

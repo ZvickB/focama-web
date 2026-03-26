@@ -195,13 +195,17 @@ function buildCandidateSummary(candidatePool) {
     rank: index + 1,
     title: candidate.title,
     description: getCandidateSummaryDescription(candidate, candidatePool.query),
+    duplicateFamilyKey: candidate.duplicateFamilyKey || '',
     source: candidate.source,
     price: candidate.price,
     numericPrice: candidate.numericPrice,
     rating: candidate.rating,
     reviewCount: candidate.reviewCount,
+    attributes: Array.isArray(candidate.attributes) ? candidate.attributes.slice(0, 6) : [],
     matchSignals: candidate.matchSignals,
     reasons: getCandidateSummaryReasons(candidate),
+    trustSignals: candidate.trustSignals || null,
+    variantTokens: Array.isArray(candidate.variantTokens) ? candidate.variantTokens.slice(0, 4) : [],
   }))
 }
 

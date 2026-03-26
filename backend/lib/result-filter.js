@@ -23,6 +23,55 @@ const STOP_WORDS = new Set([
   'at',
   'from',
 ])
+const DUPLICATE_FAMILY_STOP_WORDS = new Set([
+  ...STOP_WORDS,
+  'edition',
+  'new',
+  'pack',
+  'set',
+  'size',
+])
+const VARIANT_TOKENS = new Set([
+  'black',
+  'blue',
+  'brown',
+  'casual',
+  'coast',
+  'compact',
+  'extra',
+  'formal',
+  'gray',
+  'green',
+  'kids',
+  'large',
+  'leather',
+  'lightweight',
+  'max',
+  'mens',
+  'mini',
+  'narrow',
+  'premium',
+  'pro',
+  'running',
+  'small',
+  'waterproof',
+  'white',
+  'wide',
+  'women',
+  'womens',
+])
+const ATTRIBUTE_PATTERNS = [
+  ['waterproof', /\bwaterproof\b/i],
+  ['running', /\brunning\b/i],
+  ['formal', /\b(dress|formal)\b/i],
+  ['casual', /\bcasual\b/i],
+  ['kit', /\b(kit|paint by numbers|diy)\b/i],
+  ['wall_art', /\b(wall art|canvas art|framed art|poster|print)\b/i],
+  ['abstract', /\babstract\b/i],
+  ['framed', /\bframed\b/i],
+  ['leather', /\bleather\b/i],
+  ['beginner_friendly', /\bbeginner(s)?\b/i],
+]
 
 function tokenize(value) {
   return (value.toLowerCase().match(/[a-z0-9]+/g) || []).filter((token) => !STOP_WORDS.has(token))
@@ -41,6 +90,17 @@ function normalizedTitleKey(title) {
     .trim()
 }
 
+function buildDuplicateFamilyKey(title) {
+  const tokens = tokenize(title).filter((token) => !DUPLICATE_FAMILY_STOP_WORDS.has(token))
+  const baseTokens = tokens.filter((token) => !VARIANT_TOKENS.has(token))
+
+  return (baseTokens.length > 0 ? baseTokens : tokens).slice(0, 5).join(' ')
+}
+
+function getVariantTokens(title) {
+  return uniqueTokens(title).filter((token) => VARIANT_TOKENS.has(token)).slice(0, 4)
+}
+
 function countTokenMatches(targetTokens, candidateText) {
   const haystack = new Set(tokenize(candidateText))
   return targetTokens.filter((token) => haystack.has(token)).length
@@ -53,6 +113,64 @@ function hasWeakMetadata(item) {
   )
   const hasText = Boolean(item.title?.trim()) && hasImage
   return !hasPrice || !hasText
+}
+
+function hasRealDescription(item) {
+  const supportText = [item.snippet, ...(item.extensions || [])]
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+
+  return supportText.length >= 20
+}
+
+function extractAttributes(item) {
+  const supportText = [item.title, item.snippet, ...(item.extensions || [])].filter(Boolean).join(' ')
+
+  return ATTRIBUTE_PATTERNS
+    .filter(([, pattern]) => pattern.test(supportText))
+    .map(([attribute]) => attribute)
+    .slice(0, 6)
+}
+
+function buildTrustSignals(item, normalizedDescription) {
+  const rating = Number(item.rating ?? 0)
+  const reviews = Number(item.reviews ?? 0)
+  let score = 0
+
+  if (rating >= 4.5) {
+    score += 2
+  } else if (rating >= 4) {
+    score += 1
+  } else if (rating > 0 && rating < 3.5) {
+    score -= 1
+  }
+
+  if (reviews >= 500) {
+    score += 2
+  } else if (reviews >= 50) {
+    score += 1
+  } else if (reviews <= 1) {
+    score -= 2
+  }
+
+  if (normalizedDescription) {
+    score += 1
+  } else if (!hasRealDescription(item)) {
+    score -= 1
+  }
+
+  if (item.multiple_sources) {
+    score += 1
+  }
+
+  return {
+    hasMultipleSources: Boolean(item.multiple_sources),
+    hasRealDescription: Boolean(normalizedDescription),
+    ratingBand: rating >= 4.5 ? 'high' : rating >= 4 ? 'solid' : rating > 0 ? 'mixed' : 'unknown',
+    reviewBand: reviews >= 500 ? 'strong' : reviews >= 50 ? 'moderate' : reviews > 1 ? 'light' : 'thin',
+    score,
+  }
 }
 
 function scoreResult(item, queryTokens, detailsTokens, searchState) {
@@ -170,6 +288,10 @@ function buildAiCandidate(item, index, score, matchSignals, reasonFallback) {
     return null
   }
 
+  const duplicateFamilyKey = buildDuplicateFamilyKey(normalized.title)
+  const attributes = extractAttributes(item)
+  const trustSignals = buildTrustSignals(item, normalized.description)
+
   return {
     id: normalized.id,
     score: Number(score.toFixed(2)),
@@ -187,7 +309,11 @@ function buildAiCandidate(item, index, score, matchSignals, reasonFallback) {
     link: normalized.link,
     image: normalized.image,
     reasons: normalized.reasons,
+    duplicateFamilyKey,
     matchSignals,
+    attributes,
+    trustSignals,
+    variantTokens: getVariantTokens(normalized.title),
   }
 }
 

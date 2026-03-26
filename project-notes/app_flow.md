@@ -50,6 +50,10 @@
   - `/api/health/supabase` should treat local file fallback as a supported development/storage mode when Supabase is not configured
 - Guided search requests now expose backend stage timing through `Server-Timing` headers, and the homepage shows the timing panel in development or when `?timing=1` is present for discover, refine, and finalize.
 - Guided candidate/result normalization now skips promo-only description text such as sale blurbs, and the finalize AI summary now omits empty/generic filler descriptions plus redundant source/price/delivery boilerplate to reduce prompt waste.
+- The backend candidate pool is now a more provider-agnostic structured layer:
+  - duplicate-family keys and variant tokens are attached before AI selection
+  - lightweight attribute tags are extracted from product text
+  - trust signals are pre-scored before finalize so AI gets cleaner compact guidance
 - After loading/refinement, the page displays up to 6 normalized product cards.
 - Clicking a product opens a detail modal with:
   - product image
