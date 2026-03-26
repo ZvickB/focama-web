@@ -9,6 +9,8 @@ Use these files:
 - `cleanup-backlog.md` for the audited cleanup plan split into trackable sections
 - `app_flow.md` for the currently implemented app behavior
 - `doc_briefs.md` for product intent, UI direction, and longer-term decisions
+- `db-needs.md` for the plain-language summary of which Supabase tables the current app uses now
+- `db-cache-setup.md` for the lower-level Supabase/cache setup details and SQL
 
 Related temporary development data:
 - `temp-data/search-evaluation.json` for local search-quality examples gathered during development only

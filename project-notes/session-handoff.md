@@ -17,6 +17,7 @@
 - Shared guided-search logic/state: `/src/components/home/useGuidedSearch.js`
 - Site header/nav/logo usage: `/src/components/SiteLayout.jsx`
 - Default homepage route file: `/src/pages/HomePage.jsx`
+- Plain-language DB note for current Supabase tables: `/project-notes/db-needs.md`
 
 ## Current UI state
 - `/` is the `open` variant.

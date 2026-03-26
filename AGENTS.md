@@ -13,6 +13,7 @@ Read this file first at the start of every chat.
 - Read `project-notes/app_flow.md` for current implemented behavior.
 - Read `project-notes/handoff.md` for medium-term work and open product questions.
 - Read `project-notes/doc_briefs.md` for product intent, UX direction, and broader decisions.
+- Read `project-notes/db-needs.md` when you need the plain-language summary of which Supabase tables the current app uses now.
 - Read `project-notes/db-cache-setup.md` only when working on cache, Supabase, or storage behavior.
 - Read `project-notes/cleanup-backlog.md` only when the task is specifically cleanup or when the user asks to work a section from it.
 
@@ -21,6 +22,7 @@ Read this file first at the start of every chat.
 - `project-notes/current-status.md`: short snapshot for the next chat.
 - `project-notes/handoff.md`: durable remaining work and open questions.
 - `project-notes/doc_briefs.md`: product intent and longer-term direction.
+- `project-notes/db-needs.md`: plain-language summary of the current required Supabase tables.
 - `project-notes/cleanup-backlog.md`: cleanup debt only, one section at a time.
 
 ## Working rules
@@ -92,6 +94,7 @@ Read this file first at the start of every chat.
 - For small UI or copy changes, prefer manual verification over running a full build every time.
 - Run tests when they meaningfully reduce risk or validate changed behavior.
 - For meaningful checkpoints, report what changed, what was verified, and what notes were updated.
+- Never print full `.env` contents or raw secret values into tool output. When checking configuration, verify only whether required keys are present or mask the values.
 
 ## If unsure
 - Prefer the smallest change that keeps the codebase and notes aligned.

@@ -43,8 +43,56 @@ export function buildQuery(productQuery, details) {
   return [productQuery, details].filter(Boolean).join(' ').trim()
 }
 
+function normalizeCacheWhitespace(value) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.toLowerCase().trim().split(/\s+/).filter(Boolean).join(' ')
+}
+
+function singularizeCacheToken(token) {
+  if (typeof token !== 'string') {
+    return ''
+  }
+
+  const normalizedToken = token.trim()
+
+  if (normalizedToken.length < 4) {
+    return normalizedToken
+  }
+
+  if (/(ss|us|is)$/.test(normalizedToken)) {
+    return normalizedToken
+  }
+
+  if (/ies$/.test(normalizedToken) && normalizedToken.length > 4) {
+    return `${normalizedToken.slice(0, -3)}y`
+  }
+
+  if (/ses$/.test(normalizedToken) || /xes$/.test(normalizedToken) || /zes$/.test(normalizedToken) || /ches$/.test(normalizedToken) || /shes$/.test(normalizedToken)) {
+    return normalizedToken.slice(0, -2)
+  }
+
+  if (normalizedToken.endsWith('s') && !normalizedToken.endsWith('ss')) {
+    return normalizedToken.slice(0, -1)
+  }
+
+  return normalizedToken
+}
+
+export function normalizeCacheKeyInput(value) {
+  return normalizeCacheWhitespace(value)
+    .split(' ')
+    .filter(Boolean)
+    .map((token) => singularizeCacheToken(token))
+    .join(' ')
+}
+
 export function buildCacheKey(productQuery, details, scope = 'default') {
-  const baseKey = buildQuery(productQuery, details).toLowerCase()
+  const normalizedQuery = normalizeCacheKeyInput(productQuery)
+  const normalizedDetails = normalizeCacheWhitespace(details)
+  const baseKey = buildQuery(normalizedQuery, normalizedDetails)
 
   if (!scope || scope === 'default') {
     return baseKey

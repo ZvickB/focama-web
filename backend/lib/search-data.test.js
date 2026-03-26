@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCacheKey,
   getNormalizedResults,
+  normalizeCacheKeyInput,
   normalizeResult,
   validateSearchInput,
 } from './search-data.js'
@@ -14,6 +15,17 @@ describe('search-data helpers', () => {
 
   it('supports scoped cache keys for separate search flows', () => {
     expect(buildCacheKey('Lego', 'For Kids', 'guided_discovery')).toBe('guided_discovery:lego for kids')
+  })
+
+  it('normalizes repeated whitespace and obvious plural nouns for cache keys', () => {
+    expect(normalizeCacheKeyInput('  Ice   Cream   Makers  ')).toBe('ice cream maker')
+    expect(buildCacheKey('Desk Lamps', '')).toBe('desk lamp')
+    expect(buildCacheKey('Toy Buses', '')).toBe('toy bus')
+  })
+
+  it('keeps words that should not be singularized aggressively', () => {
+    expect(normalizeCacheKeyInput('glass bass')).toBe('glass bass')
+    expect(normalizeCacheKeyInput('office chair')).toBe('office chair')
   })
 
   it('normalizes a shopping result into the frontend shape', () => {

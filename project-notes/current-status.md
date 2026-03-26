@@ -45,9 +45,11 @@
 - Guided discovery cache is now the only persistent search cache scope used by the product/backend flow.
 - Guided `/api/search/discover` now returns a `discoveryToken`, and guided `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache instead of relying on a browser-posted pool.
 - Guided `/api/search/finalize` still does not reuse cached final result sets; it rebuilds the candidate context from guided discovery cache and reruns AI selection per request.
+- Cache keys now normalize query casing, whitespace, and obvious plural product terms more conservatively so closely matched searches such as singular/plural product names can reuse discovery cache more often without changing freeform detail wording.
 - Search cache and operational search-history logging can use Supabase when configured.
 - Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`.
 - Local file-based cache remains as a development/fallback path.
+- `project-notes/db-needs.md` now captures the plain-language summary of the current required Supabase tables: `search_cache` and `search_history`.
 - Basic IP-based rate limiting exists on the search handlers.
 - The Vercel API wrappers now forward request headers into the backend handlers so production rate limiting can use forwarded client IP headers.
 - Guided `/api/search/finalize` now enforces explicit abuse guardrails:

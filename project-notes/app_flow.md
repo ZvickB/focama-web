@@ -68,6 +68,7 @@
 - Search cache plus operational search-history logging now exists through the storage layer, with Supabase preferred and local fallback for development.
 - `search_history` is currently an internal operational record for cache/debug visibility, not a user-facing saved-history product feature.
 - Guided discovery is the reusable persistent cache layer; `/api/search/live` and guided finalization stay request-specific.
+- Guided discovery cache keys now normalize lowercase/spacing and obvious plural product terms on the main query so trivial singular/plural query variations can reuse the same cache entry more often.
 - The production deployment at `focama.vercel.app` is now successfully using Supabase-backed guided discovery caching.
 - Guided finalization is now explicitly guarded:
   - request bodies larger than 32 KB are rejected
