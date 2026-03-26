@@ -14,6 +14,17 @@ export const ALLOWED_RESULT_BADGES = [
 ]
 const REQUIRED_PRIMARY_BADGE = 'Best match'
 const MAX_BADGED_RESULTS = 3
+const DESCRIPTION_BOILERPLATE_TOKENS = new Set([
+  'at',
+  'buy',
+  'discover',
+  'explore',
+  'find',
+  'for',
+  'from',
+  'on',
+  'shop',
+])
 
 function getResponseText(payload) {
   if (typeof payload?.output_text === 'string' && payload.output_text.trim()) {
@@ -36,23 +47,161 @@ function getResponseText(payload) {
   return chunks.join('\n').trim()
 }
 
+function truncateText(value, maxLength) {
+  const normalized = typeof value === 'string' ? value.trim() : ''
+
+  if (!normalized) {
+    return ''
+  }
+
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}...` : normalized
+}
+
+function normalizeComparableText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function getComparableTokens(value) {
+  return normalizeComparableText(value)
+    .split(' ')
+    .filter(Boolean)
+}
+
+function isLowValueDescription(value) {
+  const normalized = String(value || '').trim()
+
+  if (!normalized) {
+    return true
+  }
+
+  return (
+    /serpapi search route|live product result returned/i.test(normalized) ||
+    /^a shopping option we found for ".+"\.$/i.test(normalized) ||
+    /^(\d{1,3}%\s*off|low price|limited time deal|sale|deal|save\s+\d{1,3}%|save\s+\$\d+)[!.]*$/i.test(
+      normalized,
+    )
+  )
+}
+
+function isBoilerplateQueryDescription(description, candidate, candidatePoolQuery) {
+  const normalizedDescription = String(description || '').trim()
+
+  if (!/^(shop|buy|find|discover|explore)\b/i.test(normalizedDescription)) {
+    return false
+  }
+
+  const descriptionTokens = getComparableTokens(normalizedDescription)
+    .filter((token) => !DESCRIPTION_BOILERPLATE_TOKENS.has(token))
+
+  if (descriptionTokens.length === 0) {
+    return true
+  }
+
+  const knownTokens = new Set([
+    ...getComparableTokens(candidate.title),
+    ...getComparableTokens(candidate.source),
+    ...getComparableTokens(candidatePoolQuery),
+  ])
+  const unknownTokenCount = descriptionTokens.filter((token) => !knownTokens.has(token)).length
+
+  return unknownTokenCount <= 1
+}
+
+function isReasonRedundant(reason, candidate) {
+  const normalizedReason = normalizeComparableText(reason)
+
+  if (!normalizedReason) {
+    return true
+  }
+
+  const normalizedSource = normalizeComparableText(candidate.source)
+  const normalizedPrice = normalizeComparableText(candidate.price)
+  const normalizedTitle = normalizeComparableText(candidate.title)
+
+  if (normalizedSource && normalizedReason === `available from ${normalizedSource}`) {
+    return true
+  }
+
+  if (normalizedPrice && normalizedReason.includes(normalizedPrice)) {
+    return true
+  }
+
+  if (normalizedTitle && normalizedReason === normalizedTitle) {
+    return true
+  }
+
+  if (/^(free|fast|same day|next day|2 day|two day)\s+(delivery|shipping)\b/.test(normalizedReason)) {
+    return true
+  }
+
+  if (/^(delivery|shipping)\s+(available|included)\b/.test(normalizedReason)) {
+    return true
+  }
+
+  return false
+}
+
+function getCandidateSummaryReasons(candidate) {
+  const reasons = Array.isArray(candidate.reasons) ? candidate.reasons : []
+  const seenReasons = []
+
+  return reasons
+    .filter((reason) => !isReasonRedundant(reason, candidate))
+    .map((reason) => truncateText(reason, 100))
+    .filter(Boolean)
+    .filter((reason) => {
+      const normalizedReason = normalizeComparableText(reason)
+
+      if (!normalizedReason) {
+        return false
+      }
+
+      const isNearDuplicate = seenReasons.some(
+        (existingReason) =>
+          existingReason === normalizedReason ||
+          existingReason.includes(normalizedReason) ||
+          normalizedReason.includes(existingReason),
+      )
+
+      if (isNearDuplicate) {
+        return false
+      }
+
+      seenReasons.push(normalizedReason)
+      return true
+    })
+    .slice(0, 2)
+}
+
+function getCandidateSummaryDescription(candidate, candidatePoolQuery) {
+  if (isLowValueDescription(candidate.description)) {
+    return ''
+  }
+
+  if (isBoilerplateQueryDescription(candidate.description, candidate, candidatePoolQuery)) {
+    return ''
+  }
+
+  return truncateText(candidate.description, 160)
+}
+
 function buildCandidateSummary(candidatePool) {
   return candidatePool.candidates.map((candidate, index) => ({
     id: candidate.id,
     rank: index + 1,
     title: candidate.title,
-    description: candidate.description,
+    description: getCandidateSummaryDescription(candidate, candidatePool.query),
     source: candidate.source,
     price: candidate.price,
     numericPrice: candidate.numericPrice,
     rating: candidate.rating,
     reviewCount: candidate.reviewCount,
-    delivery: candidate.delivery,
-    tag: candidate.tag,
-    extensions: candidate.extensions,
-    multipleSources: candidate.multipleSources,
     matchSignals: candidate.matchSignals,
-    reasons: candidate.reasons,
+    reasons: getCandidateSummaryReasons(candidate),
   }))
 }
 

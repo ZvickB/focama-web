@@ -48,6 +48,8 @@
   - `/api/search/debug` should describe the guided flow as primary
   - `/api/search/live` should be treated as the manual combined route
   - `/api/health/supabase` should treat local file fallback as a supported development/storage mode when Supabase is not configured
+- Guided search requests now expose backend stage timing through `Server-Timing` headers, and the homepage shows the timing panel in development or when `?timing=1` is present for discover, refine, and finalize.
+- Guided candidate/result normalization now skips promo-only description text such as sale blurbs, and the finalize AI summary now omits empty/generic filler descriptions plus redundant source/price/delivery boilerplate to reduce prompt waste.
 - After loading/refinement, the page displays up to 6 normalized product cards.
 - Clicking a product opens a detail modal with:
   - product image

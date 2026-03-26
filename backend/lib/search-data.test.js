@@ -71,11 +71,50 @@ describe('search-data helpers', () => {
       price: '$34.99',
       rating: 4.7,
       reviewCount: 1200,
-      description: 'A shopping option we found for "Thermos Stainless King Vacuum-Insulated Drink Bottle".',
+      description: '',
       reasons: ['Available from Amazon', 'Listed around $34.99'],
       image: 'https://example.com/thermos.jpg',
       link: 'https://example.com/thermos',
     })
+  })
+
+  it('skips promo-only snippets and falls back to cleaner extension text', () => {
+    const result = normalizeResult(
+      {
+        title: 'On Cloud 6',
+        source: 'Nordstrom',
+        extracted_price: 149.99,
+        rating: '4.5',
+        reviews: '240',
+        snippet: 'LOW PRICE',
+        extensions: ['Breathable everyday sneaker'],
+        thumbnail: 'https://example.com/shoe.jpg',
+        product_link: 'https://example.com/shoe',
+      },
+      0,
+      'Fallback reason',
+    )
+
+    expect(result?.description).toBe('Breathable everyday sneaker')
+  })
+
+  it('drops promo-only snippets when there is no better descriptive fallback', () => {
+    const result = normalizeResult(
+      {
+        title: 'Wall art set',
+        source: 'Amazon',
+        extracted_price: 39.99,
+        rating: '4.2',
+        reviews: '98',
+        snippet: '20% OFF',
+        thumbnail: 'https://example.com/art.jpg',
+        product_link: 'https://example.com/art',
+      },
+      0,
+      'Fallback reason',
+    )
+
+    expect(result?.description).toBe('')
   })
 
   it('filters invalid shopping results and respects the limit', () => {

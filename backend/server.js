@@ -40,11 +40,36 @@ const FINALIZE_MAX_RETRY_COUNT = 2
 const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
 const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 
-export function sendJson(response, statusCode, payload) {
-  response.writeHead(statusCode, {
+function roundTimingDuration(value) {
+  return Math.round(value * 10) / 10
+}
+
+function formatServerTiming(metrics = []) {
+  return metrics
+    .filter((metric) => metric && metric.name && Number.isFinite(metric.duration))
+    .map((metric) => `${metric.name};dur=${roundTimingDuration(metric.duration)}`)
+    .join(', ')
+}
+
+function nowMs() {
+  return performance.now()
+}
+
+export function sendJson(response, statusCode, payload, headers = {}) {
+  const serverTiming = formatServerTiming(headers.serverTiming)
+  const responseHeaders = {
+    ...headers,
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
-  })
+  }
+
+  delete responseHeaders.serverTiming
+
+  if (serverTiming) {
+    responseHeaders['Server-Timing'] = serverTiming
+  }
+
+  response.writeHead(statusCode, responseHeaders)
   response.end(JSON.stringify(payload))
 }
 
@@ -361,6 +386,7 @@ export async function handleCachedSearch(requestUrl, response) {
 }
 
 export async function handleLiveSearch(requestUrl, response, request = { headers: {} }) {
+  const requestStartedAt = nowMs()
   const serpApiKey = getEnv('SERPAPI_API_KEY')
   const openAiApiKey = getEnv('OPENAI_API_KEY')
 
@@ -392,6 +418,8 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
   }
 
   try {
+    const searchStartedAt = nowMs()
+    let openAiDuration = null
     const { artifacts, error: artifactsError } = await fetchSearchArtifacts({
       filterConfig: LIVE_RESULT_FILTER_CONFIG,
       productQuery: normalizedQuery,
@@ -408,6 +436,7 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
       return
     }
 
+    const serpApiDuration = nowMs() - searchStartedAt
     const { candidatePool, results: fallbackResults } = artifacts
 
     let results = fallbackResults
@@ -419,12 +448,14 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
     }
 
     try {
+      const aiStartedAt = nowMs()
       const aiSelection = await selectAiResults({
         candidatePool,
         finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
         apiKey: openAiApiKey,
         model: getEnv('OPENAI_MODEL') || DEFAULT_OPENAI_MODEL,
       })
+      openAiDuration = nowMs() - aiStartedAt
 
       if (aiSelection.results.length > 0) {
         results = aiSelection.results
@@ -457,6 +488,12 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
       candidatePool,
       results,
       selection,
+    }, {
+      serverTiming: [
+        { name: 'serpapi', duration: serpApiDuration },
+        ...(Number.isFinite(openAiDuration) ? [{ name: 'openai', duration: openAiDuration }] : []),
+        { name: 'total', duration: nowMs() - requestStartedAt },
+      ],
     })
   } catch (error) {
     sendJson(response, 500, {
@@ -467,6 +504,7 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
 }
 
 export async function handleDiscoverySearch(requestUrl, response, request = { headers: {} }) {
+  const requestStartedAt = nowMs()
   const serpApiKey = getEnv('SERPAPI_API_KEY')
 
   if (!serpApiKey) {
@@ -494,11 +532,13 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   }
 
   const normalizedDetails = ''
+  const cacheLookupStartedAt = nowMs()
   const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
     scope: CACHE_SCOPE_DISCOVERY,
   })
+  const cacheLookupDuration = nowMs() - cacheLookupStartedAt
 
   if (cachedEntry?.candidatePool && cachedEntry?.results?.length) {
     const discoveryToken = buildCacheKey(normalizedQuery, normalizedDetails, CACHE_SCOPE_DISCOVERY)
@@ -522,11 +562,17 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
       previewResults: normalizedCachedResults,
       source: 'cache',
       cachedAt: cachedEntry.cachedAt,
+    }, {
+      serverTiming: [
+        { name: 'cache', duration: cacheLookupDuration },
+        { name: 'total', duration: nowMs() - requestStartedAt },
+      ],
     })
     return
   }
 
   try {
+    const serpApiStartedAt = nowMs()
     const { artifacts, error: artifactsError } = await fetchSearchArtifacts({
       filterConfig: LIVE_RESULT_FILTER_CONFIG,
       productQuery: normalizedQuery,
@@ -542,7 +588,9 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
       })
       return
     }
+    const serpApiDuration = nowMs() - serpApiStartedAt
 
+    const cacheWriteStartedAt = nowMs()
     await writeSearchSnapshot({
       productQuery: normalizedQuery,
       details: normalizedDetails,
@@ -557,6 +605,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
       source: 'guided_discovery',
       scope: CACHE_SCOPE_DISCOVERY,
     })
+    const cacheWriteDuration = nowMs() - cacheWriteStartedAt
 
     await recordSearchCacheEvent({
       cacheKey,
@@ -575,6 +624,13 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
       discoveryToken: buildCacheKey(normalizedQuery, normalizedDetails, CACHE_SCOPE_DISCOVERY),
       candidatePool: artifacts.candidatePool,
       previewResults: artifacts.results,
+    }, {
+      serverTiming: [
+        { name: 'cache', duration: cacheLookupDuration },
+        { name: 'serpapi', duration: serpApiDuration },
+        { name: 'cachewrite', duration: cacheWriteDuration },
+        { name: 'total', duration: nowMs() - requestStartedAt },
+      ],
     })
   } catch (error) {
     sendJson(response, 500, {
@@ -585,6 +641,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
 }
 
 export async function handleRefinementPrompt(requestUrl, response) {
+  const requestStartedAt = nowMs()
   const openAiApiKey = getEnv('OPENAI_API_KEY')
   const { error, isValid, normalizedQuery } = getValidatedSearchRequest(requestUrl, {
     includeDetails: false,
@@ -601,13 +658,20 @@ export async function handleRefinementPrompt(requestUrl, response) {
   }
 
   try {
+    const openAiStartedAt = nowMs()
     const refinementPrompt = await generateRefinementPrompt({
       productQuery: normalizedQuery,
       apiKey: openAiApiKey,
       model: getEnv('OPENAI_MODEL') || DEFAULT_OPENAI_MODEL,
     })
+    const openAiDuration = nowMs() - openAiStartedAt
 
-    sendJson(response, 200, refinementPrompt)
+    sendJson(response, 200, refinementPrompt, {
+      serverTiming: [
+        { name: 'openai', duration: openAiDuration },
+        { name: 'total', duration: nowMs() - requestStartedAt },
+      ],
+    })
   } catch (error) {
     sendJson(response, 500, {
       error: 'Unable to generate the refinement prompt.',
@@ -709,6 +773,7 @@ export async function handleSearchDebug(requestUrl, response) {
 }
 
 export async function handleFinalizeSelection(request, response) {
+  const requestStartedAt = nowMs()
   const openAiApiKey = getEnv('OPENAI_API_KEY')
 
   if (!openAiApiKey) {
@@ -729,7 +794,9 @@ export async function handleFinalizeSelection(request, response) {
   let body
 
   try {
+    const bodyReadStartedAt = nowMs()
     body = await readJsonBody(request, { maxBytes: FINALIZE_BODY_LIMIT_BYTES })
+    body.bodyReadDuration = nowMs() - bodyReadStartedAt
   } catch (error) {
     sendJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid request body.' })
     return
@@ -742,9 +809,11 @@ export async function handleFinalizeSelection(request, response) {
     return
   }
 
+  const cacheLookupStartedAt = nowMs()
   const resolvedCandidatePool = await readFinalizeCandidatePoolFromDiscovery(
     sanitizedDiscoveryContext.normalizedQuery,
   )
+  const cacheLookupDuration = nowMs() - cacheLookupStartedAt
 
   if (!resolvedCandidatePool.isValid) {
     sendJson(response, resolvedCandidatePool.statusCode, { error: resolvedCandidatePool.error })
@@ -807,17 +876,25 @@ export async function handleFinalizeSelection(request, response) {
         selectedCandidateIds: [],
         details: 'No new candidates remained after excluding the previously rejected picks.',
       },
+    }, {
+      serverTiming: [
+        { name: 'body', duration: body.bodyReadDuration || 0 },
+        { name: 'cache', duration: cacheLookupDuration },
+        { name: 'total', duration: nowMs() - requestStartedAt },
+      ],
     })
     return
   }
 
   try {
+    const openAiStartedAt = nowMs()
     const aiSelection = await selectAiResults({
       candidatePool: nextCandidatePool,
       finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
       apiKey: openAiApiKey,
       model: getEnv('OPENAI_MODEL') || DEFAULT_OPENAI_MODEL,
     })
+    const openAiDuration = nowMs() - openAiStartedAt
 
     const fallbackResults = nextCandidatePool.candidates
       .slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit)
@@ -854,6 +931,13 @@ export async function handleFinalizeSelection(request, response) {
             ? 'AI selected the final recommendations from the cleaned candidate pool.'
             : 'Rules-based fallback was used.',
       },
+    }, {
+      serverTiming: [
+        { name: 'body', duration: body.bodyReadDuration || 0 },
+        { name: 'cache', duration: cacheLookupDuration },
+        { name: 'openai', duration: openAiDuration },
+        { name: 'total', duration: nowMs() - requestStartedAt },
+      ],
     })
   } catch (error) {
     sendJson(response, 500, {

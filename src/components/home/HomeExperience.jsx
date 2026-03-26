@@ -10,6 +10,19 @@ import { Textarea } from '@/components/ui/textarea.jsx'
 
 const HERO_SUBLINE = 'From too many choices to yours'
 
+function shouldShowTimingPanel() {
+  if (import.meta.env.DEV) {
+    return true
+  }
+
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  const searchParams = new URLSearchParams(window.location.search)
+  return searchParams.get('timing') === '1'
+}
+
 function handleRefinementTextareaKeyDown(event, { canSubmit, onSubmit }) {
   if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) {
     return
@@ -38,6 +51,57 @@ function handleNewSearchClick(event, resetToNewSearch) {
   resetToNewSearch()
 }
 
+function formatTimingValue(value) {
+  return Number.isFinite(value) ? `${value.toFixed(1)} ms` : 'n/a'
+}
+
+function TimingPanel({ requestTiming }) {
+  const entries = [
+    ['Discover', requestTiming?.discover],
+    ['Refine', requestTiming?.refine],
+    ['Finalize', requestTiming?.finalize],
+  ].filter(([, timing]) => timing)
+
+  if (entries.length === 0) {
+    return null
+  }
+
+  return (
+    <section className="w-full max-w-5xl rounded-[28px] border border-dashed border-stone-200 bg-stone-50/70 p-4 sm:p-5">
+      <div className="space-y-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+          Dev timing
+        </p>
+        <p className="text-sm leading-6 text-slate-600">
+          Compare browser round-trip time with backend stage timings from the `Server-Timing` header.
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        {entries.map(([label, timing]) => (
+          <div
+            key={label}
+            className="rounded-[22px] border border-stone-200/80 bg-white/85 p-4 text-sm text-slate-600"
+          >
+            <p className="font-medium text-slate-900">{label}</p>
+            <p className="mt-2">Client total: {formatTimingValue(timing?.client?.totalMs)}</p>
+            <p>Client round trip: {formatTimingValue(timing?.client?.roundTripMs)}</p>
+            <p>Response read: {formatTimingValue(timing?.client?.responseReadMs)}</p>
+            <p className="mt-2">Backend total: {formatTimingValue(timing?.server?.total)}</p>
+            {Object.entries(timing?.server || {})
+              .filter(([name]) => name !== 'total')
+              .map(([name, value]) => (
+                <p key={name}>
+                  {name}: {formatTimingValue(value)}
+                </p>
+              ))}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function OpenLayout(props) {
   const refinementRef = useRef(null)
   const resultsViewportRef = useRef(null)
@@ -60,6 +124,7 @@ function OpenLayout(props) {
     setFollowUpNotes,
     setProductQuery,
     showPreviewResults,
+    showTimingPanel,
     state,
     submittedQuery,
   } = props
@@ -375,6 +440,8 @@ function OpenLayout(props) {
             </div>
           )}
         </section>
+
+        {showTimingPanel ? <TimingPanel requestTiming={state.requestTiming} /> : null}
       </div>
     </main>
   )
@@ -382,6 +449,7 @@ function OpenLayout(props) {
 
 export function HomeExperience() {
   const state = useGuidedSearch()
+  const showTimingPanel = shouldShowTimingPanel()
 
   const layoutProps = {
     displayedResults: state.displayedResults,
@@ -400,6 +468,7 @@ export function HomeExperience() {
     retryFeedback: state.retryFeedback,
     setFollowUpNotes: state.setFollowUpNotes,
     setProductQuery: state.setProductQuery,
+    showTimingPanel,
     showPreviewResults: state.showPreviewResults,
     state,
     submittedQuery: state.submittedQuery,

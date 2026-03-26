@@ -71,10 +71,36 @@ function isTechnicalShoppingCopy(value) {
   return /live product result returned|returned by the live serpapi search route/i.test(value)
 }
 
+function isGenericFallbackDescription(value) {
+  return /^a shopping option we found for ".+"\.$/i.test(value)
+}
+
+function isPromoOnlyShoppingCopy(value) {
+  const normalized = typeof value === 'string' ? value.trim() : ''
+
+  if (!normalized) {
+    return false
+  }
+
+  return (
+    /^(\d{1,3}%\s*off|low price|limited time deal|sale|deal|save\s+\d{1,3}%|save\s+\$\d+)/i.test(
+      normalized,
+    ) ||
+    /^(\d{1,3}%\s*off|low price|limited time deal|sale|deal|save\s+\d{1,3}%|save\s+\$\d+)[!.]*$/i.test(
+      normalized,
+    )
+  )
+}
+
 function cleanUserFacingText(value) {
   const normalized = typeof value === 'string' ? value.trim() : ''
 
-  if (!normalized || isTechnicalShoppingCopy(normalized)) {
+  if (
+    !normalized ||
+    isTechnicalShoppingCopy(normalized) ||
+    isPromoOnlyShoppingCopy(normalized) ||
+    isGenericFallbackDescription(normalized)
+  ) {
     return ''
   }
 
@@ -93,10 +119,10 @@ export function normalizeResult(item, index, _reasonFallback) {
   const numericReviews = Number(item.reviews ?? 0)
   const source = item.source?.trim() || item.store?.trim() || 'Marketplace result'
   const image = item.thumbnail || item.thumbnail_hd || item.serpapi_thumbnail || createFallbackImage(title)
-  const description =
-    cleanUserFacingText(item.snippet) ||
-    cleanUserFacingText(item.extensions?.filter(Boolean).join(' - ')) ||
-    `A shopping option we found for "${title}".`
+  const extensionDescription = Array.isArray(item.extensions)
+    ? item.extensions.map((entry) => cleanUserFacingText(entry)).find(Boolean)
+    : ''
+  const description = cleanUserFacingText(item.snippet) || extensionDescription || ''
 
   const reasons = [
     `Available from ${source}`,

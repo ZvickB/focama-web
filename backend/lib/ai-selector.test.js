@@ -222,4 +222,123 @@ describe('ai selector', () => {
       'Best for small spaces',
     ])
   })
+
+  it('omits low-value descriptions from the AI candidate summary', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          picks: [],
+        }),
+      }),
+    })
+
+    await selectAiResults(
+      {
+        apiKey: 'test-key',
+        candidatePool: {
+          query: 'painting',
+          details: '',
+          searchState: '',
+          similarQueries: [],
+          candidates: [
+            createCandidate({
+              description: '20% OFF',
+            }),
+          ],
+        },
+        finalResultLimit: 6,
+      },
+      fetchMock,
+    )
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
+    const prompt = requestBody.input[1].content
+
+    expect(prompt).toContain('"description": ""')
+    expect(prompt).not.toContain('20% OFF')
+  })
+
+  it('drops redundant source, price, and delivery reasons from the AI candidate summary', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          picks: [],
+        }),
+      }),
+    })
+
+    await selectAiResults(
+      {
+        apiKey: 'test-key',
+        candidatePool: {
+          query: 'mens on cloud dress shoes',
+          details: '',
+          searchState: '',
+          similarQueries: [],
+          candidates: [
+            createCandidate({
+              price: '$149.99',
+              reasons: [
+                'Available from Target',
+                'Listed around $149.99',
+                'Free shipping',
+                'Breathable knit upper for everyday wear',
+                'Breathable knit upper for everyday wear.',
+              ],
+            }),
+          ],
+        },
+        finalResultLimit: 6,
+      },
+      fetchMock,
+    )
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
+    const prompt = requestBody.input[1].content
+
+    expect(prompt).not.toContain('Available from Target')
+    expect(prompt).not.toContain('Listed around $149.99')
+    expect(prompt).not.toContain('Free shipping')
+    expect(prompt).toContain('Breathable knit upper for everyday wear')
+  })
+
+  it('drops boilerplate shop-style descriptions that mostly restate the title or query', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          picks: [],
+        }),
+      }),
+    })
+
+    await selectAiResults(
+      {
+        apiKey: 'test-key',
+        candidatePool: {
+          query: 'mens on cloud dress shoes',
+          details: '',
+          searchState: '',
+          similarQueries: [],
+          candidates: [
+            createCandidate({
+              title: 'On Cloud 6',
+              source: 'Nordstrom',
+              description: 'Shop mens on cloud dress shoes at Nordstrom',
+            }),
+          ],
+        },
+        finalResultLimit: 6,
+      },
+      fetchMock,
+    )
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
+    const prompt = requestBody.input[1].content
+
+    expect(prompt).toContain('"description": ""')
+    expect(prompt).not.toContain('Shop mens on cloud dress shoes at Nordstrom')
+  })
 })

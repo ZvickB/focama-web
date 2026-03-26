@@ -55,6 +55,8 @@
   - priorities limit: 8 items, 80 characters each
   - follow-up notes limit: 500 characters before OpenAI selection
 - Guided finalize now depends on guided discovery cache as the server-side source of truth for the candidate pool, so the browser only sends lightweight finalize context.
+- Guided search responses now include backend timing via `Server-Timing` headers, and the homepage shows the timing panel in development or when `?timing=1` is present so discover/refine/finalize latency can be inspected by leg.
+- Candidate/result normalization now ignores promo-only description text, and the finalize AI handoff drops empty/generic filler descriptions plus redundant source/price/delivery boilerplate so the prompt stays tighter without changing the shortlist flow.
 - Search history records cache status best-effort, including guided cache hits/misses and uncached live-route runs.
 - `search_history` is treated as internal operational telemetry for debugging and cache analysis, not as a user-facing saved-search feature.
 - `/api/search/debug` now reports the guided flow as primary, shows guided discovery cache status, and keeps `/api/search/live` clearly marked as the uncached manual combined route.

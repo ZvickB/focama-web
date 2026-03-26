@@ -26,6 +26,7 @@
 - Watch the live deployment on desktop and mobile for cache behavior, result quality, and any Supabase/storage regressions.
 - Watch for weak-result cases and improve result-quality handling without overcomplicating the flow.
 - Refine the AI prompt and selection behavior based on real searches.
+- Keep using real-query inspection to tighten weak candidate descriptions, duplicate-heavy pools, and ambiguous searches before accepting any meaningful quality downgrade.
 - Decide whether the next product milestone is:
   - better raw result quality and fallback handling
   - outbound retailer links
