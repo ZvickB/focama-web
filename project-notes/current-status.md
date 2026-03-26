@@ -42,7 +42,8 @@
   - uses AI to generate the refinement prompt and/or select the final shortlist
   - includes tradeoffs/drawbacks in result data
 - Guided discovery cache is now the only persistent search cache scope used by the product/backend flow.
-- Guided `/api/search/finalize` reranks the submitted candidate pool and does not reuse cached final result sets.
+- Guided `/api/search/discover` now returns a `discoveryToken`, and guided `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache instead of relying on a browser-posted pool.
+- Guided `/api/search/finalize` still does not reuse cached final result sets; it rebuilds the candidate context from guided discovery cache and reruns AI selection per request.
 - Search cache and operational search-history logging can use Supabase when configured.
 - Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`.
 - Local file-based cache remains as a development/fallback path.
@@ -53,6 +54,7 @@
   - candidate pool limit: 20 candidates
   - priorities limit: 8 items, 80 characters each
   - follow-up notes limit: 500 characters before OpenAI selection
+- Guided finalize now depends on guided discovery cache as the server-side source of truth for the candidate pool, so the browser only sends lightweight finalize context.
 - Search history records cache status best-effort, including guided cache hits/misses and uncached live-route runs.
 - `search_history` is treated as internal operational telemetry for debugging and cache analysis, not as a user-facing saved-search feature.
 - `/api/search/debug` now reports the guided flow as primary, shows guided discovery cache status, and keeps `/api/search/live` clearly marked as the uncached manual combined route.
@@ -75,7 +77,7 @@
 6. Filter junk, duplicates, and weak candidates before final ranking.
 7. Use AI where it improves refinement prompt quality and final selection quality.
 8. Store cache/operational history in Supabase when configured, with local fallback for development.
-9. Keep the explicit `/api/search/live` combined route available only for debug/manual use while guided discovery remains the only persistent cache path.
+9. Keep the explicit `/api/search/live` combined route available only for debug/manual use while guided discovery remains the only persistent cache path and finalize reconstructs from that cache server-side.
 
 ## Important scope constraints
 - Do not overengineer scaling work before v1 usage justifies it.

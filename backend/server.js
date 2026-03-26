@@ -16,7 +16,7 @@ import {
   getSupabaseHealth,
   isSupabaseConfigured,
 } from './lib/search-storage.js'
-import { buildCacheKey, getEnv } from './lib/search-data.js'
+import { buildCacheKey, getEnv, validateSearchInput } from './lib/search-data.js'
 
 const PORT = Number(process.env.PORT || 8787)
 const LIVE_RESULT_FILTER_CONFIG = {
@@ -123,6 +123,41 @@ function sanitizeExcludedCandidateIds(values) {
     maxItems: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
     maxItemLength: 200,
   })
+}
+
+function sanitizeFinalizeDiscoveryContext(body) {
+  const query = typeof body?.query === 'string' ? body.query : ''
+  const discoveryToken = truncateText(body?.discoveryToken, 300)
+  const { error, isValid, normalizedQuery } = validateSearchInput(query, '')
+
+  if (!isValid) {
+    return {
+      error,
+      isValid: false,
+    }
+  }
+
+  if (!discoveryToken) {
+    return {
+      error: 'A discovery token is required to finalize the search.',
+      isValid: false,
+    }
+  }
+
+  const expectedDiscoveryToken = buildCacheKey(normalizedQuery, '', CACHE_SCOPE_DISCOVERY)
+
+  if (discoveryToken !== expectedDiscoveryToken) {
+    return {
+      error: 'The guided discovery token is invalid for this query. Please start the search again.',
+      isValid: false,
+    }
+  }
+
+  return {
+    discoveryToken,
+    isValid: true,
+    normalizedQuery,
+  }
 }
 
 function sanitizeFinalizeCandidate(candidate, index) {
@@ -262,6 +297,37 @@ function sanitizeFinalizeCandidatePool(candidatePool) {
       similarQueries: sanitizeStringList(candidatePool.similarQueries, { maxItems: 8, maxItemLength: 120 }),
       candidates,
     },
+  }
+}
+
+async function readFinalizeCandidatePoolFromDiscovery(normalizedQuery) {
+  const { cachedEntry } = await readCachedSearchSnapshot({
+    productQuery: normalizedQuery,
+    details: '',
+    scope: CACHE_SCOPE_DISCOVERY,
+  })
+
+  if (!cachedEntry?.candidatePool?.candidates?.length) {
+    return {
+      error: 'The guided search context expired. Please start the search again.',
+      isValid: false,
+      statusCode: 409,
+    }
+  }
+
+  const sanitizedCandidatePool = sanitizeFinalizeCandidatePool(cachedEntry.candidatePool)
+
+  if (!sanitizedCandidatePool.isValid) {
+    return {
+      error: 'The cached guided discovery data was invalid. Please start the search again.',
+      isValid: false,
+      statusCode: 500,
+    }
+  }
+
+  return {
+    candidatePool: sanitizedCandidatePool.candidatePool,
+    isValid: true,
   }
 }
 
@@ -435,6 +501,8 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   })
 
   if (cachedEntry?.candidatePool && cachedEntry?.results?.length) {
+    const discoveryToken = buildCacheKey(normalizedQuery, normalizedDetails, CACHE_SCOPE_DISCOVERY)
+
     await recordSearchCacheEvent({
       cacheKey,
       cacheStatus: 'hit',
@@ -449,6 +517,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
     })
 
     sendJson(response, 200, {
+      discoveryToken,
       candidatePool: cachedEntry.candidatePool,
       previewResults: normalizedCachedResults,
       source: 'cache',
@@ -503,6 +572,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
     })
 
     sendJson(response, 200, {
+      discoveryToken: buildCacheKey(normalizedQuery, normalizedDetails, CACHE_SCOPE_DISCOVERY),
       candidatePool: artifacts.candidatePool,
       previewResults: artifacts.results,
     })
@@ -607,27 +677,28 @@ export async function handleSearchDebug(requestUrl, response) {
       openAiConfigured: Boolean(getEnv('OPENAI_API_KEY')),
       supabaseConfigured: isSupabaseConfigured(),
     },
-    architecture: {
-      primaryProductFlow: [
-        '/api/search/discover',
-        '/api/search/refine',
-        '/api/search/finalize',
-      ],
-      manualCombinedRoute: '/api/search/live',
-      storageMode: isSupabaseConfigured() ? 'supabase' : 'local_file_fallback',
-      finalizeUsesRequestCandidatePool: true,
-    },
-    flowBehavior: {
-      guidedDiscovery: {
-        usesCache: guidedDiscoveryUsesCache,
-        callsSerpApi: !guidedDiscoveryUsesCache,
-        callsOpenAi: false,
+      architecture: {
+        primaryProductFlow: [
+          '/api/search/discover',
+          '/api/search/refine',
+          '/api/search/finalize',
+        ],
+        manualCombinedRoute: '/api/search/live',
+        storageMode: isSupabaseConfigured() ? 'supabase' : 'local_file_fallback',
+        finalizeUsesDiscoveryCache: true,
+        finalizeUsesRequestCandidatePool: false,
       },
-      guidedFinalize: {
-        usesCache: false,
-        callsSerpApi: false,
-        callsOpenAi: true,
-      },
+      flowBehavior: {
+        guidedDiscovery: {
+          usesCache: guidedDiscoveryUsesCache,
+          callsSerpApi: !guidedDiscoveryUsesCache,
+          callsOpenAi: false,
+        },
+        guidedFinalize: {
+          usesCache: true,
+          callsSerpApi: false,
+          callsOpenAi: true,
+        },
       liveSearch: {
         usesCache: false,
         callsSerpApi: true,
@@ -664,14 +735,23 @@ export async function handleFinalizeSelection(request, response) {
     return
   }
 
-  const sanitizedCandidatePool = sanitizeFinalizeCandidatePool(body?.candidatePool)
+  const sanitizedDiscoveryContext = sanitizeFinalizeDiscoveryContext(body)
 
-  if (!sanitizedCandidatePool.isValid) {
-    sendJson(response, 400, { error: sanitizedCandidatePool.error })
+  if (!sanitizedDiscoveryContext.isValid) {
+    sendJson(response, 400, { error: sanitizedDiscoveryContext.error })
     return
   }
 
-  const candidatePool = sanitizedCandidatePool.candidatePool
+  const resolvedCandidatePool = await readFinalizeCandidatePoolFromDiscovery(
+    sanitizedDiscoveryContext.normalizedQuery,
+  )
+
+  if (!resolvedCandidatePool.isValid) {
+    sendJson(response, resolvedCandidatePool.statusCode, { error: resolvedCandidatePool.error })
+    return
+  }
+
+  const candidatePool = resolvedCandidatePool.candidatePool
   const priorities = sanitizeStringList(body?.priorities, {
     maxItems: FINALIZE_MAX_PRIORITIES,
     maxItemLength: FINALIZE_MAX_PRIORITY_LENGTH,

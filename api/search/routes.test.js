@@ -91,9 +91,8 @@ describe('Vercel search route wrappers', () => {
         'x-forwarded-for': '203.0.113.32',
       },
       body: JSON.stringify({
-        candidatePool: {
-          candidates: [{ id: 'one', title: 'Candidate one' }],
-        },
+        query: 'stroller',
+        discoveryToken: 'guided_discovery:stroller|',
       }),
     })
 
@@ -112,9 +111,8 @@ describe('Vercel search route wrappers', () => {
     )
     expect(await response.text()).toBe(
       JSON.stringify({
-        candidatePool: {
-          candidates: [{ id: 'one', title: 'Candidate one' }],
-        },
+        query: 'stroller',
+        discoveryToken: 'guided_discovery:stroller|',
       }),
     )
   })

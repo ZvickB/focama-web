@@ -34,10 +34,11 @@
 ## Known remaining work
 - Watch how the new feedback-based retry loop performs with real searches and tighten the copy, friction, and retry cap only if testers start treating it like a browse loop.
 - Watch whether hard exclusion of rejected picks is too strict in small candidate pools, and decide later whether to broaden discovery rather than reusing rejected items.
-- Consider whether a later version of the retry path should preserve or expose a broader cleaned candidate set for smarter follow-up passes before paying for another SerpApi request; do not let this quietly turn the product into a generic `show more results` marketplace-style browse flow.
-- Replace the current `About` destination with a `Why Focama` page that explains what the product is for and how to use it.
-- Make sure any header/nav link that currently points people to `About` lands on `Why Focama` instead.
-- The `Why Focama` page should include a clear home button so users can easily return to the homepage.
+- The broader cleaned guided candidate set is now preserved server-side in guided discovery cache for finalize/retry reconstruction; if a later retry path exposes more of that context, do not let it quietly turn into a generic `show more results` marketplace-style browse flow.
+- Development is currently strict about missing guided `discoveryToken` state so frontend/backend contract drift fails loudly; before shipping to production, add or explicitly reject a controlled resilience fallback for missing token state so users do not hit a dead-end if discover/finalize state drifts in the wild, but do not mask real integration bugs during development.
+- Replace the current `About` destination with a `Why Focamai` page that explains what the product is for and how to use it.
+- Make sure any header/nav link that currently points people to `About` lands on `Why Focamai` instead.
+- The `Why Focamai` page should include a clear home button so users can easily return to the homepage.
 - Right after products load on the homepage, add a clear explanation prompt such as `We think the best choice is X. Click to find out why.` On small screens, use tap-oriented wording instead of click-oriented wording.
 - Improve low-confidence search handling so weak or ambiguous searches get a clearer fallback instead of merely plausible results.
 - Decide whether to add post-search quality checks in addition to the current pre-search validation.

@@ -21,7 +21,7 @@
 ## Current UI state
 - `/` is the `open` variant.
 - The open layout is intentionally more minimal and mobile-friendly.
-- The homepage hero in the open layout now uses the PNG wordmark instead of plain `Focama` text.
+- The homepage hero in the open layout now uses the PNG wordmark instead of plain `Focamai` text.
 
 ## Brand assets
 - Master logo: `/src/assets/logo_master_version.svg`
@@ -46,6 +46,10 @@
 - `/api/search/live` is the explicit manual/debug combined route
 - The Vercel route wrappers now preserve forwarded request headers so backend IP-based rate limiting still works in production deployments
 - Guided `/api/search/finalize` now rejects oversized or malformed payloads before AI selection and caps candidate pool size at 20
+- Guided `/api/search/discover` now returns a lightweight `discoveryToken` tied to the cached guided candidate pool
+- Guided `/api/search/finalize` now accepts lightweight finalize context and rebuilds the rich candidate pool server-side from guided discovery cache before AI selection
+- The browser no longer needs to POST the full rich guided candidate pool back to `/api/search/finalize`
+- Guided `/api/search/finalize` body limit is back to 32 KB now that the finalize payload is lightweight again
 - `/api/search/debug` should be read as guided-primary debug output, with `/api/search/live` treated as the manual combined route
 - `/api/health/supabase` now reports local fallback as a supported state when Supabase is not configured
 - Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`

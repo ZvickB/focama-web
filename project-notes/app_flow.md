@@ -1,4 +1,4 @@
-# Focama App Flow
+# Focamai App Flow
 
 ## Purpose of this file
 - This file tracks how the current web app behaves right now.
@@ -30,7 +30,7 @@
 - When the user presses `Show focused picks`, the page should immediately scroll to the results region and swap into loading skeletons while final AI selection is in progress.
 - Once a search has started, the homepage now includes a `Start a new search` action that resets the guided state back to a clean blank search.
 - After final results appear, the homepage now offers a feedback-based retry path through `Didn't find anything you like? Tell us why.`
-- Retry passes reuse the existing candidate pool through `/api/search/finalize` and require feedback before another shortlist is generated.
+- Retry passes reuse the existing guided discovery context through `/api/search/finalize` and require feedback before another shortlist is generated.
 - The retry path is intentionally capped at 2 follow-up retries so the product stays guided instead of becoming endless browsing.
 - On retry, the previously rejected shortlist is excluded from AI reselection rather than merely down-ranked.
 - After a retry succeeds, the earlier shortlist moves into a collapsed `Previous picks` section so the newest shortlist stays primary.
@@ -38,6 +38,9 @@
   - discovery starts through `/api/search/discover`
   - the follow-up prompt comes from `/api/search/refine`
   - final focused picks come from `/api/search/finalize`
+  - `/api/search/discover` now returns the preview set plus a `discoveryToken` tied to the cached guided candidate pool
+  - `/api/search/finalize` now accepts lightweight context such as the query, `discoveryToken`, follow-up notes, retry feedback, and excluded ids
+  - the backend rebuilds the rich candidate pool from guided discovery cache before calling OpenAI
   - this guided flow is the primary backend architecture for the live product experience
   - `/api/search/live` is the explicit manual/debug combined-search endpoint
   - the Vercel route wrappers now forward request headers into the backend handlers so IP-based rate limiting can still key off forwarded client IPs in production
@@ -65,10 +68,11 @@
   - candidate pools are capped at 20 candidates
   - follow-up notes are truncated to 500 characters before going to OpenAI
   - priorities are sanitized and capped before they are merged into final selection context
+  - finalize reconstructs the candidate pool from the cached guided-discovery entry on the server before AI selection, instead of trusting a browser-posted rich pool
 - Retailer product links can already appear in the modal, but affiliate handling and disclosure strategy are not finalized.
 
 ## Marketplace direction
-- Focama is meant to help users narrow choices before going into a retailer marketplace.
+- Focamai is meant to help users narrow choices before going into a retailer marketplace.
 - Retailer integration should stay flexible.
 - The app should not be tightly designed around one marketplace unless that becomes a stable product decision.
 - SerpApi is the current near-term search integration direction.

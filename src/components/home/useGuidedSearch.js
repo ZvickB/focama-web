@@ -10,7 +10,7 @@ export const MAX_REFINEMENT_RETRIES = 2
 function createFallbackRefinementPrompt(productQuery) {
   return {
     prompt: `What should we optimize for with this ${productQuery}?`,
-    helperText: 'Add any context that will help Focama narrow the shortlist more intelligently.',
+    helperText: 'Add any context that will help Focamai narrow the shortlist more intelligently.',
     followUpPlaceholder:
       'Examples: for a small apartment, for daily commuting, needs to feel premium, under $200, easy to clean, for a child, or should last a long time.',
   }
@@ -48,7 +48,8 @@ async function fetchRefinementPrompt(query) {
 }
 
 async function finalizeGuidedSearch({
-  candidatePool,
+  query,
+  discoveryToken,
   followUpNotes,
   rejectionFeedback,
   retryCount,
@@ -60,7 +61,8 @@ async function finalizeGuidedSearch({
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      candidatePool,
+      query,
+      discoveryToken,
       followUpNotes,
       rejectionFeedback,
       retryCount,
@@ -69,39 +71,6 @@ async function finalizeGuidedSearch({
   })
 
   return readJsonResponse(response)
-}
-
-function buildFinalizeCandidatePool(candidatePool) {
-  if (!candidatePool || typeof candidatePool !== 'object') {
-    return null
-  }
-
-  return {
-    query: candidatePool.query,
-    details: candidatePool.details,
-    combinedSearchText: candidatePool.combinedSearchText,
-    searchState: candidatePool.searchState,
-    similarQueries: candidatePool.similarQueries,
-    candidates: Array.isArray(candidatePool.candidates)
-      ? candidatePool.candidates.map((candidate) => ({
-          id: candidate.id,
-          score: candidate.score,
-          title: candidate.title,
-          description: candidate.description,
-          source: candidate.source,
-          price: candidate.price,
-          numericPrice: candidate.numericPrice,
-          rating: candidate.rating,
-          reviewCount: candidate.reviewCount,
-          delivery: candidate.delivery,
-          tag: candidate.tag,
-          extensions: candidate.extensions,
-          multipleSources: candidate.multipleSources,
-          reasons: candidate.reasons,
-          matchSignals: candidate.matchSignals,
-        }))
-      : [],
-  }
 }
 
 function mergeFinalizeResults(results, sourceCandidatePool) {
@@ -134,6 +103,7 @@ export function useGuidedSearch() {
   const [errorMessage, setErrorMessage] = useState('')
   const [hasStartedSearch, setHasStartedSearch] = useState(false)
   const [submittedQuery, setSubmittedQuery] = useState('')
+  const [discoveryToken, setDiscoveryToken] = useState('')
   const [candidatePool, setCandidatePool] = useState(null)
   const [previewResults, setPreviewResults] = useState([])
   const [results, setResults] = useState([])
@@ -180,6 +150,7 @@ export function useGuidedSearch() {
     setSubmittedQuery(nextSubmittedQuery)
     setSelectedProduct(null)
     setErrorMessage('')
+    setDiscoveryToken('')
     setCandidatePool(null)
     setPreviewResults([])
     setResults([])
@@ -200,6 +171,7 @@ export function useGuidedSearch() {
     setErrorMessage('')
     setHasStartedSearch(false)
     setSubmittedQuery('')
+    setDiscoveryToken('')
     setCandidatePool(null)
     setPreviewResults([])
     setResults([])
@@ -237,6 +209,16 @@ export function useGuidedSearch() {
           return
         }
 
+        if (!payload.discoveryToken) {
+          setCandidatePool(null)
+          setPreviewResults([])
+          setErrorMessage(
+            'Guided discovery is missing its session token. Restart the backend server and start the search again.',
+          )
+          return
+        }
+
+        setDiscoveryToken(payload.discoveryToken || '')
         setCandidatePool(payload.candidatePool || null)
         setPreviewResults(payload.previewResults || [])
       })
@@ -274,14 +256,18 @@ export function useGuidedSearch() {
   }
 
   function handleFinalizeRefinement() {
-    if (!candidatePool) {
+    if (!candidatePool || !submittedQuery) {
       return
     }
 
-    const finalizeCandidatePool = buildFinalizeCandidatePool(candidatePool)
+    if (!discoveryToken) {
+      setErrorMessage('Search session is missing. Please start the search again.')
+      return
+    }
 
     finalizeMutation.mutate({
-      candidatePool: finalizeCandidatePool,
+      query: submittedQuery,
+      discoveryToken,
       originalCandidatePool: candidatePool,
       followUpNotes,
       rejectionFeedback: '',
@@ -296,14 +282,18 @@ export function useGuidedSearch() {
   }
 
   function handleRetryWithFeedback() {
-    if (!candidatePool || !retryFeedback.trim() || retryCount >= MAX_REFINEMENT_RETRIES) {
+    if (!candidatePool || !submittedQuery || !retryFeedback.trim() || retryCount >= MAX_REFINEMENT_RETRIES) {
       return
     }
 
-    const finalizeCandidatePool = buildFinalizeCandidatePool(candidatePool)
+    if (!discoveryToken) {
+      setErrorMessage('Search session is missing. Please start the search again.')
+      return
+    }
 
     finalizeMutation.mutate({
-      candidatePool: finalizeCandidatePool,
+      query: submittedQuery,
+      discoveryToken,
       originalCandidatePool: candidatePool,
       followUpNotes,
       rejectionFeedback: retryFeedback.trim(),

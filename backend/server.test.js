@@ -113,6 +113,34 @@ function createFinalizeCandidate(id) {
   }
 }
 
+function createDiscoveryCacheEntry(query, candidates = [createFinalizeCandidate('one')]) {
+  return {
+    cachedAt: '2026-03-17T12:00:00.000Z',
+    candidatePool: {
+      query,
+      details: '',
+      combinedSearchText: query,
+      searchState: 'Results for exact spelling',
+      similarQueries: query === 'stroller' ? ['compact stroller'] : [],
+      candidates,
+    },
+    results: candidates.map((candidate) => ({
+      id: candidate.id,
+      title: candidate.title,
+    })),
+    selection: { mode: 'discovery_preview' },
+    source: 'guided_discovery',
+  }
+}
+
+function createFinalizeDiscoveryBody(overrides = {}) {
+  return {
+    query: 'stroller',
+    discoveryToken: 'guided_discovery:stroller|',
+    ...overrides,
+  }
+}
+
 describe('server handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -187,6 +215,7 @@ describe('server handlers', () => {
       scope: 'guided_discovery',
     })
     expect(JSON.parse(response.body)).toEqual({
+      discoveryToken: 'guided_discovery:thermos|',
       candidatePool: {
         query: 'thermos',
         details: '',
@@ -255,6 +284,18 @@ describe('server handlers', () => {
       },
       source: 'guided_discovery',
       scope: 'guided_discovery',
+    })
+    expect(JSON.parse(response.body)).toEqual({
+      discoveryToken: 'guided_discovery:thermos|',
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Results for exact spelling',
+        similarQueries: [],
+        candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
+      },
+      previewResults: [{ id: 'live-1', title: 'Thermos bottle' }],
     })
   })
 
@@ -333,7 +374,8 @@ describe('server handlers', () => {
         ],
         manualCombinedRoute: '/api/search/live',
         storageMode: 'local_file_fallback',
-        finalizeUsesRequestCandidatePool: true,
+        finalizeUsesDiscoveryCache: true,
+        finalizeUsesRequestCandidatePool: false,
       },
       flowBehavior: {
         guidedDiscovery: {
@@ -342,7 +384,7 @@ describe('server handlers', () => {
           callsOpenAi: false,
         },
         guidedFinalize: {
-          usesCache: false,
+          usesCache: true,
           callsSerpApi: false,
           callsOpenAi: true,
         },
@@ -831,7 +873,7 @@ describe('server handlers', () => {
     })
   })
 
-  it('rejects finalize requests without a candidate pool', async () => {
+  it('rejects finalize requests without a query', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
 
     const response = createResponseRecorder()
@@ -848,11 +890,11 @@ describe('server handlers', () => {
 
     expect(response.statusCode).toBe(400)
     expect(JSON.parse(response.body)).toEqual({
-      error: 'A candidate pool is required to finalize the search.',
+      error: 'Enter a product topic to get started.',
     })
   })
 
-  it('rejects finalize requests when candidates is not an array', async () => {
+  it('rejects finalize requests without a discovery token', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
 
     const response = createResponseRecorder()
@@ -860,9 +902,7 @@ describe('server handlers', () => {
     await handleFinalizeSelection(
       createFinalizeRequest(
         JSON.stringify({
-          candidatePool: {
-            candidates: 'not-an-array',
-          },
+          query: 'stroller',
         }),
         { 'x-forwarded-for': '203.0.113.26' },
       ),
@@ -871,20 +911,20 @@ describe('server handlers', () => {
 
     expect(response.statusCode).toBe(400)
     expect(JSON.parse(response.body)).toEqual({
-      error: 'A candidate pool with a candidates array is required to finalize the search.',
+      error: 'A discovery token is required to finalize the search.',
     })
   })
 
   it('rejects oversized finalize request bodies', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
 
-    const oversizedNotes = 'x'.repeat(40_000)
+    const oversizedNotes = 'x'.repeat(70_000)
     const response = createResponseRecorder()
 
     await handleFinalizeSelection(
       createFinalizeRequest(
         JSON.stringify({
-          candidatePool: { candidates: [createFinalizeCandidate('one')] },
+          ...createFinalizeDiscoveryBody(),
           followUpNotes: oversizedNotes,
         }),
         { 'x-forwarded-for': '203.0.113.21' },
@@ -898,7 +938,7 @@ describe('server handlers', () => {
     })
   })
 
-  it('rejects malformed finalize candidate pools', async () => {
+  it('rejects finalize requests when the discovery token does not match the query', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
 
     const response = createResponseRecorder()
@@ -906,9 +946,8 @@ describe('server handlers', () => {
     await handleFinalizeSelection(
       createFinalizeRequest(
         JSON.stringify({
-          candidatePool: {
-            candidates: [{ id: '', title: '' }],
-          },
+          query: 'stroller',
+          discoveryToken: 'guided_discovery:thermos|',
         }),
         { 'x-forwarded-for': '203.0.113.22' },
       ),
@@ -917,27 +956,19 @@ describe('server handlers', () => {
 
     expect(response.statusCode).toBe(400)
     expect(JSON.parse(response.body)).toEqual({
-      error: 'Candidate 1 must include non-empty id and title fields.',
+      error: 'The guided discovery token is invalid for this query. Please start the search again.',
     })
   })
 
-  it('rejects finalize candidate pools that exceed the explicit candidate limit', async () => {
+  it('rejects finalize requests when the guided discovery cache entry is missing', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
 
     const response = createResponseRecorder()
-    const candidates = Array.from({ length: 21 }, (_, index) => createFinalizeCandidate(`id-${index + 1}`))
 
     await handleFinalizeSelection(
       createFinalizeRequest(
         JSON.stringify({
-          candidatePool: {
-            query: 'stroller',
-            details: '',
-            combinedSearchText: 'stroller',
-            searchState: 'Results for exact spelling',
-            similarQueries: ['compact stroller'],
-            candidates,
-          },
+          ...createFinalizeDiscoveryBody(),
           followUpNotes: 'keep it lightweight',
         }),
         { 'x-forwarded-for': '203.0.113.23' },
@@ -945,9 +976,9 @@ describe('server handlers', () => {
       response,
     )
 
-    expect(response.statusCode).toBe(400)
+    expect(response.statusCode).toBe(409)
     expect(JSON.parse(response.body)).toEqual({
-      error: 'Candidate pool cannot include more than 20 candidates.',
+      error: 'The guided search context expired. Please start the search again.',
     })
     expect(selectAiResults).not.toHaveBeenCalled()
   })
@@ -963,18 +994,12 @@ describe('server handlers', () => {
     const response = createResponseRecorder()
     const candidates = Array.from({ length: 20 }, (_, index) => createFinalizeCandidate(`id-${index + 1}`))
     const longNotes = 'n'.repeat(800)
+    readStoredSearchCacheEntry.mockResolvedValueOnce(createDiscoveryCacheEntry('stroller', candidates))
 
     await handleFinalizeSelection(
       createFinalizeRequest(
         JSON.stringify({
-          candidatePool: {
-            query: 'stroller',
-            details: '',
-            combinedSearchText: 'stroller',
-            searchState: 'Results for exact spelling',
-            similarQueries: ['compact stroller'],
-            candidates,
-          },
+          ...createFinalizeDiscoveryBody(),
           priorities: ['lightweight', 'easy fold'],
           followUpNotes: longNotes,
         }),
@@ -1007,18 +1032,14 @@ describe('server handlers', () => {
     })
 
     const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one'), createFinalizeCandidate('two')]),
+    )
 
     await handleFinalizeSelection(
       createFinalizeRequest(
         JSON.stringify({
-          candidatePool: {
-            query: 'stroller',
-            details: '',
-            combinedSearchText: 'stroller',
-            searchState: 'Results for exact spelling',
-            similarQueries: ['compact stroller'],
-            candidates: [createFinalizeCandidate('one'), createFinalizeCandidate('two')],
-          },
+          ...createFinalizeDiscoveryBody(),
           followUpNotes: 'keep it lightweight',
           rejectionFeedback: 'These picks still feel too bulky for city travel.',
           excludedCandidateIds: ['one'],
@@ -1054,15 +1075,14 @@ describe('server handlers', () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
 
     const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
 
     await handleFinalizeSelection(
       createFinalizeRequest(
         JSON.stringify({
-          candidatePool: {
-            query: 'stroller',
-            details: '',
-            candidates: [createFinalizeCandidate('one')],
-          },
+          ...createFinalizeDiscoveryBody(),
           rejectionFeedback: 'Not right for city travel',
           excludedCandidateIds: ['one'],
           retryCount: 1,
@@ -1078,9 +1098,9 @@ describe('server handlers', () => {
       candidatePool: {
         query: 'stroller',
         details: 'Retry feedback: Not right for city travel. Excluded previous picks: one',
-        combinedSearchText: '',
-        searchState: '',
-        similarQueries: [],
+        combinedSearchText: 'stroller',
+        searchState: 'Results for exact spelling',
+        similarQueries: ['compact stroller'],
         candidates: [],
       },
       retryCount: 1,
@@ -1103,11 +1123,11 @@ describe('server handlers', () => {
     })
 
     const requestBody = JSON.stringify({
-      candidatePool: {
-        candidates: [createFinalizeCandidate('one')],
-      },
+      ...createFinalizeDiscoveryBody(),
       followUpNotes: 'keep it lightweight',
     })
+
+    readStoredSearchCacheEntry.mockResolvedValue(createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]))
 
     for (let index = 0; index < 5; index += 1) {
       const response = createResponseRecorder()

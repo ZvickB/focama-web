@@ -82,6 +82,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
+            discoveryToken: 'guided_discovery:stroller|',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -151,6 +152,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
+            discoveryToken: 'guided_discovery:stroller|',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -228,6 +230,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
+            discoveryToken: 'guided_discovery:stroller|',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -304,6 +307,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
+            discoveryToken: 'guided_discovery:stroller|',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -356,6 +360,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
+            discoveryToken: 'guided_discovery:stroller|',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -413,6 +418,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
+            discoveryToken: 'guided_discovery:stroller|',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -530,32 +536,8 @@ describe('HomePage', () => {
       }),
     )
     expect(JSON.parse(retryRequest[1].body)).toEqual({
-      candidatePool: {
-        query: 'stroller',
-        details: '',
-        candidates: [
-          {
-            id: 'result-1',
-            title: 'Travel stroller',
-            description: 'Lightweight and easy to fold.',
-            source: 'Target',
-            price: '$129.99',
-            rating: 4.4,
-            reviewCount: 87,
-            reasons: ['Available from Target'],
-          },
-          {
-            id: 'result-2',
-            title: 'Full-size stroller',
-            description: 'Larger frame for everyday use.',
-            source: 'Target',
-            price: '$189.99',
-            rating: 4.5,
-            reviewCount: 120,
-            reasons: ['Roomier seat'],
-          },
-        ],
-      },
+      query: 'stroller',
+      discoveryToken: 'guided_discovery:stroller|',
       followUpNotes: 'comfort matters most',
       rejectionFeedback: 'Still too bulky for city travel.',
       excludedCandidateIds: ['result-1', 'result-2'],
@@ -571,6 +553,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
+            discoveryToken: 'guided_discovery:thermos|',
             candidatePool: {
               query: 'thermos',
               details: '',
@@ -636,6 +619,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
+            discoveryToken: 'guided_discovery:stroller|',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -726,6 +710,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
+            discoveryToken: 'guided_discovery:stroller|',
             candidatePool: {
               query: 'stroller',
               details: '',
