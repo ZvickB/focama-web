@@ -5,17 +5,17 @@ function AffiliateDisclosurePage() {
     <PageShell
       eyebrow="Affiliate Disclosure"
       title="Current disclosure status."
-      description="This page explains how affiliate relationships are handled on Focama at the current stage of the project."
+      description="This page explains how affiliate relationships are handled on Focamai at the current stage of the project."
     >
       <p>
-        Focama can already send users to retailer product pages from recommendation results. Those
+        Focamai can already send users to retailer product pages from recommendation results. Those
         outbound links are part of the current guided-search experience even while the monetization
         model is still evolving.
       </p>
       <p>
-        In the future, Focama may participate in affiliate programs, including Amazon Associates.
+        In the future, Focamai may participate in affiliate programs, including Amazon Associates.
         If and when affiliate links are activated, the site will provide clear disclosures so users
-        understand that Focama may earn a commission from qualifying purchases.
+        understand that Focamai may earn a commission from qualifying purchases.
       </p>
       <p>
         Once Amazon Associates is active on the site, this page and any relevant page-level

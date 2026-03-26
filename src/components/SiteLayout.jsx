@@ -129,14 +129,14 @@ function SiteLayout() {
               <NavLink to="/" className="flex items-center gap-3 text-slate-900">
                 <img
                   src={logo}
-                  alt="Focama logo"
+                  alt="Focamai logo"
                   width="96"
                   height="96"
                   className={`rounded-[18px] bg-white/35 object-contain p-0.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)] ring-1 ring-stone-200/35 transition-all duration-300 ease-out ${
                     isCompact ? 'h-12 w-12 sm:h-14 sm:w-14' : 'h-16 w-16 sm:h-20 sm:w-20'
                   }`}
                 />
-                <span className="text-lg font-semibold tracking-[0.08em] sm:text-xl">FOCAMA</span>
+                <span className="text-lg font-semibold tracking-[0.08em] sm:text-xl">FOCAMAI</span>
               </NavLink>
               <p
                 className={`text-sm text-slate-500 transition-all duration-300 ease-out ${
@@ -199,9 +199,9 @@ function SiteLayout() {
       <footer className="border-t border-white/60 bg-[rgba(252,249,243,0.72)] px-4 py-8 sm:px-6 lg:px-8">
         <div className="mx-auto grid w-full max-w-7xl gap-6 text-sm text-slate-600 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-2">
-            <p className="text-base font-semibold text-slate-900">Focama</p>
+            <p className="text-base font-semibold text-slate-900">Focamai</p>
             <p>
-              Focama offers calm buying guidance before you head to a marketplace. The current app
+              Focamai offers calm buying guidance before you head to a marketplace. The current app
               focuses on guided product search, AI-assisted shortlist refinement, and clear trust
               pages while the broader product continues to evolve.
             </p>

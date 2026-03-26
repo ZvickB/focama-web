@@ -1,4 +1,4 @@
-# Focama Agent Guide
+# Focamai Agent Guide
 
 Read this file first at the start of every chat.
 

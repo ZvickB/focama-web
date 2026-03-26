@@ -1,6 +1,6 @@
 # Project Notes
 
-This folder holds working notes for the Focama project and is the best place to point future AI chats for context.
+This folder holds working notes for the Focamai project and is the best place to point future AI chats for context.
 
 Use these files:
 - `current-status.md` for the immediate next step and active constraints

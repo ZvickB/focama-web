@@ -260,7 +260,7 @@ export function ProductDetailModal({ item, onClose }) {
                   </Button>
                 )}
                 <p className="text-xs leading-5 text-slate-500">
-                  Prices and availability can change after you leave Focama.
+                  Prices and availability can change after you leave Focamai.
                 </p>
               </div>
               <Button
@@ -524,7 +524,7 @@ export function ResultsSection({
                 Search first, refine while it loads.
               </h2>
               <p className="text-base leading-7 text-slate-600">
-                Start with the product, then let Focama ask the more useful follow-up instead of
+                Start with the product, then let Focamai ask the more useful follow-up instead of
                 making you fill out a long form up front.
               </p>
             </div>
@@ -560,7 +560,7 @@ export function ResultsSection({
             </div>
             <p className="text-lg font-medium text-slate-900">We couldn&apos;t build a strong shortlist yet.</p>
             <p className="text-sm leading-6 text-slate-600 sm:text-base">
-              Try a more specific search or add more context so Focama can narrow the best options.
+              Try a more specific search or add more context so Focamai can narrow the best options.
             </p>
           </div>
         </div>

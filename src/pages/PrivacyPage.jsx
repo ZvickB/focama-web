@@ -5,10 +5,10 @@ function PrivacyPage() {
     <PageShell
       eyebrow="Privacy Policy"
       title="How information is handled on this site."
-      description="This is a simple privacy policy for the current version of Focama and can be updated as the site adds more features."
+      description="This is a simple privacy policy for the current version of Focamai and can be updated as the site adds more features."
     >
       <p>
-        Focama currently lets visitors enter product topics and optional refinement notes to
+        Focamai currently lets visitors enter product topics and optional refinement notes to
         generate shopping shortlists. That information is used to operate the guided search flow,
         help refine the final shortlist, and improve the reliability of the experience.
       </p>
@@ -20,7 +20,7 @@ function PrivacyPage() {
         Supabase-backed storage or a local development fallback.
       </p>
       <p>
-        Focama does not currently offer user accounts, and it does not ask users to submit payment
+        Focamai does not currently offer user accounts, and it does not ask users to submit payment
         information through the site.
       </p>
       <p>

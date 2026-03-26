@@ -179,7 +179,7 @@ function OpenLayout(props) {
             <div className="space-y-2">
               <img
                 src={wordmark}
-                alt="Focama"
+                alt="Focamai"
                 className="mx-auto h-auto w-full max-w-[240px] sm:max-w-[340px] lg:max-w-[420px]"
               />
             </div>
@@ -269,7 +269,7 @@ function OpenLayout(props) {
                       {state.isGeneratingPrompt
                         ? 'We’re preparing a more useful follow-up before you refine the shortlist.'
                         : prompt?.helperText ||
-                          'Add any context that will help Focama narrow the shortlist more intelligently.'}
+                          'Add any context that will help Focamai narrow the shortlist more intelligently.'}
                     </p>
                   </div>
 

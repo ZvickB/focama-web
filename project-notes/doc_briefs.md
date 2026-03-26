@@ -1,6 +1,6 @@
-# Focama
+# Focamai
 intent: an app where the user can enter a product description and receive a calmer, more focused shopping shortlist before heading into a retailer marketplace.
-purpose: Large marketplaces are designed to be sticky and distracting. Focama is meant to reduce that friction by helping users move toward the item they want without the usual noise. This is especially relevant for users who care about focus and who may also want to avoid the general browsing environment of major marketplaces.
+purpose: Large marketplaces are designed to be sticky and distracting. Focamai is meant to reduce that friction by helping users move toward the item they want without the usual noise. This is especially relevant for users who care about focus and who may also want to avoid the general browsing environment of major marketplaces.
 
 ## Amazon compliance notes
 - Use the exact Amazon Associates website disclosure text somewhere clear on the site once Amazon affiliate linking is live: `As an Amazon Associate I earn from qualifying purchases.`
@@ -41,7 +41,7 @@ purpose: Large marketplaces are designed to be sticky and distracting. Focama is
 - Keep the default homepage on the `open` layout while continuing to polish it.
 - Do not remove the alternate UI variants yet.
 - Keep the product vendor-agnostic in both UX and backend structure so different search/data providers can support different tiers over time.
-- The frontend and normalized backend response shape should belong to Focama rather than to any one provider.
+- The frontend and normalized backend response shape should belong to Focamai rather than to any one provider.
 - The site may eventually point users to Amazon or Walmart, so the frontend should stay flexible for those destinations.
 - SerpApi is the practical interim data source until the product flow is working and Amazon Creator API approval is in place.
 - SerpApi may still remain part of the product later for broader paid-tier search, so it should be treated as a provider option rather than as the identity of the app.

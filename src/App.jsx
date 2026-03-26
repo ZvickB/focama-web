@@ -39,7 +39,7 @@ function App() {
       return
     }
 
-    const splashStartedAt = Number(window.__focamaSplashStartedAt || 0)
+    const splashStartedAt = Number(window.__focamaiSplashStartedAt || 0)
     const elapsed = Math.max(0, performance.now() - splashStartedAt)
     const remainingDelay = Math.max(0, SPLASH_MIN_DURATION_MS - elapsed)
 
