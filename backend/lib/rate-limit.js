@@ -1,3 +1,5 @@
+import { takeSharedRateLimitToken } from './search-storage.js'
+
 const RATE_LIMIT_STORE = new Map()
 
 export const DEFAULT_RATE_LIMIT_CONFIG = {
@@ -25,9 +27,15 @@ export function getClientIpAddress(headers = {}) {
   return 'anonymous'
 }
 
-export function takeRateLimitToken(ipAddress, { limit, windowMs } = DEFAULT_RATE_LIMIT_CONFIG) {
+export async function takeRateLimitToken(ipAddress, { limit, windowMs } = DEFAULT_RATE_LIMIT_CONFIG) {
   const now = Date.now()
   const key = toKey(ipAddress)
+  const sharedResult = await takeSharedRateLimitToken({ key, limit, windowMs })
+
+  if (sharedResult) {
+    return sharedResult
+  }
+
   const existingEntry = RATE_LIMIT_STORE.get(key)
 
   if (!existingEntry || existingEntry.resetAt <= now) {

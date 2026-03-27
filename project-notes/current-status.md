@@ -21,6 +21,7 @@
   - tucks rejected shortlists into a collapsed `Previous picks` section after a retry succeeds
   - scrolls more directly between search, refinement, and results states
   - scrolls to results immediately when final AI picks are requested and shows skeletons during finalization
+  - keeps preview results visible during final AI narrowing when they are already on screen, with a calmer status message instead of dropping straight back to a blank loading state
   - keeps skeletons visible but lower-priority
   - shows products in a 2x3 skeleton layout
 - Product shortlists are now 6 items end to end, not 4.
@@ -49,9 +50,12 @@
 - Search cache and operational search-history logging can use Supabase when configured.
 - Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`.
 - Local file-based cache remains as a development/fallback path.
-- `project-notes/db-needs.md` now captures the plain-language summary of the current required Supabase tables: `search_cache` and `search_history`.
-- Basic IP-based rate limiting exists on the search handlers.
+- Shared rate limiting now uses Supabase when configured, with in-memory fallback only for local/degraded environments.
+- Backend env fallback loading now caches the parsed root `.env` snapshot in-process instead of rereading it on each `getEnv()` call.
+- `project-notes/db-needs.md` now captures the plain-language summary of the current required Supabase tables: `search_cache`, `search_history`, and `rate_limit_events`.
+- Basic IP-based rate limiting exists on the search handlers, and now prefers the shared Supabase-backed limiter path when available.
 - The Vercel API wrappers now forward request headers into the backend handlers so production rate limiting can use forwarded client IP headers.
+- The Vercel route wrappers now share a small bridge helper so the dual-runtime path stays thinner, but the backend still uses a transitional Node-shaped handler contract across local server and Vercel routes.
 - Guided `/api/search/finalize` now enforces explicit abuse guardrails:
   - request body limit: 32 KB
   - candidate pool limit: 20 candidates
@@ -59,9 +63,11 @@
   - follow-up notes limit: 500 characters before OpenAI selection
 - Guided finalize now depends on guided discovery cache as the server-side source of truth for the candidate pool, so the browser only sends lightweight finalize context.
 - Guided search responses now include backend timing via `Server-Timing` headers, and the homepage shows the timing panel in development or when `?timing=1` is present so discover/refine/finalize latency can be inspected by leg.
+- Guided `/api/search/discover` now returns the preview response before the discovery-cache write finishes, so first-hit latency is no longer blocked by Supabase cache persistence.
+- Guided finalize now sends a slightly slimmer AI candidate summary by dropping variant tokens and collapsing trust metadata to a compact score-only signal, while keeping reasons and attributes in the selection prompt.
 - Candidate/result normalization now ignores promo-only description text, and the finalize AI handoff drops empty/generic filler descriptions plus redundant source/price/delivery boilerplate so the prompt stays tighter without changing the shortlist flow.
 - The filtered candidate pool now carries provider-agnostic duplicate-family metadata, compact attribute tags, and trust signals before final AI selection so the backend is less tied to raw SerpApi wording.
-- Search history records cache status best-effort, including guided cache hits/misses and uncached live-route runs.
+- Search history records cache status best-effort, including guided cache hits/misses and uncached live-route runs, and guided discovery telemetry now uses the scoped discovery cache key.
 - `search_history` is treated as internal operational telemetry for debugging and cache analysis, not as a user-facing saved-search feature.
 - `/api/search/debug` now reports the guided flow as primary, shows guided discovery cache status, and keeps `/api/search/live` clearly marked as the uncached manual combined route.
 - `/api/health/supabase` now treats an unconfigured Supabase setup as an optional local-fallback state rather than a backend failure.
@@ -103,3 +109,4 @@
 
 ## Recommended next task
 - Continue polishing the default `open` homepage, then keep tightening result quality, cache behavior, and abuse protection based on real tester feedback from the current deployed flow.
+- When backend cleanup resumes, prioritize a shared/global rate limiter first, then keep shrinking `backend/server.js`, and leave runtime-agnostic service extraction for the Vercel bridge as the later cleanup step.

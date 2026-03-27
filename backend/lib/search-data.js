@@ -10,8 +10,13 @@ export const SERPAPI_ENDPOINT = 'https://serpapi.com/search.json'
 export const SEARCH_CACHE_PATH = resolve(process.cwd(), 'temp-data', 'serpapi-cache.json')
 export const SEARCH_EVALUATION_PATH = resolve(process.cwd(), 'temp-data', 'search-evaluation.json')
 const ENV_PATH = resolve(process.cwd(), '.env')
+let cachedEnvEntries = null
 
 export function readEnvFile() {
+  if (cachedEnvEntries) {
+    return cachedEnvEntries
+  }
+
   try {
     const envContents = readFileSync(ENV_PATH, 'utf8')
     const pairs = envContents
@@ -29,14 +34,20 @@ export function readEnvFile() {
       })
       .filter(Boolean)
 
-    return Object.fromEntries(pairs)
+    cachedEnvEntries = Object.fromEntries(pairs)
+    return cachedEnvEntries
   } catch {
-    return {}
+    cachedEnvEntries = {}
+    return cachedEnvEntries
   }
 }
 
 export function getEnv(name) {
   return process.env[name] || readEnvFile()[name]
+}
+
+export function resetEnvCache() {
+  cachedEnvEntries = null
 }
 
 export function buildQuery(productQuery, details) {

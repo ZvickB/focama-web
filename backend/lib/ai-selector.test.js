@@ -342,7 +342,7 @@ describe('ai selector', () => {
     expect(prompt).not.toContain('Shop mens on cloud dress shoes at Nordstrom')
   })
 
-  it('includes compact duplicate-family, attribute, and trust metadata in the AI summary', async () => {
+  it('includes compact duplicate-family, attribute, and trimmed trust metadata in the AI summary', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -386,6 +386,8 @@ describe('ai selector', () => {
     expect(prompt).toContain('"duplicateFamilyKey": "cloud 6 shoe"')
     expect(prompt).toContain('"attributes": [')
     expect(prompt).toContain('"trustSignals": {')
-    expect(prompt).toContain('"variantTokens": [')
+    expect(prompt).toContain('"score": 4')
+    expect(prompt).not.toContain('"variantTokens": [')
+    expect(prompt).not.toContain('"ratingBand": "high"')
   })
 })

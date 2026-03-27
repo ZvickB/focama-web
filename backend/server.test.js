@@ -37,6 +37,7 @@ vi.mock('./lib/search-storage.js', () => ({
   isSupabaseConfigured: vi.fn(() => false),
   readStoredSearchCacheEntry: vi.fn(),
   recordSearchHistory: vi.fn(),
+  takeSharedRateLimitToken: vi.fn().mockResolvedValue(null),
   writeStoredSearchCacheEntry: vi.fn(),
 }))
 

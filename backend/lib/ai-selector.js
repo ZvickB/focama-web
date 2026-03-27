@@ -204,8 +204,14 @@ function buildCandidateSummary(candidatePool) {
     attributes: Array.isArray(candidate.attributes) ? candidate.attributes.slice(0, 6) : [],
     matchSignals: candidate.matchSignals,
     reasons: getCandidateSummaryReasons(candidate),
-    trustSignals: candidate.trustSignals || null,
-    variantTokens: Array.isArray(candidate.variantTokens) ? candidate.variantTokens.slice(0, 4) : [],
+    trustSignals:
+      candidate.trustSignals && typeof candidate.trustSignals === 'object' && !Array.isArray(candidate.trustSignals)
+        ? {
+            score: Number.isFinite(Number(candidate.trustSignals.score))
+              ? Number(candidate.trustSignals.score)
+              : 0,
+          }
+        : null,
   }))
 }
 

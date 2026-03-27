@@ -47,14 +47,20 @@
 - This guided flow is the primary backend architecture for the homepage
 - `/api/search/live` is the explicit manual/debug combined route
 - The Vercel route wrappers now preserve forwarded request headers so backend IP-based rate limiting still works in production deployments
+- Shared rate limiting now prefers a Supabase-backed event table when configured, with in-memory fallback only for local or degraded environments
 - Guided `/api/search/finalize` now rejects oversized or malformed payloads before AI selection and caps candidate pool size at 20
 - Guided `/api/search/discover` now returns a lightweight `discoveryToken` tied to the cached guided candidate pool
 - Guided `/api/search/finalize` now accepts lightweight finalize context and rebuilds the rich candidate pool server-side from guided discovery cache before AI selection
 - The browser no longer needs to POST the full rich guided candidate pool back to `/api/search/finalize`
 - Guided `/api/search/finalize` body limit is back to 32 KB now that the finalize payload is lightweight again
 - Guided discover/refine/finalize now expose backend stage timing through `Server-Timing` headers, and the homepage shows the timing panel in development or when `?timing=1` is present for quick latency checks
+- Guided discovery now responds before the discovery cache write finishes, so first-time searches are no longer blocked by Supabase cache persistence time
+- Guided finalize now trims prompt weight by dropping variant tokens and reducing trust metadata to a score-only signal, while keeping reasons and attributes in the AI selection context
 - Promo-only shopping snippets such as `20% OFF` / `LOW PRICE` are now ignored as normalized descriptions, and finalize AI summaries now omit empty/generic filler descriptions plus redundant source/price/delivery boilerplate to cut prompt waste
 - The backend candidate pool now includes provider-agnostic duplicate-family keys, variant tokens, compact attribute tags, and trust signals before finalize so future search-provider changes can reuse the same internal model more easily
+- Guided discovery telemetry now records the scoped discovery cache key in `search_history`, so debug history lines up with the actual cached entry
+- Backend env fallback loading now caches the parsed `.env` file in-process, so repeated `getEnv()` reads no longer hit sync disk I/O on request paths
+- The Vercel route wrappers now share a tiny bridge helper instead of each manually recreating the same Node-like adapter logic
 - `/api/search/debug` should be read as guided-primary debug output, with `/api/search/live` treated as the manual combined route
 - `/api/health/supabase` now reports local fallback as a supported state when Supabase is not configured
 - Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`
@@ -70,6 +76,7 @@
   - earlier rejected shortlists collapse into a `Previous picks` section after a retry
   - scroll transitions between refinement and results should move once without overshooting
   - pressing `Show focused picks` now scrolls to the results region immediately and shows skeletons while final AI selection runs
+  - if preview results are already visible during finalization, they now stay on screen with a calmer narrowing-state message instead of disappearing behind a blank loading state
   - no chips
   - `Show products now` stays disabled until discovery is ready
   - skeletons show in a 2x3 layout and only peek into view
@@ -82,7 +89,9 @@
 ## Testing state
 - In the latest backend cleanup pass:
   - `npm test -- backend/server.test.js` passed
-  - `npm test -- api/search/routes.test.js` passed
+  - `npm test -- api/search/routes.test.js` passed in the earlier pass
+  - after the non-blocking discovery-cache write change, `npm test -- backend/server.test.js` passed again
+  - rerunning `npm test -- api/search/routes.test.js` from PowerShell hit a Windows `EPERM` path-resolution error before Vitest ran
 
 ## Recent user preferences
 - Prefer minimal copy in the open layout
@@ -101,3 +110,7 @@
 - First inspect `/src/components/home/HomeExperience.jsx`
 - Then inspect `/src/App.jsx` and `/src/components/SiteLayout.jsx`
 - Treat `wordmark.PNG` as the preferred current wordmark asset unless the user explicitly wants another attempt
+- If backend architecture cleanup resumes, the next practical order is:
+  - stronger global/shared rate limiting
+  - keep thinning `backend/server.js`
+  - later extract runtime-agnostic services so the Vercel bridge stops depending on a Node-style handler contract

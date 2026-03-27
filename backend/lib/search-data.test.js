@@ -3,12 +3,28 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCacheKey,
   getNormalizedResults,
+  getEnv,
   normalizeCacheKeyInput,
   normalizeResult,
+  resetEnvCache,
   validateSearchInput,
 } from './search-data.js'
 
 describe('search-data helpers', () => {
+  it('prefers process env values over the cached env file fallback', () => {
+    process.env.SEARCH_DATA_TEST_VALUE = 'from-process'
+
+    expect(getEnv('SEARCH_DATA_TEST_VALUE')).toBe('from-process')
+
+    delete process.env.SEARCH_DATA_TEST_VALUE
+  })
+
+  it('can reset the cached env file snapshot between reads', () => {
+    resetEnvCache()
+
+    expect(getEnv('SEARCH_DATA_TEST_VALUE_THAT_DOES_NOT_EXIST')).toBeUndefined()
+  })
+
   it('builds a lowercase cache key from query and details', () => {
     expect(buildCacheKey('Lego', 'For Kids')).toBe('lego for kids')
   })

@@ -16,7 +16,7 @@
 - Input validation now blocks obviously low-signal queries.
 - TanStack Query is installed and used for the homepage search request flow.
 - The result cards and modal surface drawbacks/tradeoffs as well as reasons.
-- Basic IP-based rate limiting exists on the search endpoints, including `/api/search/finalize`.
+- Basic IP-based rate limiting exists on the search endpoints, including `/api/search/finalize`, and now prefers a shared Supabase-backed limiter when available.
 - Supabase-backed cache/operational-history storage and health tooling now exist, with local fallback for development.
 - Guided discovery is the only persistent cache path; `/api/search/live` remains only as the explicit manual/debug combined route.
 - Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`.
@@ -53,6 +53,8 @@
 - Tighten privacy/compliance language if analytics stays enabled and as affiliate behavior becomes real.
 - Keep search history operational-only for now; if user-facing saved history is ever added, build it as a separate product feature and data model instead of exposing the current telemetry table.
 - Keep an eye on rate limiting, cache TTL strategy, and API costs once usage increases.
+- Continue trimming `backend/server.js` so request parsing, route orchestration, and flow-specific logic are not all growing in the same file.
+- The Vercel bridge is acceptable for now, but the long-term cleanup path should be extracting runtime-agnostic backend services so Vercel routes stop adapting themselves into Node-style request objects.
 
 ## Nice-to-have polish
 - Do another small pass on result-card readability and image overlays.

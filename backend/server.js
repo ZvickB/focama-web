@@ -55,6 +55,10 @@ function nowMs() {
   return performance.now()
 }
 
+function runInBackground(task) {
+  Promise.resolve(task).catch(() => {})
+}
+
 export function sendJson(response, statusCode, payload, headers = {}) {
   const serverTiming = formatServerTiming(headers.serverTiming)
   const responseHeaders = {
@@ -422,7 +426,7 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
   }
 
   const clientIpAddress = getClientIpAddress(request.headers || {})
-  const rateLimit = takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
+  const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
 
   if (!rateLimit.allowed) {
     sendJson(response, 429, {
@@ -534,7 +538,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   }
 
   const clientIpAddress = getClientIpAddress(request.headers || {})
-  const rateLimit = takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
+  const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
 
   if (!rateLimit.allowed) {
     sendJson(response, 429, {
@@ -543,7 +547,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
     return
   }
 
-  const { cacheKey, error, isValid, normalizedQuery } = getValidatedSearchRequest(requestUrl, {
+  const { error, isValid, normalizedQuery } = getValidatedSearchRequest(requestUrl, {
     includeDetails: false,
   })
 
@@ -553,6 +557,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   }
 
   const normalizedDetails = ''
+  const discoveryCacheKey = buildCacheKey(normalizedQuery, normalizedDetails, CACHE_SCOPE_DISCOVERY)
   const cacheLookupStartedAt = nowMs()
   const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
@@ -562,10 +567,8 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
 
   if (cachedEntry?.candidatePool && cachedEntry?.results?.length) {
-    const discoveryToken = buildCacheKey(normalizedQuery, normalizedDetails, CACHE_SCOPE_DISCOVERY)
-
     await recordSearchCacheEvent({
-      cacheKey,
+      cacheKey: discoveryCacheKey,
       cacheStatus: 'hit',
       candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
         ? cachedEntry.candidatePool.candidates.length
@@ -578,7 +581,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
     })
 
     sendJson(response, 200, {
-      discoveryToken,
+      discoveryToken: discoveryCacheKey,
       candidatePool: cachedEntry.candidatePool,
       previewResults: normalizedCachedResults,
       source: 'cache',
@@ -611,25 +614,25 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
     }
     const serpApiDuration = nowMs() - serpApiStartedAt
 
-    const cacheWriteStartedAt = nowMs()
-    await writeSearchSnapshot({
-      productQuery: normalizedQuery,
-      details: normalizedDetails,
-      candidatePool: artifacts.candidatePool,
-      results: artifacts.results,
-      selection: {
-        mode: 'discovery_preview',
-        model: null,
-        selectedCandidateIds: artifacts.results.map((item) => item.id),
-        details: 'Discovery preview results were cached for the guided search flow. Finalized picks stay request-specific.',
-      },
-      source: 'guided_discovery',
-      scope: CACHE_SCOPE_DISCOVERY,
-    })
-    const cacheWriteDuration = nowMs() - cacheWriteStartedAt
+    runInBackground(
+      writeSearchSnapshot({
+        productQuery: normalizedQuery,
+        details: normalizedDetails,
+        candidatePool: artifacts.candidatePool,
+        results: artifacts.results,
+        selection: {
+          mode: 'discovery_preview',
+          model: null,
+          selectedCandidateIds: artifacts.results.map((item) => item.id),
+          details: 'Discovery preview results were cached for the guided search flow. Finalized picks stay request-specific.',
+        },
+        source: 'guided_discovery',
+        scope: CACHE_SCOPE_DISCOVERY,
+      }),
+    )
 
     await recordSearchCacheEvent({
-      cacheKey,
+      cacheKey: discoveryCacheKey,
       cacheStatus: 'miss',
       candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
         ? artifacts.candidatePool.candidates.length
@@ -642,14 +645,13 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
     })
 
     sendJson(response, 200, {
-      discoveryToken: buildCacheKey(normalizedQuery, normalizedDetails, CACHE_SCOPE_DISCOVERY),
+      discoveryToken: discoveryCacheKey,
       candidatePool: artifacts.candidatePool,
       previewResults: artifacts.results,
     }, {
       serverTiming: [
         { name: 'cache', duration: cacheLookupDuration },
         { name: 'serpapi', duration: serpApiDuration },
-        { name: 'cachewrite', duration: cacheWriteDuration },
         { name: 'total', duration: nowMs() - requestStartedAt },
       ],
     })
@@ -803,7 +805,7 @@ export async function handleFinalizeSelection(request, response) {
   }
 
   const clientIpAddress = getClientIpAddress(request.headers || {})
-  const rateLimit = takeRateLimitToken(clientIpAddress, FINALIZE_SELECTION_RATE_LIMIT)
+  const rateLimit = await takeRateLimitToken(clientIpAddress, FINALIZE_SELECTION_RATE_LIMIT)
 
   if (!rateLimit.allowed) {
     sendJson(response, 429, {

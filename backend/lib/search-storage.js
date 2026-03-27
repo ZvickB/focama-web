@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { randomUUID } from 'node:crypto'
 import {
   buildCacheKey,
   getEnv,
@@ -8,6 +9,7 @@ import {
 
 const SEARCH_CACHE_TABLE = 'search_cache'
 const SEARCH_HISTORY_TABLE = 'search_history'
+const RATE_LIMIT_EVENTS_TABLE = 'rate_limit_events'
 const DEFAULT_CACHE_TTL_MINUTES = 1440
 
 let supabaseAdminClient = null
@@ -282,6 +284,48 @@ export async function recordSearchHistory({
   }
 }
 
+export async function takeSharedRateLimitToken({ key, limit, windowMs }) {
+  if (!isSupabaseConfigured()) {
+    return null
+  }
+
+  try {
+    const supabase = getSupabaseAdminClient()
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + windowMs).toISOString()
+    const windowStartedAt = new Date(now.getTime() - windowMs).toISOString()
+
+    const { error: insertError } = await supabase.from(RATE_LIMIT_EVENTS_TABLE).insert({
+      request_key: key,
+      request_id: randomUUID(),
+      expires_at: expiresAt,
+    })
+
+    if (insertError) {
+      throw insertError
+    }
+
+    const { count, error: countError } = await supabase
+      .from(RATE_LIMIT_EVENTS_TABLE)
+      .select('request_id', { head: true, count: 'exact' })
+      .eq('request_key', key)
+      .gte('created_at', windowStartedAt)
+
+    if (countError) {
+      throw countError
+    }
+
+    return {
+      allowed: Number(count) <= limit,
+      remaining: Math.max(limit - Number(count || 0), 0),
+      resetAt: now.getTime() + windowMs,
+      storage: 'supabase',
+    }
+  } catch {
+    return null
+  }
+}
+
 async function checkSupabaseTable(supabase, tableName, columnName) {
   const { error } = await supabase.from(tableName).select(columnName, { head: true, count: 'exact' }).limit(1)
 
@@ -308,6 +352,7 @@ export async function getSupabaseHealth() {
     const tableChecks = await Promise.all([
       checkSupabaseTable(supabase, SEARCH_CACHE_TABLE, 'cache_key'),
       checkSupabaseTable(supabase, SEARCH_HISTORY_TABLE, 'id'),
+      checkSupabaseTable(supabase, RATE_LIMIT_EVENTS_TABLE, 'request_id'),
     ])
 
     return {

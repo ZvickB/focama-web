@@ -284,6 +284,7 @@ export function ResultsSection({
   errorMessage,
   hasFinalResults,
   hasStartedSearch,
+  isFinalizing,
   isLoading,
   isRetryReady,
   isRetrying,
@@ -370,7 +371,7 @@ export function ResultsSection({
               <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
               <span className="relative mt-[1px] h-2.5 w-2.5 rounded-full bg-primary/70" />
             </span>
-            <span>Starting the search and preparing your guided follow-up...</span>
+            <span>Starting your search and getting the first options ready...</span>
           </div>
 
           <div>
@@ -402,9 +403,48 @@ export function ResultsSection({
         </div>
       ) : null}
 
+      {isFinalizing && hasDisplayedResults && !hasFinalResults ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-[24px] border border-stone-200/80 bg-stone-50/90 px-4 py-4 text-left text-slate-600 shadow-[0_22px_60px_-42px_rgba(15,23,42,0.35)] transition-all duration-300 sm:px-5"
+        >
+          <div className="flex items-start gap-3">
+            <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
+              <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
+              <span className="relative h-2.5 w-2.5 rounded-full bg-primary/70" />
+            </span>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-slate-900">Taking a closer look at these options.</p>
+              <p className="text-sm leading-6 text-slate-600">
+                We&apos;re narrowing things down and writing up the tradeoffs now.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {hasDisplayedResults ? (
         <div className="space-y-4">
-          <div className="mx-auto grid max-w-6xl grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 sm:gap-5">
+          <div
+            className={`relative overflow-hidden rounded-[30px] transition-all duration-500 ${
+              isFinalizing && !hasFinalResults
+                ? 'bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.9),rgba(248,250,252,0.72)_46%,rgba(241,245,249,0.55)_100%)] p-2 sm:p-3'
+                : ''
+            }`}
+          >
+            {isFinalizing && !hasFinalResults ? (
+              <>
+                <div className="pointer-events-none absolute inset-0 bg-white/22 backdrop-blur-[1.5px]" />
+                <div className="pointer-events-none absolute inset-y-3 left-[-35%] w-[45%] skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/55 to-transparent animate-shimmer" />
+              </>
+            ) : null}
+
+            <div
+              className={`mx-auto grid max-w-6xl grid-cols-1 gap-3 transition-all duration-300 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3 ${
+                isFinalizing && !hasFinalResults ? 'scale-[0.995] opacity-80' : 'opacity-100'
+              }`}
+            >
             {orderedResults.map((item, index) => (
               <div key={item.id}>
                 <ProductCard
@@ -420,6 +460,7 @@ export function ResultsSection({
                 />
               </div>
             ))}
+            </div>
           </div>
         </div>
       ) : null}

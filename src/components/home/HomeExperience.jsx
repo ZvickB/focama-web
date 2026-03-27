@@ -55,6 +55,67 @@ function formatTimingValue(value) {
   return Number.isFinite(value) ? `${value.toFixed(1)} ms` : 'n/a'
 }
 
+function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
+  return {
+    helper:
+      prompt?.helperText || 'A few details can help us choose better picks for you.',
+    placeholder:
+      prompt?.followUpPlaceholder ||
+      'Examples: for a 6 year old, under $200, small apartment, should feel premium, or easy to clean.',
+    title: isGeneratingPrompt
+      ? 'You can add more detail right away'
+      : prompt?.prompt || `What should we optimize for with this ${submittedQuery}?`,
+  }
+}
+
+function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
+  const [displayedCopy, setDisplayedCopy] = useState(() =>
+    buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }),
+  )
+  const [isVisible, setIsVisible] = useState(true)
+
+  useEffect(() => {
+    const nextCopy = buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery })
+
+    if (
+      displayedCopy.title === nextCopy.title &&
+      displayedCopy.helper === nextCopy.helper &&
+      displayedCopy.placeholder === nextCopy.placeholder
+    ) {
+      return
+    }
+
+    const hideTimer = window.setTimeout(() => {
+      setIsVisible(false)
+    }, 0)
+
+    const swapTimer = window.setTimeout(() => {
+      setDisplayedCopy(nextCopy)
+      setIsVisible(true)
+    }, 300)
+
+    return () => {
+      window.clearTimeout(hideTimer)
+      window.clearTimeout(swapTimer)
+    }
+  }, [displayedCopy.helper, displayedCopy.placeholder, displayedCopy.title, isGeneratingPrompt, prompt, submittedQuery])
+
+  return (
+    <div className="space-y-2">
+      <div className="inline-flex items-center gap-2 rounded-full bg-primary/8 px-3 py-1 text-sm text-primary">
+        <Sparkles className={`h-4 w-4 ${isGeneratingPrompt ? 'animate-pulse' : ''}`} />
+        A little more context
+      </div>
+      <div
+        className={`space-y-3 transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+      >
+        <p className="text-xl font-medium leading-8 text-slate-900">{displayedCopy.title}</p>
+        <p className="max-w-2xl text-sm leading-7 text-slate-600">{displayedCopy.helper}</p>
+      </div>
+    </div>
+  )
+}
+
 function TimingPanel({ requestTiming }) {
   const entries = [
     ['Discover', requestTiming?.discover],
@@ -234,7 +295,12 @@ function OpenLayout(props) {
   }, [hasFinalResults, submittedQuery])
 
   const hasDiscoveryResults = Boolean(state.candidatePool)
-  const showLoadingResults = (isLoading && displayedResults.length === 0) || state.isFinalizing
+  const showLoadingResults = isLoading && displayedResults.length === 0
+  const refinementCopy = buildRefinementCopy({
+    isGeneratingPrompt: state.isGeneratingPrompt,
+    prompt,
+    submittedQuery,
+  })
 
   return (
     <main className="px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
@@ -320,51 +386,51 @@ function OpenLayout(props) {
 
               {hasStartedSearch ? (
                 <div className="mt-5 space-y-5 border-t border-stone-200/80 pt-5">
-                  <div className="space-y-2">
-                    <div className="inline-flex items-center gap-2 rounded-full bg-primary/8 px-3 py-1 text-sm text-primary">
-                      <Sparkles className="h-4 w-4" />
-                      AI refinement
-                    </div>
-                    <p className="text-xl font-medium leading-8 text-slate-900">
-                      {state.isGeneratingPrompt
-                        ? 'Shaping your next question...'
-                        : prompt?.prompt || `What should we optimize for with this ${submittedQuery}?`}
-                    </p>
-                    <p className="max-w-2xl text-sm leading-7 text-slate-600">
-                      {state.isGeneratingPrompt
-                        ? 'We’re preparing a more useful follow-up before you refine the shortlist.'
-                        : prompt?.helperText ||
-                          'Add any context that will help Focamai narrow the shortlist more intelligently.'}
-                    </p>
-                  </div>
+                  <RefinementCopy
+                    isGeneratingPrompt={state.isGeneratingPrompt}
+                    prompt={prompt}
+                    submittedQuery={submittedQuery}
+                  />
 
                   <div className="space-y-2">
                     <Label htmlFor="open-follow-up-notes" className="text-slate-700">
                       Add context for the AI
                     </Label>
-                    <Textarea
-                      id="open-follow-up-notes"
-                      value={state.followUpNotes}
-                      onChange={(event) => setFollowUpNotes(event.target.value)}
-                      onKeyDown={(event) =>
-                        handleRefinementTextareaKeyDown(event, {
-                          canSubmit: hasDiscoveryResults && !state.isFinalizing,
-                          onSubmit: onFinalize,
-                        })
-                      }
-                      className="min-h-36 resize-none rounded-[28px] border-stone-200 bg-[#fffdf9] px-5 py-4 text-base leading-7 placeholder:text-slate-400"
-                      placeholder={
+                    <div
+                      className={`rounded-[30px] border border-stone-200 bg-[#fffdf9] p-1 transition-all duration-300 ${
                         state.isGeneratingPrompt
-                          ? 'Shaping your next question...'
-                          : prompt?.followUpPlaceholder ||
-                            'Examples: for a 6 year old, under $200, small apartment, should feel premium, or easy to clean.'
-                      }
-                      disabled={state.isFinalizing || state.isGeneratingPrompt}
-                    />
+                          ? 'translate-y-0 shadow-[0_20px_60px_-42px_rgba(37,99,235,0.45)] ring-1 ring-primary/12'
+                          : 'translate-y-0 shadow-[0_16px_40px_-36px_rgba(15,23,42,0.2)]'
+                      }`}
+                    >
+                      <Textarea
+                        id="open-follow-up-notes"
+                        value={state.followUpNotes}
+                        onChange={(event) => setFollowUpNotes(event.target.value)}
+                        onKeyDown={(event) =>
+                          handleRefinementTextareaKeyDown(event, {
+                            canSubmit: hasDiscoveryResults && !state.isFinalizing,
+                            onSubmit: onFinalize,
+                          })
+                        }
+                        className="min-h-36 resize-none rounded-[28px] border-0 bg-transparent px-5 py-4 text-base leading-7 shadow-none placeholder:text-slate-400 focus-visible:ring-0"
+                        placeholder={refinementCopy.placeholder}
+                        disabled={state.isFinalizing}
+                      />
+                    </div>
                     {state.isGeneratingPrompt ? (
-                      <div className="relative overflow-hidden rounded-full bg-stone-200/80">
-                        <div className="h-2.5 w-full" />
-                        <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" />
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-xs font-medium tracking-[0.02em] text-slate-500">
+                          <span className="relative flex h-2.5 w-2.5">
+                          <span className="absolute inset-0 rounded-full bg-primary/20 animate-soft-pulse" />
+                          <span className="relative h-2.5 w-2.5 rounded-full bg-primary/65" />
+                          </span>
+                          You can start typing while we put together a suggestion.
+                        </div>
+                        <div className="relative overflow-hidden rounded-full bg-stone-200/80">
+                          <div className="h-2.5 w-full" />
+                          <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" />
+                        </div>
                       </div>
                     ) : null}
                   </div>
@@ -376,7 +442,7 @@ function OpenLayout(props) {
                       className="h-13 w-full rounded-[24px] bg-primary px-5 text-base text-primary-foreground hover:bg-primary/90 sm:w-auto"
                       onClick={onFinalize}
                     >
-                      {state.isFinalizing ? 'Applying your priorities...' : 'Show focused picks'}
+                      {state.isFinalizing ? 'Narrowing your picks...' : 'Show focused picks'}
                       {state.isFinalizing ? (
                         <LoaderCircle className="ml-2 h-4 w-4 animate-spin" />
                       ) : (
@@ -408,6 +474,26 @@ function OpenLayout(props) {
         <section className="w-full max-w-5xl space-y-4">
           {showLoadingResults ? (
             <div ref={resultsViewportRef} className="max-h-[360px] scroll-mt-28 overflow-hidden">
+              {state.isFinalizing ? (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="mb-4 rounded-[24px] border border-stone-200/80 bg-stone-50/90 px-4 py-4 text-left text-slate-600 sm:px-5"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
+                      <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
+                      <span className="relative h-2.5 w-2.5 rounded-full bg-primary/70" />
+                    </span>
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-slate-900">Taking a closer look at the options.</p>
+                      <p className="text-sm leading-6 text-slate-600">
+                        We&apos;re narrowing the shortlist and writing up the tradeoffs now.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {RESULT_CARD_SLOTS.map((index) => (
                   <ResultSkeleton key={index} className="opacity-95" />
@@ -424,6 +510,7 @@ function OpenLayout(props) {
                 errorMessage={errorMessage}
                 hasFinalResults={hasFinalResults}
                 hasStartedSearch={hasStartedSearch}
+                isFinalizing={state.isFinalizing}
                 isLoading={isLoading}
                 isRetryReady={state.retryCount < 2}
                 isRetrying={state.isFinalizing}

@@ -3,6 +3,7 @@
 ## Current direction
 - The primary guided search flow now uses the shared cache/storage layer through `/api/search/discover` and related backend handlers.
 - If `SUPABASE_URL` and a server-side Supabase key are configured, cache and operational search-history writes use Supabase.
+- Shared rate limiting now also uses Supabase when configured, via a short-lived event table.
 - If Supabase is not configured or is temporarily unavailable, the app falls back to the existing local JSON cache in `temp-data/`.
 - This keeps local development easy while giving us a production-ready persistence path.
 - Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`.
@@ -65,6 +66,19 @@ create index if not exists search_history_created_at_idx
 
 create index if not exists search_history_cache_key_idx
   on public.search_history (cache_key);
+
+create table if not exists public.rate_limit_events (
+  request_id uuid primary key,
+  request_key text not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  expires_at timestamptz not null
+);
+
+create index if not exists rate_limit_events_request_key_created_at_idx
+  on public.rate_limit_events (request_key, created_at desc);
+
+create index if not exists rate_limit_events_expires_at_idx
+  on public.rate_limit_events (expires_at);
 ```
 
 ## What gets cached
@@ -81,6 +95,7 @@ create index if not exists search_history_cache_key_idx
 ## Current tradeoffs
 - Cache invalidation is TTL-based only for now.
 - Expired Supabase rows are ignored but not actively deleted yet.
+- Shared rate limiting now depends on the `rate_limit_events` table when Supabase is configured.
 - Search history is best-effort operational analytics/persistence and should not block responses.
 - The `search_history` table is an internal telemetry table for cache/debug analysis, not the schema for a future user-facing saved-history feature.
 - The old `/api/search/cache` debugging route still works, now through the same storage abstraction.

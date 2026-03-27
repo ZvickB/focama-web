@@ -28,6 +28,7 @@
   - the page should scroll cleanly to the refinement area once, without bouncing past it
 - When preview or final results are revealed from the guided flow, the page should scroll down to that results region without needing a manual swipe.
 - When the user presses `Show focused picks`, the page should immediately scroll to the results region and swap into loading skeletons while final AI selection is in progress.
+- If preview results are already visible when final AI selection starts, the page should keep those visible with a calmer narrowing-state message instead of dropping back to a blank loading view.
 - Once a search has started, the homepage now includes a `Start a new search` action that resets the guided state back to a clean blank search.
 - After final results appear, the homepage now offers a feedback-based retry path through `Didn't find anything you like? Tell us why.`
 - Retry passes reuse the existing guided discovery context through `/api/search/finalize` and require feedback before another shortlist is generated.
@@ -49,6 +50,8 @@
   - `/api/search/live` should be treated as the manual combined route
   - `/api/health/supabase` should treat local file fallback as a supported development/storage mode when Supabase is not configured
 - Guided search requests now expose backend stage timing through `Server-Timing` headers, and the homepage shows the timing panel in development or when `?timing=1` is present for discover, refine, and finalize.
+- Guided discovery now sends the preview response as soon as artifacts are ready and lets the discovery-cache write finish in the background, so first-hit responses are not held open by cache persistence time.
+- Guided finalize now keeps reasons and attributes in the AI handoff but trims backend-only prompt baggage by removing variant tokens and reducing trust metadata to a compact score signal.
 - Guided candidate/result normalization now skips promo-only description text such as sale blurbs, and the finalize AI summary now omits empty/generic filler descriptions plus redundant source/price/delivery boilerplate to reduce prompt waste.
 - The backend candidate pool is now a more provider-agnostic structured layer:
   - duplicate-family keys and variant tokens are attached before AI selection
