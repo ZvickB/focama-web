@@ -77,6 +77,7 @@
   - follow-up notes limit: 500 characters before OpenAI selection
 - Guided finalize now depends on guided discovery cache as the server-side source of truth for the candidate pool, so the browser only sends lightweight finalize context.
 - Guided search responses now include backend timing via `Server-Timing` headers, and the homepage shows the timing panel in development or when `?timing=1` is present so discover/refine/finalize latency can be inspected by leg.
+- Guided refine/finalize and live-search responses now surface OpenAI token usage metadata in JSON so current refine/finalize cost can be measured from real traffic instead of guessed from prompt length.
 - Guided `/api/search/discover` now returns the preview response before the discovery-cache write finishes, so first-hit latency is no longer blocked by Supabase cache persistence.
 - Guided finalize now sends a slightly slimmer AI candidate summary by dropping variant tokens and collapsing trust metadata to a compact score-only signal, while keeping reasons and attributes in the selection prompt.
 - Candidate/result normalization now ignores promo-only description text, and the finalize AI handoff drops empty/generic filler descriptions plus redundant source/price/delivery boilerplate so the prompt stays tighter without changing the shortlist flow.

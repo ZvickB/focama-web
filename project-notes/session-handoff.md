@@ -55,6 +55,7 @@
 - The browser no longer needs to POST the full rich guided candidate pool back to `/api/search/finalize`
 - Guided `/api/search/finalize` body limit is back to 32 KB now that the finalize payload is lightweight again
 - Guided discover/refine/finalize now expose backend stage timing through `Server-Timing` headers, and the homepage shows the timing panel in development or when `?timing=1` is present for quick latency checks
+- Guided refine/finalize and `/api/search/live` now also include OpenAI token usage metadata in their JSON responses when AI runs, making refine/finalize cost measurable from actual response data
 - Guided discovery now responds before the discovery cache write finishes, so first-time searches are no longer blocked by Supabase cache persistence time
 - Guided finalize now trims prompt weight by dropping variant tokens and reducing trust metadata to a score-only signal, while keeping reasons and attributes in the AI selection context
 - Promo-only shopping snippets such as `20% OFF` / `LOW PRICE` are now ignored as normalized descriptions, and finalize AI summaries now omit empty/generic filler descriptions plus redundant source/price/delivery boilerplate to cut prompt waste

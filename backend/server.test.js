@@ -696,6 +696,12 @@ describe('server handlers', () => {
     })
     selectAiResults.mockResolvedValue({
       model: 'gpt-5-mini',
+      usage: {
+        inputTokens: 420,
+        outputTokens: 96,
+        totalTokens: 516,
+        reasoningTokens: 44,
+      },
       selectedCandidateIds: ['live-1'],
       results: [
         {
@@ -776,8 +782,22 @@ describe('server handlers', () => {
       selection: {
         mode: 'ai',
         model: 'gpt-5-mini',
+        usage: {
+          inputTokens: 420,
+          outputTokens: 96,
+          totalTokens: 516,
+          reasoningTokens: 44,
+        },
         selectedCandidateIds: ['live-1'],
         details: 'AI selected the final recommendations from the cleaned candidate pool.',
+      },
+      usage: {
+        openai: {
+          inputTokens: 420,
+          outputTokens: 96,
+          totalTokens: 516,
+          reasoningTokens: 44,
+        },
       },
     })
 
@@ -854,6 +874,9 @@ describe('server handlers', () => {
         model: null,
         selectedCandidateIds: ['live-1'],
         details: 'Rules-based fallback was used.',
+      },
+      usage: {
+        openai: null,
       },
     })
   })
@@ -988,6 +1011,12 @@ describe('server handlers', () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
     selectAiResults.mockResolvedValue({
       model: 'gpt-5-mini',
+      usage: {
+        inputTokens: 510,
+        outputTokens: 84,
+        totalTokens: 594,
+        reasoningTokens: 38,
+      },
       selectedCandidateIds: ['one'],
       results: [{ id: 'one', title: 'Candidate one', reasons: [], drawbacks: [] }],
     })
@@ -1028,6 +1057,12 @@ describe('server handlers', () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
     selectAiResults.mockResolvedValue({
       model: 'gpt-5-mini',
+      usage: {
+        inputTokens: 510,
+        outputTokens: 84,
+        totalTokens: 594,
+        reasoningTokens: 38,
+      },
       selectedCandidateIds: ['one'],
       results: [{ id: 'one', title: 'Candidate one', reasons: [], drawbacks: [] }],
     })
@@ -1068,6 +1103,22 @@ describe('server handlers', () => {
     expect(JSON.parse(response.body)).toEqual(
       expect.objectContaining({
         retryCount: 1,
+        selection: expect.objectContaining({
+          usage: {
+            inputTokens: 510,
+            outputTokens: 84,
+            totalTokens: 594,
+            reasoningTokens: 38,
+          },
+        }),
+        usage: {
+          openai: {
+            inputTokens: 510,
+            outputTokens: 84,
+            totalTokens: 594,
+            reasoningTokens: 38,
+          },
+        },
       }),
     )
   })

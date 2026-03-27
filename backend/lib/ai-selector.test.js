@@ -38,6 +38,14 @@ describe('ai selector', () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
+        usage: {
+          input_tokens: 420,
+          output_tokens: 96,
+          total_tokens: 516,
+          output_tokens_details: {
+            reasoning_tokens: 44,
+          },
+        },
         output_text: JSON.stringify({
           picks: [
             {
@@ -92,6 +100,12 @@ describe('ai selector', () => {
       }),
     )
     expect(result.model).toBe(DEFAULT_OPENAI_MODEL)
+    expect(result.usage).toEqual({
+      inputTokens: 420,
+      outputTokens: 96,
+      totalTokens: 516,
+      reasoningTokens: 44,
+    })
     expect(result.selectedCandidateIds).toEqual(['prod-2', 'prod-1'])
     expect(result.results[0].title).toBe('Compact airport stroller')
     expect(result.results[0].reasons[0]).toBe('AI fit: Best fit for airport travel and strong reviews.')

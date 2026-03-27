@@ -26,6 +26,24 @@ const DESCRIPTION_BOILERPLATE_TOKENS = new Set([
   'shop',
 ])
 
+function normalizeOpenAiUsage(payload) {
+  if (!payload?.usage || typeof payload.usage !== 'object' || Array.isArray(payload.usage)) {
+    return null
+  }
+
+  const inputTokens = Number(payload.usage.input_tokens)
+  const outputTokens = Number(payload.usage.output_tokens)
+  const totalTokens = Number(payload.usage.total_tokens)
+  const reasoningTokens = Number(payload.usage.output_tokens_details?.reasoning_tokens)
+
+  return {
+    inputTokens: Number.isFinite(inputTokens) ? inputTokens : 0,
+    outputTokens: Number.isFinite(outputTokens) ? outputTokens : 0,
+    totalTokens: Number.isFinite(totalTokens) ? totalTokens : 0,
+    reasoningTokens: Number.isFinite(reasoningTokens) ? reasoningTokens : 0,
+  }
+}
+
 function getResponseText(payload) {
   if (typeof payload?.output_text === 'string' && payload.output_text.trim()) {
     return payload.output_text
@@ -394,6 +412,7 @@ export async function selectAiResults(
       model,
       selectedCandidateIds: [],
       results: [],
+      usage: null,
     }
   }
 
@@ -438,6 +457,7 @@ export async function selectAiResults(
 
   const payload = await response.json()
   const responseText = getResponseText(payload)
+  const usage = normalizeOpenAiUsage(payload)
 
   if (!responseText) {
     throw new Error('OpenAI selection returned no structured output.')
@@ -495,5 +515,6 @@ export async function selectAiResults(
       ...buildUiResult(entry.candidate, entry.rationale, badgeByCandidateId.get(entry.candidateId)),
       drawbacks: entry.drawback ? [entry.drawback] : [],
     })),
+    usage,
   }
 }

@@ -490,6 +490,7 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
         selection = {
           mode: 'ai',
           model: aiSelection.model,
+          usage: aiSelection.usage,
           selectedCandidateIds: aiSelection.selectedCandidateIds,
           details: 'AI selected the final recommendations from the cleaned candidate pool.',
         }
@@ -516,6 +517,9 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
       candidatePool,
       results,
       selection,
+      usage: {
+        openai: selection.usage || null,
+      },
     }, {
       serverTiming: [
         { name: 'serpapi', duration: serpApiDuration },
@@ -948,6 +952,7 @@ export async function handleFinalizeSelection(request, response) {
       selection: {
         mode: aiSelection.results.length > 0 ? 'ai' : 'rules_fallback',
         model: aiSelection.results.length > 0 ? aiSelection.model : null,
+        usage: aiSelection.results.length > 0 ? aiSelection.usage || null : null,
         selectedCandidateIds:
           aiSelection.results.length > 0
             ? aiSelection.selectedCandidateIds
@@ -956,6 +961,9 @@ export async function handleFinalizeSelection(request, response) {
           aiSelection.results.length > 0
             ? 'AI selected the final recommendations from the cleaned candidate pool.'
             : 'Rules-based fallback was used.',
+      },
+      usage: {
+        openai: aiSelection.usage || null,
       },
     }, {
       serverTiming: [

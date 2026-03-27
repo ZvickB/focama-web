@@ -51,6 +51,24 @@ function buildPromptInput(productQuery) {
   ].join('\n')
 }
 
+function normalizeOpenAiUsage(payload) {
+  if (!payload?.usage || typeof payload.usage !== 'object' || Array.isArray(payload.usage)) {
+    return null
+  }
+
+  const inputTokens = Number(payload.usage.input_tokens)
+  const outputTokens = Number(payload.usage.output_tokens)
+  const totalTokens = Number(payload.usage.total_tokens)
+  const reasoningTokens = Number(payload.usage.output_tokens_details?.reasoning_tokens)
+
+  return {
+    inputTokens: Number.isFinite(inputTokens) ? inputTokens : 0,
+    outputTokens: Number.isFinite(outputTokens) ? outputTokens : 0,
+    totalTokens: Number.isFinite(totalTokens) ? totalTokens : 0,
+    reasoningTokens: Number.isFinite(reasoningTokens) ? reasoningTokens : 0,
+  }
+}
+
 export async function generateRefinementPrompt(
   { productQuery, apiKey, model = DEFAULT_OPENAI_MODEL },
   fetchImpl = fetch,
@@ -99,6 +117,7 @@ export async function generateRefinementPrompt(
 
   const payload = await response.json()
   const responseText = getResponseText(payload)
+  const usage = normalizeOpenAiUsage(payload)
 
   if (!responseText) {
     throw new Error('OpenAI refinement prompt returned no structured output.')
@@ -110,5 +129,6 @@ export async function generateRefinementPrompt(
     prompt: parsed.prompt,
     helperText: parsed.helper_text,
     followUpPlaceholder: parsed.follow_up_placeholder,
+    usage,
   }
 }
