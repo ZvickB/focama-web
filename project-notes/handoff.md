@@ -18,12 +18,14 @@
 - The result cards and modal surface drawbacks/tradeoffs as well as reasons.
 - Basic IP-based rate limiting exists on the search endpoints, including `/api/search/finalize`, and now prefers a shared Supabase-backed limiter when available.
 - Supabase-backed cache/operational-history storage and health tooling now exist, with local fallback for development.
+- Optional Supabase-backed funnel analytics wiring now exists for guided-search path choice, result impressions, and retailer click-throughs.
 - Guided discovery is the only persistent cache path; `/api/search/live` remains only as the explicit manual/debug combined route.
 - Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`.
 - Guided `/api/search/finalize` and `/api/search/live` remain intentionally uncached.
 
 ## Next likely work
 - Watch the live deployment on desktop and mobile for cache behavior, result quality, and any Supabase/storage regressions.
+- If funnel analytics is enabled in Supabase, verify that `Show products now`, AI-finalized picks, result badges, and retailer click-throughs are being recorded as expected before widening the schema further.
 - Watch for weak-result cases and improve result-quality handling without overcomplicating the flow.
 - Refine the AI prompt and selection behavior based on real searches.
 - Keep using real-query inspection to tighten weak candidate descriptions, duplicate-heavy pools, and ambiguous searches before accepting any meaningful quality downgrade.

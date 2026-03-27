@@ -18,6 +18,7 @@
 - Site header/nav/logo usage: `/src/components/SiteLayout.jsx`
 - Default homepage route file: `/src/pages/HomePage.jsx`
 - Plain-language DB note for current Supabase tables: `/project-notes/db-needs.md`
+- Optional funnel analytics schema for Supabase: `/project-notes/analytics-funnel-schema.sql`
 
 ## Current UI state
 - `/` is the `open` variant.
@@ -59,6 +60,9 @@
 - Promo-only shopping snippets such as `20% OFF` / `LOW PRICE` are now ignored as normalized descriptions, and finalize AI summaries now omit empty/generic filler descriptions plus redundant source/price/delivery boilerplate to cut prompt waste
 - The backend candidate pool now includes provider-agnostic duplicate-family keys, variant tokens, compact attribute tags, and trust signals before finalize so future search-provider changes can reuse the same internal model more easily
 - Guided discovery telemetry now records the scoped discovery cache key in `search_history`, so debug history lines up with the actual cached entry
+- A new best-effort analytics endpoint now exists at `/api/analytics/track` for optional funnel instrumentation
+- The homepage now tracks guided-search funnel steps, result impressions, card opens, and retailer click-throughs when the optional analytics tables are present in Supabase
+- Analytics result events distinguish preview, final, retry, and previous-result sets so `Show products now` behavior can be compared against finalized AI picks
 - Backend env fallback loading now caches the parsed `.env` file in-process, so repeated `getEnv()` reads no longer hit sync disk I/O on request paths
 - The Vercel route wrappers now share a tiny bridge helper instead of each manually recreating the same Node-like adapter logic
 - `/api/search/debug` should be read as guided-primary debug output, with `/api/search/live` treated as the manual combined route

@@ -10,6 +10,10 @@ import {
 const SEARCH_CACHE_TABLE = 'search_cache'
 const SEARCH_HISTORY_TABLE = 'search_history'
 const RATE_LIMIT_EVENTS_TABLE = 'rate_limit_events'
+const ANALYTICS_SEARCH_RUNS_TABLE = 'analytics_search_runs'
+const ANALYTICS_SEARCH_EVENTS_TABLE = 'analytics_search_events'
+const ANALYTICS_RESULT_IMPRESSIONS_TABLE = 'analytics_result_impressions'
+const ANALYTICS_RESULT_CLICKS_TABLE = 'analytics_result_clicks'
 const DEFAULT_CACHE_TTL_MINUTES = 1440
 
 let supabaseAdminClient = null
@@ -323,6 +327,117 @@ export async function takeSharedRateLimitToken({ key, limit, windowMs }) {
     }
   } catch {
     return null
+  }
+}
+
+export async function upsertAnalyticsSearchRun(run) {
+  if (!isSupabaseConfigured() || !run?.searchId || !run?.sessionId || !run?.productQuery) {
+    return
+  }
+
+  try {
+    const supabase = getSupabaseAdminClient()
+    const { error } = await supabase.from(ANALYTICS_SEARCH_RUNS_TABLE).upsert(
+      {
+        search_id: run.searchId,
+        session_id: run.sessionId,
+        product_query: run.productQuery,
+        details: run.details || '',
+        entered_ai_refinement: Boolean(run.enteredAiRefinement),
+        used_show_products_now: Boolean(run.usedShowProductsNow),
+        completed_finalize: Boolean(run.completedFinalize),
+        retry_round: Number.isFinite(Number(run.retryRound)) ? Number(run.retryRound) : 0,
+        best_result_key: run.bestResultKey || null,
+      },
+      { onConflict: 'search_id' },
+    )
+
+    if (error) {
+      throw error
+    }
+  } catch {
+    // Analytics writes are best-effort so user flows stay resilient.
+  }
+}
+
+export async function recordAnalyticsSearchEvent(event) {
+  if (!isSupabaseConfigured() || !event?.searchId || !event?.sessionId || !event?.eventType) {
+    return
+  }
+
+  try {
+    const supabase = getSupabaseAdminClient()
+    const { error } = await supabase.from(ANALYTICS_SEARCH_EVENTS_TABLE).insert({
+      search_id: event.searchId,
+      session_id: event.sessionId,
+      event_type: event.eventType,
+      event_data:
+        event.eventData && typeof event.eventData === 'object' && !Array.isArray(event.eventData)
+          ? event.eventData
+          : {},
+    })
+
+    if (error) {
+      throw error
+    }
+  } catch {
+    // Analytics writes are best-effort so user flows stay resilient.
+  }
+}
+
+export async function recordAnalyticsResultImpressions({ items, resultSet, searchId, sessionId }) {
+  if (!isSupabaseConfigured() || !searchId || !sessionId || !Array.isArray(items) || items.length === 0) {
+    return
+  }
+
+  try {
+    const supabase = getSupabaseAdminClient()
+    const { error } = await supabase.from(ANALYTICS_RESULT_IMPRESSIONS_TABLE).insert(
+      items.map((item) => ({
+        search_id: searchId,
+        session_id: sessionId,
+        result_set: resultSet || 'final',
+        result_key: item.resultKey,
+        position: item.position,
+        provider: item.provider || null,
+        badge_type: item.badgeType || null,
+        is_best_pick: Boolean(item.isBestPick),
+      })),
+    )
+
+    if (error) {
+      throw error
+    }
+  } catch {
+    // Analytics writes are best-effort so user flows stay resilient.
+  }
+}
+
+export async function recordAnalyticsResultClick(click) {
+  if (!isSupabaseConfigured() || !click?.searchId || !click?.sessionId || !click?.resultKey || !click?.clickTarget) {
+    return
+  }
+
+  try {
+    const supabase = getSupabaseAdminClient()
+    const { error } = await supabase.from(ANALYTICS_RESULT_CLICKS_TABLE).insert({
+      search_id: click.searchId,
+      session_id: click.sessionId,
+      result_set: click.resultSet || 'final',
+      result_key: click.resultKey,
+      position: Number.isFinite(Number(click.position)) ? Number(click.position) : 0,
+      provider: click.provider || null,
+      badge_type: click.badgeType || null,
+      is_best_pick: Boolean(click.isBestPick),
+      click_target: click.clickTarget,
+      retailer_url: click.retailerUrl || null,
+    })
+
+    if (error) {
+      throw error
+    }
+  } catch {
+    // Analytics writes are best-effort so user flows stay resilient.
   }
 }
 

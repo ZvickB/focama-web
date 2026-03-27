@@ -1,6 +1,11 @@
 import { useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 
+import {
+  createAnalyticsSearchId,
+  getOrCreateAnalyticsSessionId,
+  trackAnalytics,
+} from '@/lib/analytics.js'
 import { validateSearchInput } from '../../../shared/search-input.js'
 
 export const RESULT_CARD_COUNT = 6
@@ -137,6 +142,20 @@ function mergeFinalizeResults(results, sourceCandidatePool) {
   })
 }
 
+function buildResultAnalyticsItems(results) {
+  if (!Array.isArray(results)) {
+    return []
+  }
+
+  return results.map((item, index) => ({
+    resultKey: String(item.id),
+    position: index,
+    provider: item.subtitle || '',
+    badgeType: item.badgeLabel || '',
+    isBestPick: index === 0 || item.badgeLabel === 'Best match',
+  }))
+}
+
 export function useGuidedSearch() {
   const [productQuery, setProductQuery] = useState('')
   const [selectedProduct, setSelectedProduct] = useState(null)
@@ -162,6 +181,10 @@ export function useGuidedSearch() {
   const [isDiscovering, setIsDiscovering] = useState(false)
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false)
   const activeSearchIdRef = useRef(0)
+  const analyticsSearchIdRef = useRef('')
+  const analyticsSessionIdRef = useRef('')
+  const hasTrackedRefinementViewRef = useRef(false)
+  const hasTrackedPreviewImpressionsRef = useRef(false)
 
   const finalizeMutation = useMutation({
     mutationFn: finalizeGuidedSearch,
@@ -183,6 +206,49 @@ export function useGuidedSearch() {
       setRetryFeedback('')
       setRetryCount(payload.retryCount ?? variables.retryCount ?? 0)
       setSelectionState(payload.selection || null)
+
+      const searchId = analyticsSearchIdRef.current
+      const sessionId = analyticsSessionIdRef.current
+      const finalizedResults = mergeFinalizeResults(payload.results, variables.originalCandidatePool)
+      const resultSet = variables.retryCount > 0 ? 'retry' : 'final'
+
+      if (searchId && sessionId) {
+        trackAnalytics({
+          eventType: 'search_run_upsert',
+          searchId,
+          sessionId,
+          productQuery: variables.query,
+          details: variables.followUpNotes || '',
+          enteredAiRefinement: true,
+          usedShowProductsNow: showPreviewResults,
+          completedFinalize: true,
+          retryRound: payload.retryCount ?? variables.retryCount ?? 0,
+          bestResultKey: finalizedResults[0]?.id ? String(finalizedResults[0].id) : '',
+        })
+        trackAnalytics({
+          eventType: 'search_event',
+          searchId,
+          sessionId,
+          name: 'final_results_shown',
+          eventData: {
+            resultCount: finalizedResults.length,
+            resultSet,
+            retryRound: payload.retryCount ?? variables.retryCount ?? 0,
+          },
+        })
+
+        const impressionItems = buildResultAnalyticsItems(finalizedResults)
+
+        if (impressionItems.length > 0) {
+          trackAnalytics({
+            eventType: 'result_impressions',
+            searchId,
+            sessionId,
+            resultSet,
+            items: impressionItems,
+          })
+        }
+      }
     },
     onError: (error) => {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to finalize the search.')
@@ -215,6 +281,8 @@ export function useGuidedSearch() {
     })
     setShowPreviewResults(false)
     setRefinementPrompt(null)
+    hasTrackedRefinementViewRef.current = false
+    hasTrackedPreviewImpressionsRef.current = false
   }
 
   function resetToNewSearch() {
@@ -243,6 +311,9 @@ export function useGuidedSearch() {
     setShowPreviewResults(false)
     setIsDiscovering(false)
     setIsGeneratingPrompt(false)
+    analyticsSearchIdRef.current = ''
+    hasTrackedRefinementViewRef.current = false
+    hasTrackedPreviewImpressionsRef.current = false
   }
 
   function beginGuidedSearch(event) {
@@ -257,10 +328,35 @@ export function useGuidedSearch() {
 
     const nextSearchId = activeSearchIdRef.current + 1
     activeSearchIdRef.current = nextSearchId
+    const analyticsSearchId = createAnalyticsSearchId()
+    const analyticsSessionId = getOrCreateAnalyticsSessionId()
+    analyticsSearchIdRef.current = analyticsSearchId
+    analyticsSessionIdRef.current = analyticsSessionId
 
     resetGuidedState(normalizedQuery)
     setIsDiscovering(true)
     setIsGeneratingPrompt(true)
+
+    trackAnalytics({
+      eventType: 'search_run_upsert',
+      searchId: analyticsSearchId,
+      sessionId: analyticsSessionId,
+      productQuery: normalizedQuery,
+      details: '',
+      enteredAiRefinement: false,
+      usedShowProductsNow: false,
+      completedFinalize: false,
+      retryRound: 0,
+    })
+    trackAnalytics({
+      eventType: 'search_event',
+      searchId: analyticsSearchId,
+      sessionId: analyticsSessionId,
+      name: 'search_started',
+      eventData: {
+        query: normalizedQuery,
+      },
+    })
 
     fetchDiscoveryResults(normalizedQuery)
       .then((payload) => {
@@ -284,6 +380,20 @@ export function useGuidedSearch() {
           ...current,
           discover: payload.timing || null,
         }))
+
+        trackAnalytics({
+          eventType: 'search_event',
+          searchId: analyticsSearchId,
+          sessionId: analyticsSessionId,
+          name: 'discovery_loaded',
+          eventData: {
+            candidateCount: Array.isArray(payload.candidatePool?.candidates)
+              ? payload.candidatePool.candidates.length
+              : 0,
+            previewCount: Array.isArray(payload.previewResults) ? payload.previewResults.length : 0,
+            source: payload.source || 'live',
+          },
+        })
       })
       .catch((error) => {
         if (activeSearchIdRef.current !== nextSearchId) {
@@ -309,10 +419,36 @@ export function useGuidedSearch() {
           ...current,
           refine: payload.timing || null,
         }))
+
+        if (!hasTrackedRefinementViewRef.current) {
+          hasTrackedRefinementViewRef.current = true
+          trackAnalytics({
+            eventType: 'search_event',
+            searchId: analyticsSearchId,
+            sessionId: analyticsSessionId,
+            name: 'refine_viewed',
+            eventData: {
+              usedFallback: false,
+            },
+          })
+        }
       })
       .catch(() => {
         if (activeSearchIdRef.current === nextSearchId) {
           setRefinementPrompt(createFallbackRefinementPrompt(normalizedQuery))
+
+          if (!hasTrackedRefinementViewRef.current) {
+            hasTrackedRefinementViewRef.current = true
+            trackAnalytics({
+              eventType: 'search_event',
+              searchId: analyticsSearchId,
+              sessionId: analyticsSessionId,
+              name: 'refine_viewed',
+              eventData: {
+                usedFallback: true,
+              },
+            })
+          }
         }
       })
       .finally(() => {
@@ -332,6 +468,29 @@ export function useGuidedSearch() {
       return
     }
 
+    if (analyticsSearchIdRef.current && analyticsSessionIdRef.current) {
+      trackAnalytics({
+        eventType: 'search_run_upsert',
+        searchId: analyticsSearchIdRef.current,
+        sessionId: analyticsSessionIdRef.current,
+        productQuery: submittedQuery,
+        details: followUpNotes,
+        enteredAiRefinement: true,
+        usedShowProductsNow: showPreviewResults,
+        completedFinalize: false,
+        retryRound: 0,
+      })
+      trackAnalytics({
+        eventType: 'search_event',
+        searchId: analyticsSearchIdRef.current,
+        sessionId: analyticsSessionIdRef.current,
+        name: 'ai_followup_submitted',
+        eventData: {
+          noteLength: followUpNotes.trim().length,
+        },
+      })
+    }
+
     finalizeMutation.mutate({
       query: submittedQuery,
       discoveryToken,
@@ -346,6 +505,46 @@ export function useGuidedSearch() {
 
   function handleShowProductsNow() {
     setShowPreviewResults(true)
+
+    if (!analyticsSearchIdRef.current || !analyticsSessionIdRef.current) {
+      return
+    }
+
+    trackAnalytics({
+      eventType: 'search_run_upsert',
+      searchId: analyticsSearchIdRef.current,
+      sessionId: analyticsSessionIdRef.current,
+      productQuery: submittedQuery,
+      details: followUpNotes,
+      enteredAiRefinement: false,
+      usedShowProductsNow: true,
+      completedFinalize: false,
+      retryRound: 0,
+    })
+    trackAnalytics({
+      eventType: 'search_event',
+      searchId: analyticsSearchIdRef.current,
+      sessionId: analyticsSessionIdRef.current,
+      name: 'show_products_now_clicked',
+      eventData: {
+        previewCount: previewResults.length,
+      },
+    })
+
+    if (!hasTrackedPreviewImpressionsRef.current) {
+      hasTrackedPreviewImpressionsRef.current = true
+      const impressionItems = buildResultAnalyticsItems(previewResults)
+
+      if (impressionItems.length > 0) {
+        trackAnalytics({
+          eventType: 'result_impressions',
+          searchId: analyticsSearchIdRef.current,
+          sessionId: analyticsSessionIdRef.current,
+          resultSet: 'preview',
+          items: impressionItems,
+        })
+      }
+    }
   }
 
   function handleRetryWithFeedback() {
@@ -356,6 +555,19 @@ export function useGuidedSearch() {
     if (!discoveryToken) {
       setErrorMessage('Search session is missing. Please start the search again.')
       return
+    }
+
+    if (analyticsSearchIdRef.current && analyticsSessionIdRef.current) {
+      trackAnalytics({
+        eventType: 'search_event',
+        searchId: analyticsSearchIdRef.current,
+        sessionId: analyticsSessionIdRef.current,
+        name: 'retry_started',
+        eventData: {
+          retryRound: retryCount + 1,
+          feedbackLength: retryFeedback.trim().length,
+        },
+      })
     }
 
     finalizeMutation.mutate({
@@ -370,6 +582,58 @@ export function useGuidedSearch() {
     })
   }
 
+  function handleSelectProduct(item, { position = 0, resultSet = 'final' } = {}) {
+    setSelectedProduct({
+      ...item,
+      analyticsMeta: {
+        badgeType: item.badgeLabel || '',
+        isBestPick: position === 0 || item.badgeLabel === 'Best match',
+        position,
+        provider: item.subtitle || '',
+        resultKey: String(item.id),
+        resultSet,
+      },
+    })
+
+    if (!analyticsSearchIdRef.current || !analyticsSessionIdRef.current) {
+      return
+    }
+
+    trackAnalytics({
+      eventType: 'result_click',
+      searchId: analyticsSearchIdRef.current,
+      sessionId: analyticsSessionIdRef.current,
+      resultSet,
+      resultKey: String(item.id),
+      position,
+      provider: item.subtitle || '',
+      badgeType: item.badgeLabel || '',
+      isBestPick: position === 0 || item.badgeLabel === 'Best match',
+      clickTarget: 'card',
+      retailerUrl: item.link || '',
+    })
+  }
+
+  function handleRetailerClick(item, { position = 0, resultSet = 'final' } = {}) {
+    if (!analyticsSearchIdRef.current || !analyticsSessionIdRef.current) {
+      return
+    }
+
+    trackAnalytics({
+      eventType: 'result_click',
+      searchId: analyticsSearchIdRef.current,
+      sessionId: analyticsSessionIdRef.current,
+      resultSet,
+      resultKey: String(item.id),
+      position,
+      provider: item.subtitle || '',
+      badgeType: item.badgeLabel || '',
+      isBestPick: position === 0 || item.badgeLabel === 'Best match',
+      clickTarget: 'retailer',
+      retailerUrl: item.link || '',
+    })
+  }
+
   return {
     candidatePool,
     displayedResults,
@@ -377,6 +641,8 @@ export function useGuidedSearch() {
     followUpNotes,
     hasFinalResults,
     hasStartedSearch,
+    handleRetailerClick,
+    handleSelectProduct,
     isDiscovering,
     isFinalizing,
     isGeneratingPrompt,

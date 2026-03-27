@@ -5,7 +5,6 @@ import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, takeRateLimitToken } fro
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
 import { DEFAULT_FILTER_CONFIG } from './lib/result-filter.js'
 import {
-  ensureBadges,
   fetchSearchArtifacts,
   getValidatedSearchRequest,
   readCachedSearchSnapshot,
@@ -15,6 +14,10 @@ import {
 import {
   getSupabaseHealth,
   isSupabaseConfigured,
+  recordAnalyticsResultClick,
+  recordAnalyticsResultImpressions,
+  recordAnalyticsSearchEvent,
+  upsertAnalyticsSearchRun,
 } from './lib/search-storage.js'
 import { buildCacheKey, getEnv, validateSearchInput } from './lib/search-data.js'
 
@@ -970,6 +973,146 @@ export async function handleFinalizeSelection(request, response) {
   }
 }
 
+function sanitizeAnalyticsEventData(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).slice(0, 20).map(([key, entryValue]) => {
+      const normalizedKey = truncateText(key, 60)
+
+      if (!normalizedKey) {
+        return null
+      }
+
+      if (typeof entryValue === 'string') {
+        return [normalizedKey, truncateText(entryValue, 500)]
+      }
+
+      if (typeof entryValue === 'number' || typeof entryValue === 'boolean' || entryValue === null) {
+        return [normalizedKey, entryValue]
+      }
+
+      return [normalizedKey, truncateText(JSON.stringify(entryValue), 500)]
+    }).filter(Boolean),
+  )
+}
+
+function sanitizeAnalyticsItems(items) {
+  if (!Array.isArray(items)) {
+    return []
+  }
+
+  return items
+    .slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit)
+    .map((item, index) => {
+      const resultKey = truncateText(item?.resultKey, 200)
+
+      if (!resultKey) {
+        return null
+      }
+
+      return {
+        resultKey,
+        position: Number.isFinite(Number(item?.position)) ? Number(item.position) : index,
+        provider: truncateText(item?.provider, 160),
+        badgeType: truncateText(item?.badgeType, 80),
+        isBestPick: Boolean(item?.isBestPick),
+      }
+    })
+    .filter(Boolean)
+}
+
+export async function handleAnalyticsTrack(request, response) {
+  let body
+
+  try {
+    body = await readJsonBody(request, { maxBytes: FINALIZE_BODY_LIMIT_BYTES })
+  } catch (error) {
+    sendJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid request body.' })
+    return
+  }
+
+  const searchId = truncateText(body?.searchId, 100)
+  const sessionId = truncateText(body?.sessionId, 120)
+  const eventType = truncateText(body?.eventType, 80)
+
+  if (!searchId || !sessionId || !eventType) {
+    sendJson(response, 400, { error: 'searchId, sessionId, and eventType are required.' })
+    return
+  }
+
+  const resultSet = truncateText(body?.resultSet, 40) || 'final'
+
+  switch (eventType) {
+    case 'search_run_upsert': {
+      const productQuery = truncateText(body?.productQuery, 200)
+
+      if (!productQuery) {
+        sendJson(response, 400, { error: 'productQuery is required for search_run_upsert.' })
+        return
+      }
+
+      await upsertAnalyticsSearchRun({
+        searchId,
+        sessionId,
+        productQuery,
+        details: truncateText(body?.details, 500),
+        enteredAiRefinement: Boolean(body?.enteredAiRefinement),
+        usedShowProductsNow: Boolean(body?.usedShowProductsNow),
+        completedFinalize: Boolean(body?.completedFinalize),
+        retryRound: Number.isFinite(Number(body?.retryRound)) ? Number(body.retryRound) : 0,
+        bestResultKey: truncateText(body?.bestResultKey, 200),
+      })
+      break
+    }
+    case 'search_event':
+      await recordAnalyticsSearchEvent({
+        searchId,
+        sessionId,
+        eventType: truncateText(body?.name, 80) || 'unknown',
+        eventData: sanitizeAnalyticsEventData(body?.eventData),
+      })
+      break
+    case 'result_impressions': {
+      const items = sanitizeAnalyticsItems(body?.items)
+
+      if (items.length === 0) {
+        sendJson(response, 400, { error: 'At least one result impression item is required.' })
+        return
+      }
+
+      await recordAnalyticsResultImpressions({
+        searchId,
+        sessionId,
+        resultSet,
+        items,
+      })
+      break
+    }
+    case 'result_click':
+      await recordAnalyticsResultClick({
+        searchId,
+        sessionId,
+        resultSet,
+        resultKey: truncateText(body?.resultKey, 200),
+        position: Number.isFinite(Number(body?.position)) ? Number(body.position) : 0,
+        provider: truncateText(body?.provider, 160),
+        badgeType: truncateText(body?.badgeType, 80),
+        isBestPick: Boolean(body?.isBestPick),
+        clickTarget: truncateText(body?.clickTarget, 80),
+        retailerUrl: truncateText(body?.retailerUrl, 1000),
+      })
+      break
+    default:
+      sendJson(response, 400, { error: 'Unsupported analytics event type.' })
+      return
+  }
+
+  sendJson(response, 202, { ok: true })
+}
+
 export function createApiServer() {
   return createServer(async (request, response) => {
     const requestUrl = new URL(request.url || '/', `http://${request.headers.host || '127.0.0.1'}`)
@@ -1006,6 +1149,11 @@ export function createApiServer() {
 
     if (request.method === 'POST' && requestUrl.pathname === '/api/search/finalize') {
       await handleFinalizeSelection(request, response)
+      return
+    }
+
+    if (request.method === 'POST' && requestUrl.pathname === '/api/analytics/track') {
+      await handleAnalyticsTrack(request, response)
       return
     }
 

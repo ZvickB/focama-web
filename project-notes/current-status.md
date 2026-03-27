@@ -53,6 +53,20 @@
 - Shared rate limiting now uses Supabase when configured, with in-memory fallback only for local/degraded environments.
 - Backend env fallback loading now caches the parsed root `.env` snapshot in-process instead of rereading it on each `getEnv()` call.
 - `project-notes/db-needs.md` now captures the plain-language summary of the current required Supabase tables: `search_cache`, `search_history`, and `rate_limit_events`.
+- An optional funnel analytics path now exists for measuring guided-search behavior and retailer clicks:
+  - `POST /api/analytics/track`
+  - optional Supabase tables: `analytics_search_runs`, `analytics_search_events`, `analytics_result_impressions`, `analytics_result_clicks`
+- The homepage now emits best-effort analytics for:
+  - search start
+  - discovery loaded
+  - refinement viewed
+  - `Show products now` clicked
+  - AI follow-up submitted
+  - final results shown
+  - result impressions
+  - result card opens
+  - retailer click-throughs
+- Result impression/click analytics now distinguish preview, final, retry, and previous-result sets so ranking/badge behavior can be compared by flow stage.
 - Basic IP-based rate limiting exists on the search handlers, and now prefers the shared Supabase-backed limiter path when available.
 - The Vercel API wrappers now forward request headers into the backend handlers so production rate limiting can use forwarded client IP headers.
 - The Vercel route wrappers now share a small bridge helper so the dual-runtime path stays thinner, but the backend still uses a transitional Node-shaped handler contract across local server and Vercel routes.

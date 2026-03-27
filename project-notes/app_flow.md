@@ -57,6 +57,17 @@
   - duplicate-family keys and variant tokens are attached before AI selection
   - lightweight attribute tags are extracted from product text
   - trust signals are pre-scored before finalize so AI gets cleaner compact guidance
+- If the optional Supabase analytics funnel tables exist, the homepage now sends best-effort analytics through `/api/analytics/track` for:
+  - search start
+  - discovery loaded
+  - refinement viewed
+  - `Show products now` clicked
+  - AI follow-up submitted
+  - final results shown
+  - result impressions
+  - result card opens
+  - retailer click-throughs
+- Result analytics now distinguish `preview`, `final`, `retry`, and `previous` result sets so rank/badge behavior can be compared by stage.
 - After loading/refinement, the page displays up to 6 normalized product cards.
 - Clicking a product opens a detail modal with:
   - product image

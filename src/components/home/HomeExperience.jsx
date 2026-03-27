@@ -178,6 +178,7 @@ function OpenLayout(props) {
     hasStartedSearch,
     isLoading,
     onFinalize,
+    onRetailerClick,
     onSelectProduct,
     onShowProductsNow,
     prompt,
@@ -514,6 +515,7 @@ function OpenLayout(props) {
                 isLoading={isLoading}
                 isRetryReady={state.retryCount < 2}
                 isRetrying={state.isFinalizing}
+                onRetailerClick={onRetailerClick}
                 onSelectProduct={onSelectProduct}
                 onRetryFeedbackChange={state.setRetryFeedback}
                 onRetryWithFeedback={state.handleRetryWithFeedback}
@@ -545,7 +547,8 @@ export function HomeExperience() {
     hasStartedSearch: state.hasStartedSearch,
     isLoading: state.isLoading,
     onFinalize: state.handleFinalizeRefinement,
-    onSelectProduct: state.setSelectedProduct,
+    onRetailerClick: state.handleRetailerClick,
+    onSelectProduct: state.handleSelectProduct,
     onShowProductsNow: state.handleShowProductsNow,
     prompt: state.refinementPrompt,
     previousResults: state.previousResults,
@@ -567,6 +570,12 @@ export function HomeExperience() {
       {state.selectedProduct ? (
         <ProductDetailModal
           item={state.selectedProduct}
+          onRetailerClick={() =>
+            state.handleRetailerClick(state.selectedProduct, {
+              position: state.selectedProduct?.analyticsMeta?.position ?? 0,
+              resultSet: state.selectedProduct?.analyticsMeta?.resultSet || 'final',
+            })
+          }
           onClose={() => state.setSelectedProduct(null)}
         />
       ) : null}

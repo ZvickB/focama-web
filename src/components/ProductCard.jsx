@@ -61,6 +61,7 @@ function ProductCard({
   drawbacks = [],
   image,
   link,
+  onRetailerClick,
   onSelect,
   price,
   rating,
@@ -151,7 +152,10 @@ function ProductCard({
             target="_blank"
             rel="noreferrer"
             className="relative z-10 inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-stone-300 hover:text-slate-900"
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation()
+              onRetailerClick?.()
+            }}
           >
             View site
             <ChevronRight className="h-4 w-4 text-slate-400" />

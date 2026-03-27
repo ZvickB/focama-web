@@ -108,7 +108,7 @@ export function ResultSkeleton({ className = '' }) {
   )
 }
 
-export function ProductDetailModal({ item, onClose }) {
+export function ProductDetailModal({ item, onClose, onRetailerClick }) {
   useEffect(() => {
     document.body.style.overflow = 'hidden'
 
@@ -245,7 +245,7 @@ export function ProductDetailModal({ item, onClose }) {
                     asChild
                     className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
                   >
-                    <a href={item.link} target="_blank" rel="noreferrer">
+                    <a href={item.link} target="_blank" rel="noreferrer" onClick={onRetailerClick}>
                       View on retailer site
                       <ArrowUpRight className="h-4 w-4" />
                     </a>
@@ -288,6 +288,7 @@ export function ResultsSection({
   isLoading,
   isRetryReady,
   isRetrying,
+  onRetailerClick,
   onSelectProduct,
   onRetryFeedbackChange,
   onRetryWithFeedback,
@@ -456,7 +457,18 @@ export function ResultsSection({
                     item.badgeReason ||
                     (!hasExplicitBadges && index === 0 ? 'Top overall fit for this shortlist.' : '')
                   }
-                  onSelect={() => onSelectProduct(item)}
+                  onRetailerClick={() =>
+                    onRetailerClick(item, {
+                      position: index,
+                      resultSet: hasFinalResults ? 'final' : 'preview',
+                    })
+                  }
+                  onSelect={() =>
+                    onSelectProduct(item, {
+                      position: index,
+                      resultSet: hasFinalResults ? 'final' : 'preview',
+                    })
+                  }
                 />
               </div>
             ))}
@@ -477,9 +489,23 @@ export function ResultsSection({
             <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-180" />
           </summary>
           <div className="mt-4 grid max-w-6xl grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 sm:gap-5">
-            {orderedPreviousResults.map((item) => (
+            {orderedPreviousResults.map((item, index) => (
               <div key={`previous-${item.id}`}>
-                <ProductCard {...item} onSelect={() => onSelectProduct(item)} />
+                <ProductCard
+                  {...item}
+                  onRetailerClick={() =>
+                    onRetailerClick(item, {
+                      position: index,
+                      resultSet: 'previous',
+                    })
+                  }
+                  onSelect={() =>
+                    onSelectProduct(item, {
+                      position: index,
+                      resultSet: 'previous',
+                    })
+                  }
+                />
               </div>
             ))}
           </div>
