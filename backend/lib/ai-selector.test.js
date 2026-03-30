@@ -269,7 +269,7 @@ describe('ai selector', () => {
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
     const prompt = requestBody.input[1].content
 
-    expect(prompt).toContain('"description": ""')
+    expect(prompt).toContain('"description":""')
     expect(prompt).not.toContain('20% OFF')
   })
 
@@ -352,7 +352,7 @@ describe('ai selector', () => {
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
     const prompt = requestBody.input[1].content
 
-    expect(prompt).toContain('"description": ""')
+    expect(prompt).toContain('"description":""')
     expect(prompt).not.toContain('Shop mens on cloud dress shoes at Nordstrom')
   })
 
@@ -397,11 +397,49 @@ describe('ai selector', () => {
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
     const prompt = requestBody.input[1].content
 
-    expect(prompt).toContain('"duplicateFamilyKey": "cloud 6 shoe"')
-    expect(prompt).toContain('"attributes": [')
-    expect(prompt).toContain('"trustSignals": {')
-    expect(prompt).toContain('"score": 4')
+    expect(prompt).toContain('"duplicateFamilyKey":"cloud 6 shoe"')
+    expect(prompt).toContain('"attributes":[')
+    expect(prompt).toContain('"trustScore":4')
     expect(prompt).not.toContain('"variantTokens": [')
     expect(prompt).not.toContain('"ratingBand": "high"')
+  })
+
+  it('drops backend-only and redundant prompt fields from finalize selection input', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          picks: [],
+        }),
+      }),
+    })
+
+    await selectAiResults(
+      {
+        apiKey: 'test-key',
+        candidatePool: {
+          query: 'stroller',
+          details: 'airport travel and easy folding',
+          searchState: 'Results for exact spelling',
+          similarQueries: ['compact stroller'],
+          candidates: [
+            createCandidate({
+              numericPrice: 199.99,
+            }),
+          ],
+        },
+        finalResultLimit: 6,
+      },
+      fetchMock,
+    )
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
+    const prompt = requestBody.input[1].content
+
+    expect(prompt).not.toContain('Search state:')
+    expect(prompt).not.toContain('Similar queries:')
+    expect(prompt).not.toContain('"matchSignals"')
+    expect(prompt).not.toContain('"numericPrice"')
+    expect(prompt).toContain('"trustScore":null')
   })
 })

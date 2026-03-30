@@ -88,6 +88,7 @@
 - Guided `/api/search/discover` now returns the preview response before the discovery-cache write finishes, so first-hit latency is no longer blocked by Supabase cache persistence.
 - Guided finalize now sends a slightly slimmer AI candidate summary by dropping variant tokens and collapsing trust metadata to a compact score-only signal, while keeping reasons and attributes in the selection prompt.
 - Candidate/result normalization now ignores promo-only description text, and the finalize AI handoff drops empty/generic filler descriptions plus redundant source/price/delivery boilerplate so the prompt stays tighter without changing the shortlist flow.
+- Guided finalize prompt slimming now also removes top-level search-state/similar-query prompt text, drops backend-only match-signal and duplicate numeric-price fields from each candidate summary, flattens trust metadata to a single `trustScore`, and minifies the candidate JSON payload before sending it to OpenAI.
 - The filtered candidate pool now carries provider-agnostic duplicate-family metadata, compact attribute tags, and trust signals before final AI selection so the backend is less tied to raw SerpApi wording.
 - Search history records cache status best-effort, including guided cache hits/misses and uncached live-route runs, and guided discovery telemetry now uses the scoped discovery cache key.
 - `search_history` is treated as internal operational telemetry for debugging and cache analysis, not as a user-facing saved-search feature.
@@ -132,4 +133,13 @@
 ## Recommended next task
 - Follow `project-notes/reset-runbook.md` from Step 4 onward: measure real baseline latency and token usage first, then plan the next simpler architecture before any new finalize-flow rebuild.
 - The first rebuild step is now done: refine was slimmed and re-measured.
-- Next, reduce finalize prompt weight and then re-measure the same sample queries again.
+- The next reset step is now complete: finalize prompt weight was reduced without changing the current product flow.
+- Re-measured finalize on 2026-03-30 after the slimming step:
+  - average latency: about 13.9 s
+  - average total tokens: about 5403
+  - average full guided-search total tokens: about 5574
+- Compared with the reset baseline:
+  - finalize latency improved from 16.1 s to 13.9 s
+  - finalize total tokens improved from 5485 to 5403
+  - full guided-search total tokens improved from 5803 to 5574
+- Next, decide whether finalize quality/latency is acceptable as-is or whether a compact in-request shard-scoring test is justified.

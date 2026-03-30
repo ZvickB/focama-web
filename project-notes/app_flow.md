@@ -57,6 +57,7 @@
 - Guided discovery, refine, and finalize now emit structured `[search-flow]` logs so latency, token usage, candidate counts, and ranking ownership are easier to inspect during rebuild work.
 - Guided discovery now sends the preview response as soon as artifacts are ready and lets the discovery-cache write finish in the background, so first-hit responses are not held open by cache persistence time.
 - Guided finalize now keeps reasons and attributes in the AI handoff but trims backend-only prompt baggage by removing variant tokens and reducing trust metadata to a compact score signal.
+- Guided finalize prompt slimming now also removes top-level search-state/similar-query prompt text, drops backend-only match-signal and duplicate numeric-price fields from each AI candidate summary, flattens trust metadata to a single `trustScore`, and minifies the candidate JSON block before sending it to OpenAI.
 - Guided candidate/result normalization now skips promo-only description text such as sale blurbs, and the finalize AI summary now omits empty/generic filler descriptions plus redundant source/price/delivery boilerplate to reduce prompt waste.
 - The backend candidate pool is now a more provider-agnostic structured layer:
   - duplicate-family keys and variant tokens are attached before AI selection

@@ -76,6 +76,7 @@
 - Guided discovery now responds before the discovery cache write finishes, so first-time searches are no longer blocked by Supabase cache persistence time
 - Guided finalize now trims prompt weight by dropping variant tokens and reducing trust metadata to a score-only signal, while keeping reasons and attributes in the AI selection context
 - Promo-only shopping snippets such as `20% OFF` / `LOW PRICE` are now ignored as normalized descriptions, and finalize AI summaries now omit empty/generic filler descriptions plus redundant source/price/delivery boilerplate to cut prompt waste
+- Guided finalize prompt slimming now also removes top-level search-state/similar-query prompt text, drops backend-only match-signal and duplicate numeric-price fields from each AI candidate summary, flattens trust metadata to a single `trustScore`, and minifies the candidate JSON block before sending it to OpenAI
 - The backend candidate pool now includes provider-agnostic duplicate-family keys, variant tokens, compact attribute tags, and trust signals before finalize so future search-provider changes can reuse the same internal model more easily
 - Guided discovery telemetry now records the scoped discovery cache key in `search_history`, so debug history lines up with the actual cached entry
 - A new best-effort analytics endpoint now exists at `/api/analytics/track` for optional funnel instrumentation
@@ -132,4 +133,13 @@
 - First continue `project-notes/reset-runbook.md` from Step 4
 - Measure real refine/finalize latency and token usage on the reset baseline before any new finalize architecture work
 - Treat `wordmark.PNG` as the preferred current wordmark asset unless the user explicitly wants another attempt
-- The next implementation step is to reduce finalize prompt weight and then re-measure the same sample queries
+- The finalize-prompt slimming step is now complete and was re-measured on the same sample queries
+- Re-measured finalize on 2026-03-30 after the slimming step:
+  - average latency: about 13.9 s
+  - average total tokens: about 5403
+  - average full guided-search total tokens: about 5574
+- Compared with the reset baseline:
+  - finalize latency improved from 16.1 s to 13.9 s
+  - finalize total tokens improved from 5485 to 5403
+  - full guided-search total tokens improved from 5803 to 5574
+- The next implementation decision is whether that improvement is enough to stop before more ranking complexity, or whether a compact in-request shard-scoring test is worth trying

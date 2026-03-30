@@ -216,19 +216,15 @@ function buildCandidateSummary(candidatePool) {
     duplicateFamilyKey: candidate.duplicateFamilyKey || '',
     source: candidate.source,
     price: candidate.price,
-    numericPrice: candidate.numericPrice,
     rating: candidate.rating,
     reviewCount: candidate.reviewCount,
     attributes: Array.isArray(candidate.attributes) ? candidate.attributes.slice(0, 6) : [],
-    matchSignals: candidate.matchSignals,
     reasons: getCandidateSummaryReasons(candidate),
-    trustSignals:
+    trustScore:
       candidate.trustSignals && typeof candidate.trustSignals === 'object' && !Array.isArray(candidate.trustSignals)
-        ? {
-            score: Number.isFinite(Number(candidate.trustSignals.score))
-              ? Number(candidate.trustSignals.score)
-              : 0,
-          }
+        ? Number.isFinite(Number(candidate.trustSignals.score))
+          ? Number(candidate.trustSignals.score)
+          : 0
         : null,
   }))
 }
@@ -252,15 +248,9 @@ function buildSelectionPrompt({ candidatePool, finalResultLimit }) {
     '',
     `Product query: ${candidatePool.query}`,
     `Extra context: ${candidatePool.details || 'None provided.'}`,
-    `Search state: ${candidatePool.searchState || 'Unknown'}`,
-    `Similar queries: ${
-      Array.isArray(candidatePool.similarQueries) && candidatePool.similarQueries.length > 0
-        ? candidatePool.similarQueries.join(', ')
-        : 'None'
-    }`,
     '',
     'Candidates:',
-    JSON.stringify(buildCandidateSummary(candidatePool), null, 2),
+    JSON.stringify(buildCandidateSummary(candidatePool)),
   ].join('\n')
 }
 

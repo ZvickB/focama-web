@@ -139,3 +139,19 @@
   - refine total tokens improved from 318.3 to 172.0
 - Next step:
   - reduce finalize prompt weight and re-measure finalize on the same sample queries
+- 2026-03-30:
+  - Completed the second rebuild step for finalize prompt slimming.
+  - Finalize now removes top-level search-state/similar-query prompt text.
+  - Finalize AI candidate summaries now drop backend-only match signals and duplicate numeric-price fields.
+  - Finalize AI candidate summaries now flatten trust metadata to a single `trustScore`.
+  - Finalize now sends minified candidate JSON to OpenAI instead of pretty-printed JSON.
+- Re-measured finalize after this step on the same three sample queries:
+  - average latency: 13912.5 ms
+  - average total tokens: 5403.3
+  - average full guided-search total tokens: 5574.3
+- Compared with the reset baseline:
+  - finalize latency improved from 16121.8 ms to 13912.5 ms
+  - finalize total tokens improved from 5485.0 to 5403.3
+  - full guided-search total tokens improved from 5803.3 to 5574.3
+- Next step:
+  - decide whether finalize quality and latency are acceptable after prompt slimming, or if a compact in-request shard-scoring test is warranted

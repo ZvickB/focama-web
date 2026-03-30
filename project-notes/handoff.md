@@ -38,10 +38,20 @@
 - Re-measured refine on 2026-03-30 after the slimming step:
   - average latency: about 1.1 s
   - average total tokens: about 172
+- The second rebuild step is now complete:
+  - finalize prompt weight was reduced without changing the guided product flow
+  - top-level search-state/similar-query prompt text was removed
+  - backend-only match-signal and duplicate numeric-price fields were removed from each AI candidate summary
+  - trust metadata was flattened to a single `trustScore`
+  - the candidate JSON block is now minified before it is sent to OpenAI
+- Re-measured finalize on 2026-03-30 after the slimming step:
+  - average latency: about 13.9 s
+  - average total tokens: about 5403
+  - average full guided-search total tokens: about 5574
 
 ## Next likely work
 - Follow `project-notes/fast-flow-reset-plan.md`.
-- Next, reduce finalize prompt weight before attempting any new ranking architecture.
+- Next, decide whether finalize quality/latency is acceptable after the slimming pass before attempting any new ranking architecture.
 - Re-measure the same sample queries after each step.
 - Do not reintroduce persisted finalize orchestration or polling unless the user explicitly approves that tradeoff.
 - Add smarter structured logging during the rebuild so route mode, latency, token use, candidate counts, and ranking ownership stay visible as the flow changes.
