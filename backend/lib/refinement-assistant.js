@@ -1,5 +1,9 @@
 import { DEFAULT_OPENAI_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
 
+const MAX_PROMPT_LENGTH = 90
+const DEFAULT_HELPER_TEXT = 'Add the one detail that matters most and we will narrow faster.'
+const DEFAULT_PLACEHOLDER = 'Examples: budget, size, comfort, must-have, or what to avoid.'
+
 function getResponseText(payload) {
   if (typeof payload?.output_text === 'string' && payload.output_text.trim()) {
     return payload.output_text
@@ -27,28 +31,34 @@ function buildPromptSchema() {
     properties: {
       prompt: {
         type: 'string',
-      },
-      helper_text: {
-        type: 'string',
-      },
-      follow_up_placeholder: {
-        type: 'string',
+        maxLength: MAX_PROMPT_LENGTH,
       },
     },
-    required: ['prompt', 'helper_text', 'follow_up_placeholder'],
+    required: ['prompt'],
     additionalProperties: false,
   }
 }
 
 function buildPromptInput(productQuery) {
   return [
-    'You are helping a shopper clarify what matters before picking products.',
-    'Keep the tone calm, practical, and lightweight.',
-    'Return one short question, one short helper text, and one placeholder for optional free text.',
-    'Do not suggest chips, toggles, or selectable priorities.',
-    'Do not ask more than one question in this step.',
+    'Help a shopper clarify one detail that will change product ranking.',
+    'Return one short question only.',
+    `Keep the question at or under ${MAX_PROMPT_LENGTH} characters.`,
+    'Ask only one question.',
+    'Do not add helper text, examples, or a placeholder.',
+    'Focus on the detail most likely to change ranking, such as use case, must-have, budget, size, comfort, or what to avoid.',
     `Product request: ${productQuery}`,
   ].join('\n')
+}
+
+function clampText(value, maxLength) {
+  const normalizedValue = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
+
+  if (!normalizedValue) {
+    return ''
+  }
+
+  return normalizedValue.slice(0, maxLength).trim()
 }
 
 function normalizeOpenAiUsage(payload) {
@@ -87,7 +97,7 @@ export async function generateRefinementPrompt(
       model,
       store: false,
       reasoning: {
-        effort: 'low',
+        effort: 'minimal',
       },
       input: [
         {
@@ -126,9 +136,9 @@ export async function generateRefinementPrompt(
   const parsed = JSON.parse(responseText)
 
   return {
-    prompt: parsed.prompt,
-    helperText: parsed.helper_text,
-    followUpPlaceholder: parsed.follow_up_placeholder,
+    prompt: clampText(parsed.prompt, MAX_PROMPT_LENGTH),
+    helperText: DEFAULT_HELPER_TEXT,
+    followUpPlaceholder: DEFAULT_PLACEHOLDER,
     usage,
   }
 }

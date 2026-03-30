@@ -62,6 +62,22 @@ function runInBackground(task) {
   Promise.resolve(task).catch(() => {})
 }
 
+function logSearchFlowEvent(eventName, details = {}) {
+  if (process.env.NODE_ENV === 'test') {
+    return
+  }
+
+  const payload = Object.fromEntries(
+    Object.entries({
+      event: eventName,
+      timestamp: new Date().toISOString(),
+      ...details,
+    }).filter(([, value]) => value !== undefined),
+  )
+
+  console.info('[search-flow]', JSON.stringify(payload))
+}
+
 export function sendJson(response, statusCode, payload, headers = {}) {
   const serverTiming = formatServerTiming(headers.serverTiming)
   const responseHeaders = {
@@ -432,6 +448,11 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
   const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
 
   if (!rateLimit.allowed) {
+    logSearchFlowEvent('guided_discovery_rate_limited', {
+      route: '/api/search/discover',
+      query: requestUrl.searchParams.get('query') || '',
+      clientIpAddress,
+    })
     sendJson(response, 429, {
       error: 'Too many searches from this connection. Please wait a minute and try again.',
     })
@@ -441,6 +462,11 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
   const { cacheKey, error, isValid, normalizedDetails, normalizedQuery } = getValidatedSearchRequest(requestUrl)
 
   if (!isValid) {
+    logSearchFlowEvent('guided_discovery_invalid', {
+      route: '/api/search/discover',
+      query: requestUrl.searchParams.get('query') || '',
+      error,
+    })
     sendJson(response, 400, { error })
     return
   }
@@ -587,6 +613,17 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
       source: cachedEntry.source || 'cache',
     })
 
+    logSearchFlowEvent('guided_discovery_cache_hit', {
+      route: '/api/search/discover',
+      query: normalizedQuery,
+      candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
+        ? cachedEntry.candidatePool.candidates.length
+        : normalizedCachedResults.length,
+      previewCount: normalizedCachedResults.length,
+      cacheMs: roundTimingDuration(cacheLookupDuration),
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+    })
+
     sendJson(response, 200, {
       discoveryToken: discoveryCacheKey,
       candidatePool: cachedEntry.candidatePool,
@@ -651,6 +688,19 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
       source: 'guided_discovery',
     })
 
+    logSearchFlowEvent('guided_discovery_completed', {
+      route: '/api/search/discover',
+      query: normalizedQuery,
+      cacheStatus: 'miss',
+      candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
+        ? artifacts.candidatePool.candidates.length
+        : 0,
+      previewCount: artifacts.results.length,
+      cacheMs: roundTimingDuration(cacheLookupDuration),
+      serpapiMs: roundTimingDuration(serpApiDuration),
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+    })
+
     sendJson(response, 200, {
       discoveryToken: discoveryCacheKey,
       candidatePool: artifacts.candidatePool,
@@ -663,6 +713,12 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
       ],
     })
   } catch (error) {
+    logSearchFlowEvent('guided_discovery_failed', {
+      route: '/api/search/discover',
+      query: normalizedQuery,
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
     sendJson(response, 500, {
       error: 'Unable to reach SerpApi.',
       details: error instanceof Error ? error.message : 'Unknown error',
@@ -678,11 +734,20 @@ export async function handleRefinementPrompt(requestUrl, response) {
   })
 
   if (!isValid) {
+    logSearchFlowEvent('guided_refine_invalid', {
+      route: '/api/search/refine',
+      query: requestUrl.searchParams.get('query') || '',
+      error,
+    })
     sendJson(response, 400, { error })
     return
   }
 
   if (!openAiApiKey) {
+    logSearchFlowEvent('guided_refine_missing_openai_key', {
+      route: '/api/search/refine',
+      query: normalizedQuery,
+    })
     sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
     return
   }
@@ -695,14 +760,33 @@ export async function handleRefinementPrompt(requestUrl, response) {
       model: getEnv('OPENAI_MODEL') || DEFAULT_OPENAI_MODEL,
     })
     const openAiDuration = nowMs() - openAiStartedAt
+    const totalDuration = nowMs() - requestStartedAt
+
+    logSearchFlowEvent('guided_refine_completed', {
+      route: '/api/search/refine',
+      query: normalizedQuery,
+      promptLength: refinementPrompt.prompt.length,
+      helperTextLength: refinementPrompt.helperText.length,
+      placeholderLength: refinementPrompt.followUpPlaceholder.length,
+      openaiMs: roundTimingDuration(openAiDuration),
+      totalMs: roundTimingDuration(totalDuration),
+      openaiUsage: refinementPrompt.usage || null,
+      rankingOwner: 'openai_refine_prompt',
+    })
 
     sendJson(response, 200, refinementPrompt, {
       serverTiming: [
         { name: 'openai', duration: openAiDuration },
-        { name: 'total', duration: nowMs() - requestStartedAt },
+        { name: 'total', duration: totalDuration },
       ],
     })
   } catch (error) {
+    logSearchFlowEvent('guided_refine_failed', {
+      route: '/api/search/refine',
+      query: normalizedQuery,
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
     sendJson(response, 500, {
       error: 'Unable to generate the refinement prompt.',
       details: error instanceof Error ? error.message : 'Unknown error',
@@ -815,6 +899,10 @@ export async function handleFinalizeSelection(request, response) {
   const rateLimit = await takeRateLimitToken(clientIpAddress, FINALIZE_SELECTION_RATE_LIMIT)
 
   if (!rateLimit.allowed) {
+    logSearchFlowEvent('guided_finalize_rate_limited', {
+      route: '/api/search/finalize',
+      clientIpAddress,
+    })
     sendJson(response, 429, {
       error: 'Too many finalize requests from this connection. Please wait a minute and try again.',
     })
@@ -828,6 +916,10 @@ export async function handleFinalizeSelection(request, response) {
     body = await readJsonBody(request, { maxBytes: FINALIZE_BODY_LIMIT_BYTES })
     body.bodyReadDuration = nowMs() - bodyReadStartedAt
   } catch (error) {
+    logSearchFlowEvent('guided_finalize_invalid_body', {
+      route: '/api/search/finalize',
+      error: error instanceof Error ? error.message : 'Invalid request body.',
+    })
     sendJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid request body.' })
     return
   }
@@ -835,6 +927,11 @@ export async function handleFinalizeSelection(request, response) {
   const sanitizedDiscoveryContext = sanitizeFinalizeDiscoveryContext(body)
 
   if (!sanitizedDiscoveryContext.isValid) {
+    logSearchFlowEvent('guided_finalize_invalid', {
+      route: '/api/search/finalize',
+      query: typeof body?.query === 'string' ? body.query : '',
+      error: sanitizedDiscoveryContext.error,
+    })
     sendJson(response, 400, { error: sanitizedDiscoveryContext.error })
     return
   }
@@ -846,6 +943,11 @@ export async function handleFinalizeSelection(request, response) {
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
 
   if (!resolvedCandidatePool.isValid) {
+    logSearchFlowEvent('guided_finalize_missing_discovery_context', {
+      route: '/api/search/finalize',
+      query: sanitizedDiscoveryContext.normalizedQuery,
+      error: resolvedCandidatePool.error,
+    })
     sendJson(response, resolvedCandidatePool.statusCode, { error: resolvedCandidatePool.error })
     return
   }
@@ -896,6 +998,14 @@ export async function handleFinalizeSelection(request, response) {
   }
 
   if (retryCount > 0 && nextCandidatePool.candidates.length === 0) {
+    logSearchFlowEvent('guided_finalize_retry_exhausted', {
+      route: '/api/search/finalize',
+      query: sanitizedDiscoveryContext.normalizedQuery,
+      candidateCount: 0,
+      retryCount,
+      cacheMs: roundTimingDuration(cacheLookupDuration),
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+    })
     sendJson(response, 200, {
       candidatePool: nextCandidatePool,
       retryCount,
@@ -944,6 +1054,21 @@ export async function handleFinalizeSelection(request, response) {
       }))
 
     const results = aiSelection.results.length > 0 ? aiSelection.results : fallbackResults
+    const totalDuration = nowMs() - requestStartedAt
+
+    logSearchFlowEvent('guided_finalize_completed', {
+      route: '/api/search/finalize',
+      query: sanitizedDiscoveryContext.normalizedQuery,
+      candidateCount: nextCandidatePool.candidates.length,
+      finalCount: results.length,
+      retryCount,
+      cacheMs: roundTimingDuration(cacheLookupDuration),
+      openaiMs: roundTimingDuration(openAiDuration),
+      totalMs: roundTimingDuration(totalDuration),
+      openaiUsage: aiSelection.usage || null,
+      rankingOwner: aiSelection.results.length > 0 ? 'openai_then_backend_select' : 'deterministic_fallback',
+      selectionMode: aiSelection.results.length > 0 ? 'ai' : 'rules_fallback',
+    })
 
     sendJson(response, 200, {
       candidatePool: nextCandidatePool,
@@ -970,10 +1095,18 @@ export async function handleFinalizeSelection(request, response) {
         { name: 'body', duration: body.bodyReadDuration || 0 },
         { name: 'cache', duration: cacheLookupDuration },
         { name: 'openai', duration: openAiDuration },
-        { name: 'total', duration: nowMs() - requestStartedAt },
+        { name: 'total', duration: totalDuration },
       ],
     })
   } catch (error) {
+    logSearchFlowEvent('guided_finalize_failed', {
+      route: '/api/search/finalize',
+      query: sanitizedDiscoveryContext.normalizedQuery,
+      candidateCount: nextCandidatePool.candidates.length,
+      retryCount,
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
     sendJson(response, 500, {
       error: 'Unable to finalize the product selection.',
       details: error instanceof Error ? error.message : 'Unknown error',

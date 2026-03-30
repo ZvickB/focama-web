@@ -56,6 +56,14 @@
 - `/api/search/live` is the explicit manual/debug combined route
 - The archived staged/persisted finalize experiment is not the active path on `main`.
 - Future finalize or latency-architecture changes should start from `project-notes/architecture-reset.md`, not from the archived experiment.
+- Guided refine was slimmed after the reset:
+  - AI now returns only one short ranking question
+  - helper text and the textarea placeholder are static server-side copy
+  - refine now uses minimal reasoning effort
+- Guided discovery, refine, and finalize now emit structured `[search-flow]` logs for latency, token usage, candidate counts, and ranking ownership.
+- Re-measured refine on 2026-03-30 after the slimming step:
+  - average latency: about 1.1 s
+  - average total tokens: about 172
 - The Vercel route wrappers now preserve forwarded request headers so backend IP-based rate limiting still works in production deployments
 - Shared rate limiting now prefers a Supabase-backed event table when configured, with in-memory fallback only for local or degraded environments
 - Guided `/api/search/finalize` now rejects oversized or malformed payloads before AI selection and caps candidate pool size at 20
@@ -124,3 +132,4 @@
 - First continue `project-notes/reset-runbook.md` from Step 4
 - Measure real refine/finalize latency and token usage on the reset baseline before any new finalize architecture work
 - Treat `wordmark.PNG` as the preferred current wordmark asset unless the user explicitly wants another attempt
+- The next implementation step is to reduce finalize prompt weight and then re-measure the same sample queries

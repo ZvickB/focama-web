@@ -40,6 +40,10 @@
 - This guided flow is the primary backend path for the product.
 - `/api/search/live` is the explicit combined-path endpoint for backend/debug/manual use.
 - The staged/persisted finalize experiment is not on `main`.
+- Guided refine now asks AI for only one short ranking question.
+- Guided refine helper text and textarea placeholder are now static server-side copy instead of extra AI output.
+- Guided refine now uses minimal reasoning effort to reduce latency and token usage.
+- Guided discovery, refine, and finalize now emit structured `[search-flow]` logs with route/mode, latency, token usage, candidate counts, and ranking ownership.
 - The live search flow currently:
   - validates input
   - queries SerpApi
@@ -127,3 +131,5 @@
 
 ## Recommended next task
 - Follow `project-notes/reset-runbook.md` from Step 4 onward: measure real baseline latency and token usage first, then plan the next simpler architecture before any new finalize-flow rebuild.
+- The first rebuild step is now done: refine was slimmed and re-measured.
+- Next, reduce finalize prompt weight and then re-measure the same sample queries again.

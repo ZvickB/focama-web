@@ -51,6 +51,10 @@
   - `/api/health/supabase` should treat local file fallback as a supported development/storage mode when Supabase is not configured
 - Guided search requests now expose backend stage timing through `Server-Timing` headers, and the homepage shows the timing panel in development or when `?timing=1` is present for discover, refine, and finalize.
 - Guided `/api/search/refine`, `/api/search/finalize`, and `/api/search/live` now also surface OpenAI token usage metadata in their JSON responses when those AI calls run, so refine/finalize cost can be measured directly instead of estimated from prompt size alone.
+- Guided refine now asks AI for only one short question.
+- Guided refine helper text and the textarea placeholder are now fixed server-side copy instead of extra AI-generated fields.
+- Guided refine now uses minimal reasoning effort so the follow-up step stays closer to a lightweight helper.
+- Guided discovery, refine, and finalize now emit structured `[search-flow]` logs so latency, token usage, candidate counts, and ranking ownership are easier to inspect during rebuild work.
 - Guided discovery now sends the preview response as soon as artifacts are ready and lets the discovery-cache write finish in the background, so first-hit responses are not held open by cache persistence time.
 - Guided finalize now keeps reasons and attributes in the AI handoff but trims backend-only prompt baggage by removing variant tokens and reducing trust metadata to a compact score signal.
 - Guided candidate/result normalization now skips promo-only description text such as sale blurbs, and the finalize AI summary now omits empty/generic filler descriptions plus redundant source/price/delivery boilerplate to reduce prompt waste.

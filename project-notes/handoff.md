@@ -30,12 +30,23 @@
   - finalize average total tokens: about 5485
   - full guided-search average total tokens: about 5803
 - The current planning note for the next rebuild pass is `project-notes/fast-flow-reset-plan.md`.
+- The first rebuild step is now complete:
+  - refine now asks AI for only one short question
+  - helper text and placeholder copy are static server-side strings
+  - refine now uses minimal reasoning effort
+  - guided discovery/refine/finalize emit structured `[search-flow]` logs
+- Re-measured refine on 2026-03-30 after the slimming step:
+  - average latency: about 1.1 s
+  - average total tokens: about 172
 
 ## Next likely work
 - Follow `project-notes/fast-flow-reset-plan.md`.
-- First shrink refine and reduce finalize prompt weight before attempting any new ranking architecture.
+- Next, reduce finalize prompt weight before attempting any new ranking architecture.
 - Re-measure the same sample queries after each step.
 - Do not reintroduce persisted finalize orchestration or polling unless the user explicitly approves that tradeoff.
+- Add smarter structured logging during the rebuild so route mode, latency, token use, candidate counts, and ranking ownership stay visible as the flow changes.
+- Use `npm run dev:all` at meaningful integration checkpoints instead of waiting until many steps pile up.
+- Commit after each completed narrow step so rollback stays easy and architecture drift is easier to catch.
 
 ## Known remaining work
 - Watch how the new feedback-based retry loop performs with real searches and tighten the copy, friction, and retry cap only if testers start treating it like a browse loop.

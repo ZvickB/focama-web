@@ -80,6 +80,15 @@
 1. Instrument the current one-shot guided flow more explicitly.
    - Persist the baseline measurements in notes.
    - Make sure refine/finalize timing and token usage stay visible in development.
+   - Add smarter structured logs so each meaningful search step records:
+     - route and flow mode
+     - latency
+     - token usage when AI runs
+     - candidate counts before and after narrowing
+     - whether AI or deterministic backend logic made the key decision
+   - Make the logs clear enough to distinguish:
+     - slow because of AI work
+     - slow because of backend orchestration or extra workflow steps
 2. Shrink refine first.
    - Tighten the refine prompt so it produces one useful question with lower output token use.
    - Add a compact structured guidance payload only if it stays small.
@@ -94,9 +103,39 @@
    - Do not add persistence or polling.
 6. Add optional presentation polish only after shortlist quality and latency are acceptable.
 
+## Working rhythm guardrails
+- Run `npm run dev:all` at meaningful checkpoints where the full homepage-to-backend flow should be exercised end to end, especially:
+  - after changing request/response contracts
+  - after changing guided-flow route behavior
+  - after changing timing, token, or logging instrumentation
+  - before declaring a step complete
+- Do not wait for a giant batch of changes before testing the integrated flow.
+- Commit after each meaningful completed step, not after a stack of loosely related changes.
+- A good commit point is when:
+  - one planned step is done
+  - `dev:all` sanity-checks the intended flow
+  - the notes for that step are updated if needed
+- If a step is too large to reach a safe commit quickly, split it into a smaller step before continuing.
+
 ## Decision gate before each implementation step
 - Is this simpler than the staged experiment?
 - Does this reduce real user wait time or token cost?
 - Does this preserve one-request finalize behavior?
 - Does this keep backend ranking ownership clear?
 - If not, stop and ask before coding further.
+
+## Progress update
+- 2026-03-30:
+  - Completed the first rebuild step for refine.
+  - AI now returns only one short ranking question.
+  - Helper text and textarea placeholder are now static server-side copy.
+  - Refine now uses minimal reasoning effort.
+  - Structured `[search-flow]` logs now exist for guided discovery, refine, and finalize.
+- Re-measured refine after this step on the same three sample queries:
+  - average latency: 1127.7 ms
+  - average total tokens: 172.0
+- Compared with the reset baseline:
+  - refine latency improved from 3422.4 ms to 1127.7 ms
+  - refine total tokens improved from 318.3 to 172.0
+- Next step:
+  - reduce finalize prompt weight and re-measure finalize on the same sample queries
