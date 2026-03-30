@@ -113,7 +113,9 @@ describe('HomePage', () => {
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /show focused picks/i })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /show products now/i })[0]).toBeInTheDocument()
-    expect(screen.getByText(/skip ai refinement\./i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/these are fast picks from our cleaned product pool\./i),
+    ).toBeInTheDocument()
   })
 
   it('shows the backend error message when discovery fails', async () => {
@@ -349,7 +351,9 @@ describe('HomePage', () => {
     await user.click(screen.getAllByRole('button', { name: /show products now/i })[0])
 
     expect(await screen.findByText('Travel stroller')).toBeInTheDocument()
-    expect(screen.getByText(/skip ai refinement\./i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/these are fast picks from our cleaned product pool\./i),
+    ).toBeInTheDocument()
   })
 
   it('lets the user reset to a brand-new search after results are shown', async () => {

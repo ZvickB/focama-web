@@ -509,7 +509,10 @@ function OpenLayout(props) {
                       >
                         Show products now
                       </Button>
-                      <p className="text-xs text-slate-500">Skip AI refinement.</p>
+                      <p className="text-xs text-slate-500">
+                        These are fast picks from our cleaned product pool. Add more detail for a
+                        more focused AI shortlist.
+                      </p>
                     </div>
                   </div>
                 </div>
