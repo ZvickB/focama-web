@@ -6,6 +6,7 @@ import {
   getOrCreateAnalyticsSessionId,
   trackAnalytics,
 } from '@/lib/analytics.js'
+import { enrichFinalResultsForDisplay } from '@/components/home/resultPresentation.js'
 import { validateSearchInput } from '../../../shared/search-input.js'
 
 export const RESULT_CARD_COUNT = 6
@@ -40,7 +41,8 @@ function parseServerTimingHeader(headerValue) {
 function createFallbackRefinementPrompt(productQuery) {
   return {
     prompt: `What should we optimize for with this ${productQuery}?`,
-    helperText: 'Answer in natural language so Focamai can understand what you really want.',
+    helperText:
+      'Use this step for natural-language details like budget, size, comfort, style, or where you plan to use it.',
     followUpPlaceholder:
       'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
   }
@@ -192,13 +194,17 @@ export function useGuidedSearch() {
       setErrorMessage('')
     },
     onSuccess: (payload, variables) => {
-      setCandidatePool(variables.originalCandidatePool || null)
-      setPreviousResults(
-        variables.retryCount > 0 && Array.isArray(variables.previousResults)
-          ? variables.previousResults
-          : [],
+      const finalizedResults = enrichFinalResultsForDisplay(
+        mergeFinalizeResults(payload.results, variables.originalCandidatePool),
       )
-      setResults(mergeFinalizeResults(payload.results, variables.originalCandidatePool))
+      const previousDisplayResults =
+        variables.retryCount > 0 && Array.isArray(variables.previousResults)
+          ? enrichFinalResultsForDisplay(variables.previousResults)
+          : []
+
+      setCandidatePool(variables.originalCandidatePool || null)
+      setPreviousResults(previousDisplayResults)
+      setResults(finalizedResults)
       setRequestTiming((current) => ({
         ...current,
         finalize: payload.timing || null,
@@ -209,7 +215,6 @@ export function useGuidedSearch() {
 
       const searchId = analyticsSearchIdRef.current
       const sessionId = analyticsSessionIdRef.current
-      const finalizedResults = mergeFinalizeResults(payload.results, variables.originalCandidatePool)
       const resultSet = variables.retryCount > 0 ? 'retry' : 'final'
 
       if (searchId && sessionId) {

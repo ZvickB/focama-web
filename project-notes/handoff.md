@@ -59,12 +59,17 @@
   - badge reasons were removed from the blocking finalize contract
   - drawback/caution text stays available but was moved off the card grid and into the modal
   - the guided flow, one-shot finalize baseline, and retry behavior were unchanged
+- The next narrow rebuild step is now complete:
+  - homepage messaging now more clearly tells users to start with the product search itself, closer to what they would type into Google
+  - the refine step is now framed more explicitly as the place for natural-language narrowing such as budget, size, comfort, style, or use case
+  - finalized results can now get a lightweight deterministic frontend badge backfill when AI leaves secondary badge slots empty
+  - this stays inside the current guided flow and does not re-expand blocking finalize work
 
 ## Next likely work
 - Follow `project-notes/finalize-strategy.md`.
 - Keep the current guided flow and reassess AI scope before more finalize implementation work.
 - Keep the slimmer one-shot finalize selector as the implementation baseline.
-- Next, if step 2 happens, keep it limited to non-blocking polish/enrichment that does not change the guided flow, add polling, or re-expand blocking finalize work.
+- Step 2 is now done; any next pass should stay equally narrow unless the user explicitly approves a broader change.
 - Re-measure the same sample queries after each step.
 - Do not reintroduce persisted finalize orchestration or polling unless the user explicitly approves that tradeoff.
 - Add smarter structured logging during the rebuild so route mode, latency, token use, candidate counts, and ranking ownership stay visible as the flow changes.
@@ -75,9 +80,8 @@
 - Watch how the new feedback-based retry loop performs with real searches and tighten the copy, friction, and retry cap only if testers start treating it like a browse loop.
 - Watch whether hard exclusion of rejected picks is too strict in small candidate pools, and decide later whether to broaden discovery rather than reusing rejected items.
 - Clarify the intended user search flow in homepage/refine copy:
-  - the first query should feel like what the user would normally type into Google for the product they want
-  - the refine step should be explained as the place where natural-language narrowing helps shape that initial product search
-  - do not rely on users to infer that a very broad first query plus a narrow refine note will behave like a full query rewrite
+  - keep watching whether users now understand that the first query should feel like what they would normally type into Google for the product they want
+  - keep watching whether the refine step explanation is clear enough that users treat it as narrowing, not a full query rewrite
 - The broader cleaned guided candidate set is now preserved server-side in guided discovery cache for finalize/retry reconstruction; if a later retry path exposes more of that context, do not let it quietly turn into a generic `show more results` marketplace-style browse flow.
 - Development is currently strict about missing guided `discoveryToken` state so frontend/backend contract drift fails loudly; before shipping to production, add or explicitly reject a controlled resilience fallback for missing token state so users do not hit a dead-end if discover/finalize state drifts in the wild, but do not mask real integration bugs during development.
 - Replace the current `About` destination with a `Why Focamai` page that explains what the product is for and how to use it.

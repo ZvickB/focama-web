@@ -82,6 +82,11 @@
   - finalized blocking results keep one concise fit reason per pick
   - badge reasons were removed from the blocking result contract
   - drawback/caution text moved off the result card grid and is now modal-only
+- Guided finalize step 2 is now complete as frontend-only polish on top of that baseline:
+  - homepage copy now better explains that the first query should be the product search itself, closer to what a user would type into Google
+  - the refine step is now framed more clearly as the place for natural-language narrowing such as budget, size, comfort, style, or use case
+  - finalized results can now get a small deterministic frontend badge backfill when AI leaves secondary badge slots empty
+  - this does not widen finalize into more blocking backend work
 - The backend candidate pool now includes provider-agnostic duplicate-family keys, variant tokens, compact attribute tags, and trust signals before finalize so future search-provider changes can reuse the same internal model more easily
 - Guided discovery telemetry now records the scoped discovery cache key in `search_history`, so debug history lines up with the actual cached entry
 - A new best-effort analytics endpoint now exists at `/api/analytics/track` for optional funnel instrumentation
@@ -158,7 +163,7 @@
   - full guided-search total tokens increased from 5574 to 6311
 - The shard experiment should be treated as a measured failed branch, not as the active path
 - The next strategy step is to keep the current guided flow and reassess AI scope, explanation strategy, and badge strategy before more finalize implementation work
-- The immediate next step after the completed step-1 contract slimming is optional step-2 polish/enrichment work only; do not re-expand blocking finalize work by accident
+- Step 2 is now done; keep future work from drifting back into heavier blocking finalize work by accident
 - Treat the intended v1 split as `results first, polish later`:
   - finalize should return the shortlist as soon as core selection is ready
   - badge/explanation after-touch work should not quietly become required blocking work again

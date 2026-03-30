@@ -58,7 +58,8 @@ function formatTimingValue(value) {
 function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
   return {
     helper:
-      prompt?.helperText || 'Answer in natural language so Focamai can understand what you really want.',
+      prompt?.helperText ||
+      'Use this step for natural-language details like budget, size, comfort, style, or where you plan to use it.',
     placeholder:
       prompt?.followUpPlaceholder ||
       'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
@@ -399,7 +400,7 @@ function OpenLayout(props) {
                     aria-label="Product topic"
                     value={state.productQuery}
                     onChange={(event) => setProductQuery(event.target.value)}
-                    placeholder='Try "lego", "office chair", or "travel stroller"'
+                    placeholder='Try "travel stroller for airplane", "ergonomic office chair", or "lego botanical set"'
                     className="h-16 w-full rounded-[28px] border border-stone-200 bg-white px-5 text-lg text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary/50"
                     disabled={isLoading}
                   />
@@ -430,6 +431,12 @@ function OpenLayout(props) {
                   )}
                 </Button>
               </div>
+              {!hasStartedSearch ? (
+                <p className="mt-3 px-2 text-sm leading-6 text-slate-500">
+                  Start with the product search you&apos;d normally type into Google. Use the next
+                  step for budget, size, comfort, style, or other must-haves.
+                </p>
+              ) : null}
 
               {hasStartedSearch ? (
                 <div className="mt-5 space-y-5 border-t border-stone-200/80 pt-5">
@@ -441,7 +448,7 @@ function OpenLayout(props) {
 
                   <div className="space-y-2">
                     <Label htmlFor="open-follow-up-notes" className="text-slate-700">
-                      Add context for the AI
+                      Add details to narrow the search
                     </Label>
                     <div
                       className={`rounded-[30px] border border-stone-200 bg-[#fffdf9] p-1 transition-all duration-300 ${
@@ -486,7 +493,7 @@ function OpenLayout(props) {
                     <Button
                       type="button"
                       disabled={!hasDiscoveryResults || state.isFinalizing}
-                      className="h-13 w-full rounded-[24px] bg-primary px-5 text-base text-primary-foreground hover:bg-primary/90 sm:w-auto"
+                      className="h-14 w-full rounded-[24px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_18px_40px_-24px_rgba(37,99,235,0.7)] hover:bg-primary/90 sm:min-w-[220px]"
                       onClick={onFinalize}
                     >
                       {state.isFinalizing ? 'Narrowing your picks...' : 'Show focused picks'}
@@ -496,11 +503,11 @@ function OpenLayout(props) {
                         <Sparkles className="ml-2 h-4 w-4" />
                       )}
                     </Button>
-                    <div className="space-y-1 text-right sm:flex sm:min-h-[56px] sm:flex-col sm:justify-between">
+                    <div className="space-y-1 text-right sm:max-w-[240px] sm:flex sm:min-h-[56px] sm:flex-col sm:justify-between">
                       <Button
                         type="button"
                         disabled={!hasDiscoveryResults || state.isFinalizing}
-                        className={`h-13 w-full rounded-[24px] px-5 text-base transition sm:w-auto ${
+                        className={`h-13 w-full rounded-[24px] px-5 text-sm transition sm:min-w-[220px] ${
                           hasDiscoveryResults && !state.isFinalizing
                             ? 'bg-accent/70 text-accent-foreground hover:bg-accent/80'
                             : 'bg-stone-200 text-slate-500 hover:bg-stone-200'
@@ -510,8 +517,7 @@ function OpenLayout(props) {
                         Show products now
                       </Button>
                       <p className="text-xs text-slate-500">
-                        These are fast picks from our cleaned product pool. Add more detail for a
-                        more focused AI shortlist.
+                        Fast picks now. Add detail for a more focused shortlist.
                       </p>
                     </div>
                   </div>

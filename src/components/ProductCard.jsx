@@ -133,7 +133,10 @@ function ProductCard({
         ) : null}
       </CardContent>
       <CardContent className="flex items-center justify-between gap-3 border-t border-stone-100 px-4 py-3 text-sm font-medium text-slate-500">
-        <span>Tap for details</span>
+        <span>
+          <span className="sm:hidden">Tap for details</span>
+          <span className="hidden sm:inline">Click for details</span>
+        </span>
         {link ? (
           <a
             href={link}

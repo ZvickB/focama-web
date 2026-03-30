@@ -95,6 +95,12 @@
   - finalized blocking results now keep one concise AI fit reason per pick
   - finalized drawbacks/cautions still exist in result data, but they are now modal-only instead of card-grid copy
   - badge labels stay on the blocking path for scanability, while badge reasons are no longer part of the blocking finalize contract
+- Guided finalize step 2 is now implemented as non-blocking polish on top of that baseline:
+  - homepage copy now makes the intended search flow clearer:
+    - the first query should look more like the product search a user would type into Google
+    - the refine step is framed as the place for natural-language narrowing such as budget, size, comfort, style, or use case
+  - finalized result badges can now be lightly backfilled on the frontend with deterministic heuristics when AI leaves secondary badge slots empty
+  - this badge polish does not widen the backend finalize contract or add another request
 - The filtered candidate pool now carries provider-agnostic duplicate-family metadata, compact attribute tags, and trust signals before final AI selection so the backend is less tied to raw SerpApi wording.
 - Search history records cache status best-effort, including guided cache hits/misses and uncached live-route runs, and guided discovery telemetry now uses the scoped discovery cache key.
 - `search_history` is treated as internal operational telemetry for debugging and cache analysis, not as a user-facing saved-search feature.
@@ -153,5 +159,9 @@
   - one concise fit reason preserved
   - drawback/caution moved off the card grid and left in the modal
   - badge reasons removed from the blocking path while badge labels remain
-- Next, step 2 should stay limited to optional non-blocking polish or enrichment, without changing the guided flow or re-expanding blocking finalize work.
+- Step 2 is now done:
+  - search/refine messaging is clearer about how to start the search and where narrowing belongs
+  - badge scanability gets a lightweight frontend-only deterministic fallback after final results arrive
+  - the guided flow and blocking finalize contract remain unchanged
+- Next work should stay outside this step-2 scope unless the user explicitly chooses another narrow pass.
 - Treat the archived reset notes as historical measurement context, not as the current active plan.

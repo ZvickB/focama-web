@@ -585,21 +585,23 @@ export function ResultsSection({
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-stone-200/80 bg-white/80 px-4 py-4">
-                <p className="text-sm font-medium text-slate-900">Start simple</p>
+                <p className="text-sm font-medium text-slate-900">Start with the product search</p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Enter the product first instead of filling out a long form up front.
+                  Use the kind of search you&apos;d normally type into Google, like a product plus
+                  the main use case.
                 </p>
               </div>
               <div className="rounded-2xl border border-stone-200/80 bg-white/80 px-4 py-4">
-                <p className="text-sm font-medium text-slate-900">Think it through</p>
+                <p className="text-sm font-medium text-slate-900">Refine in plain language</p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  The AI helps narrow what matters like comfort, price, quality, or style.
+                  The next step is where budget, comfort, size, quality, or style help narrow that
+                  initial product search.
                 </p>
               </div>
               <div className="rounded-2xl border border-stone-200/80 bg-white/80 px-4 py-4">
                 <p className="text-sm font-medium text-slate-900">See six focused picks</p>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Products appear after the refinement step, or you can skip and show them now.
+                  You can view the cleaned shortlist right away, or let Focamai narrow it first.
                 </p>
               </div>
             </div>

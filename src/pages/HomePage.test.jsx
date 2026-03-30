@@ -114,7 +114,7 @@ describe('HomePage', () => {
     expect(screen.getByRole('button', { name: /show focused picks/i })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /show products now/i })[0]).toBeInTheDocument()
     expect(
-      screen.getByText(/these are fast picks from our cleaned product pool\./i),
+      screen.getByText(/these are quick picks from our cleaned product pool\./i),
     ).toBeInTheDocument()
   })
 
@@ -215,7 +215,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/add context for the ai/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/add details to narrow the search/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
 
     expect(await screen.findByText('Compact airport stroller')).toBeInTheDocument()
@@ -294,7 +294,7 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
 
-    const refinementTextarea = screen.getByLabelText(/add context for the ai/i)
+    const refinementTextarea = screen.getByLabelText(/add details to narrow the search/i)
     await user.type(refinementTextarea, 'comfort matters most')
     await user.keyboard('{Enter}')
 
@@ -352,7 +352,7 @@ describe('HomePage', () => {
 
     expect(await screen.findByText('Travel stroller')).toBeInTheDocument()
     expect(
-      screen.getByText(/these are fast picks from our cleaned product pool\./i),
+      screen.getByText(/these are quick picks from our cleaned product pool\./i),
     ).toBeInTheDocument()
   })
 
@@ -519,7 +519,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/add context for the ai/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/add details to narrow the search/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Compact airport stroller')
 
@@ -695,7 +695,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/add context for the ai/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/add details to narrow the search/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
 
@@ -785,7 +785,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/add context for the ai/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/add details to narrow the search/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
 

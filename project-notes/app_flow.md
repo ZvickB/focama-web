@@ -63,6 +63,11 @@
   - each finalized pick keeps one concise AI fit reason
   - badge reasons are no longer part of the blocking finalize contract
   - drawback/caution text remains available for the detail modal but is not shown on the result card grid
+- Guided finalize step 2 now adds lightweight frontend-only after-touch polish without changing the backend flow:
+  - homepage search copy now tells users to start with the kind of product query they would normally type into Google
+  - the refinement step is explained as the place for natural-language narrowing like budget, size, comfort, style, or use case
+  - after finalized results arrive, the frontend can deterministically fill a small number of missing secondary badge labels for scanability
+  - that badge polish does not add another request and does not widen the blocking finalize contract
 - The backend candidate pool is now a more provider-agnostic structured layer:
   - duplicate-family keys and variant tokens are attached before AI selection
   - lightweight attribute tags are extracted from product text
@@ -86,7 +91,9 @@
   - drawbacks/tradeoffs
   - an outbound retailer link when one is available
 - In the active step-1 finalize shape:
+- In the active step-2 finalize presentation:
   - result cards keep scan-friendly badge labels
+  - if finalize returns fewer useful secondary badges, the frontend may backfill a small number of deterministic labels after the shortlist arrives
   - result cards no longer show badge-reason copy
   - result cards no longer show drawback/caution text
   - finalized drawback/caution text is currently modal-only
