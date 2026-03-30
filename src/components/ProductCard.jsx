@@ -56,9 +56,7 @@ function ProductBadge({ label }) {
 
 function ProductCard({
   badgeLabel = '',
-  badgeReason = '',
   description,
-  drawbacks = [],
   image,
   link,
   onRetailerClick,
@@ -123,11 +121,6 @@ function ProductCard({
           <span className="font-medium text-slate-700">{rating.toFixed(1)}</span>
           <span className="text-slate-500">({reviewCount} reviews)</span>
         </div>
-        {badgeReason ? (
-          <p className="hidden line-clamp-2 rounded-2xl border border-stone-200/80 bg-stone-50/85 px-3 py-2 text-sm leading-5 text-slate-600 sm:block">
-            <span className="font-medium text-slate-800">{badgeLabel}:</span> {badgeReason}
-          </p>
-        ) : null}
         {userFacingDescription ? (
           <p className="hidden line-clamp-2 text-sm leading-5 text-slate-600 sm:block">
             {userFacingDescription}
@@ -136,11 +129,6 @@ function ProductCard({
         {primaryReason ? (
           <p className="hidden line-clamp-2 text-sm leading-5 text-slate-600 sm:block">
             {primaryReason}
-          </p>
-        ) : null}
-        {drawbacks[0] ? (
-          <p className="hidden line-clamp-2 text-sm leading-5 text-slate-500 sm:block">
-            <span className="font-medium text-slate-700">Tradeoff:</span> {drawbacks[0]}
           </p>
         ) : null}
       </CardContent>

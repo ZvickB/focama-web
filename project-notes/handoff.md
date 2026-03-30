@@ -29,7 +29,7 @@
   - finalize average latency: about 16.1 s
   - finalize average total tokens: about 5485
   - full guided-search average total tokens: about 5803
-- The current planning note for the next rebuild pass is `project-notes/fast-flow-reset-plan.md`.
+- The active strategy note for future finalize work is now `project-notes/finalize-strategy.md`.
 - The first rebuild step is now complete:
   - refine now asks AI for only one short question
   - helper text and placeholder copy are static server-side strings
@@ -48,19 +48,23 @@
   - average latency: about 13.9 s
   - average total tokens: about 5403
   - average full guided-search total tokens: about 5574
-- The third rebuild step is now complete:
-  - guided finalize now tests compact in-request parallel shard scoring for larger candidate pools
-  - shard work stays inside one finalize request
-  - the backend merges shard scores deterministically into the final shortlist
-  - finalize telemetry now records whether selection used `single_pass` or `parallel_shards`
+- A compact in-request shard-scoring finalize experiment was implemented, measured, and then rolled back after regression.
 - Re-measured finalize on 2026-03-30 after the shard-scoring step:
   - average latency: about 16.9 s
   - average total tokens: about 6139
   - average full guided-search total tokens: about 6311
+- Guided finalize is now back on the slimmer one-shot selector as the active baseline after that regression.
+- The next narrow rebuild step is now complete:
+  - blocking finalize results were slimmed so each pick keeps one concise fit reason
+  - badge reasons were removed from the blocking finalize contract
+  - drawback/caution text stays available but was moved off the card grid and into the modal
+  - the guided flow, one-shot finalize baseline, and retry behavior were unchanged
 
 ## Next likely work
-- Follow `project-notes/fast-flow-reset-plan.md`.
-- Next, decide whether the shard-scoring experiment is worth keeping for shortlist quality evaluation or whether finalize should go back to the slimmer one-shot selector.
+- Follow `project-notes/finalize-strategy.md`.
+- Keep the current guided flow and reassess AI scope before more finalize implementation work.
+- Keep the slimmer one-shot finalize selector as the implementation baseline.
+- Next, if step 2 happens, keep it limited to non-blocking polish/enrichment that does not change the guided flow, add polling, or re-expand blocking finalize work.
 - Re-measure the same sample queries after each step.
 - Do not reintroduce persisted finalize orchestration or polling unless the user explicitly approves that tradeoff.
 - Add smarter structured logging during the rebuild so route mode, latency, token use, candidate counts, and ranking ownership stay visible as the flow changes.
@@ -70,6 +74,10 @@
 ## Known remaining work
 - Watch how the new feedback-based retry loop performs with real searches and tighten the copy, friction, and retry cap only if testers start treating it like a browse loop.
 - Watch whether hard exclusion of rejected picks is too strict in small candidate pools, and decide later whether to broaden discovery rather than reusing rejected items.
+- Clarify the intended user search flow in homepage/refine copy:
+  - the first query should feel like what the user would normally type into Google for the product they want
+  - the refine step should be explained as the place where natural-language narrowing helps shape that initial product search
+  - do not rely on users to infer that a very broad first query plus a narrow refine note will behave like a full query rewrite
 - The broader cleaned guided candidate set is now preserved server-side in guided discovery cache for finalize/retry reconstruction; if a later retry path exposes more of that context, do not let it quietly turn into a generic `show more results` marketplace-style browse flow.
 - Development is currently strict about missing guided `discoveryToken` state so frontend/backend contract drift fails loudly; before shipping to production, add or explicitly reject a controlled resilience fallback for missing token state so users do not hit a dead-end if discover/finalize state drifts in the wild, but do not mask real integration bugs during development.
 - Replace the current `About` destination with a `Why Focamai` page that explains what the product is for and how to use it.

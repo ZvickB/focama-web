@@ -815,4 +815,61 @@ describe('HomePage', () => {
     expect(fetchMock).not.toHaveBeenCalled()
     expect(screen.getByLabelText(/product topic/i)).toHaveValue('travel stroller')
   })
+
+  it('keeps tradeoffs out of the result grid and shows them only in the modal', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            discoveryToken: 'guided_discovery:stroller|',
+            candidatePool: {
+              query: 'stroller',
+              details: '',
+              candidates: [
+                {
+                  id: 'result-1',
+                  title: 'Travel stroller',
+                  source: 'Target',
+                  price: '$129.99',
+                  rating: 4.4,
+                  reviewCount: 87,
+                  description: 'Lightweight and easy to fold.',
+                  reasons: ['Available from Target'],
+                  image: 'https://example.com/stroller.jpg',
+                  link: 'https://example.com/stroller',
+                },
+              ],
+            },
+            previewResults: [createMockResult()],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            prompt: 'What should we optimize for with this stroller?',
+            helperText: 'Pick anything that matters.',
+            followUpPlaceholder: 'Anything else?',
+          }),
+      })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+    await screen.findByText(/what should we optimize for with this stroller/i)
+    await user.click(screen.getAllByRole('button', { name: /show products now/i })[0])
+
+    expect(screen.queryByText(/pricier than the smallest umbrella stroller options\./i)).not.toBeInTheDocument()
+
+    await user.click(screen.getByText('Travel stroller'))
+
+    expect(await screen.findByText(/possible drawbacks/i)).toBeInTheDocument()
+    expect(screen.getByText(/pricier than the smallest umbrella stroller options\./i)).toBeInTheDocument()
+  })
 })

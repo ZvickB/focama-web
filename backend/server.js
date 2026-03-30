@@ -1050,7 +1050,6 @@ export async function handleFinalizeSelection(request, response) {
         image: candidate.image,
         link: candidate.link,
         badgeLabel: index === 0 ? 'Best match' : '',
-        badgeReason: index === 0 ? 'Top overall fit from the refined product pool.' : '',
       }))
 
     const results = aiSelection.results.length > 0 ? aiSelection.results : fallbackResults

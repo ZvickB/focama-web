@@ -197,12 +197,6 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
                   {item.rating.toFixed(1)} ({item.reviewCount} reviews)
                 </span>
               </div>
-              {item.badgeReason ? (
-                <p className="rounded-2xl border border-stone-200/80 bg-stone-50/90 px-4 py-3 text-sm leading-6 text-slate-600">
-                  <span className="font-medium text-slate-800">{item.badgeLabel}:</span>{' '}
-                  {item.badgeReason}
-                </p>
-              ) : null}
               {userFacingDescription ? (
                 <p className="text-base leading-7 text-slate-600">{userFacingDescription}</p>
               ) : null}
@@ -418,7 +412,7 @@ export function ResultsSection({
             <div className="space-y-1">
               <p className="text-sm font-medium text-slate-900">Taking a closer look at these options.</p>
               <p className="text-sm leading-6 text-slate-600">
-                We&apos;re narrowing things down and writing up the tradeoffs now.
+                We&apos;re narrowing things down and locking the shortlist.
               </p>
             </div>
           </div>
@@ -450,13 +444,7 @@ export function ResultsSection({
               <div key={item.id}>
                 <ProductCard
                   {...item}
-                  badgeLabel={
-                    item.badgeLabel || (!hasExplicitBadges && index === 0 ? 'Best match' : '')
-                  }
-                  badgeReason={
-                    item.badgeReason ||
-                    (!hasExplicitBadges && index === 0 ? 'Top overall fit for this shortlist.' : '')
-                  }
+                  badgeLabel={item.badgeLabel || (!hasExplicitBadges && index === 0 ? 'Best match' : '')}
                   onRetailerClick={() =>
                     onRetailerClick(item, {
                       position: index,

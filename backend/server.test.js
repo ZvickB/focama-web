@@ -163,12 +163,12 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(200)
     expect(JSON.parse(response.body)).toEqual({
       results: [
-        { id: '1', badgeLabel: 'Best match', badgeReason: 'Top overall fit for this shortlist.' },
-        { id: '2', badgeLabel: '', badgeReason: '' },
-        { id: '3', badgeLabel: '', badgeReason: '' },
-        { id: '4', badgeLabel: '', badgeReason: '' },
-        { id: '5', badgeLabel: '', badgeReason: '' },
-        { id: '6', badgeLabel: '', badgeReason: '' },
+        { id: '1', badgeLabel: 'Best match' },
+        { id: '2', badgeLabel: '' },
+        { id: '3', badgeLabel: '' },
+        { id: '4', badgeLabel: '' },
+        { id: '5', badgeLabel: '' },
+        { id: '6', badgeLabel: '' },
       ],
       source: 'cache',
       cachedAt: '2026-03-17T12:00:00.000Z',
@@ -230,7 +230,6 @@ describe('server handlers', () => {
           id: 'cached-1',
           title: 'Thermos bottle',
           badgeLabel: 'Best match',
-          badgeReason: 'Top overall fit for this shortlist.',
         },
       ],
       source: 'cache',
@@ -711,7 +710,6 @@ describe('server handlers', () => {
           reasons: ['AI fit: Best for airport travel'],
           drawbacks: ['Pricier than some umbrella strollers.'],
           badgeLabel: 'Best match',
-          badgeReason: 'Strongest overall fit for airport travel.',
         },
       ],
     })
@@ -776,7 +774,6 @@ describe('server handlers', () => {
           reasons: ['AI fit: Best for airport travel'],
           drawbacks: ['Pricier than some umbrella strollers.'],
           badgeLabel: 'Best match',
-          badgeReason: 'Strongest overall fit for airport travel.',
         },
       ],
       selection: {
@@ -835,7 +832,7 @@ describe('server handlers', () => {
         similarQueries: [],
         candidates: [{ id: 'live-1', title: 'Travel stroller' }],
       },
-      results: [{ id: 'live-1', title: 'Travel stroller', badgeLabel: 'Best match', badgeReason: 'Rule-based top result.' }],
+      results: [{ id: 'live-1', title: 'Travel stroller', badgeLabel: 'Best match' }],
     })
     selectAiResults.mockResolvedValue({
       model: 'gpt-5-mini',
@@ -868,7 +865,7 @@ describe('server handlers', () => {
         similarQueries: [],
         candidates: [{ id: 'live-1', title: 'Travel stroller' }],
       },
-      results: [{ id: 'live-1', title: 'Travel stroller', badgeLabel: 'Best match', badgeReason: 'Rule-based top result.' }],
+      results: [{ id: 'live-1', title: 'Travel stroller', badgeLabel: 'Best match' }],
       selection: {
         mode: 'rules_fallback',
         model: null,

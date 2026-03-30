@@ -16,7 +16,6 @@ export function ensureBadges(results = []) {
   return results.map((item, index) => ({
     ...item,
     badgeLabel: index === 0 ? 'Best match' : '',
-    badgeReason: index === 0 ? 'Top overall fit for this shortlist.' : '',
   }))
 }
 

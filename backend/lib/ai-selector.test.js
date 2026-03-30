@@ -53,14 +53,12 @@ describe('ai selector', () => {
               rationale: 'Best fit for airport travel and strong reviews.',
               drawback: 'Pricier than the cheapest compact options.',
               badge_label: 'Best match',
-              badge_reason: 'Strongest overall fit for airport travel and review confidence.',
             },
             {
               candidate_id: 'prod-1',
               rationale: 'A solid backup with a similar lightweight profile.',
               drawback: 'Fewer reviews than the top pick.',
               badge_label: 'Best value',
-              badge_reason: 'Lower price while keeping a similar lightweight profile.',
             },
           ],
         }),
@@ -130,14 +128,12 @@ describe('ai selector', () => {
                       rationale: 'Valid.',
                       drawback: 'Some caution.',
                       badge_label: null,
-                      badge_reason: null,
                     },
                     {
                       candidate_id: 'prod-1',
                       rationale: 'Duplicate.',
                       drawback: 'Duplicate caution.',
                       badge_label: 'Best match',
-                      badge_reason: 'Duplicate.',
                     },
                   ],
                 }),
@@ -180,28 +176,24 @@ describe('ai selector', () => {
               rationale: 'Top fit.',
               drawback: 'A bit expensive.',
               badge_label: 'Best value',
-              badge_reason: 'Well priced for the feature set.',
             },
             {
               candidate_id: 'prod-2',
               rationale: 'Premium option.',
               drawback: 'Highest price here.',
               badge_label: 'Best premium pick',
-              badge_reason: 'Top-end materials.',
             },
             {
               candidate_id: 'prod-3',
               rationale: 'Small-space option.',
               drawback: 'Less roomy.',
               badge_label: 'Best for small spaces',
-              badge_reason: 'Compact footprint.',
             },
             {
               candidate_id: 'prod-4',
               rationale: 'Comfort-focused.',
               drawback: 'Bulkier.',
               badge_label: 'Best for comfort',
-              badge_reason: 'Extra cushioning.',
             },
           ],
         }),
@@ -443,172 +435,4 @@ describe('ai selector', () => {
     expect(prompt).toContain('"trustScore":null')
   })
 
-  it('uses parallel shard scoring for larger candidate pools and aggregates usage', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          usage: {
-            input_tokens: 800,
-            output_tokens: 220,
-            total_tokens: 1020,
-            output_tokens_details: {
-              reasoning_tokens: 90,
-            },
-          },
-          output_text: JSON.stringify({
-            evaluations: [
-              {
-                candidate_id: 'prod-1',
-                score: 88,
-                rationale: 'Strong overall fit.',
-                drawback: 'A bit pricier than the lowest-cost options.',
-                badge_label: null,
-                badge_reason: null,
-              },
-              {
-                candidate_id: 'prod-2',
-                score: 96,
-                rationale: 'Best match for the travel use case.',
-                drawback: 'Costs more than the budget picks.',
-                badge_label: 'Best premium pick',
-                badge_reason: 'Top overall quality for frequent travel.',
-              },
-              {
-                candidate_id: 'prod-3',
-                score: 95,
-                rationale: 'Very close to the top option.',
-                drawback: 'Only sold by one merchant here.',
-                badge_label: null,
-                badge_reason: null,
-              },
-              {
-                candidate_id: 'prod-4',
-                score: 84,
-                rationale: 'Dependable backup choice.',
-                drawback: 'Less compact when folded.',
-                badge_label: null,
-                badge_reason: null,
-              },
-              {
-                candidate_id: 'prod-5',
-                score: 82,
-                rationale: 'Useful value-oriented option.',
-                drawback: 'Fewer premium features.',
-                badge_label: null,
-                badge_reason: null,
-              },
-              {
-                candidate_id: 'prod-6',
-                score: 80,
-                rationale: 'Good all-rounder.',
-                drawback: 'Average review depth.',
-                badge_label: null,
-                badge_reason: null,
-              },
-              {
-                candidate_id: 'prod-7',
-                score: 78,
-                rationale: 'Still relevant to the query.',
-                drawback: 'Heavier than the top picks.',
-                badge_label: null,
-                badge_reason: null,
-              },
-            ],
-          }),
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          usage: {
-            input_tokens: 420,
-            output_tokens: 120,
-            total_tokens: 540,
-            output_tokens_details: {
-              reasoning_tokens: 44,
-            },
-          },
-          output_text: JSON.stringify({
-            evaluations: [
-              {
-                candidate_id: 'prod-8',
-                score: 91,
-                rationale: 'Compact and travel-friendly.',
-                drawback: 'Smaller basket.',
-                badge_label: 'Best value',
-                badge_reason: 'Strong feature-to-price balance.',
-              },
-              {
-                candidate_id: 'prod-9',
-                score: 79,
-                rationale: 'Useful alternate option.',
-                drawback: 'Not as easy to fold.',
-                badge_label: null,
-                badge_reason: null,
-              },
-              {
-                candidate_id: 'prod-10',
-                score: 77,
-                rationale: 'Works for lighter use.',
-                drawback: 'Lowest review confidence here.',
-                badge_label: null,
-                badge_reason: null,
-              },
-            ],
-          }),
-        }),
-      })
-
-    const result = await selectAiResults(
-      {
-        apiKey: 'test-key',
-        candidatePool: {
-          query: 'stroller',
-          details: 'airport travel and easy folding',
-          searchState: '',
-          similarQueries: [],
-          candidates: [
-            createCandidate({ id: 'prod-1', title: 'Travel stroller 1' }),
-            createCandidate({
-              id: 'prod-2',
-              title: 'Travel stroller 2',
-              duplicateFamilyKey: 'airport-family',
-            }),
-            createCandidate({
-              id: 'prod-3',
-              title: 'Travel stroller 3',
-              duplicateFamilyKey: 'airport-family',
-            }),
-            createCandidate({ id: 'prod-4', title: 'Travel stroller 4' }),
-            createCandidate({ id: 'prod-5', title: 'Travel stroller 5' }),
-            createCandidate({ id: 'prod-6', title: 'Travel stroller 6' }),
-            createCandidate({ id: 'prod-7', title: 'Travel stroller 7' }),
-            createCandidate({ id: 'prod-8', title: 'Travel stroller 8' }),
-            createCandidate({ id: 'prod-9', title: 'Travel stroller 9' }),
-            createCandidate({ id: 'prod-10', title: 'Travel stroller 10' }),
-          ],
-        },
-        finalResultLimit: 6,
-      },
-      fetchMock,
-    )
-
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body).input[1].content).toContain('Only score candidates from shard 1 of 2.')
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body).input[1].content).toContain('Only score candidates from shard 2 of 2.')
-    expect(result.strategy).toBe('parallel_shards')
-    expect(result.usage).toEqual({
-      inputTokens: 1220,
-      outputTokens: 340,
-      totalTokens: 1560,
-      reasoningTokens: 134,
-    })
-    expect(result.selectedCandidateIds).toEqual(['prod-2', 'prod-8', 'prod-1', 'prod-4', 'prod-5', 'prod-6'])
-    expect(result.results).toHaveLength(6)
-    expect(result.results[0].badgeLabel).toBe('Best match')
-    expect(result.results[1].badgeLabel).toBe('Best value')
-    expect(result.results.some((item) => item.title === 'Travel stroller 3')).toBe(false)
-  })
 })

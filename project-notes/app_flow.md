@@ -58,12 +58,11 @@
 - Guided discovery now sends the preview response as soon as artifacts are ready and lets the discovery-cache write finish in the background, so first-hit responses are not held open by cache persistence time.
 - Guided finalize now keeps reasons and attributes in the AI handoff but trims backend-only prompt baggage by removing variant tokens and reducing trust metadata to a compact score signal.
 - Guided finalize prompt slimming now also removes top-level search-state/similar-query prompt text, drops backend-only match-signal and duplicate numeric-price fields from each AI candidate summary, flattens trust metadata to a single `trustScore`, and minifies the candidate JSON block before sending it to OpenAI.
-- Guided finalize now also uses compact in-request parallel shard scoring for larger candidate pools:
-  - the finalize route contract stays the same
-  - shard work stays inside the single `/api/search/finalize` request
-  - the backend merges shard scores deterministically into the final shortlist
-  - finalize selection telemetry now records whether the selector used `single_pass` or `parallel_shards`
 - Guided candidate/result normalization now skips promo-only description text such as sale blurbs, and the finalize AI summary now omits empty/generic filler descriptions plus redundant source/price/delivery boilerplate to reduce prompt waste.
+- Guided finalize step 1 now also trims the blocking output shape:
+  - each finalized pick keeps one concise AI fit reason
+  - badge reasons are no longer part of the blocking finalize contract
+  - drawback/caution text remains available for the detail modal but is not shown on the result card grid
 - The backend candidate pool is now a more provider-agnostic structured layer:
   - duplicate-family keys and variant tokens are attached before AI selection
   - lightweight attribute tags are extracted from product text
@@ -82,10 +81,15 @@
 - After loading/refinement, the page displays up to 6 normalized product cards.
 - Clicking a product opens a detail modal with:
   - product image
-  - short explanation
+  - short fit explanation
   - price and ratings
   - drawbacks/tradeoffs
   - an outbound retailer link when one is available
+- In the active step-1 finalize shape:
+  - result cards keep scan-friendly badge labels
+  - result cards no longer show badge-reason copy
+  - result cards no longer show drawback/caution text
+  - finalized drawback/caution text is currently modal-only
 
 ## Current MVP assumptions
 - Product data comes from the live search backend path rather than a frontend mock catalog.
@@ -144,6 +148,6 @@
 ## Next likely implementation steps
 - Keep watching the Vercel deployment using the current cache/storage flow.
 - Keep tightening weak-result handling and AI judgment quality.
-- Decide whether the current shard-scoring finalize path is worth keeping after the 2026-03-30 measurement regression, or whether finalize should fall back to the slimmer one-shot selector.
+- Keep the slimmer one-shot finalize selector as the active path unless the user explicitly approves another experiment.
 - Decide how affiliate-ready outbound retailer links and disclosures should work in the modal and cards.
 - Refine the default open homepage based on tester feedback.

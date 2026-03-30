@@ -538,7 +538,7 @@ function OpenLayout(props) {
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-slate-900">Taking a closer look at the options.</p>
                       <p className="text-sm leading-6 text-slate-600">
-                        We&apos;re narrowing the shortlist and writing up the tradeoffs now.
+                        We&apos;re narrowing the shortlist and locking the final picks.
                       </p>
                     </div>
                   </div>

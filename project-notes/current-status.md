@@ -10,7 +10,7 @@
 - The default homepage at `/` now uses the `open` layout: spacious, search-first, single-column, and more mobile-friendly than the older split-screen layout.
 - Older homepage experiments were removed after the open layout became the clear direction.
 - The reset baseline is now back on `main`; the staged/persisted finalize experiment was archived separately and should not be treated as the active product path.
-- Read `project-notes/architecture-reset.md` before making more finalize or latency-architecture changes.
+- Read `project-notes/finalize-strategy.md` before making more finalize or latency-architecture changes.
 - The open layout now:
   - uses the PNG wordmark in the hero
   - uses Instrument Sans as the primary UI typeface instead of the older serif base
@@ -89,11 +89,12 @@
 - Guided finalize now sends a slightly slimmer AI candidate summary by dropping variant tokens and collapsing trust metadata to a compact score-only signal, while keeping reasons and attributes in the selection prompt.
 - Candidate/result normalization now ignores promo-only description text, and the finalize AI handoff drops empty/generic filler descriptions plus redundant source/price/delivery boilerplate so the prompt stays tighter without changing the shortlist flow.
 - Guided finalize prompt slimming now also removes top-level search-state/similar-query prompt text, drops backend-only match-signal and duplicate numeric-price fields from each candidate summary, flattens trust metadata to a single `trustScore`, and minifies the candidate JSON payload before sending it to OpenAI.
-- Guided finalize now also tests compact in-request parallel shard scoring for larger candidate pools while keeping the same guided product flow:
-  - the browser contract is unchanged
-  - shard work stays inside one `/api/search/finalize` request
-  - the backend deterministically merges shard scores into the final shortlist
-  - finalize logs/JSON now expose whether selection used `single_pass` or `parallel_shards`
+- The compact shard-scoring finalize experiment was measured and then rolled back after it regressed latency and token usage.
+- Guided finalize is back on the slimmer one-shot selector while keeping the same guided product flow and finalize contract.
+- Guided finalize step 1 is now implemented on top of that slimmer one-shot baseline:
+  - finalized blocking results now keep one concise AI fit reason per pick
+  - finalized drawbacks/cautions still exist in result data, but they are now modal-only instead of card-grid copy
+  - badge labels stay on the blocking path for scanability, while badge reasons are no longer part of the blocking finalize contract
 - The filtered candidate pool now carries provider-agnostic duplicate-family metadata, compact attribute tags, and trust signals before final AI selection so the backend is less tied to raw SerpApi wording.
 - Search history records cache status best-effort, including guided cache hits/misses and uncached live-route runs, and guided discovery telemetry now uses the scoped discovery cache key.
 - `search_history` is treated as internal operational telemetry for debugging and cache analysis, not as a user-facing saved-search feature.
@@ -107,6 +108,14 @@
 - Favor calm, spacious, search-first UX over dashboard-like side-by-side layouts.
 - Keep the product vendor-agnostic at the response-shape level even if Amazon becomes the strongest affiliate path later.
 - Prioritize practical v1 decisions over premature architecture work.
+- Keep AI in the product, but narrow its default critical-path role instead of expanding it.
+- Preserve fit/caution explanation value and scan-friendly badges as core product behaviors.
+- For v1, perceived speed is the primary UX goal:
+  - showing a trustworthy shortlist sooner matters more than waiting for complete polish
+- The intended v1 split is results first, polish later:
+  - finalize should return the shortlist as soon as core selection is ready
+  - badge/explanation polish should not be treated as required blocking work by default
+- Do not change the guided product flow or widen finalize architecture without explicit user approval first.
 
 ## Current backend plan
 1. Read `SERPAPI_API_KEY` from the root `.env`.
@@ -136,24 +145,13 @@
 - This project is being worked in PowerShell on Windows.
 
 ## Recommended next task
-- Follow `project-notes/reset-runbook.md` from Step 4 onward: measure real baseline latency and token usage first, then plan the next simpler architecture before any new finalize-flow rebuild.
-- The first rebuild step is now done: refine was slimmed and re-measured.
-- The next reset step is now complete: finalize prompt weight was reduced without changing the current product flow.
-- Re-measured finalize on 2026-03-30 after the slimming step:
-  - average latency: about 13.9 s
-  - average total tokens: about 5403
-  - average full guided-search total tokens: about 5574
-- Compared with the reset baseline:
-  - finalize latency improved from 16.1 s to 13.9 s
-  - finalize total tokens improved from 5485 to 5403
-  - full guided-search total tokens improved from 5803 to 5574
-- The next reset step is now also implemented and measured: compact in-request shard/parallel finalize scoring.
-- Re-measured finalize on 2026-03-30 after the shard-scoring step:
-  - average latency: about 16.9 s
-  - average total tokens: about 6139
-  - average full guided-search total tokens: about 6311
-- Compared with the prior slim one-shot finalize step:
-  - finalize latency regressed from 13.9 s to 16.9 s
-  - finalize total tokens increased from 5403 to 6139
-  - full guided-search total tokens increased from 5574 to 6311
-- Next, decide whether to keep the shard-scoring experiment for shortlist quality evaluation or revert back to the slimmer one-shot finalize selector.
+- Use `project-notes/finalize-strategy.md` as the active strategy note before more finalize implementation work.
+- Keep the current guided flow and current guardrails unless the user explicitly approves a change first.
+- Keep the slimmer one-shot finalize selector as the active implementation baseline.
+- Step 1 is now done:
+  - lighter blocking finalize contract
+  - one concise fit reason preserved
+  - drawback/caution moved off the card grid and left in the modal
+  - badge reasons removed from the blocking path while badge labels remain
+- Next, step 2 should stay limited to optional non-blocking polish or enrichment, without changing the guided flow or re-expanding blocking finalize work.
+- Treat the archived reset notes as historical measurement context, not as the current active plan.

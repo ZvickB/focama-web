@@ -388,7 +388,6 @@ export function getFilteredSearchArtifacts(
       image: candidate.image,
       link: candidate.link,
       badgeLabel: index === 0 ? 'Best match' : '',
-      badgeReason: index === 0 ? 'Top overall fit from the cleaned product pool.' : '',
     })),
   }
 }

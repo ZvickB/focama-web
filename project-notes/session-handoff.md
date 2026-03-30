@@ -9,8 +9,7 @@
 - `project-notes/current-status.md`
 - `project-notes/app_flow.md`
 - `project-notes/handoff.md`
-- `project-notes/architecture-reset.md`
-- `project-notes/reset-runbook.md`
+- `project-notes/finalize-strategy.md`
 
 ## Current homepage direction
 - The default homepage at `/` now uses the `open` layout variant.
@@ -55,7 +54,7 @@
 - This guided flow is the primary backend architecture for the homepage
 - `/api/search/live` is the explicit manual/debug combined route
 - The archived staged/persisted finalize experiment is not the active path on `main`.
-- Future finalize or latency-architecture changes should start from `project-notes/architecture-reset.md`, not from the archived experiment.
+- Future finalize or latency-architecture changes should start from `project-notes/finalize-strategy.md`.
 - Guided refine was slimmed after the reset:
   - AI now returns only one short ranking question
   - helper text and the textarea placeholder are static server-side copy
@@ -77,11 +76,12 @@
 - Guided finalize now trims prompt weight by dropping variant tokens and reducing trust metadata to a score-only signal, while keeping reasons and attributes in the AI selection context
 - Promo-only shopping snippets such as `20% OFF` / `LOW PRICE` are now ignored as normalized descriptions, and finalize AI summaries now omit empty/generic filler descriptions plus redundant source/price/delivery boilerplate to cut prompt waste
 - Guided finalize prompt slimming now also removes top-level search-state/similar-query prompt text, drops backend-only match-signal and duplicate numeric-price fields from each AI candidate summary, flattens trust metadata to a single `trustScore`, and minifies the candidate JSON block before sending it to OpenAI
-- Guided finalize now also has a compact in-request shard-scoring test path for larger candidate pools:
-  - it stays inside one `/api/search/finalize` request
-  - it does not add persistence or polling
-  - the backend deterministically merges shard scores into the final shortlist
-  - finalize telemetry now includes whether selection used `single_pass` or `parallel_shards`
+- The compact shard-scoring finalize experiment was measured and then rolled back after it regressed latency and token usage.
+- Guided finalize is back on the slimmer one-shot selector as the active implementation path.
+- Guided finalize step 1 is now complete on that baseline:
+  - finalized blocking results keep one concise fit reason per pick
+  - badge reasons were removed from the blocking result contract
+  - drawback/caution text moved off the result card grid and is now modal-only
 - The backend candidate pool now includes provider-agnostic duplicate-family keys, variant tokens, compact attribute tags, and trust signals before finalize so future search-provider changes can reuse the same internal model more easily
 - Guided discovery telemetry now records the scoped discovery cache key in `search_history`, so debug history lines up with the actual cached entry
 - A new best-effort analytics endpoint now exists at `/api/analytics/track` for optional funnel instrumentation
@@ -135,8 +135,8 @@
   - caching as the major early cost-reduction lever
 
 ## If continuing from here
-- First continue `project-notes/reset-runbook.md` from Step 4
-- Measure real refine/finalize latency and token usage on the reset baseline before any new finalize architecture work
+- First read `project-notes/finalize-strategy.md` before making more finalize changes
+- Treat the archived reset notes as historical context only, not as current implementation marching orders
 - Treat `wordmark.PNG` as the preferred current wordmark asset unless the user explicitly wants another attempt
 - The finalize-prompt slimming step is now complete and was re-measured on the same sample queries
 - Re-measured finalize on 2026-03-30 after the slimming step:
@@ -147,7 +147,7 @@
   - finalize latency improved from 16.1 s to 13.9 s
   - finalize total tokens improved from 5485 to 5403
   - full guided-search total tokens improved from 5803 to 5574
-- The shard-scoring test step is now also implemented and measured on the same sample queries
+- The shard-scoring test step was implemented and measured on the same sample queries
 - Re-measured finalize on 2026-03-30 after the shard step:
   - average latency: about 16.9 s
   - average total tokens: about 6139
@@ -156,4 +156,11 @@
   - finalize latency regressed from 13.9 s to 16.9 s
   - finalize total tokens increased from 5403 to 6139
   - full guided-search total tokens increased from 5574 to 6311
-- The next implementation decision is whether to keep the shard-scoring experiment for shortlist quality evaluation or revert back to the slimmer one-shot finalize selector
+- The shard experiment should be treated as a measured failed branch, not as the active path
+- The next strategy step is to keep the current guided flow and reassess AI scope, explanation strategy, and badge strategy before more finalize implementation work
+- The immediate next step after the completed step-1 contract slimming is optional step-2 polish/enrichment work only; do not re-expand blocking finalize work by accident
+- Treat the intended v1 split as `results first, polish later`:
+  - finalize should return the shortlist as soon as core selection is ready
+  - badge/explanation after-touch work should not quietly become required blocking work again
+- For v1, perceived speed is the priority:
+  - prefer showing a trustworthy shortlist sooner over waiting for fuller first-paint polish
