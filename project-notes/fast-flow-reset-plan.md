@@ -155,3 +155,18 @@
   - full guided-search total tokens improved from 5803.3 to 5574.3
 - Next step:
   - decide whether finalize quality and latency are acceptable after prompt slimming, or if a compact in-request shard-scoring test is warranted
+- 2026-03-30:
+  - Completed the third rebuild step for compact in-request shard scoring.
+  - Guided finalize now uses parallel shard scoring for larger candidate pools without changing the guided product flow or finalize request contract.
+  - The backend now merges shard scores deterministically into the final shortlist.
+  - Finalize telemetry now records whether selection used `single_pass` or `parallel_shards`.
+- Re-measured finalize after this step on the same three sample queries:
+  - average latency: 16942.6 ms
+  - average total tokens: 6138.7
+  - average full guided-search total tokens: 6311.0
+- Compared with the prior slim one-shot finalize step:
+  - finalize latency regressed from 13912.5 ms to 16942.6 ms
+  - finalize total tokens increased from 5403.3 to 6138.7
+  - full guided-search total tokens increased from 5574.3 to 6311.0
+- Next step:
+  - decide whether to keep the shard-scoring experiment for shortlist quality evaluation or revert back to the slimmer one-shot finalize selector

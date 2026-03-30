@@ -14,6 +14,8 @@ export const ALLOWED_RESULT_BADGES = [
 ]
 const REQUIRED_PRIMARY_BADGE = 'Best match'
 const MAX_BADGED_RESULTS = 3
+const SHARD_TRIGGER_CANDIDATE_COUNT = 9
+const SHARD_SIZE = 7
 const DESCRIPTION_BOILERPLATE_TOKENS = new Set([
   'at',
   'buy',
@@ -42,6 +44,32 @@ function normalizeOpenAiUsage(payload) {
     totalTokens: Number.isFinite(totalTokens) ? totalTokens : 0,
     reasoningTokens: Number.isFinite(reasoningTokens) ? reasoningTokens : 0,
   }
+}
+
+function sumOpenAiUsage(usages) {
+  const normalizedUsages = Array.isArray(usages) ? usages.filter(Boolean) : []
+
+  if (normalizedUsages.length === 0) {
+    return null
+  }
+
+  return normalizedUsages.reduce(
+    (totals, usage) => ({
+      inputTokens: totals.inputTokens + (Number.isFinite(Number(usage.inputTokens)) ? Number(usage.inputTokens) : 0),
+      outputTokens:
+        totals.outputTokens + (Number.isFinite(Number(usage.outputTokens)) ? Number(usage.outputTokens) : 0),
+      totalTokens: totals.totalTokens + (Number.isFinite(Number(usage.totalTokens)) ? Number(usage.totalTokens) : 0),
+      reasoningTokens:
+        totals.reasoningTokens +
+        (Number.isFinite(Number(usage.reasoningTokens)) ? Number(usage.reasoningTokens) : 0),
+    }),
+    {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      reasoningTokens: 0,
+    },
+  )
 }
 
 function getResponseText(payload) {
@@ -254,6 +282,29 @@ function buildSelectionPrompt({ candidatePool, finalResultLimit }) {
   ].join('\n')
 }
 
+function buildShardSelectionPrompt({ candidatePool, shardCandidates, shardIndex, shardCount }) {
+  return [
+    'Score the candidates for this shopping request.',
+    'Use the full 0-100 scale based on the overall shopping request, not only relative to this shard.',
+    'Prioritize:',
+    '1. Fit to the extra context/details. This is the main decision signal.',
+    '2. Relevance to the product query.',
+    '3. Quality and trust using rating and review count.',
+    '4. Diversity across style, merchant, or use case when helpful.',
+    '5. Avoid near-duplicates unless they are meaningfully different.',
+    '6. Be honest about tradeoffs. Each candidate should include one short drawback or caution.',
+    `Only score candidates from shard ${shardIndex + 1} of ${shardCount}.`,
+    `Allowed badge labels: ${ALLOWED_RESULT_BADGES.join(', ')}.`,
+    'Badge labels are optional. Use null when a badge is not clearly justified.',
+    '',
+    `Product query: ${candidatePool.query}`,
+    `Extra context: ${candidatePool.details || 'None provided.'}`,
+    '',
+    'Candidates in this shard:',
+    JSON.stringify(shardCandidates),
+  ].join('\n')
+}
+
 function buildSelectionSchema() {
   return {
     type: 'object',
@@ -304,6 +355,59 @@ function buildSelectionSchema() {
   }
 }
 
+function buildShardSelectionSchema() {
+  return {
+    type: 'object',
+    properties: {
+      evaluations: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            candidate_id: {
+              type: 'string',
+            },
+            score: {
+              type: 'number',
+            },
+            rationale: {
+              type: 'string',
+            },
+            drawback: {
+              type: 'string',
+            },
+            badge_label: {
+              anyOf: [
+                {
+                  type: 'string',
+                  enum: ALLOWED_RESULT_BADGES,
+                },
+                {
+                  type: 'null',
+                },
+              ],
+            },
+            badge_reason: {
+              anyOf: [
+                {
+                  type: 'string',
+                },
+                {
+                  type: 'null',
+                },
+              ],
+            },
+          },
+          required: ['candidate_id', 'score', 'rationale', 'drawback', 'badge_label', 'badge_reason'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['evaluations'],
+    additionalProperties: false,
+  }
+}
+
 function buildUiResult(candidate, rationale, badge = null) {
   return {
     id: candidate.id,
@@ -320,6 +424,113 @@ function buildUiResult(candidate, rationale, badge = null) {
     badgeLabel: badge?.label || '',
     badgeReason: badge?.reason || '',
   }
+}
+
+function chunkCandidates(candidates, shardSize) {
+  const chunks = []
+
+  for (let index = 0; index < candidates.length; index += shardSize) {
+    chunks.push(candidates.slice(index, index + shardSize))
+  }
+
+  return chunks
+}
+
+function getNumericValue(value) {
+  return Number.isFinite(Number(value)) ? Number(value) : 0
+}
+
+function normalizeBadgeLabel(value) {
+  const label = typeof value === 'string' ? value.trim() : ''
+  return ALLOWED_RESULT_BADGES.includes(label) ? label : ''
+}
+
+function rankScoredCandidates(candidates) {
+  return [...candidates].sort((left, right) => {
+    const scoreDelta = getNumericValue(right.aiScore) - getNumericValue(left.aiScore)
+
+    if (scoreDelta !== 0) {
+      return scoreDelta
+    }
+
+    const candidateScoreDelta = getNumericValue(right.candidate.score) - getNumericValue(left.candidate.score)
+
+    if (candidateScoreDelta !== 0) {
+      return candidateScoreDelta
+    }
+
+    const trustDelta =
+      getNumericValue(right.candidate.trustSignals?.score) - getNumericValue(left.candidate.trustSignals?.score)
+
+    if (trustDelta !== 0) {
+      return trustDelta
+    }
+
+    const ratingDelta = getNumericValue(right.candidate.rating) - getNumericValue(left.candidate.rating)
+
+    if (ratingDelta !== 0) {
+      return ratingDelta
+    }
+
+    const reviewDelta = getNumericValue(right.candidate.reviewCount) - getNumericValue(left.candidate.reviewCount)
+
+    if (reviewDelta !== 0) {
+      return reviewDelta
+    }
+
+    return getNumericValue(left.originalRank) - getNumericValue(right.originalRank)
+  })
+}
+
+function selectTopCandidatesWithDiversity(scoredCandidates, finalResultLimit) {
+  const rankedCandidates = rankScoredCandidates(scoredCandidates)
+  const selected = []
+  const seenCandidateIds = new Set()
+  const seenDuplicateFamilies = new Set()
+
+  for (const entry of rankedCandidates) {
+    if (selected.length >= finalResultLimit) {
+      break
+    }
+
+    const candidateId = String(entry.candidate.id)
+
+    if (seenCandidateIds.has(candidateId)) {
+      continue
+    }
+
+    const duplicateFamilyKey = typeof entry.candidate.duplicateFamilyKey === 'string'
+      ? entry.candidate.duplicateFamilyKey.trim()
+      : ''
+
+    if (duplicateFamilyKey && seenDuplicateFamilies.has(duplicateFamilyKey)) {
+      continue
+    }
+
+    selected.push(entry)
+    seenCandidateIds.add(candidateId)
+
+    if (duplicateFamilyKey) {
+      seenDuplicateFamilies.add(duplicateFamilyKey)
+    }
+  }
+
+  for (const entry of rankedCandidates) {
+    if (selected.length >= finalResultLimit) {
+      break
+    }
+
+    const candidateId = String(entry.candidate.id)
+
+    if (seenCandidateIds.has(candidateId)) {
+      continue
+    }
+
+    selected.push(entry)
+    seenCandidateIds.add(candidateId)
+  }
+
+  return selected
 }
 
 function normalizeBadgeAssignments(selected) {
@@ -382,30 +593,16 @@ function normalizeBadgeAssignments(selected) {
   return deduped.slice(0, MAX_BADGED_RESULTS)
 }
 
-export async function selectAiResults(
+async function requestStructuredSelection(
   {
-    candidatePool,
-    finalResultLimit,
+    prompt,
+    schema,
+    responseName,
     apiKey,
-    model = DEFAULT_OPENAI_MODEL,
+    model,
   },
-  fetchImpl = fetch,
+  fetchImpl,
 ) {
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is missing from the root .env file.')
-  }
-
-  const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
-
-  if (candidates.length === 0) {
-    return {
-      model,
-      selectedCandidateIds: [],
-      results: [],
-      usage: null,
-    }
-  }
-
   const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -426,15 +623,15 @@ export async function selectAiResults(
         },
         {
           role: 'user',
-          content: buildSelectionPrompt({ candidatePool, finalResultLimit }),
+          content: prompt,
         },
       ],
       text: {
         format: {
           type: 'json_schema',
-          name: 'product_selection',
+          name: responseName,
           strict: true,
-          schema: buildSelectionSchema(),
+          schema,
         },
       },
     }),
@@ -453,8 +650,13 @@ export async function selectAiResults(
     throw new Error('OpenAI selection returned no structured output.')
   }
 
-  const parsed = JSON.parse(responseText)
-  const picks = Array.isArray(parsed?.picks) ? parsed.picks : []
+  return {
+    parsed: JSON.parse(responseText),
+    usage,
+  }
+}
+
+function mapSelectionPicksToResults(picks, candidates, finalResultLimit) {
   const candidateById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]))
   const seen = new Set()
   const selected = []
@@ -499,12 +701,160 @@ export async function selectAiResults(
   )
 
   return {
-    model,
     selectedCandidateIds: selected.map((entry) => entry.candidateId),
     results: selected.map((entry) => ({
       ...buildUiResult(entry.candidate, entry.rationale, badgeByCandidateId.get(entry.candidateId)),
       drawbacks: entry.drawback ? [entry.drawback] : [],
     })),
+  }
+}
+
+async function runOneShotSelection({ candidatePool, finalResultLimit, apiKey, model }, fetchImpl) {
+  const { parsed, usage } = await requestStructuredSelection(
+    {
+      prompt: buildSelectionPrompt({ candidatePool, finalResultLimit }),
+      schema: buildSelectionSchema(),
+      responseName: 'product_selection',
+      apiKey,
+      model,
+    },
+    fetchImpl,
+  )
+  const picks = Array.isArray(parsed?.picks) ? parsed.picks : []
+  const mapped = mapSelectionPicksToResults(picks, candidatePool.candidates, finalResultLimit)
+
+  return {
+    ...mapped,
+    strategy: 'single_pass',
     usage,
+  }
+}
+
+async function runShardedSelection({ candidatePool, finalResultLimit, apiKey, model }, fetchImpl) {
+  const candidateSummaries = buildCandidateSummary(candidatePool)
+  const candidateById = new Map(candidatePool.candidates.map((candidate) => [String(candidate.id), candidate]))
+  const originalRankById = new Map(candidatePool.candidates.map((candidate, index) => [String(candidate.id), index + 1]))
+  const shards = chunkCandidates(candidateSummaries, SHARD_SIZE)
+
+  const shardSelections = await Promise.all(
+    shards.map(async (shardCandidates, shardIndex) => {
+      const { parsed, usage } = await requestStructuredSelection(
+        {
+          prompt: buildShardSelectionPrompt({
+            candidatePool,
+            shardCandidates,
+            shardIndex,
+            shardCount: shards.length,
+          }),
+          schema: buildShardSelectionSchema(),
+          responseName: 'product_shard_scores',
+          apiKey,
+          model,
+        },
+        fetchImpl,
+      )
+
+      return {
+        evaluations: Array.isArray(parsed?.evaluations) ? parsed.evaluations : [],
+        usage,
+      }
+    }),
+  )
+
+  const scoredCandidates = []
+  const seenCandidateIds = new Set()
+
+  for (const shardSelection of shardSelections) {
+    for (const evaluation of shardSelection.evaluations) {
+      const candidateId = String(evaluation?.candidate_id || '')
+
+      if (!candidateId || seenCandidateIds.has(candidateId)) {
+        continue
+      }
+
+      const candidate = candidateById.get(candidateId)
+
+      if (!candidate) {
+        continue
+      }
+
+      scoredCandidates.push({
+        candidate,
+        candidateId,
+        aiScore: Number.isFinite(Number(evaluation?.score)) ? Number(evaluation.score) : 0,
+        rationale: typeof evaluation?.rationale === 'string' ? evaluation.rationale.trim() : '',
+        drawback: typeof evaluation?.drawback === 'string' ? evaluation.drawback.trim() : '',
+        badgeLabel: normalizeBadgeLabel(evaluation?.badge_label),
+        badgeReason: typeof evaluation?.badge_reason === 'string' ? evaluation.badge_reason.trim() : '',
+        originalRank: originalRankById.get(candidateId) || 0,
+      })
+      seenCandidateIds.add(candidateId)
+    }
+  }
+
+  const selected = selectTopCandidatesWithDiversity(scoredCandidates, finalResultLimit)
+  const badgeAssignments = normalizeBadgeAssignments(
+    selected.map((entry) => ({
+      candidateId: entry.candidateId,
+      badgeLabel: entry.badgeLabel,
+      badgeReason: entry.badgeReason,
+    })),
+  )
+  const badgeByCandidateId = new Map(
+    badgeAssignments.map((entry) => [
+      entry.candidateId,
+      {
+        label: entry.label,
+        reason: entry.reason,
+      },
+    ]),
+  )
+
+  return {
+    strategy: 'parallel_shards',
+    selectedCandidateIds: selected.map((entry) => entry.candidateId),
+    results: selected.map((entry) => ({
+      ...buildUiResult(entry.candidate, entry.rationale, badgeByCandidateId.get(entry.candidateId)),
+      drawbacks: entry.drawback ? [entry.drawback] : [],
+    })),
+    usage: sumOpenAiUsage(shardSelections.map((selection) => selection.usage)),
+  }
+}
+
+export async function selectAiResults(
+  {
+    candidatePool,
+    finalResultLimit,
+    apiKey,
+    model = DEFAULT_OPENAI_MODEL,
+  },
+  fetchImpl = fetch,
+) {
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is missing from the root .env file.')
+  }
+
+  const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
+
+  if (candidates.length === 0) {
+    return {
+      model,
+      selectedCandidateIds: [],
+      results: [],
+      usage: null,
+    }
+  }
+
+  const selection =
+    candidates.length >= SHARD_TRIGGER_CANDIDATE_COUNT
+      ? await runShardedSelection({ candidatePool, finalResultLimit, apiKey, model }, fetchImpl)
+      : await runOneShotSelection({ candidatePool, finalResultLimit, apiKey, model }, fetchImpl)
+
+  return {
+    model,
+    selectedCandidateIds: selection.selectedCandidateIds,
+    results: selection.results,
+    usage: selection.usage,
+    strategy: selection.strategy,
   }
 }

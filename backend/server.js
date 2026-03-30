@@ -1068,6 +1068,7 @@ export async function handleFinalizeSelection(request, response) {
       openaiUsage: aiSelection.usage || null,
       rankingOwner: aiSelection.results.length > 0 ? 'openai_then_backend_select' : 'deterministic_fallback',
       selectionMode: aiSelection.results.length > 0 ? 'ai' : 'rules_fallback',
+      selectionStrategy: aiSelection.strategy || 'single_pass',
     })
 
     sendJson(response, 200, {
@@ -1076,6 +1077,7 @@ export async function handleFinalizeSelection(request, response) {
       results,
       selection: {
         mode: aiSelection.results.length > 0 ? 'ai' : 'rules_fallback',
+        strategy: aiSelection.strategy || 'single_pass',
         model: aiSelection.results.length > 0 ? aiSelection.model : null,
         usage: aiSelection.results.length > 0 ? aiSelection.usage || null : null,
         selectedCandidateIds:

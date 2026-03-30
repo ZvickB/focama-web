@@ -48,10 +48,19 @@
   - average latency: about 13.9 s
   - average total tokens: about 5403
   - average full guided-search total tokens: about 5574
+- The third rebuild step is now complete:
+  - guided finalize now tests compact in-request parallel shard scoring for larger candidate pools
+  - shard work stays inside one finalize request
+  - the backend merges shard scores deterministically into the final shortlist
+  - finalize telemetry now records whether selection used `single_pass` or `parallel_shards`
+- Re-measured finalize on 2026-03-30 after the shard-scoring step:
+  - average latency: about 16.9 s
+  - average total tokens: about 6139
+  - average full guided-search total tokens: about 6311
 
 ## Next likely work
 - Follow `project-notes/fast-flow-reset-plan.md`.
-- Next, decide whether finalize quality/latency is acceptable after the slimming pass before attempting any new ranking architecture.
+- Next, decide whether the shard-scoring experiment is worth keeping for shortlist quality evaluation or whether finalize should go back to the slimmer one-shot selector.
 - Re-measure the same sample queries after each step.
 - Do not reintroduce persisted finalize orchestration or polling unless the user explicitly approves that tradeoff.
 - Add smarter structured logging during the rebuild so route mode, latency, token use, candidate counts, and ranking ownership stay visible as the flow changes.

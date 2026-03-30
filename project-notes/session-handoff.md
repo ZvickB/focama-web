@@ -77,6 +77,11 @@
 - Guided finalize now trims prompt weight by dropping variant tokens and reducing trust metadata to a score-only signal, while keeping reasons and attributes in the AI selection context
 - Promo-only shopping snippets such as `20% OFF` / `LOW PRICE` are now ignored as normalized descriptions, and finalize AI summaries now omit empty/generic filler descriptions plus redundant source/price/delivery boilerplate to cut prompt waste
 - Guided finalize prompt slimming now also removes top-level search-state/similar-query prompt text, drops backend-only match-signal and duplicate numeric-price fields from each AI candidate summary, flattens trust metadata to a single `trustScore`, and minifies the candidate JSON block before sending it to OpenAI
+- Guided finalize now also has a compact in-request shard-scoring test path for larger candidate pools:
+  - it stays inside one `/api/search/finalize` request
+  - it does not add persistence or polling
+  - the backend deterministically merges shard scores into the final shortlist
+  - finalize telemetry now includes whether selection used `single_pass` or `parallel_shards`
 - The backend candidate pool now includes provider-agnostic duplicate-family keys, variant tokens, compact attribute tags, and trust signals before finalize so future search-provider changes can reuse the same internal model more easily
 - Guided discovery telemetry now records the scoped discovery cache key in `search_history`, so debug history lines up with the actual cached entry
 - A new best-effort analytics endpoint now exists at `/api/analytics/track` for optional funnel instrumentation
@@ -142,4 +147,13 @@
   - finalize latency improved from 16.1 s to 13.9 s
   - finalize total tokens improved from 5485 to 5403
   - full guided-search total tokens improved from 5803 to 5574
-- The next implementation decision is whether that improvement is enough to stop before more ranking complexity, or whether a compact in-request shard-scoring test is worth trying
+- The shard-scoring test step is now also implemented and measured on the same sample queries
+- Re-measured finalize on 2026-03-30 after the shard step:
+  - average latency: about 16.9 s
+  - average total tokens: about 6139
+  - average full guided-search total tokens: about 6311
+- Compared with the slimmer one-shot finalize step:
+  - finalize latency regressed from 13.9 s to 16.9 s
+  - finalize total tokens increased from 5403 to 6139
+  - full guided-search total tokens increased from 5574 to 6311
+- The next implementation decision is whether to keep the shard-scoring experiment for shortlist quality evaluation or revert back to the slimmer one-shot finalize selector
