@@ -5,6 +5,13 @@
 - It is separate from `handoff.md`, which is still useful as the broader MVP/status tracker.
 - In a new chat, you can say: "Please read `project-notes/session-handoff.md` first."
 
+## Read order
+- `project-notes/current-status.md`
+- `project-notes/app_flow.md`
+- `project-notes/handoff.md`
+- `project-notes/architecture-reset.md`
+- `project-notes/reset-runbook.md`
+
 ## Current homepage direction
 - The default homepage at `/` now uses the `open` layout variant.
 - Older UI variants were removed after the open layout direction was chosen.
@@ -47,6 +54,8 @@
   - `/api/search/finalize` for the final shortlist
 - This guided flow is the primary backend architecture for the homepage
 - `/api/search/live` is the explicit manual/debug combined route
+- The archived staged/persisted finalize experiment is not the active path on `main`.
+- Future finalize or latency-architecture changes should start from `project-notes/architecture-reset.md`, not from the archived experiment.
 - The Vercel route wrappers now preserve forwarded request headers so backend IP-based rate limiting still works in production deployments
 - Shared rate limiting now prefers a Supabase-backed event table when configured, with in-memory fallback only for local or degraded environments
 - Guided `/api/search/finalize` now rejects oversized or malformed payloads before AI selection and caps candidate pool size at 20
@@ -112,10 +121,6 @@
   - caching as the major early cost-reduction lever
 
 ## If continuing from here
-- First inspect `/src/components/home/HomeExperience.jsx`
-- Then inspect `/src/App.jsx` and `/src/components/SiteLayout.jsx`
+- First continue `project-notes/reset-runbook.md` from Step 4
+- Measure real refine/finalize latency and token usage on the reset baseline before any new finalize architecture work
 - Treat `wordmark.PNG` as the preferred current wordmark asset unless the user explicitly wants another attempt
-- If backend architecture cleanup resumes, the next practical order is:
-  - stronger global/shared rate limiting
-  - keep thinning `backend/server.js`
-  - later extract runtime-agnostic services so the Vercel bridge stops depending on a Node-style handler contract

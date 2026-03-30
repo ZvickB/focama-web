@@ -9,6 +9,8 @@
 - The frontend is built in Vite + React with React Router, TanStack Query, Tailwind, and Vitest.
 - The default homepage at `/` now uses the `open` layout: spacious, search-first, single-column, and more mobile-friendly than the older split-screen layout.
 - Older homepage experiments were removed after the open layout became the clear direction.
+- The reset baseline is now back on `main`; the staged/persisted finalize experiment was archived separately and should not be treated as the active product path.
+- Read `project-notes/architecture-reset.md` before making more finalize or latency-architecture changes.
 - The open layout now:
   - uses the PNG wordmark in the hero
   - uses Instrument Sans as the primary UI typeface instead of the older serif base
@@ -37,6 +39,7 @@
   - `/api/search/finalize` selects the final shortlist from the cleaned candidate pool
 - This guided flow is the primary backend path for the product.
 - `/api/search/live` is the explicit combined-path endpoint for backend/debug/manual use.
+- The staged/persisted finalize experiment is not on `main`.
 - The live search flow currently:
   - validates input
   - queries SerpApi
@@ -123,5 +126,4 @@
 - This project is being worked in PowerShell on Windows.
 
 ## Recommended next task
-- Continue polishing the default `open` homepage, then keep tightening result quality, cache behavior, and abuse protection based on real tester feedback from the current deployed flow.
-- When backend cleanup resumes, prioritize a shared/global rate limiter first, then keep shrinking `backend/server.js`, and leave runtime-agnostic service extraction for the Vercel bridge as the later cleanup step.
+- Follow `project-notes/reset-runbook.md` from Step 4 onward: measure real baseline latency and token usage first, then plan the next simpler architecture before any new finalize-flow rebuild.

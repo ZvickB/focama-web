@@ -9,6 +9,7 @@
 - The app is live on Vercel.
 - The homepage uses the guided `/api/search/discover -> /api/search/refine -> /api/search/finalize` flow.
 - The default homepage is now the `open` layout, with alternate variants preserved for comparison.
+- The staged/persisted finalize experiment was archived off `main`; the reset baseline is now the active branch state again.
 - SerpApi is wired through Vercel functions.
 - The backend prepares a cleaned candidate pool and uses AI to improve the final shortlist.
 - Product shortlists are now 6 results instead of 4.
@@ -22,18 +23,19 @@
 - Guided discovery is the only persistent cache path; `/api/search/live` remains only as the explicit manual/debug combined route.
 - Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`.
 - Guided `/api/search/finalize` and `/api/search/live` remain intentionally uncached.
+- The reset baseline was measured on 2026-03-30:
+  - refine average latency: about 3.4 s
+  - refine average total tokens: about 318
+  - finalize average latency: about 16.1 s
+  - finalize average total tokens: about 5485
+  - full guided-search average total tokens: about 5803
+- The current planning note for the next rebuild pass is `project-notes/fast-flow-reset-plan.md`.
 
 ## Next likely work
-- Watch the live deployment on desktop and mobile for cache behavior, result quality, and any Supabase/storage regressions.
-- If funnel analytics is enabled in Supabase, verify that `Show products now`, AI-finalized picks, result badges, and retailer click-throughs are being recorded as expected before widening the schema further.
-- Watch for weak-result cases and improve result-quality handling without overcomplicating the flow.
-- Refine the AI prompt and selection behavior based on real searches.
-- Keep using real-query inspection to tighten weak candidate descriptions, duplicate-heavy pools, and ambiguous searches before accepting any meaningful quality downgrade.
-- The backend now has a richer provider-agnostic candidate layer; the next safe step is to use that structure for smarter narrowing or duplicate-family handling only after checking real-query quality.
-- Decide whether the next product milestone is:
-  - better raw result quality and fallback handling
-  - outbound retailer links
-  - post-selection tuning and retailer linking
+- Follow `project-notes/fast-flow-reset-plan.md`.
+- First shrink refine and reduce finalize prompt weight before attempting any new ranking architecture.
+- Re-measure the same sample queries after each step.
+- Do not reintroduce persisted finalize orchestration or polling unless the user explicitly approves that tradeoff.
 
 ## Known remaining work
 - Watch how the new feedback-based retry loop performs with real searches and tighten the copy, friction, and retry cap only if testers start treating it like a browse loop.
