@@ -31,8 +31,8 @@ describe('refinement assistant', () => {
 
     expect(result).toEqual({
       prompt: 'What matters most here: portability, comfort, or battery life?',
-      helperText: 'Add the one detail that matters most and we will narrow faster.',
-      followUpPlaceholder: 'Examples: budget, size, comfort, must-have, or what to avoid.',
+      helperText: 'Answer in natural language so Focamai can understand what you really want.',
+      followUpPlaceholder: 'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
       usage: {
         inputTokens: 78,
         outputTokens: 24,
@@ -84,7 +84,7 @@ describe('refinement assistant', () => {
     )
 
     expect(result.prompt.length).toBeLessThanOrEqual(90)
-    expect(result.helperText).toBe('Add the one detail that matters most and we will narrow faster.')
-    expect(result.followUpPlaceholder).toBe('Examples: budget, size, comfort, must-have, or what to avoid.')
+    expect(result.helperText).toBe('Answer in natural language so Focamai can understand what you really want.')
+    expect(result.followUpPlaceholder).toBe('Example: I want something lightweight for daily travel, under $200, and easy to clean.')
   })
 })

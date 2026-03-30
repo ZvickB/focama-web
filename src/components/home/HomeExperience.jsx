@@ -58,10 +58,10 @@ function formatTimingValue(value) {
 function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
   return {
     helper:
-      prompt?.helperText || 'A few details can help us choose better picks for you.',
+      prompt?.helperText || 'Answer in natural language so Focamai can understand what you really want.',
     placeholder:
       prompt?.followUpPlaceholder ||
-      'Examples: for a 6 year old, under $200, small apartment, should feel premium, or easy to clean.',
+      'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
     title: isGeneratingPrompt
       ? 'You can add more detail right away'
       : prompt?.prompt || `What should we optimize for with this ${submittedQuery}?`,
@@ -72,7 +72,13 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
   const [displayedCopy, setDisplayedCopy] = useState(() =>
     buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }),
   )
-  const [isVisible, setIsVisible] = useState(true)
+  const [displayedTitle, setDisplayedTitle] = useState(() =>
+    buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }).title,
+  )
+  const [isTitleVisible, setIsTitleVisible] = useState(true)
+  const [streamedHelper, setStreamedHelper] = useState(() =>
+    isGeneratingPrompt ? '' : buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }).helper,
+  )
 
   useEffect(() => {
     const nextCopy = buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery })
@@ -85,20 +91,51 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
       return
     }
 
+    setDisplayedCopy(nextCopy)
+  }, [displayedCopy.helper, displayedCopy.placeholder, displayedCopy.title, isGeneratingPrompt, prompt, submittedQuery])
+
+  useEffect(() => {
+    if (displayedTitle === displayedCopy.title) {
+      return
+    }
+
     const hideTimer = window.setTimeout(() => {
-      setIsVisible(false)
+      setIsTitleVisible(false)
     }, 0)
 
     const swapTimer = window.setTimeout(() => {
-      setDisplayedCopy(nextCopy)
-      setIsVisible(true)
+      setDisplayedTitle(displayedCopy.title)
+      setIsTitleVisible(true)
     }, 300)
 
     return () => {
       window.clearTimeout(hideTimer)
       window.clearTimeout(swapTimer)
     }
-  }, [displayedCopy.helper, displayedCopy.placeholder, displayedCopy.title, isGeneratingPrompt, prompt, submittedQuery])
+  }, [displayedCopy.title, displayedTitle])
+
+  useEffect(() => {
+    if (!isGeneratingPrompt) {
+      setStreamedHelper(displayedCopy.helper)
+      return
+    }
+
+    setStreamedHelper('')
+
+    let characterIndex = 0
+    const intervalId = window.setInterval(() => {
+      characterIndex += 2
+      setStreamedHelper(displayedCopy.helper.slice(0, characterIndex))
+
+      if (characterIndex >= displayedCopy.helper.length) {
+        window.clearInterval(intervalId)
+      }
+    }, 40)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [displayedCopy.helper, isGeneratingPrompt])
 
   return (
     <div className="space-y-2">
@@ -106,11 +143,20 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
         <Sparkles className={`h-4 w-4 ${isGeneratingPrompt ? 'animate-pulse' : ''}`} />
         A little more context
       </div>
-      <div
-        className={`space-y-3 transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
-      >
-        <p className="text-xl font-medium leading-8 text-slate-900">{displayedCopy.title}</p>
-        <p className="max-w-2xl text-sm leading-7 text-slate-600">{displayedCopy.helper}</p>
+      <div className="space-y-3">
+        <p
+          className={`text-xl font-medium leading-8 text-slate-900 transition-opacity duration-300 ${
+            isTitleVisible ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          {displayedTitle}
+        </p>
+        <p className="max-w-2xl text-sm leading-7 text-slate-600">
+          {isGeneratingPrompt ? streamedHelper : displayedCopy.helper}
+          {isGeneratingPrompt ? (
+            <span className="ml-0.5 inline-block h-4 w-px translate-y-0.5 animate-pulse bg-slate-400 align-middle" />
+          ) : null}
+        </p>
       </div>
     </div>
   )

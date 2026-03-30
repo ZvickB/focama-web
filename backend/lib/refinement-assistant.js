@@ -1,8 +1,8 @@
 import { DEFAULT_OPENAI_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
 
 const MAX_PROMPT_LENGTH = 90
-const DEFAULT_HELPER_TEXT = 'Add the one detail that matters most and we will narrow faster.'
-const DEFAULT_PLACEHOLDER = 'Examples: budget, size, comfort, must-have, or what to avoid.'
+const DEFAULT_HELPER_TEXT = 'Answer in natural language so Focamai can understand what you really want.'
+const DEFAULT_PLACEHOLDER = 'Example: I want something lightweight for daily travel, under $200, and easy to clean.'
 
 function getResponseText(payload) {
   if (typeof payload?.output_text === 'string' && payload.output_text.trim()) {

@@ -40,9 +40,9 @@ function parseServerTimingHeader(headerValue) {
 function createFallbackRefinementPrompt(productQuery) {
   return {
     prompt: `What should we optimize for with this ${productQuery}?`,
-    helperText: 'Add any context that will help Focamai narrow the shortlist more intelligently.',
+    helperText: 'Answer in natural language so Focamai can understand what you really want.',
     followUpPlaceholder:
-      'Examples: for a small apartment, for daily commuting, needs to feel premium, under $200, easy to clean, for a child, or should last a long time.',
+      'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
   }
 }
 
