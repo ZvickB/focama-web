@@ -1038,7 +1038,7 @@ export async function handleFinalizeSelection(request, response) {
 
     const fallbackResults = nextCandidatePool.candidates
       .slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit)
-      .map((candidate, index) => ({
+      .map((candidate) => ({
         id: candidate.id,
         title: candidate.title,
         subtitle: candidate.source,
@@ -1049,7 +1049,7 @@ export async function handleFinalizeSelection(request, response) {
         reasons: candidate.reasons,
         image: candidate.image,
         link: candidate.link,
-        badgeLabel: index === 0 ? 'Best match' : '',
+        badgeLabel: '',
       }))
 
     const results = aiSelection.results.length > 0 ? aiSelection.results : fallbackResults

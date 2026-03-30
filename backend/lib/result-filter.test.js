@@ -244,4 +244,62 @@ describe('result filter', () => {
     )
     expect(artifacts.candidatePool.candidates[0].variantTokens).toContain('waterproof')
   })
+
+  it('collapses clearly redundant same-family variants before the AI pool but keeps meaningful family differences', () => {
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: [
+          createShoppingResult({
+            position: 1,
+            title: 'On Cloud 6 Running Shoe',
+            product_id: 'prod-1',
+            source: 'Nordstrom',
+            extracted_price: 149.99,
+            price: '$149.99',
+            snippet: 'Lightweight running shoe for everyday wear',
+          }),
+          createShoppingResult({
+            position: 2,
+            title: 'On Cloud 6 Running Shoe',
+            product_id: 'prod-2',
+            source: 'REI',
+            extracted_price: 151.99,
+            price: '$151.99',
+            snippet: 'Lightweight running shoe for everyday wear',
+          }),
+          createShoppingResult({
+            position: 3,
+            title: 'On Cloud 6 Waterproof Running Shoe',
+            product_id: 'prod-3',
+            source: 'Nordstrom',
+            extracted_price: 179.99,
+            price: '$179.99',
+            snippet: 'Waterproof running shoe with lightweight feel',
+          }),
+          createShoppingResult({
+            position: 4,
+            title: 'Brooks Ghost Running Shoe',
+            product_id: 'prod-4',
+            source: 'Running Warehouse',
+            extracted_price: 139.99,
+            price: '$139.99',
+            snippet: 'Neutral running shoe for everyday miles',
+          }),
+        ],
+      },
+      {
+        productQuery: 'running shoes',
+        details: '',
+        candidatePoolSize: 20,
+        finalResultLimit: 4,
+        reasonFallback: 'Returned by the live SerpApi search route',
+      },
+    )
+
+    expect(artifacts.candidatePool.candidates.map((candidate) => candidate.title)).toEqual([
+      'On Cloud 6 Running Shoe',
+      'On Cloud 6 Waterproof Running Shoe',
+      'Brooks Ghost Running Shoe',
+    ])
+  })
 })

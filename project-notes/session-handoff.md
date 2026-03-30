@@ -76,6 +76,14 @@
 - Guided finalize now trims prompt weight by dropping variant tokens and reducing trust metadata to a score-only signal, while keeping reasons and attributes in the AI selection context
 - Promo-only shopping snippets such as `20% OFF` / `LOW PRICE` are now ignored as normalized descriptions, and finalize AI summaries now omit empty/generic filler descriptions plus redundant source/price/delivery boilerplate to cut prompt waste
 - Guided finalize prompt slimming now also removes top-level search-state/similar-query prompt text, drops backend-only match-signal and duplicate numeric-price fields from each AI candidate summary, flattens trust metadata to a single `trustScore`, and minifies the candidate JSON block before sending it to OpenAI
+- The active one-shot finalize prompt has also now taken one more conservative wording trim:
+  - removed the standalone `Prioritize:` heading
+  - merged diversity and near-duplicate guidance
+  - dropped the redundant allowed badge-label line
+  - shortened badge strategy wording while keeping the explicit `Best match` requirement
+- Guided discovery filtering now also collapses some clearly redundant same-family candidates before finalize:
+  - this only applies when the duplicate-family key and variant signature match, and the merchant matches or the prices are effectively the same
+  - broader family differences should still remain available to the AI pool
 - The compact shard-scoring finalize experiment was measured and then rolled back after it regressed latency and token usage.
 - Guided finalize is back on the slimmer one-shot selector as the active implementation path.
 - Guided finalize step 1 is now complete on that baseline:
@@ -85,9 +93,19 @@
 - Guided finalize step 2 is now complete as frontend-only polish on top of that baseline:
   - homepage copy now better explains that the first query should be the product search itself, closer to what a user would type into Google
   - the refine step is now framed more clearly as the place for natural-language narrowing such as budget, size, comfort, style, or use case
-  - finalized results can now get a small deterministic frontend badge backfill when AI leaves secondary badge slots empty
+  - AI no longer assigns badge labels in the blocking finalize response
+  - finalized results now get deterministic frontend badge labels after the shortlist loads, with a slight delayed reveal so results land before badge polish
   - this does not widen finalize into more blocking backend work
 - The backend candidate pool now includes provider-agnostic duplicate-family keys, variant tokens, compact attribute tags, and trust signals before finalize so future search-provider changes can reuse the same internal model more easily
+- That candidate pool now also drops a narrow slice of clearly redundant same-family same-variant listings before the AI handoff
+- Re-measured cached same-query guided finalize on 2026-03-30 after the badge-scope reduction:
+  - finalize average latency: about 7.5 s
+  - finalize average total tokens: about 2479
+  - full guided-search average total tokens: about 2651
+  - compared with the prior cached baseline, finalize improved by about 2.5 seconds on average and crossed the under-8-second finalize milestone the user cared about
+- A separate fresh-discovery rerun was also captured after the conservative family-collapse pass:
+  - treat it as directional only, not as the clean comparison point for the badge win
+  - the badge-scope reduction is the strongest confirmed latency improvement from this pass; the family-collapse effect is still not isolated yet
 - Guided discovery telemetry now records the scoped discovery cache key in `search_history`, so debug history lines up with the actual cached entry
 - A new best-effort analytics endpoint now exists at `/api/analytics/track` for optional funnel instrumentation
 - The homepage now tracks guided-search funnel steps, result impressions, card opens, and retailer click-throughs when the optional analytics tables are present in Supabase

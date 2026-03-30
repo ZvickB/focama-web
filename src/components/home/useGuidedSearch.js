@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 
 import {
@@ -12,6 +12,7 @@ import { validateSearchInput } from '../../../shared/search-input.js'
 export const RESULT_CARD_COUNT = 6
 export const RESULT_CARD_SLOTS = Array.from({ length: RESULT_CARD_COUNT }, (_, index) => index)
 export const MAX_REFINEMENT_RETRIES = 2
+const FINAL_RESULT_BADGE_REVEAL_DELAY_MS = 240
 
 function roundTiming(value) {
   return Math.round(value * 10) / 10
@@ -179,6 +180,7 @@ export function useGuidedSearch() {
     finalize: null,
     refine: null,
   })
+  const [showFinalResultBadges, setShowFinalResultBadges] = useState(false)
   const [showPreviewResults, setShowPreviewResults] = useState(false)
   const [isDiscovering, setIsDiscovering] = useState(false)
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false)
@@ -205,6 +207,7 @@ export function useGuidedSearch() {
       setCandidatePool(variables.originalCandidatePool || null)
       setPreviousResults(previousDisplayResults)
       setResults(finalizedResults)
+      setShowFinalResultBadges(false)
       setRequestTiming((current) => ({
         ...current,
         finalize: payload.timing || null,
@@ -260,6 +263,21 @@ export function useGuidedSearch() {
     },
   })
 
+  useEffect(() => {
+    if (results.length === 0) {
+      setShowFinalResultBadges(false)
+      return undefined
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShowFinalResultBadges(true)
+    }, FINAL_RESULT_BADGE_REVEAL_DELAY_MS)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [results])
+
   const isFinalizing = finalizeMutation.isPending
   const isLoading = isDiscovering || isGeneratingPrompt || isFinalizing
   const hasFinalResults = results.length > 0
@@ -284,6 +302,7 @@ export function useGuidedSearch() {
       finalize: null,
       refine: null,
     })
+    setShowFinalResultBadges(false)
     setShowPreviewResults(false)
     setRefinementPrompt(null)
     hasTrackedRefinementViewRef.current = false
@@ -312,6 +331,7 @@ export function useGuidedSearch() {
       finalize: null,
       refine: null,
     })
+    setShowFinalResultBadges(false)
     setPreviousResults([])
     setShowPreviewResults(false)
     setIsDiscovering(false)
@@ -660,6 +680,7 @@ export function useGuidedSearch() {
     retryCount,
     retryFeedback,
     selectedProduct,
+    showFinalResultBadges,
     showPreviewResults,
     submittedQuery,
     beginGuidedSearch,

@@ -58,6 +58,11 @@
 - Guided discovery now sends the preview response as soon as artifacts are ready and lets the discovery-cache write finish in the background, so first-hit responses are not held open by cache persistence time.
 - Guided finalize now keeps reasons and attributes in the AI handoff but trims backend-only prompt baggage by removing variant tokens and reducing trust metadata to a compact score signal.
 - Guided finalize prompt slimming now also removes top-level search-state/similar-query prompt text, drops backend-only match-signal and duplicate numeric-price fields from each AI candidate summary, flattens trust metadata to a single `trustScore`, and minifies the candidate JSON block before sending it to OpenAI.
+- The active one-shot finalize prompt also now uses slightly tighter instruction wording:
+  - the standalone `Prioritize:` heading is gone
+  - diversity and near-duplicate guidance are merged
+  - the prompt no longer repeats the allowed badge-label list because schema validation already constrains it
+  - the badge strategy wording is shorter but still explicitly requires exactly one `Best match`
 - Guided candidate/result normalization now skips promo-only description text such as sale blurbs, and the finalize AI summary now omits empty/generic filler descriptions plus redundant source/price/delivery boilerplate to reduce prompt waste.
 - Guided finalize step 1 now also trims the blocking output shape:
   - each finalized pick keeps one concise AI fit reason
@@ -66,10 +71,12 @@
 - Guided finalize step 2 now adds lightweight frontend-only after-touch polish without changing the backend flow:
   - homepage search copy now tells users to start with the kind of product query they would normally type into Google
   - the refinement step is explained as the place for natural-language narrowing like budget, size, comfort, style, or use case
-  - after finalized results arrive, the frontend can deterministically fill a small number of missing secondary badge labels for scanability
+  - after finalized results arrive, the frontend now deterministically assigns badge labels for scanability instead of asking AI to return badge labels in the blocking finalize response
+  - badge labels intentionally reveal just after the shortlist paints so the result list arrives first and the scan polish settles in a beat later
   - that badge polish does not add another request and does not widen the blocking finalize contract
 - The backend candidate pool is now a more provider-agnostic structured layer:
   - duplicate-family keys and variant tokens are attached before AI selection
+  - a conservative collapse pass removes only clearly redundant same-family same-variant listings before the AI pool is finalized
   - lightweight attribute tags are extracted from product text
   - trust signals are pre-scored before finalize so AI gets cleaner compact guidance
 - If the optional Supabase analytics funnel tables exist, the homepage now sends best-effort analytics through `/api/analytics/track` for:
@@ -93,7 +100,7 @@
 - In the active step-1 finalize shape:
 - In the active step-2 finalize presentation:
   - result cards keep scan-friendly badge labels
-  - if finalize returns fewer useful secondary badges, the frontend may backfill a small number of deterministic labels after the shortlist arrives
+  - badge labels now come from deterministic frontend presentation logic after the shortlist arrives rather than from the blocking finalize AI response
   - result cards no longer show badge-reason copy
   - result cards no longer show drawback/caution text
   - finalized drawback/caution text is currently modal-only
@@ -112,6 +119,7 @@
   - follow-up notes are truncated to 500 characters before going to OpenAI
   - priorities are sanitized and capped before they are merged into final selection context
   - finalize reconstructs the candidate pool from the cached guided-discovery entry on the server before AI selection, instead of trusting a browser-posted rich pool
+  - the upstream guided-discovery filter now removes a narrow slice of clearly redundant same-family same-variant listings before that cached candidate pool is written
 - Retailer product links can already appear in the modal, but affiliate handling and disclosure strategy are not finalized.
 
 ## Marketplace direction

@@ -114,7 +114,7 @@ describe('HomePage', () => {
     expect(screen.getByRole('button', { name: /show focused picks/i })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /show products now/i })[0]).toBeInTheDocument()
     expect(
-      screen.getByText(/these are quick picks from our cleaned product pool\./i),
+      screen.getByText(/your shortlist is taking shape\./i),
     ).toBeInTheDocument()
   })
 
@@ -351,9 +351,7 @@ describe('HomePage', () => {
     await user.click(screen.getAllByRole('button', { name: /show products now/i })[0])
 
     expect(await screen.findByText('Travel stroller')).toBeInTheDocument()
-    expect(
-      screen.getByText(/these are quick picks from our cleaned product pool\./i),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /show focused picks/i })).toBeInTheDocument()
   })
 
   it('lets the user reset to a brand-new search after results are shown', async () => {

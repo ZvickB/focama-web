@@ -80,7 +80,7 @@
 - The current direction is "keep badges, but make them cheaper."
 - Strong likely direction for v1:
   - AI helps choose the shortlist
-  - backend assigns badges after selection using structured signals and clear rules
+  - deterministic app logic assigns badges after selection using structured signals and clear rules
   - do not require AI to generate badge reasons in the critical path unless the user explicitly approves that tradeoff later
 
 ## Explanation strategy direction

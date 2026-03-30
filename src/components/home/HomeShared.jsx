@@ -290,14 +290,16 @@ export function ResultsSection({
   selectionState,
   retryCount,
   retryFeedback,
+  showFinalResultBadges,
   showPreviewResults,
   submittedQuery,
 }) {
+  const shouldShowBadgeLabels = !hasFinalResults || showFinalResultBadges
   const orderedResults = displayedResults
     .map((item, index) => ({
       item,
       index,
-      priority: BADGE_DISPLAY_PRIORITY.get(item.badgeLabel || '') ?? 2,
+      priority: BADGE_DISPLAY_PRIORITY.get(shouldShowBadgeLabels ? item.badgeLabel || '' : '') ?? 2,
     }))
     .sort((left, right) => {
       if (left.priority !== right.priority) {
@@ -307,7 +309,7 @@ export function ResultsSection({
       return left.index - right.index
     })
     .map((entry) => entry.item)
-  const hasExplicitBadges = displayedResults.some((item) => item.badgeLabel)
+  const hasExplicitBadges = shouldShowBadgeLabels && displayedResults.some((item) => item.badgeLabel)
   const hasDisplayedResults = orderedResults.length > 0
   const shouldShowResultsIntro = !hasDisplayedResults || hasFinalResults
   const orderedPreviousResults = previousResults
@@ -440,26 +442,35 @@ export function ResultsSection({
                 isFinalizing && !hasFinalResults ? 'scale-[0.995] opacity-80' : 'opacity-100'
               }`}
             >
-            {orderedResults.map((item, index) => (
-              <div key={item.id}>
-                <ProductCard
-                  {...item}
-                  badgeLabel={item.badgeLabel || (!hasExplicitBadges && index === 0 ? 'Best match' : '')}
-                  onRetailerClick={() =>
-                    onRetailerClick(item, {
-                      position: index,
-                      resultSet: hasFinalResults ? 'final' : 'preview',
-                    })
-                  }
-                  onSelect={() =>
-                    onSelectProduct(item, {
-                      position: index,
-                      resultSet: hasFinalResults ? 'final' : 'preview',
-                    })
-                  }
-                />
-              </div>
-            ))}
+              {orderedResults.map((item, index) => {
+                const visibleItem = {
+                  ...item,
+                  badgeLabel:
+                    shouldShowBadgeLabels
+                      ? item.badgeLabel || (!hasExplicitBadges && index === 0 ? 'Best match' : '')
+                      : '',
+                }
+
+                return (
+                  <div key={item.id}>
+                    <ProductCard
+                      {...visibleItem}
+                      onRetailerClick={() =>
+                        onRetailerClick(visibleItem, {
+                          position: index,
+                          resultSet: hasFinalResults ? 'final' : 'preview',
+                        })
+                      }
+                      onSelect={() =>
+                        onSelectProduct(visibleItem, {
+                          position: index,
+                          resultSet: hasFinalResults ? 'final' : 'preview',
+                        })
+                      }
+                    />
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>

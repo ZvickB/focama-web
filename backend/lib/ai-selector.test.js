@@ -52,13 +52,11 @@ describe('ai selector', () => {
               candidate_id: 'prod-2',
               rationale: 'Best fit for airport travel and strong reviews.',
               drawback: 'Pricier than the cheapest compact options.',
-              badge_label: 'Best match',
             },
             {
               candidate_id: 'prod-1',
               rationale: 'A solid backup with a similar lightweight profile.',
               drawback: 'Fewer reviews than the top pick.',
-              badge_label: 'Best value',
             },
           ],
         }),
@@ -108,8 +106,8 @@ describe('ai selector', () => {
     expect(result.results[0].title).toBe('Compact airport stroller')
     expect(result.results[0].reasons[0]).toBe('AI fit: Best fit for airport travel and strong reviews.')
     expect(result.results[0].drawbacks).toEqual(['Pricier than the cheapest compact options.'])
-    expect(result.results[0].badgeLabel).toBe('Best match')
-    expect(result.results[1].badgeLabel).toBe('Best value')
+    expect(result.results[0].badgeLabel).toBe('')
+    expect(result.results[1].badgeLabel).toBe('')
   })
 
   it('ignores invalid or duplicate candidate ids from the model output', async () => {
@@ -127,13 +125,11 @@ describe('ai selector', () => {
                       candidate_id: 'prod-1',
                       rationale: 'Valid.',
                       drawback: 'Some caution.',
-                      badge_label: null,
                     },
                     {
                       candidate_id: 'prod-1',
                       rationale: 'Duplicate.',
                       drawback: 'Duplicate caution.',
-                      badge_label: 'Best match',
                     },
                   ],
                 }),
@@ -162,10 +158,10 @@ describe('ai selector', () => {
     expect(result.selectedCandidateIds).toEqual(['prod-1'])
     expect(result.results).toHaveLength(1)
     expect(result.results[0].drawbacks).toEqual(['Some caution.'])
-    expect(result.results[0].badgeLabel).toBe('Best match')
+    expect(result.results[0].badgeLabel).toBe('')
   })
 
-  it('caps badges at three total and deduplicates secondary labels', async () => {
+  it('does not ask the model to assign badge labels in the blocking selection schema', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -175,25 +171,21 @@ describe('ai selector', () => {
               candidate_id: 'prod-1',
               rationale: 'Top fit.',
               drawback: 'A bit expensive.',
-              badge_label: 'Best value',
             },
             {
               candidate_id: 'prod-2',
               rationale: 'Premium option.',
               drawback: 'Highest price here.',
-              badge_label: 'Best premium pick',
             },
             {
               candidate_id: 'prod-3',
               rationale: 'Small-space option.',
               drawback: 'Less roomy.',
-              badge_label: 'Best for small spaces',
             },
             {
               candidate_id: 'prod-4',
               rationale: 'Comfort-focused.',
               drawback: 'Bulkier.',
-              badge_label: 'Best for comfort',
             },
           ],
         }),
@@ -220,13 +212,12 @@ describe('ai selector', () => {
       fetchMock,
     )
 
-    expect(result.results.filter((item) => item.badgeLabel)).toHaveLength(3)
-    expect(result.results[0].badgeLabel).toBe('Best match')
-    expect(result.results.map((item) => item.badgeLabel).filter(Boolean)).toEqual([
-      'Best match',
-      'Best premium pick',
-      'Best for small spaces',
-    ])
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
+    const prompt = requestBody.input[1].content
+
+    expect(prompt).not.toContain('Badge strategy')
+    expect(JSON.stringify(requestBody.text.format.schema)).not.toContain('badge_label')
+    expect(result.results.every((item) => item.badgeLabel === '')).toBe(true)
   })
 
   it('omits low-value descriptions from the AI candidate summary', async () => {

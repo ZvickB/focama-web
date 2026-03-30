@@ -578,6 +578,7 @@ function OpenLayout(props) {
                 selectionState={state.selectionState}
                 retryCount={state.retryCount}
                 retryFeedback={state.retryFeedback}
+                showFinalResultBadges={state.showFinalResultBadges}
                 showPreviewResults={showPreviewResults}
                 submittedQuery={submittedQuery}
               />
@@ -613,6 +614,7 @@ export function HomeExperience() {
     retryFeedback: state.retryFeedback,
     setFollowUpNotes: state.setFollowUpNotes,
     setProductQuery: state.setProductQuery,
+    showFinalResultBadges: state.showFinalResultBadges,
     showTimingPanel,
     showPreviewResults: state.showPreviewResults,
     state,

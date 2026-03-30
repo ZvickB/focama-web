@@ -263,6 +263,70 @@ function diversifyResults(scoredItems, limit) {
   return selected
 }
 
+function buildVariantSignature(title) {
+  return getVariantTokens(title).sort().join('|')
+}
+
+function isClosePriceMatch(leftPrice, rightPrice) {
+  const left = Number(leftPrice)
+  const right = Number(rightPrice)
+
+  if (!Number.isFinite(left) || !Number.isFinite(right) || left <= 0 || right <= 0) {
+    return false
+  }
+
+  const threshold = Math.max(5, Math.min(left, right) * 0.08)
+  return Math.abs(left - right) <= threshold
+}
+
+function isLikelySameFamilyVariant(leftItem, rightItem) {
+  const leftFamilyKey = buildDuplicateFamilyKey(leftItem.title)
+  const rightFamilyKey = buildDuplicateFamilyKey(rightItem.title)
+
+  if (!leftFamilyKey || !rightFamilyKey || leftFamilyKey !== rightFamilyKey) {
+    return false
+  }
+
+  const leftVariantSignature = buildVariantSignature(leftItem.title)
+  const rightVariantSignature = buildVariantSignature(rightItem.title)
+
+  if (leftVariantSignature !== rightVariantSignature) {
+    return false
+  }
+
+  const leftSource = String(leftItem.source || '').toLowerCase().trim()
+  const rightSource = String(rightItem.source || '').toLowerCase().trim()
+
+  if (leftSource && rightSource && leftSource === rightSource) {
+    return true
+  }
+
+  const leftPrice = Number(leftItem.extracted_price)
+  const rightPrice = Number(rightItem.extracted_price)
+
+  if (isClosePriceMatch(leftPrice, rightPrice)) {
+    return true
+  }
+
+  return false
+}
+
+function collapseDuplicateFamilies(selectedItems) {
+  const collapsed = []
+
+  for (const item of selectedItems) {
+    const isRedundant = collapsed.some((existingItem) => isLikelySameFamilyVariant(existingItem, item))
+
+    if (isRedundant) {
+      continue
+    }
+
+    collapsed.push(item)
+  }
+
+  return collapsed
+}
+
 function buildMatchSignals(item, queryTokens, detailsTokens, searchState) {
   const titleText = item.title || ''
   const supportText = [item.snippet, item.source, ...(item.extensions || [])].filter(Boolean).join(' ')
@@ -358,7 +422,8 @@ export function getFilteredSearchArtifacts(
     scoredItems,
     Math.max(candidatePoolSize * diversifyPoolMultiplier, candidatePoolSize),
   )
-  const aiCandidates = selectedItems
+  const collapsedItems = collapseDuplicateFamilies(selectedItems)
+  const aiCandidates = collapsedItems
     .map((item, index) => {
       const scoredEntry = scoredItems.find((entry) => entry.item === item)
       const matchSignals = buildMatchSignals(item, queryTokens, detailsTokens, searchState)

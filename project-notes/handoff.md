@@ -44,6 +44,11 @@
   - backend-only match-signal and duplicate numeric-price fields were removed from each AI candidate summary
   - trust metadata was flattened to a single `trustScore`
   - the candidate JSON block is now minified before it is sent to OpenAI
+- A follow-up conservative finalize-prompt trim is now also complete:
+  - removed the standalone `Prioritize:` heading
+  - merged diversity and near-duplicate guidance into one line
+  - removed the redundant allowed badge-label line
+  - shortened the badge-strategy sentence while keeping the explicit `Best match` rule
 - Re-measured finalize on 2026-03-30 after the slimming step:
   - average latency: about 13.9 s
   - average total tokens: about 5403
@@ -62,8 +67,24 @@
 - The next narrow rebuild step is now complete:
   - homepage messaging now more clearly tells users to start with the product search itself, closer to what they would type into Google
   - the refine step is now framed more explicitly as the place for natural-language narrowing such as budget, size, comfort, style, or use case
-  - finalized results can now get a lightweight deterministic frontend badge backfill when AI leaves secondary badge slots empty
+  - AI badge-label assignment was removed from the blocking finalize response
+  - finalized results now get deterministic frontend badge labels after load, with a slight delayed reveal so results paint before badge polish
   - this stays inside the current guided flow and does not re-expand blocking finalize work
+- The next narrow rebuild step is now complete:
+  - guided discovery filtering now collapses a narrow slice of clearly redundant same-family same-variant listings before the AI pool is built
+  - the collapse is intentionally conservative: matching duplicate-family key and matching variant signature, plus same merchant or near-same price
+  - broader or meaningful family differences should still remain available to the AI shortlist step
+- Cached same-query finalize was re-measured on 2026-03-30 after removing AI badge-label assignment from the blocking finalize step:
+  - finalize average latency: about 7.5 s
+  - finalize average OpenAI time: about 7.0 s
+  - finalize average total tokens: about 2479
+  - full guided-search average total tokens: about 2651
+  - compared with the prior cached baseline, finalize improved by about 2.5 seconds on average and crossed the under-8-second finalize milestone the user was aiming for
+- A separate fresh-discovery rerun was also captured after the conservative family-collapse pass:
+  - fresh finalize average latency: about 10.8 s
+  - fresh finalize average total tokens: about 2617
+  - that run should be treated as directional only because live discovery changed the candidate pools again
+  - the strongest confirmed win from this session is the badge-scope reduction; the exact latency impact of the conservative family-collapse pass is still not isolated yet
 
 ## Next likely work
 - Follow `project-notes/finalize-strategy.md`.
