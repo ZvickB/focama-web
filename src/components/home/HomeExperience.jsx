@@ -56,6 +56,9 @@ function formatTimingValue(value) {
 }
 
 function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
+  const suggestedQuestion =
+    prompt?.prompt || `What should we optimize for with this ${submittedQuery}?`
+
   return {
     helper:
       prompt?.helperText ||
@@ -63,9 +66,8 @@ function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     placeholder:
       prompt?.followUpPlaceholder ||
       'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
-    title: isGeneratingPrompt
-      ? 'You can add more detail right away'
-      : prompt?.prompt || `What should we optimize for with this ${submittedQuery}?`,
+    title:
+      isGeneratingPrompt ? 'You can add more detail right away' : `One suggestion, such as: ${suggestedQuestion}`,
   }
 }
 
@@ -166,6 +168,7 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
 function TimingPanel({ requestTiming }) {
   const entries = [
     ['Discover', requestTiming?.discover],
+    ['Prewarm', requestTiming?.prewarm],
     ['Refine', requestTiming?.refine],
     ['Finalize', requestTiming?.finalize],
   ].filter(([, timing]) => timing)
@@ -401,7 +404,7 @@ function OpenLayout(props) {
                     value={state.productQuery}
                     onChange={(event) => setProductQuery(event.target.value)}
                     placeholder='Try "travel stroller for airplane", "ergonomic office chair", or "lego botanical set"'
-                    className="h-16 w-full rounded-[28px] border border-stone-200 bg-white px-5 text-lg text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary/50"
+                    className="h-16 w-full rounded-[28px] border border-stone-200 bg-white px-5 text-lg text-slate-900 outline-none transition placeholder:text-[15px] placeholder:text-slate-400 sm:placeholder:text-base focus:border-primary/50"
                     disabled={isLoading}
                   />
                 </div>
@@ -479,7 +482,7 @@ function OpenLayout(props) {
                           <span className="absolute inset-0 rounded-full bg-primary/20 animate-soft-pulse" />
                           <span className="relative h-2.5 w-2.5 rounded-full bg-primary/65" />
                           </span>
-                          You can start typing while we put together a suggestion.
+                          You can start typing while we put together an example suggestion, or just write your own.
                         </div>
                         <div className="relative overflow-hidden rounded-full bg-stone-200/80">
                           <div className="h-2.5 w-full" />

@@ -1,17 +1,7 @@
 export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses'
 export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini'
-export const ALLOWED_RESULT_BADGES = [
-  'Best match',
-  'Best value',
-  'Best budget pick',
-  'Best premium pick',
-  'Best for durability',
-  'Best for comfort',
-  'Best for small spaces',
-  'Best for beginners',
-  'Best lightweight option',
-  'Best all-rounder',
-]
+export const PRE_RANK_ARTIFACT_VERSION = 1
+const ARTIFACT_RERANK_CANDIDATE_LIMIT = 12
 const DESCRIPTION_BOILERPLATE_TOKENS = new Set([
   'at',
   'buy',
@@ -278,6 +268,97 @@ function buildSelectionSchema() {
   }
 }
 
+function buildPreRankPrompt(candidatePool) {
+  return [
+    'Create a reusable preranked shopping artifact from this candidate pool.',
+    'This is not the final shortlist.',
+    'Rank every candidate from strongest to weakest baseline fit before any future follow-up context.',
+    'Use product-query relevance, quality/trust, and overall shopping usefulness as the baseline ranking signals.',
+    'For each candidate, write one short baseline fit note and one short baseline caution.',
+    'Keep the notes concise because another step may reuse this artifact later.',
+    '',
+    `Product query: ${candidatePool.query}`,
+    '',
+    'Candidates:',
+    JSON.stringify(buildCandidateSummary(candidatePool)),
+  ].join('\n')
+}
+
+function buildPreRankSchema() {
+  return {
+    type: 'object',
+    properties: {
+      ranked_candidates: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            candidate_id: {
+              type: 'string',
+            },
+            baseline_fit: {
+              type: 'string',
+            },
+            baseline_caution: {
+              type: 'string',
+            },
+          },
+          required: ['candidate_id', 'baseline_fit', 'baseline_caution'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['ranked_candidates'],
+    additionalProperties: false,
+  }
+}
+
+function buildArtifactRerankPrompt({ artifactCandidates, candidatePool, finalResultLimit }) {
+  const desiredCount = Math.min(finalResultLimit, artifactCandidates.length)
+
+  return [
+    'Choose the best final products from this reusable preranked artifact.',
+    '1. Intent match to the extra context/details is the strongest signal and should outweigh the baseline prerank when they disagree.',
+    '2. Retry feedback and exclusions are high-priority intent signals.',
+    '3. Use the prerank and baseline notes as helpful prior context, not as a hard rule.',
+    '4. Preserve diversity only when it still fits the stated intent well.',
+    '5. Return only the selected candidate ids plus one short intent-fit reason for each pick.',
+    `Return up to ${desiredCount} picks. If there are at least ${desiredCount} strong candidates, return exactly ${desiredCount}.`,
+    '',
+    `Product query: ${candidatePool.query}`,
+    `Extra context: ${candidatePool.details || 'None provided.'}`,
+    '',
+    'Reusable preranked candidates:',
+    JSON.stringify(artifactCandidates),
+  ].join('\n')
+}
+
+function buildArtifactRerankSchema() {
+  return {
+    type: 'object',
+    properties: {
+      picks: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            candidate_id: {
+              type: 'string',
+            },
+            rationale: {
+              type: 'string',
+            },
+          },
+          required: ['candidate_id', 'rationale'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['picks'],
+    additionalProperties: false,
+  }
+}
+
 function buildUiResult(candidate, rationale) {
   return {
     id: candidate.id,
@@ -358,6 +439,180 @@ async function requestStructuredSelection(
   }
 }
 
+function createFallbackBaselineFit(candidate) {
+  const summaryReason = getCandidateSummaryReasons(candidate)[0]
+
+  if (summaryReason) {
+    return summaryReason
+  }
+
+  if (candidate.source) {
+    return `Strong baseline option from ${candidate.source}.`
+  }
+
+  return 'Strong baseline option for this query.'
+}
+
+function createFallbackBaselineCaution(candidate) {
+  if (candidate.price) {
+    return `Check whether ${candidate.price} fits the budget.`
+  }
+
+  return 'Double-check the tradeoffs against your exact needs.'
+}
+
+function mapPreRankArtifact(rankedCandidates, candidatePool, model) {
+  const candidateById = new Map(candidatePool.candidates.map((candidate) => [String(candidate.id), candidate]))
+  const seen = new Set()
+  const artifactCandidates = []
+
+  for (const entry of rankedCandidates) {
+    const candidateId = String(entry?.candidate_id || '')
+
+    if (!candidateId || seen.has(candidateId)) {
+      continue
+    }
+
+    const candidate = candidateById.get(candidateId)
+
+    if (!candidate) {
+      continue
+    }
+
+    artifactCandidates.push({
+      candidateId,
+      rank: artifactCandidates.length + 1,
+      title: candidate.title,
+      source: candidate.source,
+      price: candidate.price,
+      rating: candidate.rating,
+      reviewCount: candidate.reviewCount,
+      attributes: Array.isArray(candidate.attributes) ? candidate.attributes.slice(0, 6) : [],
+      trustScore:
+        candidate.trustSignals && typeof candidate.trustSignals === 'object' && !Array.isArray(candidate.trustSignals)
+          ? Number.isFinite(Number(candidate.trustSignals.score))
+            ? Number(candidate.trustSignals.score)
+            : 0
+          : null,
+      baselineFit: truncateText(entry?.baseline_fit, 160) || createFallbackBaselineFit(candidate),
+      baselineCaution: truncateText(entry?.baseline_caution, 160) || createFallbackBaselineCaution(candidate),
+    })
+    seen.add(candidateId)
+  }
+
+  for (const candidate of candidatePool.candidates) {
+    const candidateId = String(candidate.id)
+
+    if (seen.has(candidateId)) {
+      continue
+    }
+
+    artifactCandidates.push({
+      candidateId,
+      rank: artifactCandidates.length + 1,
+      title: candidate.title,
+      source: candidate.source,
+      price: candidate.price,
+      rating: candidate.rating,
+      reviewCount: candidate.reviewCount,
+      attributes: Array.isArray(candidate.attributes) ? candidate.attributes.slice(0, 6) : [],
+      trustScore:
+        candidate.trustSignals && typeof candidate.trustSignals === 'object' && !Array.isArray(candidate.trustSignals)
+          ? Number.isFinite(Number(candidate.trustSignals.score))
+            ? Number(candidate.trustSignals.score)
+            : 0
+          : null,
+      baselineFit: createFallbackBaselineFit(candidate),
+      baselineCaution: createFallbackBaselineCaution(candidate),
+    })
+  }
+
+  return {
+    version: PRE_RANK_ARTIFACT_VERSION,
+    generatedAt: new Date().toISOString(),
+    model,
+    query: candidatePool.query,
+    details: candidatePool.details || '',
+    candidateCount: candidatePool.candidates.length,
+    rankedCandidates: artifactCandidates,
+  }
+}
+
+function getReusableArtifactEntries(preRankArtifact, candidates) {
+  if (
+    !preRankArtifact ||
+    typeof preRankArtifact !== 'object' ||
+    Array.isArray(preRankArtifact) ||
+    preRankArtifact.version !== PRE_RANK_ARTIFACT_VERSION ||
+    !Array.isArray(preRankArtifact.rankedCandidates)
+  ) {
+    return []
+  }
+
+  const candidateById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]))
+  const reusableEntries = []
+
+  for (const entry of preRankArtifact.rankedCandidates) {
+    const candidateId = String(entry?.candidateId || entry?.candidate_id || '')
+
+    if (!candidateId) {
+      continue
+    }
+
+    const candidate = candidateById.get(candidateId)
+
+    if (!candidate) {
+      continue
+    }
+
+    reusableEntries.push({
+      candidate,
+      candidateId,
+      baselineCaution: truncateText(entry?.baselineCaution || entry?.baseline_caution, 160),
+      baselineFit: truncateText(entry?.baselineFit || entry?.baseline_fit, 160),
+      rank: Number.isFinite(Number(entry?.rank)) ? Number(entry.rank) : reusableEntries.length + 1,
+      reusableSummary: {
+        candidate_id: candidateId,
+        prewarm_rank: Number.isFinite(Number(entry?.rank)) ? Number(entry.rank) : reusableEntries.length + 1,
+        title: candidate.title,
+        source: candidate.source,
+        price: candidate.price,
+        rating: candidate.rating,
+        reviewCount: candidate.reviewCount,
+        attributes: Array.isArray(entry?.attributes)
+          ? entry.attributes.slice(0, 6)
+          : Array.isArray(candidate.attributes)
+            ? candidate.attributes.slice(0, 6)
+            : [],
+        baseline_fit: truncateText(entry?.baselineFit || entry?.baseline_fit, 160),
+        baseline_caution: truncateText(entry?.baselineCaution || entry?.baseline_caution, 160),
+        trustScore:
+          Number.isFinite(Number(entry?.trustScore))
+            ? Number(entry.trustScore)
+            : candidate.trustSignals && typeof candidate.trustSignals === 'object' && !Array.isArray(candidate.trustSignals)
+              ? Number.isFinite(Number(candidate.trustSignals.score))
+                ? Number(candidate.trustSignals.score)
+                : 0
+              : null,
+      },
+    })
+  }
+
+  return reusableEntries.sort((left, right) => left.rank - right.rank)
+}
+
+function materializeReusableArtifactResults({ reusableEntries, finalResultLimit }) {
+  const selectedEntries = reusableEntries.slice(0, finalResultLimit)
+
+  return {
+    selectedCandidateIds: selectedEntries.map((entry) => entry.candidateId),
+    results: selectedEntries.map((entry) => ({
+      ...buildUiResult(entry.candidate, entry.baselineFit || ''),
+      drawbacks: entry.baselineCaution ? [entry.baselineCaution] : [],
+    })),
+  }
+}
+
 function mapSelectionPicksToResults(picks, candidates, finalResultLimit) {
   const candidateById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]))
   const seen = new Set()
@@ -398,6 +653,45 @@ function mapSelectionPicksToResults(picks, candidates, finalResultLimit) {
   }
 }
 
+function mapArtifactRerankPicksToResults(picks, reusableEntries, finalResultLimit) {
+  const entryById = new Map(reusableEntries.map((entry) => [entry.candidateId, entry]))
+  const seen = new Set()
+  const selected = []
+
+  for (const pick of picks) {
+    const candidateId = String(pick?.candidate_id || '')
+
+    if (!candidateId || seen.has(candidateId)) {
+      continue
+    }
+
+    const entry = entryById.get(candidateId)
+
+    if (!entry) {
+      continue
+    }
+
+    selected.push({
+      candidateId,
+      rationale: truncateText(pick?.rationale, 160) || entry.baselineFit,
+      entry,
+    })
+    seen.add(candidateId)
+
+    if (selected.length >= finalResultLimit) {
+      break
+    }
+  }
+
+  return {
+    selectedCandidateIds: selected.map((entry) => entry.candidateId),
+    results: selected.map(({ entry, rationale }) => ({
+      ...buildUiResult(entry.candidate, rationale),
+      drawbacks: entry.baselineCaution ? [entry.baselineCaution] : [],
+    })),
+  }
+}
+
 async function runOneShotSelection({ candidatePool, finalResultLimit, apiKey, model }, fetchImpl) {
   const { parsed, usage } = await requestStructuredSelection(
     {
@@ -419,12 +713,98 @@ async function runOneShotSelection({ candidatePool, finalResultLimit, apiKey, mo
   }
 }
 
+export async function createPreRankArtifact(
+  {
+    candidatePool,
+    apiKey,
+    model = DEFAULT_OPENAI_MODEL,
+  },
+  fetchImpl = fetch,
+) {
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is missing from the root .env file.')
+  }
+
+  const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
+
+  if (candidates.length === 0) {
+    return {
+      model,
+      artifact: {
+        version: PRE_RANK_ARTIFACT_VERSION,
+        generatedAt: new Date().toISOString(),
+        model,
+        query: candidatePool?.query || '',
+        details: candidatePool?.details || '',
+        candidateCount: 0,
+        rankedCandidates: [],
+      },
+      usage: null,
+      strategy: 'prerank_single_pass',
+    }
+  }
+
+  const { parsed, usage } = await requestStructuredSelection(
+    {
+      prompt: buildPreRankPrompt(candidatePool),
+      schema: buildPreRankSchema(),
+      responseName: 'product_prerank_artifact',
+      apiKey,
+      model,
+    },
+    fetchImpl,
+  )
+
+  return {
+    model,
+    artifact: mapPreRankArtifact(parsed?.ranked_candidates || [], candidatePool, model),
+    usage,
+    strategy: 'prerank_single_pass',
+  }
+}
+
+export function materializePreRankArtifactResults({ preRankArtifact, candidatePool, finalResultLimit }) {
+  const reusableEntries = getReusableArtifactEntries(
+    preRankArtifact,
+    Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : [],
+  )
+
+  if (reusableEntries.length === 0) {
+    return {
+      selectedCandidateIds: [],
+      results: [],
+      debug: {
+        artifactCandidateCount: 0,
+        intentMatchRerankUsed: false,
+        preRankArtifactReused: false,
+        preRankReuseReason: 'artifact_missing_or_invalid',
+      },
+    }
+  }
+
+  const mapped = materializeReusableArtifactResults({
+    reusableEntries,
+    finalResultLimit,
+  })
+
+  return {
+    ...mapped,
+    debug: {
+      artifactCandidateCount: reusableEntries.length,
+      intentMatchRerankUsed: false,
+      preRankArtifactReused: true,
+      preRankReuseReason: 'artifact_direct',
+    },
+  }
+}
+
 export async function selectAiResults(
   {
     candidatePool,
     finalResultLimit,
     apiKey,
     model = DEFAULT_OPENAI_MODEL,
+    preRankArtifact = null,
   },
   fetchImpl = fetch,
 ) {
@@ -440,6 +820,53 @@ export async function selectAiResults(
       selectedCandidateIds: [],
       results: [],
       usage: null,
+      debug: {
+        artifactCandidateCount: 0,
+        intentMatchRerankUsed: false,
+        preRankArtifactReused: false,
+        preRankReuseReason: 'no_candidates',
+      },
+    }
+  }
+
+  const reusableEntries = getReusableArtifactEntries(preRankArtifact, candidates)
+
+  if (reusableEntries.length > 0) {
+    const artifactCandidates = reusableEntries
+      .slice(0, Math.max(finalResultLimit, Math.min(reusableEntries.length, ARTIFACT_RERANK_CANDIDATE_LIMIT)))
+      .map((entry) => entry.reusableSummary)
+
+    const { parsed, usage } = await requestStructuredSelection(
+      {
+        prompt: buildArtifactRerankPrompt({
+          artifactCandidates,
+          candidatePool,
+          finalResultLimit,
+        }),
+        schema: buildArtifactRerankSchema(),
+        responseName: 'artifact_intent_rerank',
+        apiKey,
+        model,
+      },
+      fetchImpl,
+    )
+    const picks = Array.isArray(parsed?.picks) ? parsed.picks : []
+    const mapped = mapArtifactRerankPicksToResults(picks, reusableEntries, finalResultLimit)
+
+    if (mapped.results.length > 0) {
+      return {
+        model,
+        selectedCandidateIds: mapped.selectedCandidateIds,
+        results: mapped.results,
+        usage,
+        strategy: 'artifact_intent_rerank',
+        debug: {
+          artifactCandidateCount: reusableEntries.length,
+          intentMatchRerankUsed: true,
+          preRankArtifactReused: true,
+          preRankReuseReason: 'artifact_intent_rerank',
+        },
+      }
     }
   }
 
@@ -451,5 +878,11 @@ export async function selectAiResults(
     results: selection.results,
     usage: selection.usage,
     strategy: selection.strategy,
+    debug: {
+      artifactCandidateCount: reusableEntries.length,
+      intentMatchRerankUsed: false,
+      preRankArtifactReused: false,
+      preRankReuseReason: reusableEntries.length > 0 ? 'artifact_rerank_empty_fallback' : 'artifact_missing_or_invalid',
+    },
   }
 }

@@ -5,6 +5,8 @@ vi.mock('./lib/ai-selector.js', async () => {
 
   return {
     ...actual,
+    createPreRankArtifact: vi.fn(),
+    materializePreRankArtifactResults: vi.fn(),
     selectAiResults: vi.fn(),
   }
 })
@@ -46,11 +48,12 @@ import {
   handleDiscoverySearch,
   handleFinalizeSelection,
   handleLiveSearch,
+  handlePrewarmSelection,
   handleSearchDebug,
   handleSupabaseHealth,
 } from './server.js'
 import { resetRateLimitStore } from './lib/rate-limit.js'
-import { selectAiResults } from './lib/ai-selector.js'
+import { createPreRankArtifact, materializePreRankArtifactResults, selectAiResults } from './lib/ai-selector.js'
 import { getFilteredSearchArtifacts } from './lib/result-filter.js'
 import { getSupabaseHealth, readStoredSearchCacheEntry, writeStoredSearchCacheEntry } from './lib/search-storage.js'
 import {
@@ -114,7 +117,11 @@ function createFinalizeCandidate(id) {
   }
 }
 
-function createDiscoveryCacheEntry(query, candidates = [createFinalizeCandidate('one')]) {
+function createDiscoveryCacheEntry(
+  query,
+  candidates = [createFinalizeCandidate('one')],
+  selection = { mode: 'discovery_preview' },
+) {
   return {
     cachedAt: '2026-03-17T12:00:00.000Z',
     candidatePool: {
@@ -129,7 +136,7 @@ function createDiscoveryCacheEntry(query, candidates = [createFinalizeCandidate(
       id: candidate.id,
       title: candidate.title,
     })),
-    selection: { mode: 'discovery_preview' },
+    selection,
     source: 'guided_discovery',
   }
 }
@@ -148,6 +155,15 @@ describe('server handlers', () => {
     vi.unstubAllGlobals()
     resetRateLimitStore()
     readStoredSearchCacheEntry.mockResolvedValue(null)
+    materializePreRankArtifactResults.mockReturnValue({
+      selectedCandidateIds: [],
+      results: [],
+      debug: {
+        artifactCandidateCount: 0,
+        preRankArtifactReused: false,
+        preRankReuseReason: 'artifact_missing_or_invalid',
+      },
+    })
   })
 
   it('returns cached search results and slices them to six items', async () => {
@@ -232,6 +248,10 @@ describe('server handlers', () => {
           badgeLabel: 'Best match',
         },
       ],
+      prewarm: {
+        artifactReady: false,
+        artifactGeneratedAt: null,
+      },
       source: 'cache',
       cachedAt: '2026-03-17T12:00:00.000Z',
     })
@@ -296,6 +316,10 @@ describe('server handlers', () => {
         candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
       },
       previewResults: [{ id: 'live-1', title: 'Thermos bottle' }],
+      prewarm: {
+        artifactReady: false,
+        artifactGeneratedAt: null,
+      },
     })
   })
 
@@ -359,6 +383,9 @@ describe('server handlers', () => {
           candidateCount: 1,
           previewResultCount: 1,
           selectionMode: 'discovery_preview',
+          prewarmArtifactReady: false,
+          prewarmArtifactGeneratedAt: null,
+          prewarmArtifactCandidateCount: 0,
         },
       },
       environment: {
@@ -369,6 +396,7 @@ describe('server handlers', () => {
       architecture: {
         primaryProductFlow: [
           '/api/search/discover',
+          '/api/search/prewarm',
           '/api/search/refine',
           '/api/search/finalize',
         ],
@@ -387,6 +415,12 @@ describe('server handlers', () => {
           usesCache: true,
           callsSerpApi: false,
           callsOpenAi: true,
+        },
+        guidedPrewarm: {
+          usesCache: true,
+          callsSerpApi: false,
+          callsOpenAi: true,
+          artifactReady: false,
         },
         liveSearch: {
           usesCache: false,
@@ -1004,6 +1038,180 @@ describe('server handlers', () => {
     expect(selectAiResults).not.toHaveBeenCalled()
   })
 
+  it('generates and stores a reusable prerank artifact through the prewarm route', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    createPreRankArtifact.mockResolvedValue({
+      model: 'gpt-5-mini',
+      strategy: 'prerank_single_pass',
+      usage: {
+        inputTokens: 320,
+        outputTokens: 70,
+        totalTokens: 390,
+        reasoningTokens: 18,
+      },
+      artifact: {
+        version: 1,
+        generatedAt: '2026-03-31T12:00:00.000Z',
+        model: 'gpt-5-mini',
+        query: 'stroller',
+        candidateCount: 1,
+        rankedCandidates: [
+          {
+            candidateId: 'one',
+            rank: 1,
+            baselineFit: 'Strong overall baseline fit.',
+            baselineCaution: 'A bit pricier than budget picks.',
+          },
+        ],
+      },
+    })
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+
+    const response = createResponseRecorder()
+
+    await handlePrewarmSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          candidatePool: {
+            query: 'stroller',
+            details: '',
+            combinedSearchText: 'stroller',
+            searchState: 'Results for exact spelling',
+            similarQueries: ['compact stroller'],
+            candidates: [createFinalizeCandidate('one')],
+          },
+        }),
+        { 'x-forwarded-for': '203.0.113.34' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(createPreRankArtifact).toHaveBeenCalledWith({
+      candidatePool: expect.objectContaining({
+        query: 'stroller',
+        candidates: [expect.objectContaining({ id: 'one' })],
+      }),
+      apiKey: 'openai-key',
+      model: expect.any(String),
+    })
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productQuery: 'stroller',
+        scope: 'guided_discovery',
+        selection: expect.objectContaining({
+          mode: 'discovery_preview',
+          preRankArtifact: expect.objectContaining({
+            generatedAt: '2026-03-31T12:00:00.000Z',
+          }),
+          prewarm: expect.objectContaining({
+            artifactCandidateCount: 1,
+            model: 'gpt-5-mini',
+            strategy: 'prerank_single_pass',
+            usage: {
+              inputTokens: 320,
+              outputTokens: 70,
+              totalTokens: 390,
+              reasoningTokens: 18,
+            },
+          }),
+        }),
+      }),
+    )
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        requestMode: 'guided_prerank_prewarm',
+        prewarm: expect.objectContaining({
+          artifactReady: true,
+          artifactCandidateCount: 1,
+          model: 'gpt-5-mini',
+          requestMode: 'guided_prerank_prewarm',
+          reusedStoredArtifact: false,
+          strategy: 'prerank_single_pass',
+        }),
+        usage: {
+          openai: {
+            inputTokens: 320,
+            outputTokens: 70,
+            totalTokens: 390,
+            reasoningTokens: 18,
+          },
+        },
+      }),
+    )
+  })
+
+  it('reuses the stored prerank artifact directly for empty-note finalize requests', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    materializePreRankArtifactResults.mockReturnValue({
+      selectedCandidateIds: ['one'],
+      results: [{ id: 'one', title: 'Candidate one', reasons: ['AI fit: Direct artifact reuse'], drawbacks: [] }],
+      debug: {
+        artifactCandidateCount: 1,
+        preRankArtifactReused: true,
+        preRankReuseReason: 'artifact_direct',
+      },
+    })
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')], {
+        mode: 'discovery_preview',
+        preRankArtifact: {
+          version: 1,
+          generatedAt: '2026-03-31T12:00:00.000Z',
+          model: 'gpt-5-mini',
+          rankedCandidates: [
+            {
+              candidateId: 'one',
+              rank: 1,
+              baselineFit: 'Strong overall baseline fit.',
+              baselineCaution: 'A bit pricier than budget picks.',
+            },
+          ],
+        },
+      }),
+    )
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          requestMode: 'guided_empty_notes',
+        }),
+        { 'x-forwarded-for': '203.0.113.35' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(materializePreRankArtifactResults).toHaveBeenCalledTimes(1)
+    expect(selectAiResults).not.toHaveBeenCalled()
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        requestMode: 'guided_empty_notes',
+        debug: expect.objectContaining({
+          flowPath: 'artifact_direct',
+          reusedPreRankArtifact: true,
+          usedIntentMatchRerank: false,
+        }),
+        selection: expect.objectContaining({
+          mode: 'prewarm_artifact',
+          strategy: 'artifact_direct',
+          flowPath: 'artifact_direct',
+          reusedPreRankArtifact: true,
+          usedIntentMatchRerank: false,
+        }),
+        usage: {
+          openai: null,
+        },
+      }),
+    )
+  })
+
   it('caps finalize note length before calling OpenAI', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
     selectAiResults.mockResolvedValue({
@@ -1045,9 +1253,332 @@ describe('server handlers', () => {
       finalResultLimit: 6,
       apiKey: 'openai-key',
       model: expect.any(String),
+      preRankArtifact: null,
     })
     expect(selectAiResults.mock.calls[0][0].candidatePool.candidates).toHaveLength(20)
     expect(selectAiResults.mock.calls[0][0].candidatePool.details.endsWith('n'.repeat(500))).toBe(true)
+  })
+
+  it('passes the stored prerank artifact into refined finalize reranking and returns reuse metadata', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    selectAiResults.mockResolvedValue({
+      model: 'gpt-5-mini',
+      usage: {
+        inputTokens: 180,
+        outputTokens: 30,
+        totalTokens: 210,
+        reasoningTokens: 6,
+      },
+      selectedCandidateIds: ['one'],
+      results: [{ id: 'one', title: 'Candidate one', reasons: ['AI fit: Best for city travel'], drawbacks: [] }],
+      strategy: 'artifact_intent_rerank',
+      debug: {
+        artifactCandidateCount: 1,
+        intentMatchRerankUsed: true,
+        preRankArtifactReused: true,
+        preRankReuseReason: 'artifact_intent_rerank',
+      },
+    })
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')], {
+        mode: 'discovery_preview',
+        preRankArtifact: {
+          version: 1,
+          generatedAt: '2026-03-31T12:00:00.000Z',
+          model: 'gpt-5-mini',
+          rankedCandidates: [
+            {
+              candidateId: 'one',
+              rank: 1,
+              baselineFit: 'Strong overall baseline fit.',
+              baselineCaution: 'A bit pricier than budget picks.',
+            },
+          ],
+        },
+        prewarm: {
+          usage: {
+            inputTokens: 320,
+            outputTokens: 70,
+            totalTokens: 390,
+            reasoningTokens: 18,
+          },
+        },
+      }),
+    )
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          followUpNotes: 'best for city travel',
+          requestMode: 'guided_refined',
+        }),
+        { 'x-forwarded-for': '203.0.113.36' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(selectAiResults).toHaveBeenCalledWith({
+      candidatePool: expect.objectContaining({
+        details: 'Notes: best for city travel',
+      }),
+      finalResultLimit: 6,
+      apiKey: 'openai-key',
+      model: expect.any(String),
+      preRankArtifact: expect.objectContaining({
+        generatedAt: '2026-03-31T12:00:00.000Z',
+      }),
+    })
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        requestMode: 'guided_refined',
+        debug: expect.objectContaining({
+          flowPath: 'artifact_intent_rerank',
+          fallbackReason: null,
+          reusedPreRankArtifact: true,
+          usedIntentMatchRerank: true,
+          tokenUsageByStage: expect.objectContaining({
+            finalize: {
+              inputTokens: 180,
+              outputTokens: 30,
+              totalTokens: 210,
+              reasoningTokens: 6,
+            },
+            prewarmArtifact: {
+              inputTokens: 320,
+              outputTokens: 70,
+              totalTokens: 390,
+              reasoningTokens: 18,
+            },
+          }),
+        }),
+        selection: expect.objectContaining({
+          strategy: 'artifact_intent_rerank',
+          flowPath: 'artifact_intent_rerank',
+          fallbackReason: null,
+          reusedPreRankArtifact: true,
+          usedIntentMatchRerank: true,
+        }),
+      }),
+    )
+  })
+
+  it('prefers OPENAI_FINALIZE_MODEL over the shared model for guided finalize', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      if (name === 'OPENAI_FINALIZE_MODEL') {
+        return 'gpt-5.4-nano'
+      }
+
+      if (name === 'OPENAI_MODEL') {
+        return 'gpt-5-mini'
+      }
+
+      return ''
+    })
+    selectAiResults.mockResolvedValue({
+      model: 'gpt-5.4-nano',
+      selectedCandidateIds: ['one'],
+      results: [{ id: 'one', title: 'Candidate one', reasons: [], drawbacks: [] }],
+    })
+
+    const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          followUpNotes: 'keep it lightweight',
+        }),
+        { 'x-forwarded-for': '203.0.113.30' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(selectAiResults).toHaveBeenCalledTimes(1)
+    expect(selectAiResults.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        apiKey: 'openai-key',
+        model: 'gpt-5.4-nano',
+        preRankArtifact: null,
+      }),
+    )
+  })
+
+  it('defaults context-added finalize requests to the nano model lane', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      if (name === 'OPENAI_FINALIZE_MODEL') {
+        return 'gpt-5-mini'
+      }
+
+      return ''
+    })
+    selectAiResults.mockResolvedValue({
+      model: 'gpt-5.4-nano',
+      selectedCandidateIds: ['one'],
+      results: [{ id: 'one', title: 'Candidate one', reasons: [], drawbacks: [] }],
+    })
+
+    const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          followUpNotes: 'keep it lightweight and compact',
+        }),
+        { 'x-forwarded-for': '203.0.113.31' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(selectAiResults).toHaveBeenCalledTimes(1)
+    expect(selectAiResults.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        apiKey: 'openai-key',
+        model: 'gpt-5.4-nano',
+        preRankArtifact: null,
+      }),
+    )
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        debug: expect.objectContaining({
+          finalizeModel: 'gpt-5.4-nano',
+          finalizeModelPath: 'context_added',
+        }),
+        selection: expect.objectContaining({
+          model: 'gpt-5.4-nano',
+          modelPath: 'context_added',
+        }),
+      }),
+    )
+  })
+
+  it('lets OPENAI_FINALIZE_CONTEXT_MODEL override the default context finalize lane', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      if (name === 'OPENAI_FINALIZE_MODEL') {
+        return 'gpt-5-mini'
+      }
+
+      if (name === 'OPENAI_FINALIZE_CONTEXT_MODEL') {
+        return 'gpt-5.2'
+      }
+
+      return ''
+    })
+    selectAiResults.mockResolvedValue({
+      model: 'gpt-5.2',
+      selectedCandidateIds: ['one'],
+      results: [{ id: 'one', title: 'Candidate one', reasons: [], drawbacks: [] }],
+    })
+
+    const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          priorities: ['lightweight'],
+        }),
+        { 'x-forwarded-for': '203.0.113.32' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(selectAiResults).toHaveBeenCalledTimes(1)
+    expect(selectAiResults.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        apiKey: 'openai-key',
+        model: 'gpt-5.2',
+        preRankArtifact: null,
+      }),
+    )
+  })
+
+  it('keeps empty-note finalize requests on the baseline finalize model lane', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      if (name === 'OPENAI_FINALIZE_MODEL') {
+        return 'gpt-5-mini'
+      }
+
+      return ''
+    })
+    selectAiResults.mockResolvedValue({
+      model: 'gpt-5-mini',
+      selectedCandidateIds: ['one'],
+      results: [{ id: 'one', title: 'Candidate one', reasons: [], drawbacks: [] }],
+      debug: {
+        artifactCandidateCount: 0,
+        intentMatchRerankUsed: false,
+        preRankArtifactReused: false,
+        preRankReuseReason: 'artifact_missing_or_invalid',
+      },
+    })
+
+    const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify(createFinalizeDiscoveryBody()),
+        { 'x-forwarded-for': '203.0.113.33' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(selectAiResults).toHaveBeenCalledTimes(1)
+    expect(selectAiResults.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        apiKey: 'openai-key',
+        model: 'gpt-5-mini',
+        preRankArtifact: null,
+      }),
+    )
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        debug: expect.objectContaining({
+          finalizeModel: 'gpt-5-mini',
+          finalizeModelPath: 'baseline',
+        }),
+        selection: expect.objectContaining({
+          model: 'gpt-5-mini',
+          modelPath: 'baseline',
+        }),
+      }),
+    )
   })
 
   it('passes retry feedback into finalize selection details and returns the retry count', async () => {
@@ -1095,6 +1626,7 @@ describe('server handlers', () => {
         finalResultLimit: 6,
         apiKey: 'openai-key',
         model: expect.any(String),
+        preRankArtifact: null,
       }),
     )
     expect(JSON.parse(response.body)).toEqual(
@@ -1116,6 +1648,47 @@ describe('server handlers', () => {
             reasoningTokens: 38,
           },
         },
+      }),
+    )
+  })
+
+  it('echoes finalize request mode so prewarm traffic can be measured separately', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    selectAiResults.mockResolvedValue({
+      model: 'gpt-5-mini',
+      usage: {
+        inputTokens: 200,
+        outputTokens: 40,
+        totalTokens: 240,
+        reasoningTokens: 12,
+      },
+      selectedCandidateIds: ['one'],
+      results: [{ id: 'one', title: 'Candidate one', reasons: [], drawbacks: [] }],
+    })
+
+    const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          requestMode: 'guided_empty_notes',
+        }),
+        { 'x-forwarded-for': '203.0.113.29' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        requestMode: 'guided_empty_notes',
+        selection: expect.objectContaining({
+          requestMode: 'guided_empty_notes',
+        }),
       }),
     )
   })
@@ -1152,11 +1725,13 @@ describe('server handlers', () => {
         similarQueries: ['compact stroller'],
         candidates: [],
       },
+      requestMode: 'guided_finalize',
       retryCount: 1,
       results: [],
       selection: {
         mode: 'retry_exhausted',
         model: null,
+        requestMode: 'guided_finalize',
         selectedCandidateIds: [],
         details: 'No new candidates remained after excluding the previously rejected picks.',
       },

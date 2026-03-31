@@ -28,6 +28,11 @@
   - the page should scroll cleanly to the refinement area once, without bouncing past it
 - When preview or final results are revealed from the guided flow, the page should scroll down to that results region without needing a manual swipe.
 - When the user presses `Show focused picks`, the page should immediately scroll to the results region and swap into loading skeletons while final AI selection is in progress.
+- Guided discovery now also starts a background prerank prewarm through `/api/search/prewarm`.
+- That prewarm creates a reusable preranked artifact from the guided discovery candidate pool and stores it back into the guided discovery cache entry.
+- Empty-note focused picks now prefer a direct artifact-reuse path instead of rerunning the old full one-shot finalize when the artifact is ready.
+- Refined-note and retry finalization now prefer a lighter second-stage intent-match rerank over the stored artifact before falling back to the older one-shot finalize.
+- The preview-only `Show products now` action still just reveals the current preview set; it does not consume the finalize path.
 - If preview results are already visible when final AI selection starts, the page should keep those visible with a calmer narrowing-state message instead of dropping back to a blank loading view.
 - Once a search has started, the homepage now includes a `Start a new search` action that resets the guided state back to a clean blank search.
 - After final results appear, the homepage now offers a feedback-based retry path through `Didn't find anything you like? Tell us why.`
@@ -37,6 +42,7 @@
 - After a retry succeeds, the earlier shortlist moves into a collapsed `Previous picks` section so the newest shortlist stays primary.
 - The homepage now uses a guided search flow:
   - discovery starts through `/api/search/discover`
+  - background prerank prewarm starts through `/api/search/prewarm`
   - the follow-up prompt comes from `/api/search/refine`
   - final focused picks come from `/api/search/finalize`
   - `/api/search/discover` now returns the preview set plus a `discoveryToken` tied to the cached guided candidate pool
@@ -51,6 +57,16 @@
   - `/api/health/supabase` should treat local file fallback as a supported development/storage mode when Supabase is not configured
 - Guided search requests now expose backend stage timing through `Server-Timing` headers, and the homepage shows the timing panel in development or when `?timing=1` is present for discover, refine, and finalize.
 - Guided `/api/search/refine`, `/api/search/finalize`, and `/api/search/live` now also surface OpenAI token usage metadata in their JSON responses when those AI calls run, so refine/finalize cost can be measured directly instead of estimated from prompt size alone.
+- Model selection can now be split by step with optional env overrides:
+  - `OPENAI_REFINEMENT_MODEL` for guided refine
+  - `OPENAI_FINALIZE_MODEL` for live/guided final selection
+  - `OPENAI_MODEL` remains the shared fallback if the per-step overrides are not set
+- Guided finalize now also splits model routing by request shape:
+  - empty-note finalize stays on the baseline finalize model lane unless `OPENAI_FINALIZE_EMPTY_MODEL` is set
+  - context-added finalize defaults to a faster `gpt-5.4-nano` lane unless `OPENAI_FINALIZE_CONTEXT_MODEL` is set
+  - guided finalize debug/response metadata now reports whether the baseline or context-added lane was used
+- Guided finalize now also echoes a `requestMode` value in logs/responses so experimental prewarm traffic can be measured separately from normal finalize requests.
+- Guided prewarm/finalize responses now also include structured debug metadata for artifact shape/size, reuse path, fallback reason, stage latency, and token usage by stage.
 - Guided refine now asks AI for only one short question.
 - Guided refine helper text and the textarea placeholder are now fixed server-side copy instead of extra AI-generated fields.
 - Guided refine now uses minimal reasoning effort so the follow-up step stays closer to a lightweight helper.
@@ -86,6 +102,7 @@
   - `Show products now` clicked
   - AI follow-up submitted
   - final results shown
+  - prerank prewarm lifecycle events such as started, ready, waited-on, consumed, unused, aborted, and failed
   - result impressions
   - result card opens
   - retailer click-throughs

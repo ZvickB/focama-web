@@ -6,6 +6,7 @@
 - In a new chat, you can say: "Please read `project-notes/session-handoff.md` first."
 
 ## Read order
+- `project-notes/active-experiment-override.md` when the task touches the current prewarm/finalize experiment
 - `project-notes/current-status.md`
 - `project-notes/app_flow.md`
 - `project-notes/handoff.md`
@@ -49,6 +50,7 @@
 - This was updated in both frontend and backend logic
 - The homepage now uses the guided flow:
   - `/api/search/discover` for the candidate pool and preview set
+  - `/api/search/prewarm` for the reusable preranked artifact
   - `/api/search/refine` for the AI follow-up prompt
   - `/api/search/finalize` for the final shortlist
 - This guided flow is the primary backend architecture for the homepage
@@ -72,7 +74,31 @@
 - Guided `/api/search/finalize` body limit is back to 32 KB now that the finalize payload is lightweight again
 - Guided discover/refine/finalize now expose backend stage timing through `Server-Timing` headers, and the homepage shows the timing panel in development or when `?timing=1` is present for quick latency checks
 - Guided refine/finalize and `/api/search/live` now also include OpenAI token usage metadata in their JSON responses when AI runs, making refine/finalize cost measurable from actual response data
+- Backend model selection can now be split per step:
+  - `OPENAI_REFINEMENT_MODEL` optionally overrides refine only
+  - `OPENAI_FINALIZE_MODEL` optionally overrides live/guided final selection only
+  - `OPENAI_MODEL` remains the shared fallback
+- Guided finalize model routing is now also split by request shape:
+  - empty-note finalize stays on the baseline finalize lane unless `OPENAI_FINALIZE_EMPTY_MODEL` is set
+  - context-added finalize now defaults to a faster `gpt-5.4-nano` lane unless `OPENAI_FINALIZE_CONTEXT_MODEL` is set
+  - guided finalize debug/response metadata now reports which lane was used
 - Guided discovery now responds before the discovery cache write finishes, so first-time searches are no longer blocked by Supabase cache persistence time
+- The broader prerank-artifact architecture is now the active finalize-latency experiment:
+  - guided discovery starts one background `/api/search/prewarm` request
+  - that prewarm stores a reusable preranked artifact back into the guided discovery cache entry
+  - empty-note focused picks prefer direct artifact reuse
+  - refined-note and retry finalize requests prefer a lighter intent-match rerank over the stored artifact
+  - if artifact reuse misses, finalize falls back to the older one-shot selector and logs/returns the miss reason
+- Important correction for future chats:
+  - read `project-notes/active-experiment-override.md` before changing this experiment further
+  - the primary success target is the context-added finalize path, not the empty-notes path
+- live measurement showed the current refined/retry implementation did not materially improve the main context-latency path enough to count as success
+- treat the current prerank-prewarm branch as useful groundwork plus a partial experiment result, not as the final validated solution
+- A narrower model-routing follow-up is now in place on top of that groundwork:
+  - context-added guided finalize defaults to the faster nano lane
+  - empty-note finalize keeps the baseline lane
+  - this stays inside the existing guided flow and does not add another request
+- Guided prewarm/finalize logs and responses now include `requestMode`, `flowPath`, reuse/fallback metadata, artifact size/count, stage latency, and token usage by stage so the experiment is easy to inspect locally and on Vercel
 - Guided finalize now trims prompt weight by dropping variant tokens and reducing trust metadata to a score-only signal, while keeping reasons and attributes in the AI selection context
 - Promo-only shopping snippets such as `20% OFF` / `LOW PRICE` are now ignored as normalized descriptions, and finalize AI summaries now omit empty/generic filler descriptions plus redundant source/price/delivery boilerplate to cut prompt waste
 - Guided finalize prompt slimming now also removes top-level search-state/similar-query prompt text, drops backend-only match-signal and duplicate numeric-price fields from each AI candidate summary, flattens trust metadata to a single `trustScore`, and minifies the candidate JSON block before sending it to OpenAI
@@ -103,6 +129,10 @@
   - finalize average total tokens: about 2479
   - full guided-search average total tokens: about 2651
   - compared with the prior cached baseline, finalize improved by about 2.5 seconds on average and crossed the under-8-second finalize milestone the user cared about
+- A separate context-added finalize measurement on 2026-03-31 showed the fast-lane model path was materially quicker on the same guided flow:
+  - baseline context-added finalize average latency: about 12.1 s
+  - nano context-added finalize average latency: about 4.6 s
+  - nano kept total tokens roughly flat while cutting OpenAI time by about 7.4 seconds on average
 - A separate fresh-discovery rerun was also captured after the conservative family-collapse pass:
   - treat it as directional only, not as the clean comparison point for the badge win
   - the badge-scope reduction is the strongest confirmed latency improvement from this pass; the family-collapse effect is still not isolated yet
@@ -158,6 +188,7 @@
   - caching as the major early cost-reduction lever
 
 ## If continuing from here
+- First read `project-notes/active-experiment-override.md` if the task touches the current prewarm/finalize experiment
 - First read `project-notes/finalize-strategy.md` before making more finalize changes
 - Treat the archived reset notes as historical context only, not as current implementation marching orders
 - Treat `wordmark.PNG` as the preferred current wordmark asset unless the user explicitly wants another attempt

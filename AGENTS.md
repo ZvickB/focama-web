@@ -9,6 +9,7 @@ Read this file first at the start of every chat.
 
 ## First reads
 - Read `project-notes/session-handoff.md` first for the fastest current reset.
+- Read `project-notes/active-experiment-override.md` immediately after `session-handoff.md` when the task touches the current prewarm/finalize experiment.
 - Read `project-notes/current-status.md` next for the immediate snapshot and active constraints.
 - Read `project-notes/app_flow.md` for current implemented behavior.
 - Read `project-notes/handoff.md` for medium-term work and open product questions.
@@ -18,6 +19,7 @@ Read this file first at the start of every chat.
 - Read `project-notes/cleanup-backlog.md` only when the task is specifically cleanup or when the user asks to work a section from it.
 
 ## Source of truth
+- `project-notes/active-experiment-override.md`: highest-priority note for the current prewarm/finalize experiment when it conflicts with older finalize guidance.
 - `project-notes/app_flow.md`: what the app does now.
 - `project-notes/current-status.md`: short snapshot for the next chat.
 - `project-notes/handoff.md`: durable remaining work and open questions.
@@ -29,6 +31,9 @@ Read this file first at the start of every chat.
 - Treat implemented behavior and planned work as different things.
 - Do not present a future idea as already decided unless the user explicitly chose it.
 - If current implementation and future direction differ, write both clearly.
+- Project notes and constraints are guardrails for the assistant, not limits on the user.
+- If the user explicitly wants a direction that conflicts with existing notes or prior guidance, give a clear warning about the tradeoff or risk once, then follow the user's decision.
+- When the user overrides a prior note or planned direction, update the relevant notes so future chats do not keep treating the older direction as the active one.
 - Keep changes scoped. Finish one feature, fix, or cleanup section cleanly before starting another.
 - After any meaningful revision, clean up superseded code, copy, notes, and assets in the same pass when it is safe to do so.
 - If an old strategy, UI, asset, or note may still be useful for reference, move it to a clearly named archive location instead of leaving it mixed into the active product path.

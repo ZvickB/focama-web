@@ -10,6 +10,7 @@
 - The default homepage at `/` now uses the `open` layout: spacious, search-first, single-column, and more mobile-friendly than the older split-screen layout.
 - Older homepage experiments were removed after the open layout became the clear direction.
 - The reset baseline is now back on `main`; the staged/persisted finalize experiment was archived separately and should not be treated as the active product path.
+- For the current prewarm/finalize experiment, `project-notes/active-experiment-override.md` is now the highest-priority source of truth when it conflicts with older finalize notes.
 - Read `project-notes/finalize-strategy.md` before making more finalize or latency-architecture changes.
 - The open layout now:
   - uses the PNG wordmark in the hero
@@ -35,6 +36,7 @@
 ## Search and backend state
 - The homepage now uses a guided search flow:
   - `/api/search/discover` gathers and filters the candidate pool
+  - `/api/search/prewarm` builds and stores a reusable preranked artifact from that guided discovery pool
   - `/api/search/refine` generates the lightweight AI follow-up prompt
   - `/api/search/finalize` selects the final shortlist from the cleaned candidate pool
 - This guided flow is the primary backend path for the product.
@@ -52,7 +54,7 @@
   - includes tradeoffs/drawbacks in result data
 - Guided discovery cache is now the only persistent search cache scope used by the product/backend flow.
 - Guided `/api/search/discover` now returns a `discoveryToken`, and guided `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache instead of relying on a browser-posted pool.
-- Guided `/api/search/finalize` still does not reuse cached final result sets; it rebuilds the candidate context from guided discovery cache and reruns AI selection per request.
+- Guided `/api/search/finalize` still does not reuse cached final result sets, but it can now reuse a stored prerank artifact from guided discovery cache before falling back to the older one-shot selector.
 - Cache keys now normalize query casing, whitespace, and obvious plural product terms more conservatively so closely matched searches such as singular/plural product names can reuse discovery cache more often without changing freeform detail wording.
 - Search cache and operational search-history logging can use Supabase when configured.
 - Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`.
@@ -86,6 +88,12 @@
 - Guided search responses now include backend timing via `Server-Timing` headers, and the homepage shows the timing panel in development or when `?timing=1` is present so discover/refine/finalize latency can be inspected by leg.
 - Guided refine/finalize and live-search responses now surface OpenAI token usage metadata in JSON so current refine/finalize cost can be measured from real traffic instead of guessed from prompt length.
 - Guided `/api/search/discover` now returns the preview response before the discovery-cache write finishes, so first-hit latency is no longer blocked by Supabase cache persistence.
+- Guided finalize model routing is now split by request shape:
+  - empty-note finalize stays on the baseline finalize model lane
+  - context-added finalize defaults to a faster `gpt-5.4-nano` lane
+  - `OPENAI_FINALIZE_CONTEXT_MODEL` can override the context-added lane
+  - `OPENAI_FINALIZE_EMPTY_MODEL` can override the empty-note lane
+  - guided finalize responses/logs now echo which finalize model lane was used
 - Guided finalize now sends a slightly slimmer AI candidate summary by dropping variant tokens and collapsing trust metadata to a compact score-only signal, while keeping reasons and attributes in the selection prompt.
 - Candidate/result normalization now ignores promo-only description text, and the finalize AI handoff drops empty/generic filler descriptions plus redundant source/price/delivery boilerplate so the prompt stays tighter without changing the shortlist flow.
 - Guided finalize prompt slimming now also removes top-level search-state/similar-query prompt text, drops backend-only match-signal and duplicate numeric-price fields from each candidate summary, flattens trust metadata to a single `trustScore`, and minifies the candidate JSON payload before sending it to OpenAI.
@@ -112,6 +120,19 @@
   - finalized result badges are now assigned on the frontend with deterministic heuristics after final results load
   - the badge reveal is intentionally delayed slightly so the shortlist appears first and the labels settle in just after
   - this badge polish does not widen the backend finalize contract or add another request
+- The broader prerank-artifact flow is now the active finalize-latency experiment:
+  - guided discovery starts a background `/api/search/prewarm` request after the candidate pool lands
+  - prewarm stores a reusable preranked artifact inside the guided discovery cache entry
+  - empty-note focused picks prefer direct artifact reuse
+  - refined-note and retry finalize requests prefer a lighter intent-match rerank over the stored artifact
+  - if the artifact is missing, invalid, or unusable, guided finalize falls back to the existing one-shot selector and returns explicit debug metadata about the miss
+- Live reruns on 2026-03-31 clarified the current experiment result:
+  - empty-notes finalize after the artifact is ready can return in about 0.5 s
+  - refined finalize with added context still took about 8.8 s to 12.0 s after submit
+  - retry with feedback took about 17.0 s after submit
+  - refined/retry requests did reuse the prerank artifact, but they still relied on a fresh heavy OpenAI rerank call
+  - this means the current branch improved the bonus empty-notes path, but did not materially solve the main context-added finalize latency goal
+  - treat the current branch as useful groundwork plus a partial experiment result, not as the final validated answer
 - The filtered candidate pool now carries provider-agnostic duplicate-family metadata, compact attribute tags, and trust signals before final AI selection so the backend is less tied to raw SerpApi wording.
 - That candidate pool can now also collapse clearly redundant same-family same-variant listings before the AI handoff, while keeping more meaningful family variation available.
 - Re-measured guided finalize on 2026-03-30 after removing AI badge-label assignment from the blocking finalize task:
@@ -166,6 +187,11 @@
 - `SERPAPI_API_KEY` should live in the root `.env`.
 - `OPENAI_API_KEY` should live in the root `.env`.
 - `OPENAI_MODEL` can optionally override the default model.
+- `OPENAI_REFINEMENT_MODEL` can optionally override only the guided refine model.
+- `OPENAI_FINALIZE_MODEL` can optionally override only the live/guided finalize-selection model.
+- `OPENAI_FINALIZE_CONTEXT_MODEL` can optionally override only context-added guided finalize requests.
+- `OPENAI_FINALIZE_EMPTY_MODEL` can optionally override only empty-note guided finalize requests.
+- `npm run analytics:prewarm-summary -- --hours=24` prints a recent Supabase-backed summary of prewarm usage, waste, and timing.
 - Supabase can be enabled with `SUPABASE_URL=...` and `SUPABASE_SECRET_KEY=...`.
 - The backend also accepts the legacy `SUPABASE_SERVICE_ROLE_KEY=...` if needed.
 - `SEARCH_CACHE_TTL_MINUTES` controls cache TTL and currently defaults to `1440` if omitted.
@@ -174,9 +200,10 @@
 - This project is being worked in PowerShell on Windows.
 
 ## Recommended next task
-- Use `project-notes/finalize-strategy.md` as the active strategy note before more finalize implementation work.
-- Keep the current guided flow and current guardrails unless the user explicitly approves a change first.
-- Keep the slimmer one-shot finalize selector as the active implementation baseline.
+- Read `project-notes/active-experiment-override.md` first if the task touches the current prewarm/finalize experiment.
+- Keep the current branch as the implementation starting point because the prewarm route, artifact storage, logging, and tests are useful groundwork.
+- Do not treat the current refined/retry artifact-intent-rerank behavior as the validated answer for the main latency goal.
+- Use `project-notes/finalize-strategy.md` as background context, but follow the override note where the user-approved experiment direction conflicts with older narrower guardrails.
 - Step 1 is now done:
   - lighter blocking finalize contract
   - one concise fit reason preserved

@@ -74,6 +74,27 @@
   - guided discovery filtering now collapses a narrow slice of clearly redundant same-family same-variant listings before the AI pool is built
   - the collapse is intentionally conservative: matching duplicate-family key and matching variant signature, plus same merchant or near-same price
   - broader or meaningful family differences should still remain available to the AI shortlist step
+- The broader prerank-artifact architecture is now implemented on top of the current guided flow:
+  - the homepage starts one background `/api/search/prewarm` request after guided discovery completes
+  - that prewarm generates a reusable preranked artifact from the full candidate pool and stores it back into the guided discovery cache entry
+  - empty-note focused picks prefer direct artifact reuse
+  - refined-note and retry finalize requests prefer a lighter intent-match rerank over the stored artifact
+  - guided finalize falls back to the older one-shot selector when reuse is missing or unusable, and now returns/logs explicit reuse/fallback metadata
+- The user later clarified that the primary success criterion for this experiment is the context-added finalize path, not the empty-notes path.
+- Live reruns on 2026-03-31 showed:
+  - empty-notes finalize after prewarm: about 0.5 s
+  - refined finalize with follow-up context: about 8.8 s to 12.0 s after submit
+  - retry with feedback: about 17.0 s after submit
+  - refined and retry requests did reuse the artifact, but they still paid for a fresh heavy OpenAI rerank call
+- Treat the current prerank-prewarm branch as useful groundwork plus a partial experiment result:
+  - it proved artifact reuse, observability, and the empty-notes shortcut
+  - it did not materially solve the main context-latency route the user cared about most
+- `project-notes/active-experiment-override.md` is now the highest-priority note for this experiment when it conflicts with older finalize guidance.
+- A scoped follow-up model-routing change is now implemented:
+  - context-added guided finalize defaults to a faster `gpt-5.4-nano` lane
+  - empty-note finalize stays on the baseline finalize lane
+  - `OPENAI_FINALIZE_CONTEXT_MODEL` and `OPENAI_FINALIZE_EMPTY_MODEL` can override those lanes explicitly
+  - guided finalize debug/response metadata now reports which model lane was used
 - Cached same-query finalize was re-measured on 2026-03-30 after removing AI badge-label assignment from the blocking finalize step:
   - finalize average latency: about 7.5 s
   - finalize average OpenAI time: about 7.0 s
@@ -87,12 +108,14 @@
   - the strongest confirmed win from this session is the badge-scope reduction; the exact latency impact of the conservative family-collapse pass is still not isolated yet
 
 ## Next likely work
-- Follow `project-notes/finalize-strategy.md`.
-- Keep the current guided flow and reassess AI scope before more finalize implementation work.
-- Keep the slimmer one-shot finalize selector as the implementation baseline.
-- Step 2 is now done; any next pass should stay equally narrow unless the user explicitly approves a broader change.
+- Follow `project-notes/active-experiment-override.md` first for the current prewarm/finalize experiment.
+- Start the next attempt from the current branch, not a full rollback, because the prewarm route, artifact storage, logging, and tests are useful groundwork.
+- Do not treat the current refined/retry artifact-intent-rerank behavior as the validated answer for the main latency goal.
+- The next attempt should optimize the context-added finalize path first; empty-notes wins are secondary.
+- Re-measure the new context-model routing on the same sample queries and compare both latency and shortlist quality before widening the rollout further.
+- `npm run analytics:prewarm-summary -- --hours=24` is still available for a quick Supabase-backed summary of prewarm usage, waste, and timing.
 - Re-measure the same sample queries after each step.
-- Do not reintroduce persisted finalize orchestration or polling unless the user explicitly approves that tradeoff.
+- Broader orchestration changes for this experiment are user-approved when they are needed to test the real intended idea, but they should still be deliberate and clearly documented.
 - Add smarter structured logging during the rebuild so route mode, latency, token use, candidate counts, and ranking ownership stay visible as the flow changes.
 - Use `npm run dev:all` at meaningful integration checkpoints instead of waiting until many steps pile up.
 - Commit after each completed narrow step so rollback stays easy and architecture drift is easier to catch.
