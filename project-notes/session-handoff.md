@@ -52,7 +52,7 @@
 - This was updated in both frontend and backend logic
 - The homepage now uses the guided flow:
   - `/api/search/discover` for the candidate pool and preview set
-  - `/api/search/prewarm` for the reusable preranked artifact
+  - `/api/search/prewarm` for the reusable candidate-aware prior
   - `/api/search/refine` for the AI follow-up prompt
   - `/api/search/finalize` for the final shortlist
 - This guided flow is the primary backend architecture for the homepage
@@ -86,23 +86,23 @@
   - context-added finalize now defaults to a faster `gpt-5.4-nano` lane unless `OPENAI_FINALIZE_CONTEXT_MODEL` is set
   - guided finalize debug/response metadata now reports which lane was used
 - Guided discovery now responds before the discovery cache write finishes, so first-time searches are no longer blocked by Supabase cache persistence time
-- The broader prerank-artifact architecture is now the active finalize-latency experiment:
-  - guided discovery starts one background `/api/search/prewarm` request
-  - that prewarm stores a reusable preranked artifact back into the guided discovery cache entry
-  - empty-note focused picks prefer direct artifact reuse
-  - refined-note and retry finalize requests prefer a lighter intent-match rerank over the stored artifact
-  - if artifact reuse misses, finalize falls back to the older one-shot selector and logs/returns the miss reason
+- The broader candidate-aware prewarm architecture is now the active finalize-latency experiment:
+  - guided discovery starts one background `/api/search/prewarm` request after usable candidate data exists
+  - that prewarm stores a reusable candidate-aware prior back into the guided discovery cache entry
+  - prewarm no longer creates a directly materializable final answer
+  - empty-note, refined-note, and retry finalize requests can use the stored prior for a lighter intent-match rerank
+  - if prior reuse misses, finalize falls back to the older one-shot selector and logs/returns the miss reason
 - Important correction for future chats:
   - read `project-notes/active-experiment-override.md` before changing this experiment further
   - read `project-notes/layered-latency-plan.md` before starting new latency-architecture implementation work
   - the primary success target is the context-added finalize path, not the empty-notes path
 - live measurement showed the current refined/retry implementation did not materially improve the main context-latency path enough to count as success
-- treat the current prerank-prewarm branch as useful groundwork plus a partial experiment result, not as the final validated solution
+- treat the older direct-artifact prerank-prewarm result as useful groundwork plus a partial experiment result, not as the final validated solution
 - A narrower model-routing follow-up is now in place on top of that groundwork:
   - context-added guided finalize defaults to the faster nano lane
   - empty-note finalize keeps the baseline lane
   - this stays inside the existing guided flow and does not add another request
-- Guided prewarm/finalize logs and responses now include `requestMode`, `flowPath`, reuse/fallback metadata, artifact size/count, stage latency, and token usage by stage so the experiment is easy to inspect locally and on Vercel
+- Guided prewarm/finalize logs and responses now include `requestMode`, `flowPath`, reuse/fallback metadata, prior size/count, stage latency, and token usage by stage so the experiment is easy to inspect locally and on Vercel
 - Guided finalize now trims prompt weight by dropping variant tokens and reducing trust metadata to a score-only signal, while keeping reasons and attributes in the AI selection context
 - Promo-only shopping snippets such as `20% OFF` / `LOW PRICE` are now ignored as normalized descriptions, and finalize AI summaries now omit empty/generic filler descriptions plus redundant source/price/delivery boilerplate to cut prompt waste
 - Guided finalize prompt slimming now also removes top-level search-state/similar-query prompt text, drops backend-only match-signal and duplicate numeric-price fields from each AI candidate summary, flattens trust metadata to a single `trustScore`, and minifies the candidate JSON block before sending it to OpenAI
@@ -226,8 +226,15 @@
   - `backend/lib/query-framing.js` owns query-only framing and now exposes separate `question_fast` and `framing_fields` OpenAI lanes
   - `backend/lib/refinement-assistant.js` now adapts only `question_fast` into the current `/api/search/refine` response
   - `/api/search/refine` no longer waits for richer AI field reasoning before returning the user-facing question
-  - the background `framing_fields` lane exists in code, but current runtime orchestration does not yet start/store/fetch it independently
-- The next pending layered-latency step is to update orchestration so discover, question-fast, and background framing-fields start without blocking each other, with clear telemetry for each lane
+  - `/api/search/framing-fields` now exposes the richer `framing_fields` lane as a separate background route
+  - current runtime orchestration starts discover, question-fast, and background framing-fields independently on search submit
+  - background framing-fields telemetry is visible, but those fields are not yet stored server-side or consumed by finalize
+- The candidate-aware prewarm re-scope step is now done:
+  - frontend prewarm starts only after discovery returns a usable candidate pool
+  - `/api/search/prewarm` stores a `candidate_aware_prewarm` prior instead of a directly materializable final answer
+  - guided discovery cache writes `candidateAwarePrior` and still supports the older `preRankArtifact` alias for compatibility
+  - guided finalize no longer has the direct prewarmed-card shortcut; shortlist certainty stays in finalize
+- The next pending layered-latency step is to refactor finalize into a clear `finalize-fast` contract that returns only shortlist-safe card data for the chosen 6
 - Treat the intended v1 split as `results first, polish later`:
   - finalize should return the shortlist as soon as core selection is ready
   - badge/explanation after-touch work should not quietly become required blocking work again

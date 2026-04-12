@@ -138,7 +138,7 @@ function buildFramingFieldsInput(productQuery) {
 }
 
 async function callStructuredQueryFraming(
-  { productQuery, apiKey, model = DEFAULT_REFINEMENT_MODEL, input, schemaName, schema },
+  { apiKey, model = DEFAULT_REFINEMENT_MODEL, input, schemaName, schema },
   fetchImpl = fetch,
 ) {
   if (!apiKey) {

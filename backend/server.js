@@ -4,12 +4,12 @@ import {
   DEFAULT_FINALIZE_MODEL,
   DEFAULT_REFINEMENT_MODEL,
   DEFAULT_CONTEXT_FINALIZE_MODEL,
-  createPreRankArtifact,
-  materializePreRankArtifactResults,
+  createCandidateAwarePrior,
   selectAiResults,
 } from './lib/ai-selector.js'
 import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, takeRateLimitToken } from './lib/rate-limit.js'
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
+import { generateFramingFields } from './lib/query-framing.js'
 import { DEFAULT_FILTER_CONFIG } from './lib/result-filter.js'
 import {
   fetchSearchArtifacts,
@@ -139,6 +139,30 @@ function buildDiscoveryPreviewSelection(results, extraSelection = {}) {
     details: 'Discovery preview results were cached for the guided search flow. Finalized picks stay request-specific.',
     ...extraSelection,
   }
+}
+
+function getStoredCandidateAwarePrior(selection) {
+  if (!selection || typeof selection !== 'object' || Array.isArray(selection)) {
+    return null
+  }
+
+  const candidateAwarePrior =
+    selection.candidateAwarePrior &&
+    typeof selection.candidateAwarePrior === 'object' &&
+    !Array.isArray(selection.candidateAwarePrior)
+      ? selection.candidateAwarePrior
+      : null
+
+  if (candidateAwarePrior) {
+    return candidateAwarePrior
+  }
+
+  // Compatibility for guided-discovery cache entries written before the prior rename.
+  return selection.preRankArtifact &&
+    typeof selection.preRankArtifact === 'object' &&
+    !Array.isArray(selection.preRankArtifact)
+    ? selection.preRankArtifact
+    : null
 }
 
 export function sendJson(response, statusCode, payload, headers = {}) {
@@ -458,20 +482,12 @@ async function readFinalizeCandidatePoolFromDiscovery(normalizedQuery) {
     }
   }
 
-  const cachedArtifact =
-    cachedEntry?.selection &&
-    typeof cachedEntry.selection === 'object' &&
-    !Array.isArray(cachedEntry.selection) &&
-    cachedEntry.selection.preRankArtifact &&
-    typeof cachedEntry.selection.preRankArtifact === 'object' &&
-    !Array.isArray(cachedEntry.selection.preRankArtifact)
-      ? cachedEntry.selection.preRankArtifact
-      : null
+  const cachedPrior = getStoredCandidateAwarePrior(cachedEntry?.selection)
 
   return {
     candidatePool: sanitizedCandidatePool.candidatePool,
     cachedEntry,
-    preRankArtifact: cachedArtifact,
+    candidateAwarePrior: cachedPrior,
     isValid: true,
   }
 }
@@ -694,15 +710,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
 
   if (cachedEntry?.candidatePool && cachedEntry?.results?.length) {
-    const cachedPreRankArtifact =
-      cachedEntry?.selection &&
-      typeof cachedEntry.selection === 'object' &&
-      !Array.isArray(cachedEntry.selection) &&
-      cachedEntry.selection.preRankArtifact &&
-      typeof cachedEntry.selection.preRankArtifact === 'object' &&
-      !Array.isArray(cachedEntry.selection.preRankArtifact)
-        ? cachedEntry.selection.preRankArtifact
-        : null
+    const cachedCandidateAwarePrior = getStoredCandidateAwarePrior(cachedEntry.selection)
 
     await recordSearchCacheEvent({
       cacheKey: discoveryCacheKey,
@@ -719,12 +727,14 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
 
     logSearchFlowEvent('guided_discovery_cache_hit', {
       route: '/api/search/discover',
+      lane: 'discover',
       query: normalizedQuery,
       candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
         ? cachedEntry.candidatePool.candidates.length
         : normalizedCachedResults.length,
       previewCount: normalizedCachedResults.length,
-      prewarmArtifactReady: Boolean(cachedPreRankArtifact),
+      candidateAwarePriorReady: Boolean(cachedCandidateAwarePrior),
+      prewarmArtifactReady: Boolean(cachedCandidateAwarePrior),
       cacheMs: roundTimingDuration(cacheLookupDuration),
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
@@ -734,8 +744,10 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
       candidatePool: cachedEntry.candidatePool,
       previewResults: normalizedCachedResults,
       prewarm: {
-        artifactReady: Boolean(cachedPreRankArtifact),
-        artifactGeneratedAt: cachedPreRankArtifact?.generatedAt || null,
+        priorReady: Boolean(cachedCandidateAwarePrior),
+        priorGeneratedAt: cachedCandidateAwarePrior?.generatedAt || null,
+        artifactReady: Boolean(cachedCandidateAwarePrior),
+        artifactGeneratedAt: cachedCandidateAwarePrior?.generatedAt || null,
       },
       source: 'cache',
       cachedAt: cachedEntry.cachedAt,
@@ -794,6 +806,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
 
     logSearchFlowEvent('guided_discovery_completed', {
       route: '/api/search/discover',
+      lane: 'discover',
       query: normalizedQuery,
       cacheStatus: 'miss',
       candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
@@ -823,6 +836,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   } catch (error) {
     logSearchFlowEvent('guided_discovery_failed', {
       route: '/api/search/discover',
+      lane: 'discover',
       query: normalizedQuery,
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -872,6 +886,7 @@ export async function handleRefinementPrompt(requestUrl, response) {
 
     logSearchFlowEvent('guided_refine_completed', {
       route: '/api/search/refine',
+      lane: 'question_fast',
       query: normalizedQuery,
       promptLength: refinementPrompt.prompt.length,
       helperTextLength: refinementPrompt.helperText.length,
@@ -903,6 +918,84 @@ export async function handleRefinementPrompt(requestUrl, response) {
     })
     sendJson(response, 500, {
       error: 'Unable to generate the refinement prompt.',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    })
+  }
+}
+
+export async function handleQueryFramingFields(requestUrl, response) {
+  const requestStartedAt = nowMs()
+  const openAiApiKey = getEnv('OPENAI_API_KEY')
+  const { error, isValid, normalizedQuery } = getValidatedSearchRequest(requestUrl, {
+    includeDetails: false,
+  })
+
+  if (!isValid) {
+    logSearchFlowEvent('query_framing_fields_invalid', {
+      route: '/api/search/framing-fields',
+      lane: 'framing_fields',
+      query: requestUrl.searchParams.get('query') || '',
+      error,
+    })
+    sendJson(response, 400, { error })
+    return
+  }
+
+  if (!openAiApiKey) {
+    logSearchFlowEvent('query_framing_fields_missing_openai_key', {
+      route: '/api/search/framing-fields',
+      lane: 'framing_fields',
+      query: normalizedQuery,
+    })
+    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
+    return
+  }
+
+  try {
+    const openAiStartedAt = nowMs()
+    const framingFields = await generateFramingFields({
+      productQuery: normalizedQuery,
+      apiKey: openAiApiKey,
+      model: getRefinementModel(),
+    })
+    const openAiDuration = nowMs() - openAiStartedAt
+    const totalDuration = nowMs() - requestStartedAt
+    const contract = framingFields.contract || null
+
+    logSearchFlowEvent('query_framing_fields_completed', {
+      route: '/api/search/framing-fields',
+      lane: 'framing_fields',
+      query: normalizedQuery,
+      categoryHint: contract?.categoryHint || '',
+      tradeoffAxisCount: Array.isArray(contract?.tradeoffAxes) ? contract.tradeoffAxes.length : 0,
+      refinementHintCount: Array.isArray(contract?.refinementHints) ? contract.refinementHints.length : 0,
+      openaiMs: roundTimingDuration(openAiDuration),
+      totalMs: roundTimingDuration(totalDuration),
+      openaiUsage: framingFields.usage || null,
+      queryFramingMode: 'framing_fields',
+      rankingOwner: 'query_framing_background',
+    })
+
+    sendJson(response, 200, {
+      queryFraming: contract,
+      usage: framingFields.usage || null,
+      queryFramingMode: 'framing_fields',
+    }, {
+      serverTiming: [
+        { name: 'openai', duration: openAiDuration },
+        { name: 'total', duration: totalDuration },
+      ],
+    })
+  } catch (error) {
+    logSearchFlowEvent('query_framing_fields_failed', {
+      route: '/api/search/framing-fields',
+      lane: 'framing_fields',
+      query: normalizedQuery,
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+    sendJson(response, 500, {
+      error: 'Unable to generate query framing fields.',
       details: error instanceof Error ? error.message : 'Unknown error',
     })
   }
@@ -968,9 +1061,9 @@ export async function handlePrewarmSelection(request, response) {
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
   let candidatePool = resolvedCandidatePool.isValid ? resolvedCandidatePool.candidatePool : null
   let cachedEntry = resolvedCandidatePool.isValid ? resolvedCandidatePool.cachedEntry : null
-  let preRankArtifact = resolvedCandidatePool.isValid ? resolvedCandidatePool.preRankArtifact : null
+  let candidateAwarePrior = resolvedCandidatePool.isValid ? resolvedCandidatePool.candidateAwarePrior : null
   let candidatePoolSource = resolvedCandidatePool.isValid ? 'discovery_cache' : 'request_candidate_pool'
-  const prewarmArtifactSummary =
+  const prewarmPriorSummary =
     cachedEntry?.selection &&
     typeof cachedEntry.selection === 'object' &&
     !Array.isArray(cachedEntry.selection) &&
@@ -986,7 +1079,7 @@ export async function handlePrewarmSelection(request, response) {
     if (requestCandidatePool.isValid) {
       candidatePool = requestCandidatePool.candidatePool
       cachedEntry = null
-      preRankArtifact = null
+      candidateAwarePrior = null
     } else {
       logSearchFlowEvent('guided_prewarm_missing_discovery_context', {
         route: '/api/search/prewarm',
@@ -1000,37 +1093,44 @@ export async function handlePrewarmSelection(request, response) {
     }
   }
 
-  if (preRankArtifact?.rankedCandidates?.length) {
-    const artifactSummary = {
-      artifactByteLength: safeJsonByteLength(preRankArtifact),
-      artifactCandidateCount: Array.isArray(preRankArtifact.rankedCandidates)
-        ? preRankArtifact.rankedCandidates.length
-        : 0,
-      artifactGeneratedAt: preRankArtifact.generatedAt || null,
+  if (candidateAwarePrior?.rankedCandidates?.length) {
+    const priorCandidateCount = Array.isArray(candidateAwarePrior.rankedCandidates)
+      ? candidateAwarePrior.rankedCandidates.length
+      : 0
+    const priorByteLength = safeJsonByteLength(candidateAwarePrior)
+    const priorSummary = {
+      priorByteLength,
+      priorCandidateCount,
+      priorGeneratedAt: candidateAwarePrior.generatedAt || null,
+      priorReady: true,
+      artifactByteLength: priorByteLength,
+      artifactCandidateCount: priorCandidateCount,
+      artifactGeneratedAt: candidateAwarePrior.generatedAt || null,
       artifactReady: true,
       candidatePoolSource,
-      model: preRankArtifact.model || null,
-      openaiMs: prewarmArtifactSummary?.openaiMs ?? null,
+      model: candidateAwarePrior.model || null,
+      openaiMs: prewarmPriorSummary?.openaiMs ?? null,
       requestMode: PREWARM_REQUEST_MODE_DEFAULT,
+      reusedStoredPrior: true,
       reusedStoredArtifact: true,
       storageWriteCompleted: true,
-      strategy: prewarmArtifactSummary?.strategy || 'prerank_single_pass',
-      totalMs: prewarmArtifactSummary?.totalMs ?? null,
-      usage: prewarmArtifactSummary?.usage || null,
+      strategy: prewarmPriorSummary?.strategy || 'candidate_aware_prior',
+      totalMs: prewarmPriorSummary?.totalMs ?? null,
+      usage: prewarmPriorSummary?.usage || null,
     }
 
     logSearchFlowEvent('guided_prewarm_reused', {
       route: '/api/search/prewarm',
       query: sanitizedDiscoveryContext.normalizedQuery,
       candidateCount: candidatePool.candidates.length,
-      ...artifactSummary,
+      ...priorSummary,
       cacheMs: roundTimingDuration(cacheLookupDuration),
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
 
     sendJson(response, 200, {
       requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-      prewarm: artifactSummary,
+      prewarm: priorSummary,
     }, {
       serverTiming: [
         { name: 'body', duration: body.bodyReadDuration || 0 },
@@ -1051,13 +1151,17 @@ export async function handlePrewarmSelection(request, response) {
 
   try {
     const openAiStartedAt = nowMs()
-    const preRanked = await createPreRankArtifact({
+    const prewarmed = await createCandidateAwarePrior({
       candidatePool,
       apiKey: openAiApiKey,
       model: getFinalizeModel(),
     })
     const openAiDuration = nowMs() - openAiStartedAt
-    const artifactByteLength = safeJsonByteLength(preRanked.artifact)
+    const prior = prewarmed.prior || prewarmed.artifact
+    const priorByteLength = safeJsonByteLength(prior)
+    const priorCandidateCount = Array.isArray(prior?.rankedCandidates)
+      ? prior.rankedCandidates.length
+      : 0
     const totalDuration = nowMs() - requestStartedAt
 
     let storageWriteCompleted = false
@@ -1074,18 +1178,20 @@ export async function handlePrewarmSelection(request, response) {
         selection: buildDiscoveryPreviewSelection(
           persistedPreviewResults,
           {
-            preRankArtifact: preRanked.artifact,
+            candidateAwarePrior: prior,
+            preRankArtifact: prior,
             prewarm: {
-              artifactByteLength,
-              artifactCandidateCount: Array.isArray(preRanked.artifact?.rankedCandidates)
-                ? preRanked.artifact.rankedCandidates.length
-                : 0,
-              artifactGeneratedAt: preRanked.artifact?.generatedAt || null,
-              model: preRanked.model,
+              priorByteLength,
+              priorCandidateCount,
+              priorGeneratedAt: prior?.generatedAt || null,
+              artifactByteLength: priorByteLength,
+              artifactCandidateCount: priorCandidateCount,
+              artifactGeneratedAt: prior?.generatedAt || null,
+              model: prewarmed.model,
               openaiMs: roundTimingDuration(openAiDuration),
-              strategy: preRanked.strategy || 'prerank_single_pass',
+              strategy: prewarmed.strategy || 'candidate_aware_prior',
               totalMs: roundTimingDuration(totalDuration),
-              usage: preRanked.usage || null,
+              usage: prewarmed.usage || null,
             },
           },
         ),
@@ -1100,15 +1206,15 @@ export async function handlePrewarmSelection(request, response) {
     logSearchFlowEvent('guided_prewarm_completed', {
       route: '/api/search/prewarm',
       query: sanitizedDiscoveryContext.normalizedQuery,
-      artifactByteLength,
-      artifactCandidateCount: Array.isArray(preRanked.artifact?.rankedCandidates)
-        ? preRanked.artifact.rankedCandidates.length
-        : 0,
+      priorByteLength,
+      priorCandidateCount,
+      artifactByteLength: priorByteLength,
+      artifactCandidateCount: priorCandidateCount,
       candidateCount: candidatePool.candidates.length,
       candidatePoolSource,
       cacheMs: roundTimingDuration(cacheLookupDuration),
       openaiMs: roundTimingDuration(openAiDuration),
-      openaiUsage: preRanked.usage || null,
+      openaiUsage: prewarmed.usage || null,
       requestMode: PREWARM_REQUEST_MODE_DEFAULT,
       storageWriteCompleted,
       totalMs: roundTimingDuration(totalDuration),
@@ -1117,24 +1223,27 @@ export async function handlePrewarmSelection(request, response) {
     sendJson(response, 200, {
       requestMode: PREWARM_REQUEST_MODE_DEFAULT,
       prewarm: {
-        artifactByteLength,
-        artifactCandidateCount: Array.isArray(preRanked.artifact?.rankedCandidates)
-          ? preRanked.artifact.rankedCandidates.length
-          : 0,
-        artifactGeneratedAt: preRanked.artifact?.generatedAt || null,
+        priorByteLength,
+        priorCandidateCount,
+        priorGeneratedAt: prior?.generatedAt || null,
+        priorReady: true,
+        artifactByteLength: priorByteLength,
+        artifactCandidateCount: priorCandidateCount,
+        artifactGeneratedAt: prior?.generatedAt || null,
         artifactReady: true,
         candidatePoolSource,
-        model: preRanked.model,
+        model: prewarmed.model,
         openaiMs: roundTimingDuration(openAiDuration),
         requestMode: PREWARM_REQUEST_MODE_DEFAULT,
+        reusedStoredPrior: false,
         reusedStoredArtifact: false,
         storageWriteCompleted,
-        strategy: preRanked.strategy || 'prerank_single_pass',
+        strategy: prewarmed.strategy || 'candidate_aware_prior',
         totalMs: roundTimingDuration(totalDuration),
-        usage: preRanked.usage || null,
+        usage: prewarmed.usage || null,
       },
       usage: {
-        openai: preRanked.usage || null,
+        openai: prewarmed.usage || null,
       },
     }, {
       serverTiming: [
@@ -1156,7 +1265,7 @@ export async function handlePrewarmSelection(request, response) {
       error: error instanceof Error ? error.message : 'Unknown error',
     })
     sendJson(response, 500, {
-      error: 'Unable to generate the preranked artifact.',
+      error: 'Unable to generate the candidate-aware prior.',
       details: error instanceof Error ? error.message : 'Unknown error',
     })
   }
@@ -1200,15 +1309,7 @@ export async function handleSearchDebug(requestUrl, response) {
     normalizedDetails === '' &&
     Boolean(discoveryCachedEntry?.candidatePool?.candidates) &&
     discoveryCachedResults.length > 0
-  const guidedDiscoveryPreRankArtifact =
-    discoveryCachedEntry?.selection &&
-    typeof discoveryCachedEntry.selection === 'object' &&
-    !Array.isArray(discoveryCachedEntry.selection) &&
-    discoveryCachedEntry.selection.preRankArtifact &&
-    typeof discoveryCachedEntry.selection.preRankArtifact === 'object' &&
-    !Array.isArray(discoveryCachedEntry.selection.preRankArtifact)
-      ? discoveryCachedEntry.selection.preRankArtifact
-      : null
+  const guidedDiscoveryCandidateAwarePrior = getStoredCandidateAwarePrior(discoveryCachedEntry?.selection)
 
   sendJson(response, 200, {
     query: normalizedQuery,
@@ -1225,10 +1326,15 @@ export async function handleSearchDebug(requestUrl, response) {
           : 0,
         previewResultCount: discoveryCachedResults.length,
         selectionMode: discoveryCachedEntry?.selection?.mode || null,
-        prewarmArtifactReady: Boolean(guidedDiscoveryPreRankArtifact),
-        prewarmArtifactGeneratedAt: guidedDiscoveryPreRankArtifact?.generatedAt || null,
-        prewarmArtifactCandidateCount: Array.isArray(guidedDiscoveryPreRankArtifact?.rankedCandidates)
-          ? guidedDiscoveryPreRankArtifact.rankedCandidates.length
+        candidateAwarePriorReady: Boolean(guidedDiscoveryCandidateAwarePrior),
+        candidateAwarePriorGeneratedAt: guidedDiscoveryCandidateAwarePrior?.generatedAt || null,
+        candidateAwarePriorCandidateCount: Array.isArray(guidedDiscoveryCandidateAwarePrior?.rankedCandidates)
+          ? guidedDiscoveryCandidateAwarePrior.rankedCandidates.length
+          : 0,
+        prewarmArtifactReady: Boolean(guidedDiscoveryCandidateAwarePrior),
+        prewarmArtifactGeneratedAt: guidedDiscoveryCandidateAwarePrior?.generatedAt || null,
+        prewarmArtifactCandidateCount: Array.isArray(guidedDiscoveryCandidateAwarePrior?.rankedCandidates)
+          ? guidedDiscoveryCandidateAwarePrior.rankedCandidates.length
           : 0,
       },
     },
@@ -1264,7 +1370,8 @@ export async function handleSearchDebug(requestUrl, response) {
         usesCache: true,
         callsSerpApi: false,
         callsOpenAi: true,
-        artifactReady: Boolean(guidedDiscoveryPreRankArtifact),
+        priorReady: Boolean(guidedDiscoveryCandidateAwarePrior),
+        artifactReady: Boolean(guidedDiscoveryCandidateAwarePrior),
       },
       liveSearch: {
         usesCache: false,
@@ -1342,7 +1449,7 @@ export async function handleFinalizeSelection(request, response) {
   }
 
   const candidatePool = resolvedCandidatePool.candidatePool
-  const preRankArtifact = resolvedCandidatePool.preRankArtifact
+  const candidateAwarePrior = resolvedCandidatePool.candidateAwarePrior
   const priorities = sanitizeStringList(body?.priorities, {
     maxItems: FINALIZE_MAX_PRIORITIES,
     maxItemLength: FINALIZE_MAX_PRIORITY_LENGTH,
@@ -1397,7 +1504,7 @@ export async function handleFinalizeSelection(request, response) {
     details: refinedDetails,
     candidates: eligibleCandidates,
   }
-  const prewarmArtifactSummary =
+  const prewarmPriorSummary =
     resolvedCandidatePool.cachedEntry?.selection &&
     typeof resolvedCandidatePool.cachedEntry.selection === 'object' &&
     !Array.isArray(resolvedCandidatePool.cachedEntry.selection) &&
@@ -1406,16 +1513,10 @@ export async function handleFinalizeSelection(request, response) {
     !Array.isArray(resolvedCandidatePool.cachedEntry.selection.prewarm)
       ? resolvedCandidatePool.cachedEntry.selection.prewarm
       : null
-  const directArtifactPathAllowed =
-    Boolean(preRankArtifact) &&
-    priorities.length === 0 &&
-    !followUpNotes &&
-    !rejectionFeedback &&
-    retryCount === 0 &&
-    excludedCandidateIds.length === 0
   const tokenUsageByStage = {
     finalize: null,
-    prewarmArtifact: prewarmArtifactSummary?.usage || null,
+    candidateAwarePrior: prewarmPriorSummary?.usage || null,
+    prewarmArtifact: prewarmPriorSummary?.usage || null,
   }
 
   if (retryCount > 0 && nextCandidatePool.candidates.length === 0) {
@@ -1450,85 +1551,6 @@ export async function handleFinalizeSelection(request, response) {
     return
   }
 
-  if (directArtifactPathAllowed) {
-    const artifactDirectSelection = materializePreRankArtifactResults({
-      preRankArtifact,
-      candidatePool: nextCandidatePool,
-      finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
-    })
-    const totalDuration = nowMs() - requestStartedAt
-    const flowPath = artifactDirectSelection.results.length > 0 ? 'artifact_direct' : 'full_finalize_fallback'
-    const fallbackReason =
-      artifactDirectSelection.results.length > 0 ? null : artifactDirectSelection.debug?.preRankReuseReason || 'artifact_direct_failed'
-
-    if (artifactDirectSelection.results.length > 0) {
-      logSearchFlowEvent('guided_finalize_completed', {
-        route: '/api/search/finalize',
-        query: sanitizedDiscoveryContext.normalizedQuery,
-        candidateCount: nextCandidatePool.candidates.length,
-        finalCount: artifactDirectSelection.results.length,
-        retryCount,
-        requestMode,
-        cacheMs: roundTimingDuration(cacheLookupDuration),
-        openaiMs: 0,
-        totalMs: roundTimingDuration(totalDuration),
-        openaiUsage: null,
-        rankingOwner: 'prewarm_artifact_direct',
-        selectionMode: 'prewarm_artifact',
-        selectionStrategy: 'artifact_direct',
-        flowPath,
-        intentMatchRerankingUsed: false,
-        fallbackReason,
-      })
-
-      sendJson(response, 200, {
-        candidatePool: nextCandidatePool,
-        debug: {
-          artifactByteLength: safeJsonByteLength(preRankArtifact),
-          artifactCandidateCount: artifactDirectSelection.debug?.artifactCandidateCount || 0,
-          fallbackReason,
-          flowPath,
-          requestMode,
-          reusedPreRankArtifact: true,
-          stageLatencyMs: {
-            body: roundTimingDuration(body.bodyReadDuration || 0),
-            cache: roundTimingDuration(cacheLookupDuration),
-            openai: 0,
-            total: roundTimingDuration(totalDuration),
-          },
-          tokenUsageByStage,
-          usedIntentMatchRerank: false,
-        },
-        requestMode,
-        retryCount,
-        results: artifactDirectSelection.results,
-        selection: {
-          mode: 'prewarm_artifact',
-          strategy: 'artifact_direct',
-          model: preRankArtifact?.model || null,
-          requestMode,
-          usage: null,
-          selectedCandidateIds: artifactDirectSelection.selectedCandidateIds,
-          details: 'Reused the prewarmed prerank artifact directly for the empty-notes finalize path.',
-          flowPath,
-          fallbackReason,
-          reusedPreRankArtifact: true,
-          usedIntentMatchRerank: false,
-        },
-        usage: {
-          openai: null,
-        },
-      }, {
-        serverTiming: [
-          { name: 'body', duration: body.bodyReadDuration || 0 },
-          { name: 'cache', duration: cacheLookupDuration },
-          { name: 'total', duration: totalDuration },
-        ],
-      })
-      return
-    }
-  }
-
   try {
     const openAiStartedAt = nowMs()
     const aiSelection = await selectAiResults({
@@ -1536,7 +1558,7 @@ export async function handleFinalizeSelection(request, response) {
       finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
       apiKey: openAiApiKey,
       model: finalizeModel,
-      preRankArtifact,
+      candidateAwarePrior,
     })
     const openAiDuration = nowMs() - openAiStartedAt
     tokenUsageByStage.finalize = aiSelection.usage || null
@@ -1545,22 +1567,22 @@ export async function handleFinalizeSelection(request, response) {
 
     const results = aiSelection.results.length > 0 ? aiSelection.results : fallbackResults
     const totalDuration = nowMs() - requestStartedAt
-    const reusedPreRankArtifact = Boolean(aiSelection.debug?.preRankArtifactReused)
+    const reusedCandidateAwarePrior = Boolean(
+      aiSelection.debug?.candidateAwarePriorReused || aiSelection.debug?.preRankArtifactReused,
+    )
     const usedIntentMatchRerank = Boolean(aiSelection.debug?.intentMatchRerankUsed)
     const fallbackReason =
       aiSelection.results.length > 0
         ? null
-        : reusedPreRankArtifact
-          ? aiSelection.debug?.preRankReuseReason || 'artifact_rerank_empty_fallback'
-          : preRankArtifact
-            ? aiSelection.debug?.preRankReuseReason || 'artifact_unusable_fallback'
-            : 'artifact_missing'
+        : reusedCandidateAwarePrior
+          ? aiSelection.debug?.candidateAwarePriorReuseReason || aiSelection.debug?.preRankReuseReason || 'prior_rerank_empty_fallback'
+          : candidateAwarePrior
+            ? aiSelection.debug?.candidateAwarePriorReuseReason || aiSelection.debug?.preRankReuseReason || 'prior_unusable_fallback'
+            : 'prior_missing'
     const flowPath =
       aiSelection.results.length > 0
-        ? reusedPreRankArtifact
-          ? usedIntentMatchRerank
-            ? 'artifact_intent_rerank'
-            : 'artifact_direct'
+        ? reusedCandidateAwarePrior
+          ? 'candidate_aware_prior_rerank'
           : 'full_finalize'
         : 'full_finalize_fallback'
 
@@ -1575,10 +1597,8 @@ export async function handleFinalizeSelection(request, response) {
       openaiMs: roundTimingDuration(openAiDuration),
       totalMs: roundTimingDuration(totalDuration),
       openaiUsage: aiSelection.usage || null,
-      rankingOwner: reusedPreRankArtifact
-        ? usedIntentMatchRerank
-          ? 'openai_intent_rerank_with_prerank_artifact'
-          : 'prewarm_artifact_direct'
+      rankingOwner: reusedCandidateAwarePrior
+        ? 'openai_with_candidate_aware_prior'
         : aiSelection.results.length > 0
           ? 'openai_then_backend_select'
           : 'deterministic_fallback',
@@ -1586,10 +1606,13 @@ export async function handleFinalizeSelection(request, response) {
       selectionStrategy: aiSelection.strategy || 'single_pass',
       flowPath,
       intentMatchRerankingUsed: usedIntentMatchRerank,
-      reusedPreRankArtifact,
+      reusedCandidateAwarePrior,
+      reusedPreRankArtifact: reusedCandidateAwarePrior,
       fallbackReason,
-      artifactByteLength: safeJsonByteLength(preRankArtifact),
-      artifactCandidateCount: aiSelection.debug?.artifactCandidateCount || 0,
+      priorByteLength: safeJsonByteLength(candidateAwarePrior),
+      priorCandidateCount: aiSelection.debug?.priorCandidateCount || aiSelection.debug?.artifactCandidateCount || 0,
+      artifactByteLength: safeJsonByteLength(candidateAwarePrior),
+      artifactCandidateCount: aiSelection.debug?.artifactCandidateCount || aiSelection.debug?.priorCandidateCount || 0,
       finalizeModel,
       finalizeModelPath: hasContextSignals ? 'context_added' : 'baseline',
     })
@@ -1597,14 +1620,17 @@ export async function handleFinalizeSelection(request, response) {
     sendJson(response, 200, {
       candidatePool: nextCandidatePool,
       debug: {
-        artifactByteLength: safeJsonByteLength(preRankArtifact),
-        artifactCandidateCount: aiSelection.debug?.artifactCandidateCount || 0,
+        priorByteLength: safeJsonByteLength(candidateAwarePrior),
+        priorCandidateCount: aiSelection.debug?.priorCandidateCount || aiSelection.debug?.artifactCandidateCount || 0,
+        artifactByteLength: safeJsonByteLength(candidateAwarePrior),
+        artifactCandidateCount: aiSelection.debug?.artifactCandidateCount || aiSelection.debug?.priorCandidateCount || 0,
         fallbackReason,
         flowPath,
         finalizeModel,
         finalizeModelPath: hasContextSignals ? 'context_added' : 'baseline',
         requestMode,
-        reusedPreRankArtifact,
+        reusedCandidateAwarePrior,
+        reusedPreRankArtifact: reusedCandidateAwarePrior,
         stageLatencyMs: {
           body: roundTimingDuration(body.bodyReadDuration || 0),
           cache: roundTimingDuration(cacheLookupDuration),
@@ -1630,13 +1656,14 @@ export async function handleFinalizeSelection(request, response) {
             : fallbackResults.map((item) => item.id),
         details:
           aiSelection.results.length > 0
-            ? reusedPreRankArtifact
-              ? 'AI finalized the shortlist by reusing the stored prerank artifact.'
+            ? reusedCandidateAwarePrior
+              ? 'AI finalized the shortlist using the stored candidate-aware prewarm prior.'
               : 'AI selected the final recommendations from the cleaned candidate pool.'
             : 'Rules-based fallback was used.',
         flowPath,
         fallbackReason,
-        reusedPreRankArtifact,
+        reusedCandidateAwarePrior,
+        reusedPreRankArtifact: reusedCandidateAwarePrior,
         usedIntentMatchRerank,
       },
       usage: {
@@ -1657,8 +1684,10 @@ export async function handleFinalizeSelection(request, response) {
       candidateCount: nextCandidatePool.candidates.length,
       retryCount,
       requestMode,
-      artifactReady: Boolean(preRankArtifact),
-      artifactByteLength: safeJsonByteLength(preRankArtifact),
+      priorReady: Boolean(candidateAwarePrior),
+      priorByteLength: safeJsonByteLength(candidateAwarePrior),
+      artifactReady: Boolean(candidateAwarePrior),
+      artifactByteLength: safeJsonByteLength(candidateAwarePrior),
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
       error: error instanceof Error ? error.message : 'Unknown error',
     })
@@ -1830,6 +1859,11 @@ export function createApiServer() {
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search/refine') {
       await handleRefinementPrompt(requestUrl, response)
+      return
+    }
+
+    if (request.method === 'GET' && requestUrl.pathname === '/api/search/framing-fields') {
+      await handleQueryFramingFields(requestUrl, response)
       return
     }
 

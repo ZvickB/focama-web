@@ -58,6 +58,14 @@ function isGuidedPrewarmDisabled() {
   return typeof window !== 'undefined' && window.__FOCAMAI_DISABLE_SKIP_PREWARM__ === true
 }
 
+function isBackgroundFramingDisabled() {
+  return typeof window !== 'undefined' && window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__ === true
+}
+
+function hasUsableCandidatePool(candidatePool) {
+  return Array.isArray(candidatePool?.candidates) && candidatePool.candidates.length > 0
+}
+
 async function readJsonResponse(response, requestStartedAt) {
   const responseReceivedAt = performance.now()
   const rawBody = await response.text()
@@ -100,6 +108,13 @@ async function fetchRefinementPrompt(query) {
   const searchParams = new URLSearchParams({ query })
   const requestStartedAt = performance.now()
   const response = await fetch(`/api/search/refine?${searchParams.toString()}`)
+  return readJsonResponse(response, requestStartedAt)
+}
+
+async function fetchFramingFields(query) {
+  const searchParams = new URLSearchParams({ query })
+  const requestStartedAt = performance.now()
+  const response = await fetch(`/api/search/framing-fields?${searchParams.toString()}`)
   return readJsonResponse(response, requestStartedAt)
 }
 
@@ -198,6 +213,7 @@ function buildResultAnalyticsItems(results) {
 
 export function useGuidedSearch() {
   const prewarmDisabled = isGuidedPrewarmDisabled()
+  const backgroundFramingDisabled = isBackgroundFramingDisabled()
   const [productQuery, setProductQuery] = useState('')
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
@@ -209,6 +225,7 @@ export function useGuidedSearch() {
   const [results, setResults] = useState([])
   const [previousResults, setPreviousResults] = useState([])
   const [refinementPrompt, setRefinementPrompt] = useState(null)
+  const [queryFramingFields, setQueryFramingFields] = useState(null)
   const [followUpNotes, setFollowUpNotes] = useState('')
   const [retryFeedback, setRetryFeedback] = useState('')
   const [retryCount, setRetryCount] = useState(0)
@@ -218,6 +235,7 @@ export function useGuidedSearch() {
     finalize: null,
     prewarm: null,
     refine: null,
+    framingFields: null,
   })
   const [showFinalResultBadges, setShowFinalResultBadges] = useState(false)
   const [showPreviewResults, setShowPreviewResults] = useState(false)
@@ -346,14 +364,18 @@ export function useGuidedSearch() {
           resultSet,
           retryRound: payload.retryCount ?? variables.retryCount ?? 0,
           requestMode: variables.requestMode || FINALIZE_REQUEST_MODE_DEFAULT,
-          usedPrewarm: Boolean(payload.selection?.reusedPreRankArtifact),
+          usedPrewarm: Boolean(
+            payload.selection?.reusedCandidateAwarePrior || payload.selection?.reusedPreRankArtifact,
+          ),
           usedIntentMatchRerank: Boolean(payload.selection?.usedIntentMatchRerank),
           flowPath: payload.selection?.flowPath || '',
         },
       })
 
-      if (payload.selection?.reusedPreRankArtifact) {
+      if (payload.selection?.reusedCandidateAwarePrior || payload.selection?.reusedPreRankArtifact) {
         trackSearchEvent('prerank_finalize_reused', {
+          priorFlowPath: payload.selection?.flowPath || '',
+          priorReuseReason: payload.selection?.fallbackReason || '',
           artifactFlowPath: payload.selection?.flowPath || '',
           artifactReuseReason: payload.selection?.fallbackReason || '',
           requestMode: variables.requestMode || FINALIZE_REQUEST_MODE_DEFAULT,
@@ -395,7 +417,7 @@ export function useGuidedSearch() {
   }
 
   function startArtifactPrewarm({ discoveryToken: nextDiscoveryToken, originalCandidatePool, query, searchId }) {
-    if (prewarmDisabled || !nextDiscoveryToken || !query || !originalCandidatePool) {
+    if (prewarmDisabled || !nextDiscoveryToken || !query || !hasUsableCandidatePool(originalCandidatePool)) {
       return
     }
 
@@ -453,6 +475,9 @@ export function useGuidedSearch() {
           requestMode: PREWARM_REQUEST_MODE_DEFAULT,
           totalMs: payload.timing?.client?.totalMs ?? null,
           totalTokens: payload.usage?.openai?.totalTokens ?? null,
+          priorCandidateCount:
+            payload.prewarm?.priorCandidateCount ?? payload.prewarm?.artifactCandidateCount ?? null,
+          priorByteLength: payload.prewarm?.priorByteLength ?? payload.prewarm?.artifactByteLength ?? null,
           artifactCandidateCount: payload.prewarm?.artifactCandidateCount ?? null,
           artifactByteLength: payload.prewarm?.artifactByteLength ?? null,
         })
@@ -550,10 +575,12 @@ export function useGuidedSearch() {
       finalize: null,
       prewarm: null,
       refine: null,
+      framingFields: null,
     })
     setShowFinalResultBadges(false)
     setShowPreviewResults(false)
     setRefinementPrompt(null)
+    setQueryFramingFields(null)
     hasTrackedRefinementViewRef.current = false
     hasTrackedPreviewImpressionsRef.current = false
   }
@@ -572,6 +599,7 @@ export function useGuidedSearch() {
     setPreviewResults([])
     setResults([])
     setRefinementPrompt(null)
+    setQueryFramingFields(null)
     setFollowUpNotes('')
     setRetryFeedback('')
     setRetryCount(0)
@@ -581,6 +609,7 @@ export function useGuidedSearch() {
       finalize: null,
       prewarm: null,
       refine: null,
+      framingFields: null,
     })
     setShowFinalResultBadges(false)
     setPreviousResults([])
@@ -738,6 +767,44 @@ export function useGuidedSearch() {
           setIsGeneratingPrompt(false)
         }
       })
+
+    if (!backgroundFramingDisabled) {
+      trackSearchEvent('query_framing_fields_started', {
+        lane: 'framing_fields',
+      })
+
+      fetchFramingFields(normalizedQuery)
+        .then((payload) => {
+          if (activeSearchIdRef.current !== nextSearchId) {
+            return
+          }
+
+          setQueryFramingFields(payload.queryFraming || null)
+          setRequestTiming((current) => ({
+            ...current,
+            framingFields: payload.timing || null,
+          }))
+          trackSearchEvent('query_framing_fields_ready', {
+            lane: 'framing_fields',
+            openaiMs: payload.timing?.server?.openai ?? null,
+            totalMs: payload.timing?.client?.totalMs ?? null,
+            totalTokens: payload.usage?.totalTokens ?? null,
+            tradeoffAxisCount: Array.isArray(payload.queryFraming?.tradeoffAxes)
+              ? payload.queryFraming.tradeoffAxes.length
+              : 0,
+          })
+        })
+        .catch((error) => {
+          if (activeSearchIdRef.current !== nextSearchId) {
+            return
+          }
+
+          trackSearchEvent('query_framing_fields_failed', {
+            lane: 'framing_fields',
+            error: error instanceof Error ? error.message : 'Unknown error',
+          })
+        })
+    }
   }
 
   function handleFinalizeRefinement() {
@@ -959,6 +1026,7 @@ export function useGuidedSearch() {
     isLoading,
     previousResults,
     productQuery,
+    queryFramingFields,
     requestTiming,
     refinementPrompt,
     selectionState,

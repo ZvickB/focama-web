@@ -96,8 +96,8 @@
 - [x] `status: done` Define the thin contracts for `query framing`, `candidate-aware prewarm`, `finalize-fast`, and `enrichment` so later chats can change orchestration without rediscovering payload shape.
 - [x] `status: done` Separate query framing responsibilities from discover-dependent work so framing can start immediately from the raw query.
 - [x] `status: done` Split query framing into `question-fast` and background `framing-fields` so the UI can show the follow-up question before deeper AI field reasoning finishes.
-- [ ] `status: pending` Update orchestration so discover, question-fast, and background framing-fields start without blocking each other, with clear telemetry for each lane.
-- [ ] `status: pending` Re-scope prewarm so it starts only after usable candidate data exists and produces a candidate-aware prior rather than a premature final answer.
+- [x] `status: done` Update orchestration so discover, question-fast, and background framing-fields start without blocking each other, with clear telemetry for each lane.
+- [x] `status: done` Re-scope prewarm so it starts only after usable candidate data exists and produces a candidate-aware prior rather than a premature final answer.
 - [ ] `status: pending` Refactor finalize into a clear `finalize-fast` contract that returns only shortlist-safe card data for the chosen 6.
 - [ ] `status: pending` Make the latest user follow-up or retry feedback the strongest later-stage decision signal in finalize-fast.
 - [ ] `status: pending` Remove any too-early recommendation-style reveal path so real cards appear only after shortlist certainty.
@@ -110,3 +110,10 @@
 - Default to medium-reasoning implementation passes after this planning note.
 - Pick one pending checklist step per chat when possible.
 - When a step changes active direction or current repo reality, update the relevant project notes in the same pass.
+- Current orchestration reality after the latest step:
+  - the frontend starts guided discovery, `/api/search/refine` question-fast, and `/api/search/framing-fields` background framing independently on search submit
+  - `/api/search/refine` remains the user-visible question lane and does not wait for framing fields
+  - `/api/search/framing-fields` returns the query-framing contract and telemetry as a background lane
+  - framing fields are currently captured client-side for timing/debug visibility, but they are not yet stored server-side or consumed by finalize-fast
+  - `/api/search/prewarm` starts from usable discovery candidates and stores a `candidate_aware_prewarm` prior
+  - the prewarm prior is not a final answer and guided finalize no longer materializes result cards directly from it

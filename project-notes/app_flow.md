@@ -28,10 +28,10 @@
   - the page should scroll cleanly to the refinement area once, without bouncing past it
 - When preview or final results are revealed from the guided flow, the page should scroll down to that results region without needing a manual swipe.
 - When the user presses `Show focused picks`, the page should immediately scroll to the results region and swap into loading skeletons while final AI selection is in progress.
-- Guided discovery now also starts a background prerank prewarm through `/api/search/prewarm`.
-- That prewarm creates a reusable preranked artifact from the guided discovery candidate pool and stores it back into the guided discovery cache entry.
-- Empty-note focused picks now prefer a direct artifact-reuse path instead of rerunning the old full one-shot finalize when the artifact is ready.
-- Refined-note and retry finalization now prefer a lighter second-stage intent-match rerank over the stored artifact before falling back to the older one-shot finalize.
+- Guided discovery now also starts a background candidate-aware prewarm through `/api/search/prewarm` after a usable candidate pool exists.
+- That prewarm creates a reusable candidate-aware prior from the guided discovery candidate pool and stores it back into the guided discovery cache entry.
+- The prewarm prior is not a premature final answer and no longer materializes final result cards directly.
+- Empty-note, refined-note, and retry finalization can use the stored prior as context for a lighter later rerank before falling back to the older one-shot finalize.
 - The preview-only `Show products now` action still just reveals the current preview set; it does not consume the finalize path.
 - If preview results are already visible when final AI selection starts, the page should keep those visible with a calmer narrowing-state message instead of dropping back to a blank loading view.
 - Once a search has started, the homepage now includes a `Start a new search` action that resets the guided state back to a clean blank search.
@@ -42,7 +42,7 @@
 - After a retry succeeds, the earlier shortlist moves into a collapsed `Previous picks` section so the newest shortlist stays primary.
 - The homepage now uses a guided search flow:
   - discovery starts through `/api/search/discover`
-  - background prerank prewarm starts through `/api/search/prewarm`
+  - background candidate-aware prewarm starts through `/api/search/prewarm` once discovery has usable candidates
   - the follow-up prompt comes from `/api/search/refine`
   - final focused picks come from `/api/search/finalize`
   - `/api/search/discover` now returns the preview set plus a `discoveryToken` tied to the cached guided candidate pool
@@ -67,7 +67,7 @@
   - context-added finalize defaults to a faster `gpt-5.4-nano` lane unless `OPENAI_FINALIZE_CONTEXT_MODEL` is set
   - guided finalize debug/response metadata now reports whether the baseline or context-added lane was used
 - Guided finalize now also echoes a `requestMode` value in logs/responses so experimental prewarm traffic can be measured separately from normal finalize requests.
-- Guided prewarm/finalize responses now also include structured debug metadata for artifact shape/size, reuse path, fallback reason, stage latency, and token usage by stage.
+- Guided prewarm/finalize responses now also include structured debug metadata for prior shape/size, reuse path, fallback reason, stage latency, and token usage by stage.
 - Guided refine now asks AI for only one short question.
 - Guided refine helper text and the textarea placeholder are now fixed server-side copy instead of extra AI-generated fields.
 - Guided refine now uses minimal reasoning effort so the follow-up step stays closer to a lightweight helper.
@@ -75,9 +75,11 @@
   - `backend/lib/query-framing.js` now exposes a fast `question_fast` lane for the short follow-up question and a separate `framing_fields` lane for category hint, framing summary, likely tradeoff axes, and refinement hints
   - `backend/lib/refinement-assistant.js` now adapts only the `question_fast` output into the current `/api/search/refine` response shape
   - current `/api/search/refine` behavior still returns one short question plus static helper/placeholder copy, but it no longer waits for richer AI field reasoning before responding
-  - the background `framing_fields` lane exists in code, but broader orchestration has not yet been updated to start/store/fetch it independently
+  - `/api/search/framing-fields` now exposes the richer `framing_fields` lane as a separate background GET route
+  - on search submit, the frontend starts guided discovery, `/api/search/refine`, and `/api/search/framing-fields` independently so the user-facing question is not blocked by richer field reasoning
+  - framing fields are currently held client-side for timing/debug visibility; they are not yet stored server-side or consumed by finalize
   - current UI has animated helper/loading copy during prompt generation, but it does not yet receive streamed or progressive backend framing data
-- Guided discovery, refine, and finalize now emit structured `[search-flow]` logs so latency, token usage, candidate counts, and ranking ownership are easier to inspect during rebuild work.
+- Guided discovery, question-fast refine, background framing-fields, prewarm, and finalize now emit structured `[search-flow]` logs so latency, token usage, candidate counts, and ranking ownership are easier to inspect during rebuild work.
 - Guided discovery now sends the preview response as soon as artifacts are ready and lets the discovery-cache write finish in the background, so first-hit responses are not held open by cache persistence time.
 - Guided finalize now keeps reasons and attributes in the AI handoff but trims backend-only prompt baggage by removing variant tokens and reducing trust metadata to a compact score signal.
 - Guided finalize prompt slimming now also removes top-level search-state/similar-query prompt text, drops backend-only match-signal and duplicate numeric-price fields from each AI candidate summary, flattens trust metadata to a single `trustScore`, and minifies the candidate JSON block before sending it to OpenAI.
@@ -109,7 +111,7 @@
   - `Show products now` clicked
   - AI follow-up submitted
   - final results shown
-  - prerank prewarm lifecycle events such as started, ready, waited-on, consumed, unused, aborted, and failed
+  - candidate-aware prewarm lifecycle events such as started, ready, waited-on, consumed, unused, aborted, and failed
   - result impressions
   - result card opens
   - retailer click-throughs

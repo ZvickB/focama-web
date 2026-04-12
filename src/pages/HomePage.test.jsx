@@ -45,10 +45,12 @@ describe('HomePage', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     window.__FOCAMAI_DISABLE_SKIP_PREWARM__ = true
+    window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__ = true
   })
 
   afterEach(() => {
     delete window.__FOCAMAI_DISABLE_SKIP_PREWARM__
+    delete window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__
     cleanup()
   })
 
@@ -118,6 +120,86 @@ describe('HomePage', () => {
     expect(
       screen.getByText(/your shortlist is taking shape\./i),
     ).toBeInTheDocument()
+  })
+
+  it('starts discovery, question-fast, and background framing fields as separate requests', async () => {
+    window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__ = false
+    const user = userEvent.setup()
+    const fetchMock = vi.fn((input) => {
+      const url = String(input)
+
+      if (url.includes('/api/search/discover')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              discoveryToken: 'guided_discovery:stroller|',
+              candidatePool: {
+                query: 'stroller',
+                details: '',
+                candidates: [],
+              },
+              previewResults: [createMockResult()],
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/refine')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              prompt: 'What should we optimize for with this stroller?',
+              helperText: 'Pick anything that matters.',
+              followUpPlaceholder: 'Anything else?',
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/framing-fields')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => 'openai;dur=12,total;dur=15' },
+          text: async () =>
+            JSON.stringify({
+              queryFraming: {
+                layer: 'query_framing',
+                query: 'stroller',
+                categoryHint: 'stroller',
+                tradeoffAxes: ['weight'],
+                refinementHints: ['Ask about travel use.'],
+              },
+              usage: {
+                totalTokens: 99,
+              },
+              queryFramingMode: 'framing_fields',
+            }),
+        })
+      }
+
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+
+    expect(
+      await screen.findByText(/what should we optimize for with this stroller/i),
+    ).toBeInTheDocument()
+
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('/api/search/discover'),
+        expect.stringContaining('/api/search/refine'),
+        expect.stringContaining('/api/search/framing-fields'),
+      ]),
+    )
   })
 
   it('shows the backend error message when discovery fails', async () => {
@@ -356,7 +438,7 @@ describe('HomePage', () => {
     expect(screen.getByRole('button', { name: /show focused picks/i })).toBeInTheDocument()
   })
 
-  it('reuses the prewarmed finalize result when focused picks are requested without notes', async () => {
+  it('uses the prewarmed candidate-aware prior when focused picks are requested without notes', async () => {
     window.__FOCAMAI_DISABLE_SKIP_PREWARM__ = false
     const user = userEvent.setup()
     const fetchMock = vi.fn((input) => {
@@ -435,9 +517,9 @@ describe('HomePage', () => {
                 candidates: [],
               },
               debug: {
-                flowPath: 'artifact_direct',
+                flowPath: 'candidate_aware_prior_rerank',
                 reusedPreRankArtifact: true,
-                usedIntentMatchRerank: false,
+                usedIntentMatchRerank: true,
               },
               results: [
                 createMockResult(),
@@ -448,11 +530,12 @@ describe('HomePage', () => {
                 }),
               ],
               selection: {
-                mode: 'prewarm_artifact',
+                mode: 'ai',
                 requestMode: 'guided_empty_notes',
-                flowPath: 'artifact_direct',
+                strategy: 'candidate_aware_prior_rerank',
+                flowPath: 'candidate_aware_prior_rerank',
                 reusedPreRankArtifact: true,
-                usedIntentMatchRerank: false,
+                usedIntentMatchRerank: true,
               },
               usage: {
                 openai: {

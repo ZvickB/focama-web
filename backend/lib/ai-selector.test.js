@@ -3,8 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_OPENAI_MODEL,
   OPENAI_RESPONSES_ENDPOINT,
-  createPreRankArtifact,
-  materializePreRankArtifactResults,
+  createCandidateAwarePrior,
   selectAiResults,
 } from './ai-selector.js'
 
@@ -461,7 +460,7 @@ describe('ai selector', () => {
       }),
     })
 
-    const result = await createPreRankArtifact(
+    const result = await createCandidateAwarePrior(
       {
         apiKey: 'test-key',
         candidatePool: {
@@ -489,63 +488,22 @@ describe('ai selector', () => {
     expect(result.artifact.rankedCandidates).toEqual([
       expect.objectContaining({
         candidateId: 'prod-2',
-        rank: 1,
+        prewarmRank: 1,
         baselineFit: 'Best baseline option for frequent flights.',
         baselineCaution: 'Costs more than entry-level picks.',
       }),
       expect.objectContaining({
         candidateId: 'prod-1',
-        rank: 2,
+        prewarmRank: 2,
         baselineFit: 'Strong all-round fallback option.',
         baselineCaution: 'Fewer reviews than the top baseline pick.',
       }),
     ])
+    expect(result.artifact.layer).toBe('candidate_aware_prewarm')
+    expect(result.artifact).not.toHaveProperty('selectedCandidateIds')
   })
 
-  it('can materialize direct results from a reusable prerank artifact', () => {
-    const materialized = materializePreRankArtifactResults({
-      preRankArtifact: {
-        version: 1,
-        rankedCandidates: [
-          {
-            candidateId: 'prod-2',
-            rank: 1,
-            baselineFit: 'Best baseline fit.',
-            baselineCaution: 'Pricier than the cheapest picks.',
-          },
-          {
-            candidateId: 'prod-1',
-            rank: 2,
-            baselineFit: 'Solid backup option.',
-            baselineCaution: 'Fewer reviews than the top pick.',
-          },
-        ],
-      },
-      candidatePool: {
-        candidates: [
-          createCandidate(),
-          createCandidate({
-            id: 'prod-2',
-            title: 'Compact airport stroller',
-          }),
-        ],
-      },
-      finalResultLimit: 6,
-    })
-
-    expect(materialized.selectedCandidateIds).toEqual(['prod-2', 'prod-1'])
-    expect(materialized.results[0].title).toBe('Compact airport stroller')
-    expect(materialized.results[0].reasons).toEqual(['AI fit: Best baseline fit.'])
-    expect(materialized.results[0].drawbacks).toEqual(['Pricier than the cheapest picks.'])
-    expect(materialized.debug).toEqual({
-      artifactCandidateCount: 2,
-      intentMatchRerankUsed: false,
-      preRankArtifactReused: true,
-      preRankReuseReason: 'artifact_direct',
-    })
-  })
-
-  it('uses a lighter artifact-aware rerank when a reusable prerank artifact is available', async () => {
+  it('uses a lighter candidate-aware prior rerank when a reusable prior is available', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -583,18 +541,18 @@ describe('ai selector', () => {
           ],
         },
         finalResultLimit: 6,
-        preRankArtifact: {
+        candidateAwarePrior: {
           version: 1,
           rankedCandidates: [
             {
               candidateId: 'prod-2',
-              rank: 1,
+              prewarmRank: 1,
               baselineFit: 'Best baseline option for frequent flights.',
               baselineCaution: 'Costs more than entry-level picks.',
             },
             {
               candidateId: 'prod-1',
-              rank: 2,
+              prewarmRank: 2,
               baselineFit: 'Strong all-round fallback option.',
               baselineCaution: 'Fewer reviews than the top baseline pick.',
             },
@@ -607,16 +565,19 @@ describe('ai selector', () => {
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
     const prompt = requestBody.input[1].content
 
-    expect(prompt).toContain('Reusable preranked candidates:')
+    expect(prompt).toContain('Reusable candidate-aware prior:')
     expect(prompt).toContain('airport travel and compact storage')
-    expect(result.strategy).toBe('artifact_intent_rerank')
+    expect(result.strategy).toBe('candidate_aware_prior_rerank')
     expect(result.selectedCandidateIds).toEqual(['prod-2'])
     expect(result.results[0].drawbacks).toEqual(['Costs more than entry-level picks.'])
     expect(result.debug).toEqual({
+      priorCandidateCount: 2,
       artifactCandidateCount: 2,
       intentMatchRerankUsed: true,
+      candidateAwarePriorReused: true,
+      candidateAwarePriorReuseReason: 'candidate_aware_prior_rerank',
       preRankArtifactReused: true,
-      preRankReuseReason: 'artifact_intent_rerank',
+      preRankReuseReason: 'candidate_aware_prior_rerank',
     })
   })
 

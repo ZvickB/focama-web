@@ -215,8 +215,9 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
 function TimingPanel({ requestTiming }) {
   const entries = [
     ['Discover', requestTiming?.discover],
-    ['Prewarm', requestTiming?.prewarm],
     ['Refine', requestTiming?.refine],
+    ['Framing fields', requestTiming?.framingFields],
+    ['Prewarm', requestTiming?.prewarm],
     ['Finalize', requestTiming?.finalize],
   ].filter(([, timing]) => timing)
 

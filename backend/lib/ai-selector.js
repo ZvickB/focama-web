@@ -1,11 +1,12 @@
-import { toFinalizeFastCard } from './layered-contracts.js'
+import { createCandidateAwarePrewarmContract, toFinalizeFastCard } from './layered-contracts.js'
 
 export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses'
 export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini'
 export const DEFAULT_REFINEMENT_MODEL = DEFAULT_OPENAI_MODEL
 export const DEFAULT_FINALIZE_MODEL = DEFAULT_OPENAI_MODEL
 export const DEFAULT_CONTEXT_FINALIZE_MODEL = 'gpt-5.4-nano'
-export const PRE_RANK_ARTIFACT_VERSION = 1
+export const CANDIDATE_AWARE_PRIOR_VERSION = 1
+export const PRE_RANK_ARTIFACT_VERSION = CANDIDATE_AWARE_PRIOR_VERSION
 const ARTIFACT_RERANK_CANDIDATE_LIMIT = 12
 const DESCRIPTION_BOILERPLATE_TOKENS = new Set([
   'at',
@@ -273,14 +274,14 @@ function buildSelectionSchema() {
   }
 }
 
-function buildPreRankPrompt(candidatePool) {
+function buildCandidateAwarePriorPrompt(candidatePool) {
   return [
-    'Create a reusable preranked shopping artifact from this candidate pool.',
+    'Create a reusable candidate-aware shopping prior from this candidate pool.',
     'This is not the final shortlist.',
     'Rank every candidate from strongest to weakest baseline fit before any future follow-up context.',
     'Use product-query relevance, quality/trust, and overall shopping usefulness as the baseline ranking signals.',
     'For each candidate, write one short baseline fit note and one short baseline caution.',
-    'Keep the notes concise because another step may reuse this artifact later.',
+    'Keep the notes concise because another step may use this prior later.',
     '',
     `Product query: ${candidatePool.query}`,
     '',
@@ -289,7 +290,7 @@ function buildPreRankPrompt(candidatePool) {
   ].join('\n')
 }
 
-function buildPreRankSchema() {
+function buildCandidateAwarePriorSchema() {
   return {
     type: 'object',
     properties: {
@@ -318,14 +319,14 @@ function buildPreRankSchema() {
   }
 }
 
-function buildArtifactRerankPrompt({ artifactCandidates, candidatePool, finalResultLimit }) {
-  const desiredCount = Math.min(finalResultLimit, artifactCandidates.length)
+function buildPriorRerankPrompt({ priorCandidates, candidatePool, finalResultLimit }) {
+  const desiredCount = Math.min(finalResultLimit, priorCandidates.length)
 
   return [
-    'Choose the best final products from this reusable preranked artifact.',
+    'Choose the best final products with help from this reusable candidate-aware prior.',
     '1. Intent match to the extra context/details is the strongest signal and should outweigh the baseline prerank when they disagree.',
     '2. Retry feedback and exclusions are high-priority intent signals.',
-    '3. Use the prerank and baseline notes as helpful prior context, not as a hard rule.',
+    '3. Use the baseline ranking and notes as helpful prior context, not as a hard rule.',
     '4. Preserve diversity only when it still fits the stated intent well.',
     '5. Return only the selected candidate ids plus one short intent-fit reason for each pick.',
     `Return up to ${desiredCount} picks. If there are at least ${desiredCount} strong candidates, return exactly ${desiredCount}.`,
@@ -333,12 +334,12 @@ function buildArtifactRerankPrompt({ artifactCandidates, candidatePool, finalRes
     `Product query: ${candidatePool.query}`,
     `Extra context: ${candidatePool.details || 'None provided.'}`,
     '',
-    'Reusable preranked candidates:',
-    JSON.stringify(artifactCandidates),
+    'Reusable candidate-aware prior:',
+    JSON.stringify(priorCandidates),
   ].join('\n')
 }
 
-function buildArtifactRerankSchema() {
+function buildPriorRerankSchema() {
   return {
     type: 'object',
     properties: {
@@ -453,7 +454,7 @@ function createFallbackBaselineCaution(candidate) {
   return 'Double-check the tradeoffs against your exact needs.'
 }
 
-function mapPreRankArtifact(rankedCandidates, candidatePool, model) {
+function mapCandidateAwarePrior(rankedCandidates, candidatePool, model) {
   const candidateById = new Map(candidatePool.candidates.map((candidate) => [String(candidate.id), candidate]))
   const seen = new Set()
   const artifactCandidates = []
@@ -473,7 +474,7 @@ function mapPreRankArtifact(rankedCandidates, candidatePool, model) {
 
     artifactCandidates.push({
       candidateId,
-      rank: artifactCandidates.length + 1,
+      prewarmRank: artifactCandidates.length + 1,
       title: candidate.title,
       source: candidate.source,
       price: candidate.price,
@@ -501,7 +502,7 @@ function mapPreRankArtifact(rankedCandidates, candidatePool, model) {
 
     artifactCandidates.push({
       candidateId,
-      rank: artifactCandidates.length + 1,
+      prewarmRank: artifactCandidates.length + 1,
       title: candidate.title,
       source: candidate.source,
       price: candidate.price,
@@ -519,24 +520,24 @@ function mapPreRankArtifact(rankedCandidates, candidatePool, model) {
     })
   }
 
-  return {
-    version: PRE_RANK_ARTIFACT_VERSION,
+  return createCandidateAwarePrewarmContract({
     generatedAt: new Date().toISOString(),
     model,
     query: candidatePool.query,
     details: candidatePool.details || '',
+    discoveryToken: candidatePool.discoveryToken || '',
     candidateCount: candidatePool.candidates.length,
     rankedCandidates: artifactCandidates,
-  }
+  })
 }
 
-function getReusableArtifactEntries(preRankArtifact, candidates) {
+function getReusablePriorEntries(candidateAwarePrior, candidates) {
   if (
-    !preRankArtifact ||
-    typeof preRankArtifact !== 'object' ||
-    Array.isArray(preRankArtifact) ||
-    preRankArtifact.version !== PRE_RANK_ARTIFACT_VERSION ||
-    !Array.isArray(preRankArtifact.rankedCandidates)
+    !candidateAwarePrior ||
+    typeof candidateAwarePrior !== 'object' ||
+    Array.isArray(candidateAwarePrior) ||
+    candidateAwarePrior.version !== CANDIDATE_AWARE_PRIOR_VERSION ||
+    !Array.isArray(candidateAwarePrior.rankedCandidates)
   ) {
     return []
   }
@@ -544,7 +545,7 @@ function getReusableArtifactEntries(preRankArtifact, candidates) {
   const candidateById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]))
   const reusableEntries = []
 
-  for (const entry of preRankArtifact.rankedCandidates) {
+  for (const entry of candidateAwarePrior.rankedCandidates) {
     const candidateId = String(entry?.candidateId || entry?.candidate_id || '')
 
     if (!candidateId) {
@@ -562,10 +563,18 @@ function getReusableArtifactEntries(preRankArtifact, candidates) {
       candidateId,
       baselineCaution: truncateText(entry?.baselineCaution || entry?.baseline_caution, 160),
       baselineFit: truncateText(entry?.baselineFit || entry?.baseline_fit, 160),
-      rank: Number.isFinite(Number(entry?.rank)) ? Number(entry.rank) : reusableEntries.length + 1,
+      rank: Number.isFinite(Number(entry?.prewarmRank))
+        ? Number(entry.prewarmRank)
+        : Number.isFinite(Number(entry?.rank))
+          ? Number(entry.rank)
+          : reusableEntries.length + 1,
       reusableSummary: {
         candidate_id: candidateId,
-        prewarm_rank: Number.isFinite(Number(entry?.rank)) ? Number(entry.rank) : reusableEntries.length + 1,
+        prewarm_rank: Number.isFinite(Number(entry?.prewarmRank))
+          ? Number(entry.prewarmRank)
+          : Number.isFinite(Number(entry?.rank))
+            ? Number(entry.rank)
+            : reusableEntries.length + 1,
         title: candidate.title,
         source: candidate.source,
         price: candidate.price,
@@ -591,18 +600,6 @@ function getReusableArtifactEntries(preRankArtifact, candidates) {
   }
 
   return reusableEntries.sort((left, right) => left.rank - right.rank)
-}
-
-function materializeReusableArtifactResults({ reusableEntries, finalResultLimit }) {
-  const selectedEntries = reusableEntries.slice(0, finalResultLimit)
-
-  return {
-    selectedCandidateIds: selectedEntries.map((entry) => entry.candidateId),
-    results: selectedEntries.map((entry) => ({
-      ...buildUiResult(entry.candidate, entry.baselineFit || ''),
-      drawbacks: entry.baselineCaution ? [entry.baselineCaution] : [],
-    })),
-  }
 }
 
 function mapSelectionPicksToResults(picks, candidates, finalResultLimit) {
@@ -645,7 +642,7 @@ function mapSelectionPicksToResults(picks, candidates, finalResultLimit) {
   }
 }
 
-function mapArtifactRerankPicksToResults(picks, reusableEntries, finalResultLimit) {
+function mapPriorRerankPicksToResults(picks, reusableEntries, finalResultLimit) {
   const entryById = new Map(reusableEntries.map((entry) => [entry.candidateId, entry]))
   const seen = new Set()
   const selected = []
@@ -705,7 +702,7 @@ async function runOneShotSelection({ candidatePool, finalResultLimit, apiKey, mo
   }
 }
 
-export async function createPreRankArtifact(
+export async function createCandidateAwarePrior(
   {
     candidatePool,
     apiKey,
@@ -720,75 +717,49 @@ export async function createPreRankArtifact(
   const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
 
   if (candidates.length === 0) {
+    const prior = {
+      version: CANDIDATE_AWARE_PRIOR_VERSION,
+      layer: 'candidate_aware_prewarm',
+      generatedAt: new Date().toISOString(),
+      model,
+      query: candidatePool?.query || '',
+      details: candidatePool?.details || '',
+      candidateCount: 0,
+      rankedCandidates: [],
+    }
+
     return {
       model,
-      artifact: {
-        version: PRE_RANK_ARTIFACT_VERSION,
-        generatedAt: new Date().toISOString(),
-        model,
-        query: candidatePool?.query || '',
-        details: candidatePool?.details || '',
-        candidateCount: 0,
-        rankedCandidates: [],
-      },
+      prior,
+      artifact: prior,
       usage: null,
-      strategy: 'prerank_single_pass',
+      strategy: 'candidate_aware_prior',
     }
   }
 
   const { parsed, usage } = await requestStructuredSelection(
     {
-      prompt: buildPreRankPrompt(candidatePool),
-      schema: buildPreRankSchema(),
-      responseName: 'product_prerank_artifact',
+      prompt: buildCandidateAwarePriorPrompt(candidatePool),
+      schema: buildCandidateAwarePriorSchema(),
+      responseName: 'candidate_aware_prior',
       apiKey,
       model,
     },
     fetchImpl,
   )
 
+  const prior = mapCandidateAwarePrior(parsed?.ranked_candidates || [], candidatePool, model)
+
   return {
     model,
-    artifact: mapPreRankArtifact(parsed?.ranked_candidates || [], candidatePool, model),
+    prior,
+    artifact: prior,
     usage,
-    strategy: 'prerank_single_pass',
+    strategy: 'candidate_aware_prior',
   }
 }
 
-export function materializePreRankArtifactResults({ preRankArtifact, candidatePool, finalResultLimit }) {
-  const reusableEntries = getReusableArtifactEntries(
-    preRankArtifact,
-    Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : [],
-  )
-
-  if (reusableEntries.length === 0) {
-    return {
-      selectedCandidateIds: [],
-      results: [],
-      debug: {
-        artifactCandidateCount: 0,
-        intentMatchRerankUsed: false,
-        preRankArtifactReused: false,
-        preRankReuseReason: 'artifact_missing_or_invalid',
-      },
-    }
-  }
-
-  const mapped = materializeReusableArtifactResults({
-    reusableEntries,
-    finalResultLimit,
-  })
-
-  return {
-    ...mapped,
-    debug: {
-      artifactCandidateCount: reusableEntries.length,
-      intentMatchRerankUsed: false,
-      preRankArtifactReused: true,
-      preRankReuseReason: 'artifact_direct',
-    },
-  }
-}
+export const createPreRankArtifact = createCandidateAwarePrior
 
 export async function selectAiResults(
   {
@@ -796,6 +767,7 @@ export async function selectAiResults(
     finalResultLimit,
     apiKey,
     model = DEFAULT_OPENAI_MODEL,
+    candidateAwarePrior = null,
     preRankArtifact = null,
   },
   fetchImpl = fetch,
@@ -815,35 +787,38 @@ export async function selectAiResults(
       debug: {
         artifactCandidateCount: 0,
         intentMatchRerankUsed: false,
+        candidateAwarePriorReused: false,
+        candidateAwarePriorReuseReason: 'no_candidates',
         preRankArtifactReused: false,
         preRankReuseReason: 'no_candidates',
       },
     }
   }
 
-  const reusableEntries = getReusableArtifactEntries(preRankArtifact, candidates)
+  const reusablePrior = candidateAwarePrior || preRankArtifact
+  const reusableEntries = getReusablePriorEntries(reusablePrior, candidates)
 
   if (reusableEntries.length > 0) {
-    const artifactCandidates = reusableEntries
+    const priorCandidates = reusableEntries
       .slice(0, Math.max(finalResultLimit, Math.min(reusableEntries.length, ARTIFACT_RERANK_CANDIDATE_LIMIT)))
       .map((entry) => entry.reusableSummary)
 
     const { parsed, usage } = await requestStructuredSelection(
       {
-        prompt: buildArtifactRerankPrompt({
-          artifactCandidates,
+        prompt: buildPriorRerankPrompt({
+          priorCandidates,
           candidatePool,
           finalResultLimit,
         }),
-        schema: buildArtifactRerankSchema(),
-        responseName: 'artifact_intent_rerank',
+        schema: buildPriorRerankSchema(),
+        responseName: 'candidate_aware_prior_rerank',
         apiKey,
         model,
       },
       fetchImpl,
     )
     const picks = Array.isArray(parsed?.picks) ? parsed.picks : []
-    const mapped = mapArtifactRerankPicksToResults(picks, reusableEntries, finalResultLimit)
+    const mapped = mapPriorRerankPicksToResults(picks, reusableEntries, finalResultLimit)
 
     if (mapped.results.length > 0) {
       return {
@@ -851,12 +826,15 @@ export async function selectAiResults(
         selectedCandidateIds: mapped.selectedCandidateIds,
         results: mapped.results,
         usage,
-        strategy: 'artifact_intent_rerank',
+        strategy: 'candidate_aware_prior_rerank',
         debug: {
           artifactCandidateCount: reusableEntries.length,
+          priorCandidateCount: reusableEntries.length,
           intentMatchRerankUsed: true,
+          candidateAwarePriorReused: true,
+          candidateAwarePriorReuseReason: 'candidate_aware_prior_rerank',
           preRankArtifactReused: true,
-          preRankReuseReason: 'artifact_intent_rerank',
+          preRankReuseReason: 'candidate_aware_prior_rerank',
         },
       }
     }
@@ -872,7 +850,10 @@ export async function selectAiResults(
     strategy: selection.strategy,
     debug: {
       artifactCandidateCount: reusableEntries.length,
+      priorCandidateCount: reusableEntries.length,
       intentMatchRerankUsed: false,
+      candidateAwarePriorReused: false,
+      candidateAwarePriorReuseReason: reusableEntries.length > 0 ? 'prior_rerank_empty_fallback' : 'prior_missing_or_invalid',
       preRankArtifactReused: false,
       preRankReuseReason: reusableEntries.length > 0 ? 'artifact_rerank_empty_fallback' : 'artifact_missing_or_invalid',
     },

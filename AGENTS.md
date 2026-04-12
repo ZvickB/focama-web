@@ -10,6 +10,7 @@ Read this file first at the start of every chat.
 ## First reads
 - Read `project-notes/session-handoff.md` first for the fastest current reset.
 - Read `project-notes/active-experiment-override.md` immediately after `session-handoff.md` when the task touches the current prewarm/finalize experiment.
+- Read `project-notes/finalize-strategy.md` before finalize or latency-architecture changes; use it for active finalize/AI strategy and hard guardrails.
 - Read `project-notes/current-status.md` next for the immediate snapshot and active constraints.
 - Read `project-notes/app_flow.md` for current implemented behavior.
 - Read `project-notes/handoff.md` for medium-term work and open product questions.
@@ -20,6 +21,7 @@ Read this file first at the start of every chat.
 
 ## Source of truth
 - `project-notes/active-experiment-override.md`: highest-priority note for the current prewarm/finalize experiment when it conflicts with older finalize guidance.
+- `project-notes/finalize-strategy.md`: active finalize/AI strategy and hard guardrails for future finalize or latency-architecture changes.
 - `project-notes/app_flow.md`: what the app does now.
 - `project-notes/current-status.md`: short snapshot for the next chat.
 - `project-notes/handoff.md`: durable remaining work and open questions.

@@ -8,7 +8,7 @@
 ## Current reality
 - The app is live on Vercel.
 - The homepage uses the guided `/api/search/discover -> /api/search/refine -> /api/search/finalize` flow.
-- The default homepage is now the `open` layout, with alternate variants preserved for comparison.
+- The default homepage is now the `open` layout, and older homepage variants were removed after that direction was chosen.
 - The staged/persisted finalize experiment was archived off `main`; the reset baseline is now the active branch state again.
 - SerpApi is wired through Vercel functions.
 - The backend prepares a cleaned candidate pool and uses AI to improve the final shortlist.
@@ -74,20 +74,20 @@
   - guided discovery filtering now collapses a narrow slice of clearly redundant same-family same-variant listings before the AI pool is built
   - the collapse is intentionally conservative: matching duplicate-family key and matching variant signature, plus same merchant or near-same price
   - broader or meaningful family differences should still remain available to the AI shortlist step
-- The broader prerank-artifact architecture is now implemented on top of the current guided flow:
-  - the homepage starts one background `/api/search/prewarm` request after guided discovery completes
-  - that prewarm generates a reusable preranked artifact from the full candidate pool and stores it back into the guided discovery cache entry
-  - empty-note focused picks prefer direct artifact reuse
-  - refined-note and retry finalize requests prefer a lighter intent-match rerank over the stored artifact
-  - guided finalize falls back to the older one-shot selector when reuse is missing or unusable, and now returns/logs explicit reuse/fallback metadata
+- The broader candidate-aware prewarm architecture is now implemented on top of the current guided flow:
+  - the homepage starts one background `/api/search/prewarm` request after guided discovery returns a usable candidate pool
+  - that prewarm generates a reusable candidate-aware prior from the full candidate pool and stores it back into the guided discovery cache entry
+  - the prewarm prior does not lock the shortlist and no longer materializes final result cards directly
+  - empty-note, refined-note, and retry finalize requests can use the stored prior for a lighter intent-match rerank
+  - guided finalize falls back to the older one-shot selector when prior reuse is missing or unusable, and now returns/logs explicit reuse/fallback metadata
 - The user later clarified that the primary success criterion for this experiment is the context-added finalize path, not the empty-notes path.
 - Live reruns on 2026-03-31 showed:
   - empty-notes finalize after prewarm: about 0.5 s
   - refined finalize with follow-up context: about 8.8 s to 12.0 s after submit
   - retry with feedback: about 17.0 s after submit
   - refined and retry requests did reuse the artifact, but they still paid for a fresh heavy OpenAI rerank call
-- Treat the current prerank-prewarm branch as useful groundwork plus a partial experiment result:
-  - it proved artifact reuse, observability, and the empty-notes shortcut
+- Treat the older prerank-prewarm branch as useful groundwork plus a partial experiment result:
+  - it proved prior/artifact storage, observability, and the empty-notes shortcut
   - it did not materially solve the main context-latency route the user cared about most
 - The next layered-latency groundwork step is now complete:
   - `backend/lib/layered-contracts.js` defines thin planned contracts for `query_framing`, `candidate_aware_prewarm`, `finalize_fast`, and `enrichment`
@@ -98,7 +98,15 @@
   - that module now exposes a fast `question_fast` lane for the current short follow-up question
   - it also exposes a separate `framing_fields` lane for category hint, framing summary, likely tradeoff axes, and refinement hints
   - `backend/lib/refinement-assistant.js` now adapts only `question_fast` into the existing `/api/search/refine` response so the user-facing question is not blocked by richer AI field reasoning
-  - this still does not change discover/query-framing orchestration or independently start/store/fetch background framing fields yet
+- The next layered-latency orchestration step is now complete:
+  - `/api/search/framing-fields` exposes the richer query-framing fields as a separate background route
+  - the homepage starts guided discovery, question-fast refine, and background framing-fields independently on search submit
+  - each lane now has separate timing/logging visibility
+  - background framing fields are currently client-side debug/timing context only; they are not yet stored server-side or consumed by finalize
+- The next layered-latency prewarm re-scope step is now complete:
+  - `/api/search/prewarm` now stores a `candidate_aware_prewarm` prior instead of a directly materializable final-answer artifact
+  - frontend prewarm only starts when discovery has returned a candidate pool with candidates
+  - guided finalize no longer has the direct prewarmed-card shortcut; the prior can help the AI selection path, but shortlist certainty still belongs to finalize
 - `project-notes/active-experiment-override.md` is now the highest-priority note for this experiment when it conflicts with older finalize guidance.
 - A scoped follow-up model-routing change is now implemented:
   - context-added guided finalize defaults to a faster `gpt-5.4-nano` lane
@@ -121,9 +129,9 @@
 - Follow `project-notes/active-experiment-override.md` first for the current prewarm/finalize experiment.
 - Follow `project-notes/layered-latency-plan.md` for the agreed next latency architecture and implement it one checklist step at a time.
 - Start the next attempt from the current branch, not a full rollback, because the prewarm route, artifact storage, logging, and tests are useful groundwork.
-- Do not treat the current refined/retry artifact-intent-rerank behavior as the validated answer for the main latency goal.
+- Do not treat the older refined/retry artifact-intent-rerank behavior as the validated answer for the main latency goal.
 - The next attempt should optimize the context-added finalize path first; empty-notes wins are secondary.
-- The next pending checklist step is now updating orchestration so discover, question-fast, and background framing-fields start without blocking each other, with clear telemetry for each lane.
+- The next pending checklist step is now refactoring finalize into a clear `finalize-fast` contract that returns only shortlist-safe card data for the chosen 6.
 - Keep current implementation reality and planned layered behavior clearly separated in future chats.
 - Re-measure the new context-model routing on the same sample queries and compare both latency and shortlist quality before widening the rollout further.
 - `npm run analytics:prewarm-summary -- --hours=24` is still available for a quick Supabase-backed summary of prewarm usage, waste, and timing.
