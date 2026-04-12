@@ -67,6 +67,7 @@
   - average total tokens: about 172
 - The Vercel route wrappers now preserve forwarded request headers so backend IP-based rate limiting still works in production deployments
 - Shared rate limiting now prefers a Supabase-backed event table when configured, with in-memory fallback only for local or degraded environments
+- The current same-IP search limiter is intentionally tester-friendly right now: 15 requests in a 10-second rolling window, so a human can make a few quick tries in a row without immediately tripping it
 - Guided `/api/search/finalize` now rejects oversized or malformed payloads before AI selection and caps candidate pool size at 20
 - Guided `/api/search/discover` now returns a lightweight `discoveryToken` tied to the cached guided candidate pool
 - Guided `/api/search/finalize` now accepts lightweight finalize context and rebuilds the rich candidate pool server-side from guided discovery cache before AI selection

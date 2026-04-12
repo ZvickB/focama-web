@@ -602,7 +602,7 @@ describe('server handlers', () => {
       }),
     )
 
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 15; index += 1) {
       const response = createResponseRecorder()
 
       await handleLiveSearch(
@@ -624,7 +624,7 @@ describe('server handlers', () => {
 
     expect(limitedResponse.statusCode).toBe(429)
     expect(JSON.parse(limitedResponse.body)).toEqual({
-      error: 'Too many searches from this connection. Please wait a minute and try again.',
+      error: 'Too many searches from this connection. Please wait about 10 seconds and try again.',
     })
   })
 
@@ -650,7 +650,7 @@ describe('server handlers', () => {
       }),
     )
 
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 15; index += 1) {
       const response = createResponseRecorder()
 
       await handleDiscoverySearch(
@@ -672,7 +672,7 @@ describe('server handlers', () => {
 
     expect(limitedResponse.statusCode).toBe(429)
     expect(JSON.parse(limitedResponse.body)).toEqual({
-      error: 'Too many searches from this connection. Please wait a minute and try again.',
+      error: 'Too many searches from this connection. Please wait about 10 seconds and try again.',
     })
   })
 
@@ -1753,7 +1753,7 @@ describe('server handlers', () => {
 
     readStoredSearchCacheEntry.mockResolvedValue(createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]))
 
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 15; index += 1) {
       const response = createResponseRecorder()
 
       await handleFinalizeSelection(
@@ -1773,7 +1773,7 @@ describe('server handlers', () => {
 
     expect(limitedResponse.statusCode).toBe(429)
     expect(JSON.parse(limitedResponse.body)).toEqual({
-      error: 'Too many finalize requests from this connection. Please wait a minute and try again.',
+      error: 'Too many finalize requests from this connection. Please wait about 10 seconds and try again.',
     })
   })
 })

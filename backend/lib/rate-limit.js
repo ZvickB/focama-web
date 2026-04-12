@@ -3,8 +3,8 @@ import { takeSharedRateLimitToken } from './search-storage.js'
 const RATE_LIMIT_STORE = new Map()
 
 export const DEFAULT_RATE_LIMIT_CONFIG = {
-  limit: 5,
-  windowMs: 60_000,
+  limit: 15,
+  windowMs: 10_000,
 }
 
 function toKey(ipAddress) {

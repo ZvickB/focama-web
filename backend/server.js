@@ -1,7 +1,9 @@
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import {
-  DEFAULT_OPENAI_MODEL,
+  DEFAULT_FINALIZE_MODEL,
+  DEFAULT_REFINEMENT_MODEL,
+  DEFAULT_CONTEXT_FINALIZE_MODEL,
   createPreRankArtifact,
   materializePreRankArtifactResults,
   selectAiResults,
@@ -54,10 +56,10 @@ const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 const PREWARM_REQUEST_MODE_DEFAULT = 'guided_prerank_prewarm'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
-const DEFAULT_CONTEXT_FINALIZE_MODEL = 'gpt-5.4-nano'
+const RATE_LIMIT_WAIT_MESSAGE = 'Please wait about 10 seconds and try again.'
 
 function getRefinementModel() {
-  return getEnv('OPENAI_REFINEMENT_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_OPENAI_MODEL
+  return getEnv('OPENAI_REFINEMENT_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_REFINEMENT_MODEL
 }
 
 function hasContextAddedFinalizeSignals({
@@ -77,7 +79,7 @@ function hasContextAddedFinalizeSignals({
 }
 
 function getFinalizeModel({ hasContextSignals = false } = {}) {
-  const sharedFinalizeModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_OPENAI_MODEL
+  const sharedFinalizeModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
 
   if (!hasContextSignals) {
     return getEnv('OPENAI_FINALIZE_EMPTY_MODEL') || sharedFinalizeModel
@@ -546,7 +548,7 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
       clientIpAddress,
     })
     sendJson(response, 429, {
-      error: 'Too many searches from this connection. Please wait a minute and try again.',
+      error: `Too many searches from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
     })
     return
   }
@@ -667,7 +669,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
 
   if (!rateLimit.allowed) {
     sendJson(response, 429, {
-      error: 'Too many searches from this connection. Please wait a minute and try again.',
+      error: `Too many searches from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
     })
     return
   }
@@ -918,7 +920,7 @@ export async function handlePrewarmSelection(request, response) {
       clientIpAddress,
     })
     sendJson(response, 429, {
-      error: 'Too many prewarm requests from this connection. Please wait a minute and try again.',
+      error: `Too many prewarm requests from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
     })
     return
   }
@@ -1285,7 +1287,7 @@ export async function handleFinalizeSelection(request, response) {
       clientIpAddress,
     })
     sendJson(response, 429, {
-      error: 'Too many finalize requests from this connection. Please wait a minute and try again.',
+      error: `Too many finalize requests from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
     })
     return
   }

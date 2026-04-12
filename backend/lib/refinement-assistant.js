@@ -1,6 +1,6 @@
-import { DEFAULT_OPENAI_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
+import { DEFAULT_REFINEMENT_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
 
-const MAX_PROMPT_LENGTH = 90
+const MAX_PROMPT_LENGTH = 140
 const DEFAULT_HELPER_TEXT = 'Answer in natural language so Focamai can understand what you really want.'
 const DEFAULT_PLACEHOLDER = 'Example: I want something lightweight for daily travel, under $200, and easy to clean.'
 
@@ -80,7 +80,7 @@ function normalizeOpenAiUsage(payload) {
 }
 
 export async function generateRefinementPrompt(
-  { productQuery, apiKey, model = DEFAULT_OPENAI_MODEL },
+  { productQuery, apiKey, model = DEFAULT_REFINEMENT_MODEL },
   fetchImpl = fetch,
 ) {
   if (!apiKey) {

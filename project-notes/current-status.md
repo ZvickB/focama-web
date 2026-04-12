@@ -60,6 +60,7 @@
 - Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`.
 - Local file-based cache remains as a development/fallback path.
 - Shared rate limiting now uses Supabase when configured, with in-memory fallback only for local/degraded environments.
+- Search rate limiting currently uses a 10-second rolling window with up to 15 requests per IP, which is loose enough for a few quick human retries while still adding friction against obvious hammering.
 - Backend env fallback loading now caches the parsed root `.env` snapshot in-process instead of rereading it on each `getEnv()` call.
 - `project-notes/db-needs.md` now captures the plain-language summary of the current required Supabase tables: `search_cache`, `search_history`, and `rate_limit_events`.
 - An optional funnel analytics path now exists for measuring guided-search behavior and retailer clicks:

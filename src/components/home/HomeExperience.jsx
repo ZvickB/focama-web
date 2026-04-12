@@ -66,8 +66,8 @@ function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     placeholder:
       prompt?.followUpPlaceholder ||
       'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
-    title:
-      isGeneratingPrompt ? 'You can add more detail right away' : `One suggestion, such as: ${suggestedQuestion}`,
+    titleEyebrow: isGeneratingPrompt ? 'You can add more detail right away' : 'One suggestion, such as:',
+    titleQuestion: isGeneratingPrompt ? '' : suggestedQuestion,
   }
 }
 
@@ -76,9 +76,10 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }),
   )
   const [displayedTitle, setDisplayedTitle] = useState(() =>
-    buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }).title,
+    buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }),
   )
   const [isTitleVisible, setIsTitleVisible] = useState(true)
+  const [isQuestionVisible, setIsQuestionVisible] = useState(false)
   const [streamedHelper, setStreamedHelper] = useState(() =>
     isGeneratingPrompt ? '' : buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }).helper,
   )
@@ -87,7 +88,8 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     const nextCopy = buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery })
 
     if (
-      displayedCopy.title === nextCopy.title &&
+      displayedCopy.titleEyebrow === nextCopy.titleEyebrow &&
+      displayedCopy.titleQuestion === nextCopy.titleQuestion &&
       displayedCopy.helper === nextCopy.helper &&
       displayedCopy.placeholder === nextCopy.placeholder
     ) {
@@ -95,10 +97,21 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     }
 
     setDisplayedCopy(nextCopy)
-  }, [displayedCopy.helper, displayedCopy.placeholder, displayedCopy.title, isGeneratingPrompt, prompt, submittedQuery])
+  }, [
+    displayedCopy.helper,
+    displayedCopy.placeholder,
+    displayedCopy.titleEyebrow,
+    displayedCopy.titleQuestion,
+    isGeneratingPrompt,
+    prompt,
+    submittedQuery,
+  ])
 
   useEffect(() => {
-    if (displayedTitle === displayedCopy.title) {
+    if (
+      displayedTitle.titleEyebrow === displayedCopy.titleEyebrow &&
+      displayedTitle.titleQuestion === displayedCopy.titleQuestion
+    ) {
       return
     }
 
@@ -107,15 +120,36 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     }, 0)
 
     const swapTimer = window.setTimeout(() => {
-      setDisplayedTitle(displayedCopy.title)
+      setDisplayedTitle({
+        titleEyebrow: displayedCopy.titleEyebrow,
+        titleQuestion: displayedCopy.titleQuestion,
+      })
       setIsTitleVisible(true)
+      setIsQuestionVisible(false)
     }, 300)
 
     return () => {
       window.clearTimeout(hideTimer)
       window.clearTimeout(swapTimer)
     }
-  }, [displayedCopy.title, displayedTitle])
+  }, [displayedCopy.titleEyebrow, displayedCopy.titleQuestion, displayedTitle])
+
+  useEffect(() => {
+    if (!displayedTitle.titleQuestion) {
+      setIsQuestionVisible(false)
+      return undefined
+    }
+
+    setIsQuestionVisible(false)
+
+    const questionTimer = window.setTimeout(() => {
+      setIsQuestionVisible(true)
+    }, 220)
+
+    return () => {
+      window.clearTimeout(questionTimer)
+    }
+  }, [displayedTitle.titleQuestion])
 
   useEffect(() => {
     if (!isGeneratingPrompt) {
@@ -148,12 +182,25 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
       </div>
       <div className="space-y-3">
         <p
-          className={`text-xl font-medium leading-8 text-slate-900 transition-opacity duration-300 ${
+          className={`text-[13px] font-semibold uppercase tracking-[0.14em] text-primary/70 transition-opacity duration-300 sm:text-sm ${
             isTitleVisible ? 'opacity-100' : 'opacity-0'
           }`}
+          style={{ fontFamily: '"Instrument Sans", sans-serif' }}
         >
-          {displayedTitle}
+          {displayedTitle.titleEyebrow}
         </p>
+        {displayedTitle.titleQuestion ? (
+          <p
+            className={`max-w-2xl text-xl font-medium leading-8 text-[#8f4e2f] transition-all duration-500 sm:text-[1.65rem] ${
+              isTitleVisible && isQuestionVisible
+                ? 'translate-y-0 opacity-100'
+                : 'translate-y-1 opacity-0'
+            }`}
+            style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+          >
+            {displayedTitle.titleQuestion}
+          </p>
+        ) : null}
         <p className="max-w-2xl text-sm leading-7 text-slate-600">
           {isGeneratingPrompt ? streamedHelper : displayedCopy.helper}
           {isGeneratingPrompt ? (
@@ -401,6 +448,7 @@ function OpenLayout(props) {
                   <input
                     id="open-variant-query"
                     aria-label="Product topic"
+                    autoFocus
                     value={state.productQuery}
                     onChange={(event) => setProductQuery(event.target.value)}
                     placeholder='Try "travel stroller for airplane", "ergonomic office chair", or "lego botanical set"'
