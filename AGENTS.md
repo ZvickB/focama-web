@@ -94,6 +94,16 @@ Read this file first at the start of every chat.
 - After finishing that item or section, change its status from `pending` to `done`.
 - If the task grows, split it into a new item instead of widening the original one.
 
+## Communication preferences
+- The user is stronger in React/frontend than backend architecture.
+- Assume solid general web-dev knowledge, but do not assume deep backend expertise.
+- When making backend changes, explain the reasoning in clear practical terms.
+- Prefer concrete explanations of request flow, data shape, and tradeoffs over backend jargon.
+- For non-trivial backend changes, briefly state:
+  - what changed
+  - why it changed
+  - what could break
+
 ## Workflow preferences
 - This repo is worked in PowerShell on Windows. Prefer PowerShell-safe commands.
 - For small UI or copy changes, prefer manual verification over running a full build every time.
@@ -105,3 +115,20 @@ Read this file first at the start of every chat.
 - Prefer the smallest change that keeps the codebase and notes aligned.
 - Ask before making a product decision with non-obvious consequences.
 - If there is any ambiguity, describe current reality first and label speculation as future/planned.
+
+## If you are going to deviate from instructions
+If your next action would meaningfully differ from my instruction or preference, say so before proceeding. Briefly state the mismatch and why. Do not silently override my intent. Do not warn for minor details.
+
+## Commit Workflow
+
+When the user says "commit":
+
+- Use only the current git diff (no full repo scan)
+- Write a commit message with:
+  - short subject
+  - blank line
+  - concise body (what + why)
+- Avoid vague wording
+- If changes are unrelated, warn instead
+
+Then commit and push.

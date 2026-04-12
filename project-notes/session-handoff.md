@@ -7,6 +7,7 @@
 
 ## Read order
 - `project-notes/active-experiment-override.md` when the task touches the current prewarm/finalize experiment
+- `project-notes/layered-latency-plan.md` when the task touches the preferred next latency architecture
 - `project-notes/current-status.md`
 - `project-notes/app_flow.md`
 - `project-notes/handoff.md`
@@ -22,6 +23,7 @@
 - Active homepage layout: `/src/components/home/HomeExperience.jsx`
 - Shared homepage UI blocks: `/src/components/home/HomeShared.jsx`
 - Shared guided-search logic/state: `/src/components/home/useGuidedSearch.js`
+- Planned layered-latency contract definitions: `/backend/lib/layered-contracts.js`
 - Site header/nav/logo usage: `/src/components/SiteLayout.jsx`
 - Default homepage route file: `/src/pages/HomePage.jsx`
 - Plain-language DB note for current Supabase tables: `/project-notes/db-needs.md`
@@ -92,6 +94,7 @@
   - if artifact reuse misses, finalize falls back to the older one-shot selector and logs/returns the miss reason
 - Important correction for future chats:
   - read `project-notes/active-experiment-override.md` before changing this experiment further
+  - read `project-notes/layered-latency-plan.md` before starting new latency-architecture implementation work
   - the primary success target is the context-added finalize path, not the empty-notes path
 - live measurement showed the current refined/retry implementation did not materially improve the main context-latency path enough to count as success
 - treat the current prerank-prewarm branch as useful groundwork plus a partial experiment result, not as the final validated solution
@@ -190,9 +193,11 @@
 
 ## If continuing from here
 - First read `project-notes/active-experiment-override.md` if the task touches the current prewarm/finalize experiment
+- First read `project-notes/layered-latency-plan.md` if the task is about the preferred next latency architecture
 - First read `project-notes/finalize-strategy.md` before making more finalize changes
 - Treat the archived reset notes as historical context only, not as current implementation marching orders
 - Treat `wordmark.PNG` as the preferred current wordmark asset unless the user explicitly wants another attempt
+- Treat `project-notes/layered-latency-plan.md` as the current planning reference for the next layered latency attempt
 - The finalize-prompt slimming step is now complete and was re-measured on the same sample queries
 - Re-measured finalize on 2026-03-30 after the slimming step:
   - average latency: about 13.9 s
@@ -214,6 +219,15 @@
 - The shard experiment should be treated as a measured failed branch, not as the active path
 - The next strategy step is to keep the current guided flow and reassess AI scope, explanation strategy, and badge strategy before more finalize implementation work
 - Step 2 is now done; keep future work from drifting back into heavier blocking finalize work by accident
+- The thin contract-definition step from `project-notes/layered-latency-plan.md` is now done:
+  - `backend/lib/layered-contracts.js` defines the planned thin contracts for query framing, candidate-aware prewarm, finalize-fast, and enrichment
+  - this is a source-of-truth groundwork file, not proof that the layered runtime flow is already implemented
+- The query-framing separation step is now done:
+  - `backend/lib/query-framing.js` owns query-only framing and now exposes separate `question_fast` and `framing_fields` OpenAI lanes
+  - `backend/lib/refinement-assistant.js` now adapts only `question_fast` into the current `/api/search/refine` response
+  - `/api/search/refine` no longer waits for richer AI field reasoning before returning the user-facing question
+  - the background `framing_fields` lane exists in code, but current runtime orchestration does not yet start/store/fetch it independently
+- The next pending layered-latency step is to update orchestration so discover, question-fast, and background framing-fields start without blocking each other, with clear telemetry for each lane
 - Treat the intended v1 split as `results first, polish later`:
   - finalize should return the shortlist as soon as core selection is ready
   - badge/explanation after-touch work should not quietly become required blocking work again

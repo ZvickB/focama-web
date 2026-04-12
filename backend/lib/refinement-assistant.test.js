@@ -39,6 +39,18 @@ describe('refinement assistant', () => {
         totalTokens: 102,
         reasoningTokens: 10,
       },
+      queryFraming: {
+        version: 1,
+        layer: 'query_framing',
+        query: 'wireless headphones',
+        categoryHint: '',
+        framingSummary: '',
+        tradeoffAxes: [],
+        refinementHints: [],
+        generatedAt: expect.any(String),
+      },
+      queryFramingMode: 'question_fast',
+      framingFields: null,
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -53,8 +65,9 @@ describe('refinement assistant', () => {
     const parsedBody = JSON.parse(request.body)
 
     expect(parsedBody.reasoning.effort).toBe('minimal')
-    expect(parsedBody.text.format.schema.properties.prompt.maxLength).toBe(90)
+    expect(parsedBody.text.format.name).toBe('question_fast')
     expect(parsedBody.text.format.schema.required).toEqual(['prompt'])
+    expect(parsedBody.text.format.schema.properties).not.toHaveProperty('tradeoff_axes')
   })
 
   it('clamps an overly long prompt before returning it', async () => {
@@ -83,8 +96,14 @@ describe('refinement assistant', () => {
       fetchMock,
     )
 
-    expect(result.prompt.length).toBeLessThanOrEqual(90)
+    expect(result.prompt.length).toBeLessThanOrEqual(140)
     expect(result.helperText).toBe('Answer in natural language so Focamai can understand what you really want.')
     expect(result.followUpPlaceholder).toBe('Example: I want something lightweight for daily travel, under $200, and easy to clean.')
+    expect(result.queryFraming).toEqual(
+      expect.objectContaining({
+        layer: 'query_framing',
+        query: 'coffee grinder',
+      }),
+    )
   })
 })

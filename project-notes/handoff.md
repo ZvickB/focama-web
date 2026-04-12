@@ -89,6 +89,16 @@
 - Treat the current prerank-prewarm branch as useful groundwork plus a partial experiment result:
   - it proved artifact reuse, observability, and the empty-notes shortcut
   - it did not materially solve the main context-latency route the user cared about most
+- The next layered-latency groundwork step is now complete:
+  - `backend/lib/layered-contracts.js` defines thin planned contracts for `query_framing`, `candidate_aware_prewarm`, `finalize_fast`, and `enrichment`
+  - this does not change current runtime orchestration yet
+  - current finalize-fast card shaping now reuses the shared contract helper so at least one live seam points at that source of truth
+- The next layered-latency groundwork step is now complete:
+  - query framing is now separated into its own query-only backend module at `backend/lib/query-framing.js`
+  - that module now exposes a fast `question_fast` lane for the current short follow-up question
+  - it also exposes a separate `framing_fields` lane for category hint, framing summary, likely tradeoff axes, and refinement hints
+  - `backend/lib/refinement-assistant.js` now adapts only `question_fast` into the existing `/api/search/refine` response so the user-facing question is not blocked by richer AI field reasoning
+  - this still does not change discover/query-framing orchestration or independently start/store/fetch background framing fields yet
 - `project-notes/active-experiment-override.md` is now the highest-priority note for this experiment when it conflicts with older finalize guidance.
 - A scoped follow-up model-routing change is now implemented:
   - context-added guided finalize defaults to a faster `gpt-5.4-nano` lane
@@ -109,9 +119,12 @@
 
 ## Next likely work
 - Follow `project-notes/active-experiment-override.md` first for the current prewarm/finalize experiment.
+- Follow `project-notes/layered-latency-plan.md` for the agreed next latency architecture and implement it one checklist step at a time.
 - Start the next attempt from the current branch, not a full rollback, because the prewarm route, artifact storage, logging, and tests are useful groundwork.
 - Do not treat the current refined/retry artifact-intent-rerank behavior as the validated answer for the main latency goal.
 - The next attempt should optimize the context-added finalize path first; empty-notes wins are secondary.
+- The next pending checklist step is now updating orchestration so discover, question-fast, and background framing-fields start without blocking each other, with clear telemetry for each lane.
+- Keep current implementation reality and planned layered behavior clearly separated in future chats.
 - Re-measure the new context-model routing on the same sample queries and compare both latency and shortlist quality before widening the rollout further.
 - `npm run analytics:prewarm-summary -- --hours=24` is still available for a quick Supabase-backed summary of prewarm usage, waste, and timing.
 - Re-measure the same sample queries after each step.

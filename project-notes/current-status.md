@@ -11,6 +11,7 @@
 - Older homepage experiments were removed after the open layout became the clear direction.
 - The reset baseline is now back on `main`; the staged/persisted finalize experiment was archived separately and should not be treated as the active product path.
 - For the current prewarm/finalize experiment, `project-notes/active-experiment-override.md` is now the highest-priority source of truth when it conflicts with older finalize notes.
+- The preferred next latency architecture is now captured in `project-notes/layered-latency-plan.md`.
 - Read `project-notes/finalize-strategy.md` before making more finalize or latency-architecture changes.
 - The open layout now:
   - uses the PNG wordmark in the hero
@@ -134,6 +135,28 @@
   - refined/retry requests did reuse the prerank artifact, but they still relied on a fresh heavy OpenAI rerank call
   - this means the current branch improved the bonus empty-notes path, but did not materially solve the main context-added finalize latency goal
   - treat the current branch as useful groundwork plus a partial experiment result, not as the final validated answer
+- The agreed next direction is now documented as a layered architecture:
+  - discover and query framing should run in parallel
+  - query framing should split into a fast user-visible question and slower/background framing fields
+  - the follow-up question should be shown as soon as it is ready rather than waiting for deeper AI reasoning about tradeoff axes or later selection fields
+  - candidate-aware prewarm should start only after usable candidate data exists
+  - finalize-fast should return shortlist-safe card data for the chosen 6
+  - enrichment should explain the locked shortlist later instead of re-ranking it
+  - the modal should open immediately with core facts while explanation can load progressively
+  - this is a planning direction today, not a claim that the app already behaves this way
+- Thin layer contracts for that planned architecture now live in `backend/lib/layered-contracts.js`:
+  - `query_framing`
+  - `candidate_aware_prewarm`
+  - `finalize_fast`
+  - `enrichment`
+- That contract file is groundwork only; current runtime orchestration is still the existing guided discover/prewarm/refine/finalize flow.
+- The next layered groundwork step is now implemented in the refine lane:
+  - query framing now lives in its own backend module at `backend/lib/query-framing.js`
+  - it now has a fast `question_fast` lane for the current short follow-up question
+  - it also has a separate `framing_fields` lane for category hint, framing summary, tradeoff axes, and refinement hints
+  - `backend/lib/refinement-assistant.js` now adapts only `question_fast` into the existing refine response shape
+  - `/api/search/refine` still behaves as the current product refine route, but it no longer waits for richer AI field reasoning before responding with the user-facing question
+  - the background `framing_fields` lane exists in code, but orchestration has not yet been updated to start/store/fetch those fields independently or make discover/query framing run in parallel
 - The filtered candidate pool now carries provider-agnostic duplicate-family metadata, compact attribute tags, and trust signals before final AI selection so the backend is less tied to raw SerpApi wording.
 - That candidate pool can now also collapse clearly redundant same-family same-variant listings before the AI handoff, while keeping more meaningful family variation available.
 - Re-measured guided finalize on 2026-03-30 after removing AI badge-label assignment from the blocking finalize task:
@@ -202,9 +225,11 @@
 
 ## Recommended next task
 - Read `project-notes/active-experiment-override.md` first if the task touches the current prewarm/finalize experiment.
+- Read `project-notes/layered-latency-plan.md` before starting the next latency-architecture implementation step.
 - Keep the current branch as the implementation starting point because the prewarm route, artifact storage, logging, and tests are useful groundwork.
 - Do not treat the current refined/retry artifact-intent-rerank behavior as the validated answer for the main latency goal.
 - Use `project-notes/finalize-strategy.md` as background context, but follow the override note where the user-approved experiment direction conflicts with older narrower guardrails.
+- Prefer medium-reasoning implementation chats that complete one checklist step from `project-notes/layered-latency-plan.md` at a time.
 - Step 1 is now done:
   - lighter blocking finalize contract
   - one concise fit reason preserved
@@ -214,5 +239,13 @@
   - search/refine messaging is clearer about how to start the search and where narrowing belongs
   - badge scanability is now fully frontend-owned after final results arrive, with a slight delayed reveal
   - the guided flow and blocking finalize contract remain unchanged
-- Next work should stay outside this step-2 scope unless the user explicitly chooses another narrow pass.
+- The thin contract-definition step is now done:
+  - the shared planning contract file exists at `backend/lib/layered-contracts.js`
+  - current overlap is intentionally light: finalize-fast card shaping now reuses that shared contract helper
+  - query framing and enrichment contracts are defined but not orchestrated yet
+- The query-framing split step is now done:
+  - `/api/search/refine` uses the prompt-only `question_fast` lane
+  - background `framing_fields` has a callable backend lane but is not orchestrated yet
+- The next pending layered step is updating orchestration so discover, question-fast, and background framing-fields start without blocking each other, with clear telemetry for each lane.
+- Next work should stay outside this scope unless the user explicitly chooses another narrow pass.
 - Treat the archived reset notes as historical measurement context, not as the current active plan.

@@ -4,13 +4,17 @@
 - This note is the highest-priority source of truth for the current prewarm/finalize experiment.
 - It exists because the user explicitly approved broader implementation work for this experiment, even where older finalize guardrails would normally push toward a narrower interpretation.
 - This note is scoped to the current prewarm/finalize experiment only. It is not a blanket override for unrelated product or architecture work.
+- The preferred next architecture is now captured separately in `project-notes/layered-latency-plan.md`.
+- Use this file for experiment-groundwork context and guardrails, but use `project-notes/layered-latency-plan.md` as the forward implementation plan.
 
 ## Priority
 - For this experiment, follow this file when it conflicts with older finalize-strategy guardrails or older handoff wording.
+- For new layered latency implementation work, follow `project-notes/layered-latency-plan.md` first and use this note as supporting context for what was learned already.
 - If future work changes the approved direction again, update this file and the linked handoff/status notes in the same pass.
 
 ## Approved implementation context
-- This is Stage 2 implementation work, not planning.
+- The deep planning pass is now complete in `project-notes/layered-latency-plan.md`.
+- Future chats should usually be medium-reasoning implementation passes against that plan, not fresh architecture redesign passes.
 - Use the repo's current architecture as the starting point, but do not let older guardrails force the experiment back into a narrower shape than the user approved.
 - The architecture change and multiple AI calls are explicitly approved for this experiment.
 - Do not switch finalize to `gpt-5.4-nano` for this work. Keep the current stronger finalize model path as the baseline.

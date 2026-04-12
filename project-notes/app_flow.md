@@ -71,6 +71,12 @@
 - Guided refine now asks AI for only one short question.
 - Guided refine helper text and the textarea placeholder are now fixed server-side copy instead of extra AI-generated fields.
 - Guided refine now uses minimal reasoning effort so the follow-up step stays closer to a lightweight helper.
+- Guided refine is now internally split into a query-only framing step plus a thin refine-response adapter:
+  - `backend/lib/query-framing.js` now exposes a fast `question_fast` lane for the short follow-up question and a separate `framing_fields` lane for category hint, framing summary, likely tradeoff axes, and refinement hints
+  - `backend/lib/refinement-assistant.js` now adapts only the `question_fast` output into the current `/api/search/refine` response shape
+  - current `/api/search/refine` behavior still returns one short question plus static helper/placeholder copy, but it no longer waits for richer AI field reasoning before responding
+  - the background `framing_fields` lane exists in code, but broader orchestration has not yet been updated to start/store/fetch it independently
+  - current UI has animated helper/loading copy during prompt generation, but it does not yet receive streamed or progressive backend framing data
 - Guided discovery, refine, and finalize now emit structured `[search-flow]` logs so latency, token usage, candidate counts, and ranking ownership are easier to inspect during rebuild work.
 - Guided discovery now sends the preview response as soon as artifacts are ready and lets the discovery-cache write finish in the background, so first-hit responses are not held open by cache persistence time.
 - Guided finalize now keeps reasons and attributes in the AI handoff but trims backend-only prompt baggage by removing variant tokens and reducing trust metadata to a compact score signal.
@@ -182,5 +188,6 @@
 - Keep watching the Vercel deployment using the current cache/storage flow.
 - Keep tightening weak-result handling and AI judgment quality.
 - Keep the slimmer one-shot finalize selector as the active path unless the user explicitly approves another experiment.
+- For future latency architecture work, use `project-notes/layered-latency-plan.md` as the planning reference; the current app flow above still describes implemented behavior, not the next planned layering.
 - Decide how affiliate-ready outbound retailer links and disclosures should work in the modal and cards.
 - Refine the default open homepage based on tester feedback.

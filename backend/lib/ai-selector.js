@@ -1,3 +1,5 @@
+import { toFinalizeFastCard } from './layered-contracts.js'
+
 export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses'
 export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini'
 export const DEFAULT_REFINEMENT_MODEL = DEFAULT_OPENAI_MODEL
@@ -363,20 +365,7 @@ function buildArtifactRerankSchema() {
 }
 
 function buildUiResult(candidate, rationale) {
-  return {
-    id: candidate.id,
-    title: candidate.title,
-    subtitle: candidate.source,
-    price: candidate.price,
-    rating: candidate.rating,
-    reviewCount: candidate.reviewCount,
-    description: candidate.description,
-    reasons: rationale ? [`AI fit: ${rationale}`] : candidate.reasons.slice(0, 1),
-    drawbacks: [],
-    image: candidate.image,
-    link: candidate.link,
-    badgeLabel: '',
-  }
+  return toFinalizeFastCard(candidate, { fitReason: rationale })
 }
 
 async function requestStructuredSelection(

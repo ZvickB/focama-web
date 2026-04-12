@@ -876,10 +876,16 @@ export async function handleRefinementPrompt(requestUrl, response) {
       promptLength: refinementPrompt.prompt.length,
       helperTextLength: refinementPrompt.helperText.length,
       placeholderLength: refinementPrompt.followUpPlaceholder.length,
+      queryFramingCategoryHint: refinementPrompt.queryFraming?.categoryHint || '',
+      queryFramingAxisCount: Array.isArray(refinementPrompt.queryFraming?.tradeoffAxes)
+        ? refinementPrompt.queryFraming.tradeoffAxes.length
+        : 0,
       openaiMs: roundTimingDuration(openAiDuration),
       totalMs: roundTimingDuration(totalDuration),
       openaiUsage: refinementPrompt.usage || null,
-      rankingOwner: 'openai_refine_prompt',
+      queryFramingMode: refinementPrompt.queryFramingMode || 'legacy_query_framing',
+      framingFieldsReturned: Boolean(refinementPrompt.framingFields),
+      rankingOwner: 'openai_question_fast',
     })
 
     sendJson(response, 200, refinementPrompt, {
