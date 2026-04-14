@@ -14,8 +14,8 @@ function createMockResult(overrides = {}) {
     rating: 4.4,
     reviewCount: 87,
     description: 'Lightweight and easy to fold.',
-    reasons: ['Available from Target', 'Free delivery', 'Listed around $129.99'],
-    drawbacks: ['Pricier than the smallest umbrella stroller options.'],
+    fit_reason: 'Lightweight and easy to fold — well suited for travel.',
+    caveat: 'Pricier than the smallest umbrella stroller options.',
     image: 'https://example.com/stroller.jpg',
     link: 'https://example.com/stroller',
     ...overrides,
@@ -46,11 +46,14 @@ describe('HomePage', () => {
     vi.restoreAllMocks()
     window.__FOCAMAI_DISABLE_SKIP_PREWARM__ = true
     window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__ = true
+    window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__ = true
   })
 
   afterEach(() => {
     delete window.__FOCAMAI_DISABLE_SKIP_PREWARM__
     delete window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__
+    delete window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__
+    vi.useRealTimers()
     cleanup()
   })
 

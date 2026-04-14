@@ -13,6 +13,8 @@ export const RESULT_CARD_COUNT = 6
 export const RESULT_CARD_SLOTS = Array.from({ length: RESULT_CARD_COUNT }, (_, index) => index)
 export const MAX_REFINEMENT_RETRIES = 2
 const FINAL_RESULT_BADGE_REVEAL_DELAY_MS = 240
+const ENRICHMENT_POLL_INTERVAL_MS = 1500
+const ENRICHMENT_POLL_TIMEOUT_MS = 30000
 const PREWARM_REQUEST_MODE_DEFAULT = 'guided_prerank_prewarm'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
@@ -175,6 +177,37 @@ async function finalizeGuidedSearch({
   return readJsonResponse(response, requestStartedAt)
 }
 
+async function fetchEnrichment({ token, query }) {
+  const searchParams = new URLSearchParams({ token, query })
+  const requestStartedAt = performance.now()
+  const response = await fetch(`/api/search/enrichment?${searchParams.toString()}`)
+  return readJsonResponse(response, requestStartedAt)
+}
+
+function mergeEnrichmentIntoResults(results, enrichmentEntries) {
+  if (!Array.isArray(results) || !Array.isArray(enrichmentEntries) || enrichmentEntries.length === 0) {
+    return results
+  }
+
+  const enrichmentById = new Map(
+    enrichmentEntries.map((entry) => [String(entry.candidate_id || ''), entry]),
+  )
+
+  return results.map((result) => {
+    const entry = enrichmentById.get(String(result.id))
+
+    if (!entry) {
+      return result
+    }
+
+    return {
+      ...result,
+      fit_reason: entry.fit_reason || '',
+      caveat: entry.caveat || '',
+    }
+  })
+}
+
 function mergeFinalizeResults(results, sourceCandidatePool) {
   if (!Array.isArray(results) || !sourceCandidatePool?.candidates) {
     return Array.isArray(results) ? results : []
@@ -213,11 +246,54 @@ function buildResultAnalyticsItems(results) {
   }))
 }
 
+function findResultById(results, id) {
+  if (!Array.isArray(results) || !id) {
+    return null
+  }
+
+  return results.find((item) => String(item.id) === String(id)) || null
+}
+
+export function resolveSelectedProductForDisplay({
+  previousResults = [],
+  previewResults = [],
+  results = [],
+  selectedProduct,
+}) {
+  if (!selectedProduct) {
+    return null
+  }
+
+  const selectedProductResultSet = selectedProduct.analyticsMeta?.resultSet || 'final'
+  const selectedProductLiveSource =
+    selectedProductResultSet === 'previous'
+      ? previousResults
+      : selectedProductResultSet === 'preview'
+        ? previewResults
+        : results
+  const liveSelectedProduct =
+    selectedProduct.id
+      ? findResultById(selectedProductLiveSource, selectedProduct.id) ||
+        findResultById(results, selectedProduct.id) ||
+        findResultById(previousResults, selectedProduct.id) ||
+        findResultById(previewResults, selectedProduct.id)
+      : null
+
+  if (!liveSelectedProduct) {
+    return selectedProduct
+  }
+
+  return {
+    ...liveSelectedProduct,
+    analyticsMeta: selectedProduct.analyticsMeta,
+  }
+}
+
 export function useGuidedSearch() {
   const prewarmDisabled = isGuidedPrewarmDisabled()
   const backgroundFramingDisabled = isBackgroundFramingDisabled()
   const [productQuery, setProductQuery] = useState('')
-  const [selectedProduct, setSelectedProduct] = useState(null)
+  const [selectedProductState, setSelectedProductState] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [hasStartedSearch, setHasStartedSearch] = useState(false)
   const [submittedQuery, setSubmittedQuery] = useState('')
@@ -244,7 +320,9 @@ export function useGuidedSearch() {
   const [isDiscovering, setIsDiscovering] = useState(false)
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false)
   const [isAwaitingPrewarmedFinalize, setIsAwaitingPrewarmedFinalize] = useState(false)
+  const [isEnrichmentReady, setIsEnrichmentReady] = useState(false)
   const activeSearchIdRef = useRef(0)
+  const enrichmentPollRef = useRef({ timerId: null, searchId: 0 })
   const analyticsSearchIdRef = useRef('')
   const analyticsSessionIdRef = useRef('')
   const hasTrackedRefinementViewRef = useRef(false)
@@ -273,6 +351,59 @@ export function useGuidedSearch() {
       name,
       eventData,
     })
+  }
+
+  function stopEnrichmentPolling() {
+    if (enrichmentPollRef.current.timerId !== null) {
+      window.clearTimeout(enrichmentPollRef.current.timerId)
+      enrichmentPollRef.current.timerId = null
+    }
+
+    enrichmentPollRef.current.searchId = 0
+  }
+
+  function startEnrichmentPolling({ token, query, searchId }) {
+    if (window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__) return
+    stopEnrichmentPolling()
+    enrichmentPollRef.current.searchId = searchId
+
+    const startedAt = performance.now()
+
+    function schedulePoll() {
+      enrichmentPollRef.current.timerId = window.setTimeout(async () => {
+        if (enrichmentPollRef.current.searchId !== searchId) {
+          return
+        }
+
+        if (performance.now() - startedAt > ENRICHMENT_POLL_TIMEOUT_MS) {
+          stopEnrichmentPolling()
+          return
+        }
+
+        try {
+          const payload = await fetchEnrichment({ token, query })
+
+          if (enrichmentPollRef.current.searchId !== searchId) {
+            return
+          }
+
+          if (payload.ready && Array.isArray(payload.entries) && payload.entries.length > 0) {
+            stopEnrichmentPolling()
+            setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
+            setIsEnrichmentReady(true)
+            return
+          }
+        } catch {
+          // Poll silently — enrichment is best-effort
+        }
+
+        if (enrichmentPollRef.current.searchId === searchId) {
+          schedulePoll()
+        }
+      }, ENRICHMENT_POLL_INTERVAL_MS)
+    }
+
+    schedulePoll()
   }
 
   function resetPrewarmState({ preserveTiming = false } = {}) {
@@ -331,6 +462,15 @@ export function useGuidedSearch() {
     setPreviousResults(previousDisplayResults)
     setResults(finalizedResults)
     setShowFinalResultBadges(false)
+    setIsEnrichmentReady(false)
+
+    const token = variables.discoveryToken
+    const query = variables.query
+    const pollSearchId = activeSearchIdRef.current
+
+    if (token && query && finalizedResults.length > 0) {
+      startEnrichmentPolling({ token, query, searchId: pollSearchId })
+    }
     setRequestTiming((current) => ({
       ...current,
       finalize: payload.timing || null,
@@ -551,17 +691,27 @@ export function useGuidedSearch() {
     }
   }, [results])
 
-  useEffect(() => () => resetPrewarmState(), [])
+  useEffect(() => () => {
+    resetPrewarmState()
+    stopEnrichmentPolling()
+  }, [])
 
   const isFinalizing = finalizeMutation.isPending || isAwaitingPrewarmedFinalize
   const isLoading = isDiscovering || isGeneratingPrompt || isFinalizing
   const hasFinalResults = results.length > 0
   const displayedResults = hasFinalResults ? results : showPreviewResults ? previewResults : []
+  const selectedProductForDisplay = resolveSelectedProductForDisplay({
+    previousResults,
+    previewResults,
+    results,
+    selectedProduct: selectedProductState,
+  })
 
   function resetGuidedState(nextSubmittedQuery) {
+    stopEnrichmentPolling()
     setHasStartedSearch(true)
     setSubmittedQuery(nextSubmittedQuery)
-    setSelectedProduct(null)
+    setSelectedProductState(null)
     setErrorMessage('')
     setDiscoveryToken('')
     setCandidatePool(null)
@@ -583,16 +733,18 @@ export function useGuidedSearch() {
     setShowPreviewResults(false)
     setRefinementPrompt(null)
     setQueryFramingFields(null)
+    setIsEnrichmentReady(false)
     hasTrackedRefinementViewRef.current = false
     hasTrackedPreviewImpressionsRef.current = false
   }
 
   function resetToNewSearch() {
     activeSearchIdRef.current += 1
+    stopEnrichmentPolling()
     discardPrewarm('new_search')
     finalizeMutation.reset()
     setProductQuery('')
-    setSelectedProduct(null)
+    setSelectedProductState(null)
     setErrorMessage('')
     setHasStartedSearch(false)
     setSubmittedQuery('')
@@ -618,6 +770,7 @@ export function useGuidedSearch() {
     setShowPreviewResults(false)
     setIsDiscovering(false)
     setIsGeneratingPrompt(false)
+    setIsEnrichmentReady(false)
     analyticsSearchIdRef.current = ''
     hasTrackedRefinementViewRef.current = false
     hasTrackedPreviewImpressionsRef.current = false
@@ -962,8 +1115,8 @@ export function useGuidedSearch() {
   }
 
   function handleSelectProduct(item, { position = 0, resultSet = 'final' } = {}) {
-    setSelectedProduct({
-      ...item,
+    setSelectedProductState({
+      id: item.id,
       analyticsMeta: {
         badgeType: item.badgeLabel || '',
         isBestPick: position === 0 || item.badgeLabel === 'Best match',
@@ -1023,6 +1176,7 @@ export function useGuidedSearch() {
     handleRetailerClick,
     handleSelectProduct,
     isDiscovering,
+    isEnrichmentReady,
     isFinalizing,
     isGeneratingPrompt,
     isLoading,
@@ -1034,7 +1188,7 @@ export function useGuidedSearch() {
     selectionState,
     retryCount,
     retryFeedback,
-    selectedProduct,
+    selectedProduct: selectedProductForDisplay,
     showFinalResultBadges,
     showPreviewResults,
     submittedQuery,
@@ -1046,6 +1200,6 @@ export function useGuidedSearch() {
     setRetryFeedback,
     setFollowUpNotes,
     setProductQuery,
-    setSelectedProduct,
+    setSelectedProduct: setSelectedProductState,
   }
 }
