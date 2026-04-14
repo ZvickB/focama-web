@@ -109,7 +109,12 @@ Optional: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SEARCH_CACHE_TTL_MINUTES`, mod
 ### Environment
 - **PowerShell on Windows** — prefer PowerShell-safe commands; never assume Unix-only shell behavior
 - Small UI or copy changes: prefer manual verification over a full build every time
-- Run tests when they meaningfully reduce risk or validate changed behavior
+
+### Testing
+- Run existing tests after touching backend logic, routes, or AI selector functions — even if the change looks safe
+- Write new tests when adding new routes, new AI functions, or new data contracts — as part of the same task, not after
+- Harness-only measurement code and project notes do not need tests
+- If a test run hits a Windows `EPERM` error before Vitest starts, retry once before investigating
 
 ### After meaningful changes — update notes
 - `project-notes/app_flow.md` — if implemented behavior changed

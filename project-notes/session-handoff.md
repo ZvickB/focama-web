@@ -73,10 +73,16 @@ All latency experiments are concluded. Decisions:
 - Boot splash lives in `/index.html`, shows `Focused shopping`, and fades after app readiness plus minimum display time.
 
 ## Testing state
-- Recent relevant backend tests have passed in earlier passes:
+- Tests were not run this session — changes were harness/measurement/notes focused.
+- Before wiring async enrichment, run existing tests first to confirm clean baseline:
   - `npm test -- backend/server.test.js`
   - `npm test -- api/search/routes.test.js`
-- A later PowerShell rerun of `npm test -- api/search/routes.test.js` hit a Windows `EPERM` path-resolution error before Vitest ran.
+- Write new tests as part of the wiring task, not after. Key things to cover:
+  - nano lock returns correct IDs and badge labels
+  - mini enrichment returns `fit_reason` + `caveat` fields and preserves order
+  - finalize fast response no longer includes fit reason in card payload
+  - new async enrichment endpoint returns enriched results for a valid discoveryToken
+- A previous PowerShell rerun of `npm test -- api/search/routes.test.js` hit a Windows `EPERM` path-resolution error before Vitest ran — if that happens, retry once before investigating.
 
 ## Recent user preferences
 - Minimal copy in the open layout.
