@@ -9,7 +9,7 @@ import {
   nanoLockWinnersAndBadges,
   miniEnrichSelectedCandidates,
 } from './lib/ai-selector.js'
-import { createFinalizeFastContract } from './lib/layered-contracts.js'
+import { createFinalizeFastContract, toFinalizeFastCard } from './lib/layered-contracts.js'
 import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, takeRateLimitToken } from './lib/rate-limit.js'
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
 import { generateFramingFields } from './lib/query-framing.js'
@@ -498,19 +498,7 @@ async function readFinalizeCandidatePoolFromDiscovery(normalizedQuery) {
 function buildFinalizeFallbackResults(candidatePool) {
   return candidatePool.candidates
     .slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit)
-    .map((candidate) => ({
-      id: candidate.id,
-      title: candidate.title,
-      subtitle: candidate.source,
-      price: candidate.price,
-      rating: candidate.rating,
-      reviewCount: candidate.reviewCount,
-      description: candidate.description,
-      reasons: candidate.reasons,
-      image: candidate.image,
-      link: candidate.link,
-      badgeLabel: '',
-    }))
+    .map((candidate) => toFinalizeFastCard(candidate))
 }
 
 function buildFinalizeFastResponseContract({
@@ -1502,6 +1490,97 @@ export async function handleNanoMiniSplitFinalize(request, response) {
   }
 }
 
+// Runs mini enrichment after nano has locked the shortlist, stores result in discovery cache.
+async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model, normalizedQuery }) {
+  const miniResult = await miniEnrichSelectedCandidates({
+    lockedIds,
+    candidatePool,
+    apiKey,
+    model,
+  })
+
+  const { cachedEntry } = await readCachedSearchSnapshot({
+    productQuery: normalizedQuery,
+    details: '',
+    scope: CACHE_SCOPE_DISCOVERY,
+  })
+
+  if (!cachedEntry) {
+    return
+  }
+
+  const updatedSelection = {
+    ...(cachedEntry.selection && typeof cachedEntry.selection === 'object' ? cachedEntry.selection : {}),
+    enrichment: {
+      entries: miniResult.enriched,
+      model: miniResult.model,
+      generatedAt: new Date().toISOString(),
+      preservedOrder: miniResult.preservedOrder,
+    },
+  }
+
+  await writeSearchSnapshot({
+    productQuery: normalizedQuery,
+    details: '',
+    candidatePool: cachedEntry.candidatePool,
+    results: Array.isArray(cachedEntry.results) ? cachedEntry.results : [],
+    selection: updatedSelection,
+    source: 'enrichment_update',
+    scope: CACHE_SCOPE_DISCOVERY,
+  })
+
+  logSearchFlowEvent('mini_enrichment_stored', {
+    query: normalizedQuery,
+    entryCount: miniResult.enriched.length,
+    preservedOrder: miniResult.preservedOrder,
+    model: miniResult.model,
+  })
+}
+
+export async function handleEnrichmentPoll(request, response) {
+  const requestUrl = new URL(request.url, 'http://localhost')
+  const token = requestUrl.searchParams.get('token') || ''
+  const query = requestUrl.searchParams.get('query') || ''
+
+  if (!token || !query) {
+    sendJson(response, 400, { error: 'token and query are required.' })
+    return
+  }
+
+  const { isValid, normalizedQuery } = validateSearchInput(query, '')
+
+  if (!isValid) {
+    sendJson(response, 400, { error: 'Invalid query.' })
+    return
+  }
+
+  const expectedToken = buildCacheKey(normalizedQuery, '', CACHE_SCOPE_DISCOVERY)
+
+  if (token !== expectedToken) {
+    sendJson(response, 400, { error: 'The enrichment token is invalid for this query.' })
+    return
+  }
+
+  const { cachedEntry } = await readCachedSearchSnapshot({
+    productQuery: normalizedQuery,
+    details: '',
+    scope: CACHE_SCOPE_DISCOVERY,
+  })
+
+  const enrichment = cachedEntry?.selection?.enrichment
+
+  if (!enrichment?.entries?.length) {
+    sendJson(response, 200, { ready: false })
+    return
+  }
+
+  sendJson(response, 200, {
+    ready: true,
+    entries: enrichment.entries,
+    model: enrichment.model || '',
+  })
+}
+
 export async function handleFinalizeSelection(request, response) {
   const requestStartedAt = nowMs()
   const openAiApiKey = getEnv('OPENAI_API_KEY')
@@ -1569,7 +1648,6 @@ export async function handleFinalizeSelection(request, response) {
   }
 
   const candidatePool = resolvedCandidatePool.candidatePool
-  const candidateAwarePrior = resolvedCandidatePool.candidateAwarePrior
   const priorities = sanitizeStringList(body?.priorities, {
     maxItems: FINALIZE_MAX_PRIORITIES,
     maxItemLength: FINALIZE_MAX_PRIORITY_LENGTH,
@@ -1592,10 +1670,6 @@ export async function handleFinalizeSelection(request, response) {
     retryCount,
     excludedCandidateIds,
   })
-  const finalizeModel = getFinalizeModel({
-    hasContextSignals,
-  })
-
   if (priorities.length > 0) {
     detailParts.push(`Priorities: ${priorities.join(', ')}`)
   }
@@ -1624,19 +1698,8 @@ export async function handleFinalizeSelection(request, response) {
     details: refinedDetails,
     candidates: eligibleCandidates,
   }
-  const prewarmPriorSummary =
-    resolvedCandidatePool.cachedEntry?.selection &&
-    typeof resolvedCandidatePool.cachedEntry.selection === 'object' &&
-    !Array.isArray(resolvedCandidatePool.cachedEntry.selection) &&
-    resolvedCandidatePool.cachedEntry.selection.prewarm &&
-    typeof resolvedCandidatePool.cachedEntry.selection.prewarm === 'object' &&
-    !Array.isArray(resolvedCandidatePool.cachedEntry.selection.prewarm)
-      ? resolvedCandidatePool.cachedEntry.selection.prewarm
-      : null
   const tokenUsageByStage = {
     finalize: null,
-    candidateAwarePrior: prewarmPriorSummary?.usage || null,
-    prewarmArtifact: prewarmPriorSummary?.usage || null,
   }
 
   if (retryCount > 0 && nextCandidatePool.candidates.length === 0) {
@@ -1683,55 +1746,46 @@ export async function handleFinalizeSelection(request, response) {
     return
   }
 
+  const nanoModel = getFinalizeModel({ hasContextSignals })
+
   try {
     const openAiStartedAt = nowMs()
-    const aiSelection = await selectAiResults({
+    const nanoResult = await nanoLockWinnersAndBadges({
       candidatePool: nextCandidatePool,
       finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
       apiKey: openAiApiKey,
-      model: finalizeModel,
-      candidateAwarePrior,
+      model: nanoModel,
     })
     const openAiDuration = nowMs() - openAiStartedAt
-    tokenUsageByStage.finalize = aiSelection.usage || null
+    tokenUsageByStage.finalize = nanoResult.usage || null
+
+    const candidateById = new Map(
+      nextCandidatePool.candidates.map((c) => [String(c.id), c]),
+    )
+    const nanoResults = nanoResult.lockedIds
+      .map((id) => {
+        const candidate = candidateById.get(String(id))
+        return candidate ? toFinalizeFastCard(candidate) : null
+      })
+      .filter(Boolean)
 
     const fallbackResults = buildFinalizeFallbackResults(nextCandidatePool)
-
-    const results = aiSelection.results.length > 0 ? aiSelection.results : fallbackResults
+    const results = nanoResults.length > 0 ? nanoResults : fallbackResults
     const selectedCandidateIds =
-      aiSelection.results.length > 0
-        ? aiSelection.selectedCandidateIds
-        : fallbackResults.map((item) => item.id)
-    const selectionStrategy =
-      aiSelection.strategy || (aiSelection.results.length > 0 ? 'single_pass' : 'rules_fallback')
+      nanoResults.length > 0 ? nanoResult.lockedIds : fallbackResults.map((item) => item.id)
+    const selectionStrategy = nanoResults.length > 0 ? 'nano_lock' : 'rules_fallback'
+    const flowPath = nanoResults.length > 0 ? 'nano_lock' : 'nano_lock_fallback'
+
     const finalizeFast = buildFinalizeFastResponseContract({
       query: sanitizedDiscoveryContext.normalizedQuery,
       discoveryToken: sanitizedDiscoveryContext.discoveryToken,
       latestUserContext: refinedDetails,
       results,
       selectedCandidateIds,
-      model: aiSelection.results.length > 0 ? aiSelection.model : '',
+      model: nanoResults.length > 0 ? nanoModel : '',
       strategy: selectionStrategy,
     })
     const totalDuration = nowMs() - requestStartedAt
-    const reusedCandidateAwarePrior = Boolean(
-      aiSelection.debug?.candidateAwarePriorReused || aiSelection.debug?.preRankArtifactReused,
-    )
-    const usedIntentMatchRerank = Boolean(aiSelection.debug?.intentMatchRerankUsed)
-    const fallbackReason =
-      aiSelection.results.length > 0
-        ? null
-        : reusedCandidateAwarePrior
-          ? aiSelection.debug?.candidateAwarePriorReuseReason || aiSelection.debug?.preRankReuseReason || 'prior_rerank_empty_fallback'
-          : candidateAwarePrior
-            ? aiSelection.debug?.candidateAwarePriorReuseReason || aiSelection.debug?.preRankReuseReason || 'prior_unusable_fallback'
-            : 'prior_missing'
-    const flowPath =
-      aiSelection.results.length > 0
-        ? reusedCandidateAwarePrior
-          ? 'candidate_aware_prior_rerank'
-          : 'full_finalize'
-        : 'full_finalize_fallback'
 
     logSearchFlowEvent('guided_finalize_completed', {
       route: '/api/search/finalize',
@@ -1743,41 +1797,22 @@ export async function handleFinalizeSelection(request, response) {
       cacheMs: roundTimingDuration(cacheLookupDuration),
       openaiMs: roundTimingDuration(openAiDuration),
       totalMs: roundTimingDuration(totalDuration),
-      openaiUsage: aiSelection.usage || null,
-      rankingOwner: reusedCandidateAwarePrior
-        ? 'openai_with_candidate_aware_prior'
-        : aiSelection.results.length > 0
-          ? 'openai_then_backend_select'
-          : 'deterministic_fallback',
-      selectionMode: aiSelection.results.length > 0 ? 'ai' : 'rules_fallback',
+      openaiUsage: nanoResult.usage || null,
+      rankingOwner: nanoResults.length > 0 ? 'nano_lock' : 'deterministic_fallback',
+      selectionMode: nanoResults.length > 0 ? 'ai' : 'rules_fallback',
       selectionStrategy,
       flowPath,
-      intentMatchRerankingUsed: usedIntentMatchRerank,
-      reusedCandidateAwarePrior,
-      reusedPreRankArtifact: reusedCandidateAwarePrior,
-      fallbackReason,
-      priorByteLength: safeJsonByteLength(candidateAwarePrior),
-      priorCandidateCount: aiSelection.debug?.priorCandidateCount || aiSelection.debug?.artifactCandidateCount || 0,
-      artifactByteLength: safeJsonByteLength(candidateAwarePrior),
-      artifactCandidateCount: aiSelection.debug?.artifactCandidateCount || aiSelection.debug?.priorCandidateCount || 0,
-      finalizeModel,
+      finalizeModel: nanoModel,
       finalizeModelPath: hasContextSignals ? 'context_added' : 'baseline',
     })
 
     sendJson(response, 200, {
       debug: {
         finalizeFastLayer: finalizeFast.layer,
-        priorByteLength: safeJsonByteLength(candidateAwarePrior),
-        priorCandidateCount: aiSelection.debug?.priorCandidateCount || aiSelection.debug?.artifactCandidateCount || 0,
-        artifactByteLength: safeJsonByteLength(candidateAwarePrior),
-        artifactCandidateCount: aiSelection.debug?.artifactCandidateCount || aiSelection.debug?.priorCandidateCount || 0,
-        fallbackReason,
         flowPath,
-        finalizeModel,
+        finalizeModel: nanoModel,
         finalizeModelPath: hasContextSignals ? 'context_added' : 'baseline',
         requestMode,
-        reusedCandidateAwarePrior,
-        reusedPreRankArtifact: reusedCandidateAwarePrior,
         stageLatencyMs: {
           body: roundTimingDuration(body.bodyReadDuration || 0),
           cache: roundTimingDuration(cacheLookupDuration),
@@ -1785,7 +1820,6 @@ export async function handleFinalizeSelection(request, response) {
           total: roundTimingDuration(totalDuration),
         },
         tokenUsageByStage,
-        usedIntentMatchRerank,
       },
       finalizeFast,
       requestMode,
@@ -1793,28 +1827,21 @@ export async function handleFinalizeSelection(request, response) {
       results: finalizeFast.shortlist,
       selection: {
         layer: finalizeFast.layer,
-        mode: aiSelection.results.length > 0 ? 'ai' : 'rules_fallback',
+        mode: nanoResults.length > 0 ? 'ai' : 'rules_fallback',
         strategy: selectionStrategy,
-        model: aiSelection.results.length > 0 ? aiSelection.model : null,
+        model: nanoResults.length > 0 ? nanoModel : null,
         modelPath: hasContextSignals ? 'context_added' : 'baseline',
         requestMode,
         shortlistLocked: finalizeFast.shortlistLocked,
-        usage: aiSelection.results.length > 0 ? aiSelection.usage || null : null,
+        usage: nanoResults.length > 0 ? nanoResult.usage || null : null,
         selectedCandidateIds: finalizeFast.selectedCandidateIds,
-        details:
-          aiSelection.results.length > 0
-            ? reusedCandidateAwarePrior
-              ? 'AI finalized the shortlist using the stored candidate-aware prewarm prior.'
-              : 'AI selected the final recommendations from the cleaned candidate pool.'
-            : 'Rules-based fallback was used.',
+        details: nanoResults.length > 0
+          ? 'Nano locked the shortlist. Mini enrichment is running async.'
+          : 'Rules-based fallback was used.',
         flowPath,
-        fallbackReason,
-        reusedCandidateAwarePrior,
-        reusedPreRankArtifact: reusedCandidateAwarePrior,
-        usedIntentMatchRerank,
       },
       usage: {
-        openai: aiSelection.usage || null,
+        openai: nanoResult.usage || null,
       },
     }, {
       serverTiming: [
@@ -1824,6 +1851,23 @@ export async function handleFinalizeSelection(request, response) {
         { name: 'total', duration: totalDuration },
       ],
     })
+
+    // Fire off mini enrichment async — does not block the response
+    if (nanoResults.length > 0) {
+      const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
+      runMiniEnrichmentAsync({
+        lockedIds: nanoResult.lockedIds,
+        candidatePool: nextCandidatePool,
+        apiKey: openAiApiKey,
+        model: miniModel,
+        normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
+      }).catch((error) => {
+        logSearchFlowEvent('mini_enrichment_failed', {
+          query: sanitizedDiscoveryContext.normalizedQuery,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        })
+      })
+    }
   } catch (error) {
     logSearchFlowEvent('guided_finalize_failed', {
       route: '/api/search/finalize',
@@ -1831,10 +1875,6 @@ export async function handleFinalizeSelection(request, response) {
       candidateCount: nextCandidatePool.candidates.length,
       retryCount,
       requestMode,
-      priorReady: Boolean(candidateAwarePrior),
-      priorByteLength: safeJsonByteLength(candidateAwarePrior),
-      artifactReady: Boolean(candidateAwarePrior),
-      artifactByteLength: safeJsonByteLength(candidateAwarePrior),
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
       error: error instanceof Error ? error.message : 'Unknown error',
     })
@@ -2036,6 +2076,11 @@ export function createApiServer() {
 
     if (request.method === 'POST' && requestUrl.pathname === '/api/search/finalize') {
       await handleFinalizeSelection(request, response)
+      return
+    }
+
+    if (request.method === 'GET' && requestUrl.pathname === '/api/search/enrichment') {
+      await handleEnrichmentPoll(request, response)
       return
     }
 

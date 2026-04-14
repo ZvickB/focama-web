@@ -109,7 +109,7 @@ describe('ai selector', () => {
     })
     expect(result.selectedCandidateIds).toEqual(['prod-2', 'prod-1'])
     expect(result.results[0].title).toBe('Compact airport stroller')
-    expect(result.results[0].reasons[0]).toBe('AI fit: Best fit for airport travel and strong reviews.')
+    expect(result.results[0]).not.toHaveProperty('reasons')
     expect(result.results[0]).not.toHaveProperty('drawbacks')
     expect(result.results[0].badgeLabel).toBe('')
     expect(result.results[1].badgeLabel).toBe('')

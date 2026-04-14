@@ -98,17 +98,8 @@ export function ResultSkeleton({ className = '' }) {
   )
 }
 
-// ASYNC ENRICHMENT SIMULATION — change to 0 to disable, delete this block to fully remove
-const SIMULATE_ENRICHMENT_DELAY_MS = 8000
-
 export function ProductDetailModal({ item, onClose, onRetailerClick }) {
-  const [enrichmentReady, setEnrichmentReady] = useState(SIMULATE_ENRICHMENT_DELAY_MS === 0)
-  useEffect(() => {
-    setEnrichmentReady(SIMULATE_ENRICHMENT_DELAY_MS === 0)
-    if (SIMULATE_ENRICHMENT_DELAY_MS === 0) return
-    const timer = setTimeout(() => setEnrichmentReady(true), SIMULATE_ENRICHMENT_DELAY_MS)
-    return () => clearTimeout(timer)
-  }, [item])
+  const enrichmentReady = Boolean(item?.fit_reason)
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -131,7 +122,6 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
     return null
   }
 
-  const userFacingReasons = getUserFacingReasons(item.reasons)
   const userFacingDescription = getUserFacingDescription(item.description)
 
   return (
@@ -209,12 +199,10 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
                   <CardTitle className="text-lg text-slate-900">Why this pick stands out</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
-                  {userFacingReasons.map((reason) => (
-                    <div key={reason} className="flex items-start gap-3">
-                      <Star className="mt-1 h-4 w-4 text-amber-500" />
-                      <span>{reason}</span>
-                    </div>
-                  ))}
+                  <div className="flex items-start gap-3">
+                    <Star className="mt-1 h-4 w-4 text-amber-500" />
+                    <span>{item.fit_reason}</span>
+                  </div>
                 </CardContent>
               </Card>
             ) : (
@@ -228,18 +216,16 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
               </Card>
             )}
 
-            {enrichmentReady && item.drawbacks?.length ? (
+            {enrichmentReady && item.caveat ? (
               <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg text-slate-900">Possible drawbacks</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
-                  {item.drawbacks.map((drawback) => (
-                    <div key={drawback} className="flex items-start gap-3">
-                      <span className="mt-1 h-2.5 w-2.5 rounded-full bg-stone-400" />
-                      <span>{drawback}</span>
-                    </div>
-                  ))}
+                <CardContent className="text-sm leading-6 text-slate-600">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-1 h-2.5 w-2.5 rounded-full bg-stone-400" />
+                    <span>{item.caveat}</span>
+                  </div>
                 </CardContent>
               </Card>
             ) : null}

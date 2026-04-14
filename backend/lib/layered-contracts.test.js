@@ -83,24 +83,19 @@ describe('layered contracts', () => {
   })
 
   it('defines finalize-fast cards as shortlist-safe only', () => {
-    const card = toFinalizeFastCard(
-      {
-        id: 'prod-1',
-        title: 'Compact airport stroller',
-        source: 'Target',
-        price: '$199.99',
-        rating: 4.7,
-        reviewCount: 342,
-        description: 'Lightweight stroller for flights',
-        reasons: ['Fallback reason'],
-        drawbacks: ['Should not be forwarded'],
-        image: 'https://example.com/stroller.jpg',
-        link: 'https://example.com/stroller',
-      },
-      {
-        fitReason: 'Best match for frequent airport use.',
-      },
-    )
+    const card = toFinalizeFastCard({
+      id: 'prod-1',
+      title: 'Compact airport stroller',
+      source: 'Target',
+      price: '$199.99',
+      rating: 4.7,
+      reviewCount: 342,
+      description: 'Lightweight stroller for flights',
+      reasons: ['Fallback reason'],
+      drawbacks: ['Should not be forwarded'],
+      image: 'https://example.com/stroller.jpg',
+      link: 'https://example.com/stroller',
+    })
 
     expect(card).toEqual({
       id: 'prod-1',
@@ -110,11 +105,11 @@ describe('layered contracts', () => {
       rating: 4.7,
       reviewCount: 342,
       description: 'Lightweight stroller for flights',
-      reasons: ['AI fit: Best match for frequent airport use.'],
       image: 'https://example.com/stroller.jpg',
       link: 'https://example.com/stroller',
       badgeLabel: '',
     })
+    expect(card).not.toHaveProperty('reasons')
     expect(card).not.toHaveProperty('drawbacks')
   })
 
@@ -147,8 +142,8 @@ describe('layered contracts', () => {
       entries: [
         {
           candidateId: 'prod-2',
-          fitSummary: 'Fits frequent travel because the fold is compact and easy to carry.',
-          tradeoffSummary: 'The price is a little higher than bulkier budget picks.',
+          fitReason: 'Fits frequent travel because the fold is compact and easy to carry.',
+          caveat: 'The price is a little higher than bulkier budget picks.',
         },
       ],
     })
@@ -163,8 +158,8 @@ describe('layered contracts', () => {
       entries: [
         {
           candidateId: 'prod-2',
-          fitSummary: 'Fits frequent travel because the fold is compact and easy to carry.',
-          tradeoffSummary: 'The price is a little higher than bulkier budget picks.',
+          fitReason: 'Fits frequent travel because the fold is compact and easy to carry.',
+          caveat: 'The price is a little higher than bulkier budget picks.',
         },
       ],
     })

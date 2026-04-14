@@ -365,8 +365,8 @@ function buildPriorRerankSchema() {
   }
 }
 
-function buildUiResult(candidate, rationale) {
-  return toFinalizeFastCard(candidate, { fitReason: rationale })
+function buildUiResult(candidate) {
+  return toFinalizeFastCard(candidate)
 }
 
 async function requestStructuredSelection(
@@ -634,7 +634,7 @@ function mapSelectionPicksToResults(picks, candidates, finalResultLimit) {
 
   return {
     selectedCandidateIds: selected.map((entry) => entry.candidateId),
-    results: selected.map((entry) => buildUiResult(entry.candidate, entry.rationale)),
+    results: selected.map((entry) => buildUiResult(entry.candidate)),
   }
 }
 
@@ -720,10 +720,9 @@ function buildMiniEnrichmentPrompt({ lockedCandidates, query, details }) {
   return [
     'Write a short explanation for each of these selected products. Write like a trusted assistant, not a salesperson.',
     'The shortlist is already decided. Do not change the order or swap any product.',
-    'For each product:',
-    '1. Explain in one or two sentences why it was picked for this specific need.',
-    '2. Add one honest caveat or drawback — practical (e.g. exceeds budget, heavier than alternatives) or contextual (e.g. better if X matters more than Y). Do not skip this even if the pick is strong.',
-    'Be specific to the user context. Avoid superlatives, hype phrases, and generic positives.',
+    'For each product, write two separate fields:',
+    '1. fit_reason: One or two sentences explaining why it was picked for this specific need. Be specific to the user context. Avoid superlatives, hype phrases, and generic positives.',
+    '2. caveat: One honest drawback or caveat — practical (e.g. exceeds budget, heavier than alternatives) or contextual (e.g. better if X matters more than Y). Do not skip this even if the pick is strong.',
     '',
     `Product query: ${query}`,
     `User context: ${details || 'None provided.'}`,
@@ -744,8 +743,9 @@ function buildMiniEnrichmentSchema() {
           properties: {
             candidate_id: { type: 'string' },
             fit_reason: { type: 'string' },
+            caveat: { type: 'string' },
           },
-          required: ['candidate_id', 'fit_reason'],
+          required: ['candidate_id', 'fit_reason', 'caveat'],
           additionalProperties: false,
         },
       },

@@ -36,28 +36,28 @@
 
 ## Current guided flow
 - `/api/search/discover` builds the candidate pool and preview set.
-- `/api/search/prewarm` starts after usable candidates exist and stores a reusable candidate-aware prior.
+- `/api/search/prewarm` backend route still exists but is disabled in frontend.
 - `/api/search/refine` returns one fast user-facing follow-up question.
 - `/api/search/framing-fields` returns slower background framing fields for timing/debug visibility.
-- `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache, locks the shortlist, and returns `finalizeFast` plus compatible `results`.
-- Finalized card data is shortlist-safe: selected ids, core product facts, and one concise fit reason.
-- Badge labels are frontend-owned after final results arrive.
-- Drawback/caution copy is not part of the blocking finalized card payload.
+- `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache, locks the shortlist via nano (~2s), fires mini enrichment async, and returns `flowPath: 'nano_lock'` plus metadata-only cards.
+- `/api/search/enrichment` GET — frontend polls with `?token=&query=` until `ready: true` then merges `fit_reason`/`caveat` into results.
+- Cards = metadata only: image, title, source, price, ratings, badge label. No AI copy.
+- AI copy (`fit_reason`, `caveat`) lives in the modal only, populated when enrichment arrives.
+- Badge labels are frontend-owned and assigned deterministically after shortlist arrives.
 
-## Current experiment status — CLOSED
-All latency experiments are concluded. Decisions:
-- **Prewarm: off.** Disabled in frontend as of 2026-04-14. Not a latency win, was blocking finalize for up to 23s. Backend route still exists for measurement only.
-- **nano-lock + mini async-enrichment: validated.** Nano locks winners+badges at ~2s, mini enriches async at ~8-12s with honest-caveat tone. UX acceptable because cards show metadata only and AI copy lives in modal.
-- **One-call stream: measured.** nano is the only viable fast model (~2.24s lock). mini is too slow for one-call stream (~8s lock, ~19s full).
-- **Next step: wire nano-lock + mini async-enrichment into the real product flow.**
+## Current experiment status — CLOSED AND WIRED
+All latency experiments are concluded and wired into the real product flow. Decisions:
+- **Prewarm: off.** Disabled in frontend as of 2026-04-14. Backend route still exists.
+- **nano-lock + mini async-enrichment: live.** Nano locks winners at ~2s (cards appear), mini enriches async at ~8-12s (modal AI copy arrives via polling).
+- **One-call stream: measured but not wired.** nano is the only viable fast model.
 
-## What needs wiring (next implementation task)
-1. Finalize returns nano shortlist fast (cards appear at ~2s)
-2. Mini enrichment runs async server-side after nano lock
-3. Frontend polls or receives enrichment and fills modal when ready
-4. Split mini schema into `fit_reason` + `caveat` fields so both modal sections populate
-5. Remove fit reason from blocking finalize card payload (cards = metadata only)
-6. Remove `SIMULATE_ENRICHMENT_DELAY_MS` simulation from `HomeShared.jsx`
+## What was wired (completed 2026-04-14)
+1. `/api/search/finalize` uses nano to lock shortlist fast, fires mini enrichment async after responding
+2. `/api/search/enrichment` GET endpoint — frontend polls this for enrichment readiness
+3. Mini enrichment schema uses `fit_reason` + `caveat` as separate fields
+4. Cards = metadata only (no AI copy). Modal shows `fit_reason` + `caveat` when enrichment arrives
+5. `HomeShared.jsx` modal shows placeholder until enrichment ready (`enrichmentReady = Boolean(item?.fit_reason)`)
+6. Enrichment stored in discovery cache `selection.enrichment` field — no new DB tables needed
 
 ## Current real-world timings (no prewarm, fresh cache miss)
 - Discover: ~6.5s (SerpApi ~5.3s cache miss; ~150ms on cache hit)
@@ -73,16 +73,9 @@ All latency experiments are concluded. Decisions:
 - Boot splash lives in `/index.html`, shows `Focused shopping`, and fades after app readiness plus minimum display time.
 
 ## Testing state
-- Tests were not run this session — changes were harness/measurement/notes focused.
-- Before wiring async enrichment, run existing tests first to confirm clean baseline:
-  - `npm test -- backend/server.test.js`
-  - `npm test -- api/search/routes.test.js`
-- Write new tests as part of the wiring task, not after. Key things to cover:
-  - nano lock returns correct IDs and badge labels
-  - mini enrichment returns `fit_reason` + `caveat` fields and preserves order
-  - finalize fast response no longer includes fit reason in card payload
-  - new async enrichment endpoint returns enriched results for a valid discoveryToken
-- A previous PowerShell rerun of `npm test -- api/search/routes.test.js` hit a Windows `EPERM` path-resolution error before Vitest ran — if that happens, retry once before investigating.
+- 102 tests passing as of 2026-04-14. All suites green.
+- Key coverage added this session: nano lock, enrichment poll endpoint, async enrichment storage, enrichment contract fields (`fit_reason`/`caveat`), cards without AI copy.
+- `window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__ = true` is set in all `HomePage.test.jsx` beforeEach calls to suppress background polling in tests (same pattern as prewarm disable flag).
 
 ## Recent user preferences
 - Minimal copy in the open layout.

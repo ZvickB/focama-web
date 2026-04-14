@@ -43,21 +43,18 @@
 - Guided search responses expose `Server-Timing`; the homepage timing panel appears in development or when `?timing=1` is present.
 
 ## Current finalize reality
-- Guided finalize is back on the slimmer one-shot selector as the active baseline after the compact shard-scoring experiment regressed.
-- Blocking finalized cards include core product facts and one concise fit reason.
-- Drawback/caution copy is no longer part of the blocking finalized card payload.
-- AI no longer assigns badge labels in the blocking finalize response; frontend heuristics assign scan-friendly badges after final results load.
-- `/api/search/finalize` returns a `finalizeFast` contract plus `results` derived from that contract.
-- Normal guided finalize responses no longer echo the rich candidate pool back to the browser.
-- The broader candidate-aware prewarm flow is active experiment groundwork:
-  - prewarm starts after usable discovery candidates exist
-  - it stores a reusable `candidate_aware_prewarm` prior in guided discovery cache
-  - it does not lock the shortlist or materialize final cards directly
-  - finalize can use the prior or fall back to one-shot selection
+- `/api/search/finalize` uses nano to lock the shortlist fast (~2s), then fires mini enrichment async after responding.
+- Blocking finalize cards are metadata only: image, title, source, price, ratings, badge label. No AI copy in the blocking response.
+- AI copy (`fit_reason` + `caveat`) is written by mini and stored in the discovery cache `selection.enrichment` field.
+- `/api/search/enrichment` GET endpoint — frontend polls with `?token=&query=` until enrichment is ready, then merges `fit_reason`/`caveat` into results by `candidateId`.
+- Modal shows a loading placeholder until enrichment arrives (`enrichmentReady = Boolean(item?.fit_reason)`).
+- Badge labels are frontend-owned deterministic heuristics assigned after the shortlist arrives.
+- Finalize response shape: `flowPath: 'nano_lock'`, `strategy: 'nano_lock'`, no `reusedCandidateAwarePrior`.
+- Normal guided finalize responses do not echo the rich candidate pool back to the browser.
 - Query framing is split:
   - `/api/search/refine` returns the fast user-visible question
   - `/api/search/framing-fields` returns slower background framing fields for timing/debug only
-  - framing fields are not yet stored server-side or consumed by finalize in normal product flow
+  - framing fields are not stored server-side or consumed by finalize in normal product flow
 
 ## Guardrails
 - Keep the guided flow as the main product path unless the user explicitly approves a change.
@@ -147,11 +144,7 @@
 - Work happens in PowerShell on Windows. Never print raw `.env` secret values.
 
 ## Recommended next task
-- If continuing latency work, do the smallest harness-only version of the new nano-lock plus mini async-enrichment experiment.
-- Scope: nano locks winners/badges fast, then mini writes nicer copy in a non-blocking second call.
-- Do not wire frontend, do not implement product behavior, and do not redesign the architecture.
-- Measure lock/badge latency, mini enrichment latency, tokens by model, locked-ID/order preservation, and obvious quality misses on the same context5 sample set.
-- Keep measurement-only fields temporary:
-  - `measurementPreparedQueryFraming`
-  - `measurementSelectionMode: selection_only`
-  - `measurementSelectionMode: winner_lock_ids_only`
+- Nano-lock + mini async-enrichment is wired and tests pass. Next logical steps:
+  - Verify the golden path in the browser: do cards appear fast, does the modal populate when enrichment arrives?
+  - Review product voice in mini's honest-caveat copy against the office chair reference example in CLAUDE.md.
+  - Decide whether to keep the `selectAiResults` path in `ai-selector.js` or clean it up since finalize no longer calls it directly.

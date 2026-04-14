@@ -31,10 +31,11 @@
 
 ## Guided backend flow
 - `/api/search/discover` builds the candidate pool and preview set, returns `discoveryToken`, and writes guided discovery cache in the background after response artifacts are ready.
-- `/api/search/prewarm` starts after usable discovery candidates exist and stores a reusable `candidate_aware_prewarm` prior in guided discovery cache.
+- `/api/search/prewarm` backend route exists but is disabled in the frontend as of 2026-04-14.
 - `/api/search/refine` returns one short user-facing follow-up question with static helper/placeholder copy.
 - `/api/search/framing-fields` returns background query-framing fields for timing/debug visibility only.
-- `/api/search/finalize` accepts lightweight context, reconstructs the rich candidate pool server-side from guided discovery cache, locks the shortlist, and returns `finalizeFast` plus compatible `results`.
+- `/api/search/finalize` accepts lightweight context, reconstructs the rich candidate pool server-side from guided discovery cache, locks the shortlist via nano (~2s), and returns metadata-only cards immediately. Mini enrichment fires async after the response is sent and stores `fit_reason`/`caveat` in the discovery cache.
+- `/api/search/enrichment` GET — accepts `?token=&query=`, returns `{ ready: false }` or `{ ready: true, entries: [...] }` where each entry has `candidateId`, `fitReason`, `caveat`.
 - `/api/search/live` is the explicit manual/debug combined route.
 - `/api/search/debug` should describe guided flow as primary.
 - `/api/health/supabase` should treat local file fallback as a supported development/storage mode when Supabase is not configured.
@@ -46,28 +47,19 @@
   - `framing_fields` powers `/api/search/framing-fields`
 - On search submit, the frontend starts guided discovery, question-fast refine, and background framing-fields independently.
 - Background framing fields are held client-side for timing/debug visibility; they are not stored server-side or consumed by normal finalize.
-- Candidate-aware prewarm is a prior, not a premature final answer.
-- Empty-note, refined-note, and retry finalization can use the stored prior or fall back to one-shot finalize.
-- Guided finalize currently keeps the slimmer one-shot selector as the active baseline.
+- Finalize uses nano (~2s) to lock winners, then fires mini enrichment async after responding.
+- Mini enrichment writes `fit_reason` + `caveat` per pick and stores in the discovery cache `selection.enrichment` field.
+- Frontend polls `/api/search/enrichment` every 1.5s (30s timeout) and merges enrichment into results by `candidateId`.
 - Normal user-facing flow does not send `measurementPreparedQueryFraming`, `measurementSelectionMode: selection_only`, or `measurementSelectionMode: winner_lock_ids_only`; those are temporary measurement-only finalize inputs.
-- A temporary local-only measurement route, `POST /api/search/finalize-stream`, exists for the now-measured one-call stream harness. It is not wired to the frontend, not exposed through a Vercel wrapper, and does not change normal `/api/search/finalize` behavior.
-- The next nano-lock plus mini async-enrichment idea is planned as harness-only and is not implemented in current app behavior.
+- A temporary local-only measurement route, `POST /api/search/finalize-stream`, exists for the measured one-call stream harness. It is not wired to the frontend and does not change normal finalize behavior.
 
 ## Final result behavior
 - Result lists display up to 6 normalized product cards.
-- Finalized card results currently include shortlist-safe fields: image, title, merchant/source, price, ratings when available, link when available, and one concise fit reason.
-- Finalized cards no longer include drawback/caution copy.
-- AI no longer returns badge labels or badge reasons in the blocking finalize response.
-- Frontend deterministic presentation logic assigns scan-friendly badge labels after the shortlist arrives, with a slight delayed reveal.
-- Clicking a product opens a detail modal with product image, fit explanation, price/ratings, available tradeoff data, and an outbound retailer link when available.
-- Richer drawback/caution explanation is planned for a later enrichment layer, not part of blocking finalize today.
-
-### Planned card and modal split (not yet implemented)
-- The intended direction is that product cards show metadata only: image, title, merchant/source, price, ratings, and a deterministic badge label.
-- AI-generated copy (fit reasons, explanations, tradeoff notes) belongs in the modal only, not on the card surface.
-- This decoupling lets cards render immediately from shortlist-safe data while AI copy loads progressively inside the modal.
-- The current implementation still includes a fit reason in the blocking finalize card payload. This will need to be adjusted once the async enrichment strategy is settled and the modal loading state is implemented.
-- Modal graceful loading state (core facts immediately, explanation sections load progressively) is a known pending implementation step.
+- Cards show metadata only: image, title, merchant/source, price, ratings, and a deterministic badge label. No AI copy on the card surface.
+- AI copy (`fit_reason`, `caveat`) lives in the modal only and arrives via enrichment polling.
+- AI no longer returns badge labels in the blocking finalize response. Frontend heuristics assign scan-friendly badges after the shortlist arrives with a slight delayed reveal.
+- Clicking a product opens a detail modal. If enrichment has arrived, the modal shows "Why this pick stands out" (`fit_reason`) and "Possible drawbacks" (`caveat`). If enrichment is still pending, those sections show a loading placeholder.
+- `enrichmentReady = Boolean(item?.fit_reason)` drives the modal loading state.
 
 ## Data, cache, and observability
 - Product data comes from the live guided backend path, not a frontend mock catalog.

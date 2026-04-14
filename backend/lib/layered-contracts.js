@@ -121,15 +121,7 @@ export function createCandidateAwarePrewarmContract({
   }
 }
 
-export function toFinalizeFastCard(candidate, { fitReason = '' } = {}) {
-  const reasons = compactStringArray(
-    fitReason ? [`AI fit: ${fitReason}`] : Array.isArray(candidate?.reasons) ? candidate.reasons : [],
-    {
-      maxItems: FINALIZE_REASON_LIMIT,
-      maxLength: 240,
-    },
-  )
-
+export function toFinalizeFastCard(candidate) {
   return {
     id: truncateText(candidate?.id, 200),
     title: truncateText(candidate?.title, 300),
@@ -138,7 +130,6 @@ export function toFinalizeFastCard(candidate, { fitReason = '' } = {}) {
     rating: Number.isFinite(Number(candidate?.rating)) ? Number(candidate.rating) : null,
     reviewCount: Number.isFinite(Number(candidate?.reviewCount)) ? Number(candidate.reviewCount) : null,
     description: truncateText(candidate?.description, 1200),
-    reasons,
     image: truncateText(candidate?.image, 1000),
     link: truncateText(candidate?.link, 1000),
     badgeLabel: '',
@@ -193,8 +184,8 @@ export function createEnrichmentContract({
     entries: Array.isArray(entries)
       ? entries.map((entry) => ({
           candidateId: truncateText(entry?.candidateId, 200),
-          fitSummary: truncateText(entry?.fitSummary, 240),
-          tradeoffSummary: truncateText(entry?.tradeoffSummary, 240),
+          fitReason: truncateText(entry?.fitReason, 400),
+          caveat: truncateText(entry?.caveat, 400),
         }))
       : [],
   }
