@@ -541,11 +541,29 @@ function OpenLayout(props) {
                     ) : null}
                   </div>
 
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-end">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="order-2 flex flex-col gap-1 sm:order-1">
+                      <Button
+                        type="button"
+                        disabled={!hasDiscoveryResults || state.isFinalizing}
+                        variant="ghost"
+                        className={`h-10 w-full justify-start rounded-[20px] px-4 text-sm transition sm:w-auto ${
+                          hasDiscoveryResults && !state.isFinalizing
+                            ? 'text-slate-600 hover:bg-stone-100 hover:text-slate-900'
+                            : 'text-slate-400'
+                        }`}
+                        onClick={onShowProductsNow}
+                      >
+                        Show products now
+                      </Button>
+                      <p className="px-4 text-xs text-slate-400">
+                        Skip refinement — faster but less focused.
+                      </p>
+                    </div>
                     <Button
                       type="button"
                       disabled={!hasDiscoveryResults || state.isFinalizing}
-                      className="h-14 w-full rounded-[24px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_18px_40px_-24px_rgba(37,99,235,0.7)] hover:bg-primary/90 sm:min-w-[220px]"
+                      className="order-1 h-14 w-full rounded-[24px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_18px_40px_-24px_rgba(37,99,235,0.7)] hover:bg-primary/90 sm:order-2 sm:w-auto sm:min-w-[220px]"
                       onClick={onFinalize}
                     >
                       {state.isFinalizing ? 'Narrowing your picks...' : 'Show focused picks'}
@@ -555,23 +573,6 @@ function OpenLayout(props) {
                         <Sparkles className="ml-2 h-4 w-4" />
                       )}
                     </Button>
-                    <div className="space-y-1 text-right sm:max-w-[240px] sm:flex sm:min-h-[56px] sm:flex-col sm:justify-between">
-                      <Button
-                        type="button"
-                        disabled={!hasDiscoveryResults || state.isFinalizing}
-                        className={`h-13 w-full rounded-[24px] px-5 text-sm transition sm:min-w-[220px] ${
-                          hasDiscoveryResults && !state.isFinalizing
-                            ? 'bg-accent/70 text-accent-foreground hover:bg-accent/80'
-                            : 'bg-stone-200 text-slate-500 hover:bg-stone-200'
-                        }`}
-                        onClick={onShowProductsNow}
-                      >
-                        Show products now
-                      </Button>
-                      <p className="text-xs text-slate-500">
-                        Fast picks now. Add detail for a more focused shortlist.
-                      </p>
-                    </div>
                   </div>
                 </div>
               ) : null}
@@ -579,7 +580,7 @@ function OpenLayout(props) {
           </form>
         </section>
 
-        <section className="w-full max-w-5xl space-y-4">
+        <section className="w-full max-w-[1100px] space-y-4">
           {showLoadingResults ? (
             <div ref={resultsViewportRef} className="max-h-[360px] scroll-mt-28 overflow-hidden">
               {state.isFinalizing ? (
@@ -611,7 +612,7 @@ function OpenLayout(props) {
           ) : (
             <div
               ref={resultsViewportRef}
-              className="scroll-mt-28 rounded-[32px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.28)] backdrop-blur sm:p-6"
+              className="scroll-mt-28"
             >
               <ResultsSection
                 displayedResults={displayedResults}
