@@ -7,6 +7,7 @@ import {
   createCandidateAwarePrior,
   selectAiResults,
 } from './lib/ai-selector.js'
+import { createFinalizeFastContract } from './lib/layered-contracts.js'
 import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, takeRateLimitToken } from './lib/rate-limit.js'
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
 import { generateFramingFields } from './lib/query-framing.js'
@@ -508,6 +509,27 @@ function buildFinalizeFallbackResults(candidatePool) {
       link: candidate.link,
       badgeLabel: '',
     }))
+}
+
+function buildFinalizeFastResponseContract({
+  query = '',
+  discoveryToken = '',
+  latestUserContext = '',
+  results = [],
+  selectedCandidateIds = [],
+  model = '',
+  strategy = '',
+} = {}) {
+  return createFinalizeFastContract({
+    query,
+    discoveryToken,
+    latestUserContext,
+    selectedCandidateIds,
+    shortlist: results.slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit),
+    model,
+    strategy,
+    generatedAt: new Date().toISOString(),
+  })
 }
 
 export async function handleCachedSearch(requestUrl, response) {
@@ -1520,6 +1542,16 @@ export async function handleFinalizeSelection(request, response) {
   }
 
   if (retryCount > 0 && nextCandidatePool.candidates.length === 0) {
+    const finalizeFast = buildFinalizeFastResponseContract({
+      query: sanitizedDiscoveryContext.normalizedQuery,
+      discoveryToken: sanitizedDiscoveryContext.discoveryToken,
+      latestUserContext: refinedDetails,
+      results: [],
+      selectedCandidateIds: [],
+      model: '',
+      strategy: 'retry_exhausted',
+    })
+
     logSearchFlowEvent('guided_finalize_retry_exhausted', {
       route: '/api/search/finalize',
       query: sanitizedDiscoveryContext.normalizedQuery,
@@ -1530,15 +1562,17 @@ export async function handleFinalizeSelection(request, response) {
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
     sendJson(response, 200, {
-      candidatePool: nextCandidatePool,
+      finalizeFast,
       requestMode,
       retryCount,
-      results: [],
+      results: finalizeFast.shortlist,
       selection: {
+        layer: finalizeFast.layer,
         mode: 'retry_exhausted',
         model: null,
         requestMode,
-        selectedCandidateIds: [],
+        shortlistLocked: finalizeFast.shortlistLocked,
+        selectedCandidateIds: finalizeFast.selectedCandidateIds,
         details: 'No new candidates remained after excluding the previously rejected picks.',
       },
     }, {
@@ -1566,6 +1600,21 @@ export async function handleFinalizeSelection(request, response) {
     const fallbackResults = buildFinalizeFallbackResults(nextCandidatePool)
 
     const results = aiSelection.results.length > 0 ? aiSelection.results : fallbackResults
+    const selectedCandidateIds =
+      aiSelection.results.length > 0
+        ? aiSelection.selectedCandidateIds
+        : fallbackResults.map((item) => item.id)
+    const selectionStrategy =
+      aiSelection.strategy || (aiSelection.results.length > 0 ? 'single_pass' : 'rules_fallback')
+    const finalizeFast = buildFinalizeFastResponseContract({
+      query: sanitizedDiscoveryContext.normalizedQuery,
+      discoveryToken: sanitizedDiscoveryContext.discoveryToken,
+      latestUserContext: refinedDetails,
+      results,
+      selectedCandidateIds,
+      model: aiSelection.results.length > 0 ? aiSelection.model : '',
+      strategy: selectionStrategy,
+    })
     const totalDuration = nowMs() - requestStartedAt
     const reusedCandidateAwarePrior = Boolean(
       aiSelection.debug?.candidateAwarePriorReused || aiSelection.debug?.preRankArtifactReused,
@@ -1603,7 +1652,7 @@ export async function handleFinalizeSelection(request, response) {
           ? 'openai_then_backend_select'
           : 'deterministic_fallback',
       selectionMode: aiSelection.results.length > 0 ? 'ai' : 'rules_fallback',
-      selectionStrategy: aiSelection.strategy || 'single_pass',
+      selectionStrategy,
       flowPath,
       intentMatchRerankingUsed: usedIntentMatchRerank,
       reusedCandidateAwarePrior,
@@ -1618,8 +1667,8 @@ export async function handleFinalizeSelection(request, response) {
     })
 
     sendJson(response, 200, {
-      candidatePool: nextCandidatePool,
       debug: {
+        finalizeFastLayer: finalizeFast.layer,
         priorByteLength: safeJsonByteLength(candidateAwarePrior),
         priorCandidateCount: aiSelection.debug?.priorCandidateCount || aiSelection.debug?.artifactCandidateCount || 0,
         artifactByteLength: safeJsonByteLength(candidateAwarePrior),
@@ -1640,20 +1689,20 @@ export async function handleFinalizeSelection(request, response) {
         tokenUsageByStage,
         usedIntentMatchRerank,
       },
+      finalizeFast,
       requestMode,
       retryCount,
-      results,
+      results: finalizeFast.shortlist,
       selection: {
+        layer: finalizeFast.layer,
         mode: aiSelection.results.length > 0 ? 'ai' : 'rules_fallback',
-        strategy: aiSelection.strategy || 'single_pass',
+        strategy: selectionStrategy,
         model: aiSelection.results.length > 0 ? aiSelection.model : null,
         modelPath: hasContextSignals ? 'context_added' : 'baseline',
         requestMode,
+        shortlistLocked: finalizeFast.shortlistLocked,
         usage: aiSelection.results.length > 0 ? aiSelection.usage || null : null,
-        selectedCandidateIds:
-          aiSelection.results.length > 0
-            ? aiSelection.selectedCandidateIds
-            : fallbackResults.map((item) => item.id),
+        selectedCandidateIds: finalizeFast.selectedCandidateIds,
         details:
           aiSelection.results.length > 0
             ? reusedCandidateAwarePrior

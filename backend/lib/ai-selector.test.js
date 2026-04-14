@@ -110,7 +110,7 @@ describe('ai selector', () => {
     expect(result.selectedCandidateIds).toEqual(['prod-2', 'prod-1'])
     expect(result.results[0].title).toBe('Compact airport stroller')
     expect(result.results[0].reasons[0]).toBe('AI fit: Best fit for airport travel and strong reviews.')
-    expect(result.results[0].drawbacks).toEqual(['Pricier than the cheapest compact options.'])
+    expect(result.results[0]).not.toHaveProperty('drawbacks')
     expect(result.results[0].badgeLabel).toBe('')
     expect(result.results[1].badgeLabel).toBe('')
   })
@@ -162,11 +162,11 @@ describe('ai selector', () => {
 
     expect(result.selectedCandidateIds).toEqual(['prod-1'])
     expect(result.results).toHaveLength(1)
-    expect(result.results[0].drawbacks).toEqual(['Some caution.'])
+    expect(result.results[0]).not.toHaveProperty('drawbacks')
     expect(result.results[0].badgeLabel).toBe('')
   })
 
-  it('does not ask the model to assign badge labels in the blocking selection schema', async () => {
+  it('keeps badge labels and drawbacks out of the blocking selection schema', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -221,8 +221,12 @@ describe('ai selector', () => {
     const prompt = requestBody.input[1].content
 
     expect(prompt).not.toContain('Badge strategy')
+    expect(prompt).not.toContain('drawback')
+    expect(prompt).not.toContain('tradeoffs')
     expect(JSON.stringify(requestBody.text.format.schema)).not.toContain('badge_label')
+    expect(JSON.stringify(requestBody.text.format.schema)).not.toContain('drawback')
     expect(result.results.every((item) => item.badgeLabel === '')).toBe(true)
+    expect(result.results.every((item) => !Object.hasOwn(item, 'drawbacks'))).toBe(true)
   })
 
   it('omits low-value descriptions from the AI candidate summary', async () => {
@@ -569,7 +573,7 @@ describe('ai selector', () => {
     expect(prompt).toContain('airport travel and compact storage')
     expect(result.strategy).toBe('candidate_aware_prior_rerank')
     expect(result.selectedCandidateIds).toEqual(['prod-2'])
-    expect(result.results[0].drawbacks).toEqual(['Costs more than entry-level picks.'])
+    expect(result.results[0]).not.toHaveProperty('drawbacks')
     expect(result.debug).toEqual({
       priorCandidateCount: 2,
       artifactCandidateCount: 2,

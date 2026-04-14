@@ -1276,13 +1276,26 @@ describe('server handlers', () => {
       expect.objectContaining({
         requestMode: 'guided_empty_notes',
         debug: expect.objectContaining({
+          finalizeFastLayer: 'finalize_fast',
           flowPath: 'candidate_aware_prior_rerank',
           reusedCandidateAwarePrior: true,
           reusedPreRankArtifact: true,
           usedIntentMatchRerank: true,
         }),
+        finalizeFast: expect.objectContaining({
+          layer: 'finalize_fast',
+          shortlistLocked: true,
+          selectedCandidateIds: ['one'],
+          shortlist: [
+            expect.not.objectContaining({
+              drawbacks: expect.any(Array),
+            }),
+          ],
+        }),
         selection: expect.objectContaining({
+          layer: 'finalize_fast',
           mode: 'ai',
+          shortlistLocked: true,
           strategy: 'candidate_aware_prior_rerank',
           flowPath: 'candidate_aware_prior_rerank',
           reusedCandidateAwarePrior: true,
@@ -1426,6 +1439,7 @@ describe('server handlers', () => {
       expect.objectContaining({
         requestMode: 'guided_refined',
         debug: expect.objectContaining({
+          finalizeFastLayer: 'finalize_fast',
           flowPath: 'candidate_aware_prior_rerank',
           fallbackReason: null,
           reusedCandidateAwarePrior: true,
@@ -1452,7 +1466,15 @@ describe('server handlers', () => {
             },
           }),
         }),
+        finalizeFast: expect.objectContaining({
+          layer: 'finalize_fast',
+          shortlistLocked: true,
+          latestUserContext: 'Notes: best for city travel',
+          selectedCandidateIds: ['one'],
+        }),
         selection: expect.objectContaining({
+          layer: 'finalize_fast',
+          shortlistLocked: true,
           strategy: 'candidate_aware_prior_rerank',
           flowPath: 'candidate_aware_prior_rerank',
           fallbackReason: null,
@@ -1815,21 +1837,25 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(200)
     expect(selectAiResults).not.toHaveBeenCalled()
     expect(JSON.parse(response.body)).toEqual({
-      candidatePool: {
+      finalizeFast: expect.objectContaining({
+        version: 1,
+        layer: 'finalize_fast',
         query: 'stroller',
-        details: 'Retry feedback: Not right for city travel. Excluded previous picks: one',
-        combinedSearchText: 'stroller',
-        searchState: 'Results for exact spelling',
-        similarQueries: ['compact stroller'],
-        candidates: [],
-      },
+        latestUserContext: 'Retry feedback: Not right for city travel. Excluded previous picks: one',
+        shortlistLocked: true,
+        selectedCandidateIds: [],
+        shortlist: [],
+        strategy: 'retry_exhausted',
+      }),
       requestMode: 'guided_finalize',
       retryCount: 1,
       results: [],
       selection: {
+        layer: 'finalize_fast',
         mode: 'retry_exhausted',
         model: null,
         requestMode: 'guided_finalize',
+        shortlistLocked: true,
         selectedCandidateIds: [],
         details: 'No new candidates remained after excluding the previously rejected picks.',
       },

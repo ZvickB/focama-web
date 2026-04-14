@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(wc -l backend/server.js backend/lib/*.js api/**/*.js)"
+      "Bash(wc -l backend/server.js backend/lib/*.js api/**/*.js)",
+      "Skill(update-config)"
     ]
   }
 }

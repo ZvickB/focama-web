@@ -4,10 +4,17 @@
 - This is the current planning note for the preferred layered AI latency strategy.
 - This file is planning only. It does not mean the architecture is already implemented.
 - Use it to guide future medium-reasoning implementation chats one step at a time.
-- Current implementation is still the existing guided discover/prewarm/refine/finalize flow until these steps land.
 
 ## Core decision
-- Prefer multiple smaller AI calls over one long monolithic AI session.
+- Important correction: for finalize, the active desired experiment is one streamed AI session with ordered phase events, not separate post-lock AI calls.
+- Separate preparatory lanes are still useful before finalize:
+  - query framing can split into `question-fast` and `framing-fields`
+  - candidate-aware prewarm can run after discover has real candidates
+- The finalize stream should be one backend request and one OpenAI streaming call that emits:
+  1. `winners_locked`: selected candidate IDs only, validated and treated as final
+  2. `badges_ready`: badge labels for the same locked IDs
+  3. `enrichment_ready`: fit/tradeoff/caution writing for the same locked IDs
+- Do not implement badges or enrichment as separate OpenAI calls for this active finalize-stream experiment.
 - Early layers prepare. Later user context decides.
 - Query framing can run in parallel with discover.
 - Query framing does not need discover results.
@@ -19,7 +26,7 @@
 - User follow-up context is the strongest later decision signal.
 - Finalize-fast should return shortlist-safe card data for the chosen 6.
 - Recommendation-like cards should not reveal before shortlist certainty.
-- Enrichment is a later explanation layer for the chosen 6.
+- Enrichment is a later phase for the chosen 6 inside the same streamed finalize AI session for the active experiment.
 - Enrichment explains the shortlist; it does not re-rank it.
 - The modal should open immediately with core product facts, while explanation sections can load progressively if needed.
 
@@ -33,7 +40,7 @@
 7. The user's follow-up context arrives and becomes the strongest decision signal.
 8. Finalize-fast locks the real shortlist of 6 and returns card-safe fields.
 9. Only after shortlist certainty do recommendation-like cards reveal.
-10. Enrichment explains those same 6 picks in a later pass.
+10. In the active streaming finalize experiment, badges and enrichment arrive as later events from the same OpenAI stream, not separate OpenAI requests.
 11. The modal can open immediately with core facts, while explanation sections fill in progressively if they are still loading.
 
 ## Layer breakdown
@@ -61,19 +68,25 @@
 - Works from real candidate data, not just the query.
 - Produces reusable candidate-aware structure or priors that can help later selection.
 - Must not lock the shortlist before the user adds context.
+- The normal non-streamed prepared/prior finalize path measured as a latency regression, so prewarm's role in the active stream path is unproven and must be compared against a no-prewarm stream variant.
 
 ### Finalize-fast
 - Runs after follow-up context exists, including retry feedback when relevant.
 - Combines the candidate pool, latest user context, query framing output, and candidate-aware prewarm output.
 - Treats later user context as the strongest weighting signal.
 - Returns the chosen 6 plus shortlist-safe card fields only.
-- Should not block on richer explanations that can safely move to enrichment.
+- For the active experiment, should be tested as a streamed phase sequence from one AI session:
+  - lock winners first
+  - then emit badges
+  - then emit enrichment
+- Winners become immutable once emitted; later phases must never add, remove, reorder, or re-rank them.
 
 ### Enrichment
 - Runs only after the shortlist of 6 is locked.
 - Explains why each chosen item fits and what tradeoffs matter.
 - Can add stronger modal copy, drawbacks, and explanation sections.
 - Must explain the chosen shortlist, not question it or quietly re-rank it.
+- For the active finalize-stream experiment, enrichment means "later in the same stream," not "a later OpenAI request."
 
 ### Modal fallback behavior
 - The modal should be useful immediately after shortlist-safe data exists.
@@ -85,6 +98,8 @@
 - Keep implemented behavior and planned behavior clearly separated in future chats.
 - Do not bring back provisional recommendation-like cards before shortlist certainty.
 - Do not let enrichment quietly become a second ranking pass.
+- Do not translate the active finalize-stream experiment into separate AI calls for winner lock, badges, and enrichment.
+- Do not propose deterministic badges as the active next direction unless the user asks; they remain a fallback/alternative, not the current requested experiment.
 - Do not let query framing and candidate-aware prewarm collapse back into one vague step.
 - Do not let `question-fast` and `framing-fields` collapse into a single blocking response if that makes the user wait longer to answer the refinement question.
 - Do not redesign the architecture from scratch in each implementation chat; advance this plan step by step.
@@ -98,17 +113,23 @@
 - [x] `status: done` Split query framing into `question-fast` and background `framing-fields` so the UI can show the follow-up question before deeper AI field reasoning finishes.
 - [x] `status: done` Update orchestration so discover, question-fast, and background framing-fields start without blocking each other, with clear telemetry for each lane.
 - [x] `status: done` Re-scope prewarm so it starts only after usable candidate data exists and produces a candidate-aware prior rather than a premature final answer.
-- [ ] `status: pending` Refactor finalize into a clear `finalize-fast` contract that returns only shortlist-safe card data for the chosen 6.
+- [x] `status: done` Refactor finalize into a clear `finalize-fast` contract that returns only shortlist-safe card data for the chosen 6.
+- [x] `status: done` Build a temporary finalize-stream measurement path that uses one OpenAI streaming call and emits ordered phase events: `winners_locked`, `badges_ready`, `enrichment_ready`, and `done`.
+- [x] `status: done` Measure the streamed finalize path for time to first token, time to `winners_locked`, time to `badges_ready`, time to first/top enrichment, time to all enrichment, total tokens, winner validity, and locked-ID/order preservation.
+- [x] `status: done` Compare stream-with-prewarm against a no-prewarm stream variant so prewarm has to earn its place in the streamed architecture.
+- [x] `status: done` Close the mini one-call stream model question: `gpt-5-mini` is too slow for one-call streamed finalize, while `gpt-5.4-nano` remains the only plausible fast stream model from current measurements.
+- [ ] `status: pending` Add only a smallest harness mode for the new nano-lock plus mini async-enrichment experiment.
+- [ ] `status: pending` Measure nano winner/badge lock latency, mini enrichment latency, model-specific tokens, and locked-ID/order preservation on `context5`.
 - [ ] `status: pending` Make the latest user follow-up or retry feedback the strongest later-stage decision signal in finalize-fast.
 - [ ] `status: pending` Remove any too-early recommendation-style reveal path so real cards appear only after shortlist certainty.
-- [ ] `status: pending` Add a separate enrichment pass for the locked shortlist of 6, with a contract that can explain but not re-rank.
 - [ ] `status: pending` Update modal behavior so it opens immediately with core facts and lets explanation sections load progressively when enrichment is still in flight.
 - [ ] `status: pending` Extend analytics and debug logging so each layer can be measured independently for latency, reuse, waste, and user-visible timing.
 - [ ] `status: pending` Re-measure the layered flow on the same sample queries and compare speed, token usage, and shortlist quality before widening the rollout.
 
 ## Working note for future chats
-- Default to medium-reasoning implementation passes after this planning note.
 - Pick one pending checklist step per chat when possible.
+- The temporary `stream-clean` harness path measured the one-call stream idea; do not productize it or wire frontend from that branch without explicit approval.
+- The next measurement direction is separate and harness-only: nano locks winners/badges quickly, then mini writes nicer copy in a non-blocking second call.
 - When a step changes active direction or current repo reality, update the relevant project notes in the same pass.
 - Current orchestration reality after the latest step:
   - the frontend starts guided discovery, `/api/search/refine` question-fast, and `/api/search/framing-fields` background framing independently on search submit
@@ -117,3 +138,10 @@
   - framing fields are currently captured client-side for timing/debug visibility, but they are not yet stored server-side or consumed by finalize-fast
   - `/api/search/prewarm` starts from usable discovery candidates and stores a `candidate_aware_prewarm` prior
   - the prewarm prior is not a final answer and guided finalize no longer materializes result cards directly from it
+  - `/api/search/finalize` now returns a `finalizeFast` contract plus `results` derived from that contract for the locked shortlist
+  - blocking finalize card data is shortlist-safe only: selected ids, core product facts, one concise fit reason, and no blocking drawback/caution copy
+  - temporary local-only measurement route `POST /api/search/finalize-stream` runs one OpenAI streaming call for ordered phase events and is not wired to the frontend or Vercel wrappers
+  - `backend/scripts/measure-guided-finalize.js --mode stream-clean` compares baseline finalize against the streamed one-call path in the same harness run
+  - full context5 `stream-clean-context5` measurement completed 5/5 cases: average `winners_locked` was about 2.24 s vs baseline shortlist lock about 4.29 s, later badge/enrichment phases preserved locked order in 5/5, full stream completion averaged about 6.92 s server-side and about 2534 tokens
+  - full context5 `stream-prewarm-compare-context5` measurement completed 5/5 cases: no-prewarm locked about 265 ms earlier but used about 387 more tokens and had lower winner overlap; prewarm is not justified as a latency feature
+  - full context5 mini stream comparison completed 5/5 cases: mini locked winners around 8.1-8.5 s and full stream took around 19 s, so mini is rejected for one-call streamed finalize

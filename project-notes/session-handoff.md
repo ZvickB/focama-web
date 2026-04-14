@@ -1,242 +1,110 @@
 # Session Handoff
 
-## What this file is for
-- This is the short handoff summary for starting a fresh Codex chat.
-- It is separate from `handoff.md`, which is still useful as the broader MVP/status tracker.
-- In a new chat, you can say: "Please read `project-notes/session-handoff.md` first."
+## Purpose
+- Fastest reset for a fresh Codex chat.
+- This file should point to canonical notes instead of duplicating the whole project history.
+- Broader backlog remains in `project-notes/handoff.md`.
 
-## Read order
-- `project-notes/active-experiment-override.md` when the task touches the current prewarm/finalize experiment
-- `project-notes/layered-latency-plan.md` when the task touches the preferred next latency architecture
-- `project-notes/current-status.md`
-- `project-notes/app_flow.md`
-- `project-notes/handoff.md`
-- `project-notes/finalize-strategy.md`
+## Startup read order
+1. `AGENTS.md`
+2. `project-notes/current-status.md`
+3. `project-notes/app_flow.md`
+4. `project-notes/finalize-strategy.md` before finalize or latency changes
+5. `project-notes/active-experiment-override.md` when touching the current prewarm/finalize experiment
+6. `project-notes/layered-latency-plan.md` when touching preferred latency architecture
+7. `project-notes/handoff.md` only when planning broader MVP/backlog work
 
-## Current homepage direction
-- The default homepage at `/` now uses the `open` layout variant.
-- Older UI variants were removed after the open layout direction was chosen.
-- The current product direction is the spacious, search-first open layout rather than the older split-screen or chip-heavy flows.
+## Current direction
+- `/` uses the `open` homepage layout.
+- The product should stay calm, focused, mobile-first, and not marketplace-shaped.
+- The PNG wordmark is preferred for now.
+- Shortlists are 6 results end to end.
+- The guided backend path is primary; `/api/search/live` is manual/debug only.
+- Current implemented behavior is canonical in `project-notes/app_flow.md`.
 
 ## Important files
 - Main app routes and loading fallback: `/src/App.jsx`
 - Active homepage layout: `/src/components/home/HomeExperience.jsx`
 - Shared homepage UI blocks: `/src/components/home/HomeShared.jsx`
 - Shared guided-search logic/state: `/src/components/home/useGuidedSearch.js`
-- Planned layered-latency contract definitions: `/backend/lib/layered-contracts.js`
+- Shared layered contract helpers: `/backend/lib/layered-contracts.js`
+- Query-framing lanes: `/backend/lib/query-framing.js`
 - Site header/nav/logo usage: `/src/components/SiteLayout.jsx`
 - Default homepage route file: `/src/pages/HomePage.jsx`
-- Plain-language DB note for current Supabase tables: `/project-notes/db-needs.md`
-- Optional funnel analytics schema for Supabase: `/project-notes/analytics-funnel-schema.sql`
+- Current DB table summary: `/project-notes/db-needs.md`
+- Optional analytics schema: `/project-notes/analytics-funnel-schema.sql`
 
-## Current UI state
-- `/` is the `open` variant.
-- The open layout is intentionally more minimal and mobile-friendly.
-- The homepage hero in the open layout now uses the PNG wordmark instead of plain `Focamai` text.
-- The app and boot splash now use Instrument Sans as the primary UI font instead of the older serif base.
+## Current guided flow
+- `/api/search/discover` builds the candidate pool and preview set.
+- `/api/search/prewarm` starts after usable candidates exist and stores a reusable candidate-aware prior.
+- `/api/search/refine` returns one fast user-facing follow-up question.
+- `/api/search/framing-fields` returns slower background framing fields for timing/debug visibility.
+- `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache, locks the shortlist, and returns `finalizeFast` plus compatible `results`.
+- Finalized card data is shortlist-safe: selected ids, core product facts, and one concise fit reason.
+- Badge labels are frontend-owned after final results arrive.
+- Drawback/caution copy is not part of the blocking finalized card payload.
 
-## Brand assets
+## Current experiment read
+- Canonical experiment details are in `project-notes/active-experiment-override.md`.
+- The primary latency goal is the context-added finalize path, not empty-notes finalize.
+- The current prewarm implementation is useful groundwork but not the final validated solution.
+- Prepared framing injected into the current finalize call is paused as a simple injection strategy because quality was mixed and token cost increased.
+- A thinner selection-only shortlist-lock pass materially improved speed but did not preserve quality consistently enough to validate the exact payload.
+- A cleaner full-evidence ids-only winner-lock pass then averaged about 2.45 s server-side, kept the same candidate-aware prior evidence path, and matched baseline top result in 5/5 cases; continue cautiously because post-lock badge/enrichment cost is still high.
+- Important correction: that clean split run measured separate AI calls for winner lock, badges, and enrichment. The next measured pass became one streamed finalize AI session with ordered events: `winners_locked`, `badges_ready`, `enrichment_ready`, and `done`.
+- That one-call stream pass is now measured; the new next experiment is separate: nano lock/badges first, then mini async enrichment in a harness-only second call.
+- The current open question is quality-preserving shortlist locking near or under the corrected about-6000 ms target.
+
+## Current planning read
+- Canonical layered plan: `project-notes/layered-latency-plan.md`.
+- Completed groundwork:
+  - thin contracts for query framing, candidate-aware prewarm, finalize-fast, and enrichment
+  - query framing split into `question_fast` and `framing_fields`
+  - discover, question-fast refine, and background framing-fields start independently
+  - candidate-aware prewarm starts only after usable candidates exist
+  - finalize returns a `finalizeFast` contract plus compatible `results`
+- Current temporary harness step:
+  - `POST /api/search/finalize-stream` exists on the local Node server only and is not wired to UI or Vercel
+  - `backend/scripts/measure-guided-finalize.js --mode stream-clean` compares baseline finalize against the one-call streamed finalize path in the same run
+  - small smoke measurement `stream-clean-smoke-small` completed 3/3 cases
+  - full context5 measurement `stream-clean-context5` completed 5/5 cases: average `winners_locked` was about 2.24 s vs baseline shortlist lock about 4.29 s, later badge/enrichment phases preserved locked order in 5/5, top result matched baseline in 5/5, and average winner overlap was 5.4/6
+  - full stream completion averaged about 6.92 s server-side and about 2534 tokens
+  - Chat 2 prewarm-vs-no-prewarm context5 measurement completed: no-prewarm locked winners about 265 ms earlier, but full stream completion was effectively tied, no-prewarm used about 387 more tokens, and winner overlap was worse at 4.6/6 vs 5.6/6 with prewarm
+  - conclusion: prewarm is not justified as a streamed-finalize latency feature; if kept, frame it as an explicit quality/cost hedge
+  - Chat 3 mini model-routing measurement completed with `OPENAI_FINALIZE_CONTEXT_MODEL=gpt-5-mini`: with prewarm winners locked about 8.13 s and full stream about 19.14 s; without prewarm winners locked about 8.48 s and full stream about 19.08 s; both completed 5/5 and preserved later-phase locked order
+  - decision: `gpt-5-mini` is rejected for the one-call streamed finalize path because it is far too slow for the lock and full-stream targets
+  - `gpt-5.4-nano` remains the only plausible fast one-call streamed finalize model from current measurements
+  - mini may still be useful later for asynchronous writing/enrichment only
+  - next experiment is separate from the one-call stream experiment: nano locks winners/badges fast, then mini writes nicer copy in a non-blocking second call
+  - do not wire frontend, do not implement the new experiment until explicitly asked, and do not redesign the whole architecture
+
+## Brand and loading notes
 - Master logo: `/src/assets/logo_master_version.svg`
-- Sharper small header logo: `/src/assets/logo_header_mark.svg`
-- PNG wordmark currently preferred by user: `/src/assets/wordmark.PNG`
-- Attempted SVG wordmark exists but user did not like it: `/src/assets/wordmark.svg`
-
-## Loading / fallback state
-- A true boot splash now starts from `/index.html`, so slow or throttled loads show branding before React finishes loading
-- It shows the PNG wordmark plus the line `Focused shopping`
-- It fades away only after the app is ready and the splash has been visible for about 1 second total
-- The boot splash now includes a static header shell to keep the hero closer to the real homepage position during handoff
-
-## Search/result behavior
-- Shortlist count is now 6 end-to-end, not 4
-- This was updated in both frontend and backend logic
-- The homepage now uses the guided flow:
-  - `/api/search/discover` for the candidate pool and preview set
-  - `/api/search/prewarm` for the reusable candidate-aware prior
-  - `/api/search/refine` for the AI follow-up prompt
-  - `/api/search/finalize` for the final shortlist
-- This guided flow is the primary backend architecture for the homepage
-- `/api/search/live` is the explicit manual/debug combined route
-- The archived staged/persisted finalize experiment is not the active path on `main`.
-- Future finalize or latency-architecture changes should start from `project-notes/finalize-strategy.md`.
-- Guided refine was slimmed after the reset:
-  - AI now returns only one short ranking question
-  - helper text and the textarea placeholder are static server-side copy
-  - refine now uses minimal reasoning effort
-- Guided discovery, refine, and finalize now emit structured `[search-flow]` logs for latency, token usage, candidate counts, and ranking ownership.
-- Re-measured refine on 2026-03-30 after the slimming step:
-  - average latency: about 1.1 s
-  - average total tokens: about 172
-- The Vercel route wrappers now preserve forwarded request headers so backend IP-based rate limiting still works in production deployments
-- Shared rate limiting now prefers a Supabase-backed event table when configured, with in-memory fallback only for local or degraded environments
-- The current same-IP search limiter is intentionally tester-friendly right now: 15 requests in a 10-second rolling window, so a human can make a few quick tries in a row without immediately tripping it
-- Guided `/api/search/finalize` now rejects oversized or malformed payloads before AI selection and caps candidate pool size at 20
-- Guided `/api/search/discover` now returns a lightweight `discoveryToken` tied to the cached guided candidate pool
-- Guided `/api/search/finalize` now accepts lightweight finalize context and rebuilds the rich candidate pool server-side from guided discovery cache before AI selection
-- The browser no longer needs to POST the full rich guided candidate pool back to `/api/search/finalize`
-- Guided `/api/search/finalize` body limit is back to 32 KB now that the finalize payload is lightweight again
-- Guided discover/refine/finalize now expose backend stage timing through `Server-Timing` headers, and the homepage shows the timing panel in development or when `?timing=1` is present for quick latency checks
-- Guided refine/finalize and `/api/search/live` now also include OpenAI token usage metadata in their JSON responses when AI runs, making refine/finalize cost measurable from actual response data
-- Backend model selection can now be split per step:
-  - `OPENAI_REFINEMENT_MODEL` optionally overrides refine only
-  - `OPENAI_FINALIZE_MODEL` optionally overrides live/guided final selection only
-  - `OPENAI_MODEL` remains the shared fallback
-- Guided finalize model routing is now also split by request shape:
-  - empty-note finalize stays on the baseline finalize lane unless `OPENAI_FINALIZE_EMPTY_MODEL` is set
-  - context-added finalize now defaults to a faster `gpt-5.4-nano` lane unless `OPENAI_FINALIZE_CONTEXT_MODEL` is set
-  - guided finalize debug/response metadata now reports which lane was used
-- Guided discovery now responds before the discovery cache write finishes, so first-time searches are no longer blocked by Supabase cache persistence time
-- The broader candidate-aware prewarm architecture is now the active finalize-latency experiment:
-  - guided discovery starts one background `/api/search/prewarm` request after usable candidate data exists
-  - that prewarm stores a reusable candidate-aware prior back into the guided discovery cache entry
-  - prewarm no longer creates a directly materializable final answer
-  - empty-note, refined-note, and retry finalize requests can use the stored prior for a lighter intent-match rerank
-  - if prior reuse misses, finalize falls back to the older one-shot selector and logs/returns the miss reason
-- Important correction for future chats:
-  - read `project-notes/active-experiment-override.md` before changing this experiment further
-  - read `project-notes/layered-latency-plan.md` before starting new latency-architecture implementation work
-  - the primary success target is the context-added finalize path, not the empty-notes path
-- live measurement showed the current refined/retry implementation did not materially improve the main context-latency path enough to count as success
-- treat the older direct-artifact prerank-prewarm result as useful groundwork plus a partial experiment result, not as the final validated solution
-- A narrower model-routing follow-up is now in place on top of that groundwork:
-  - context-added guided finalize defaults to the faster nano lane
-  - empty-note finalize keeps the baseline lane
-  - this stays inside the existing guided flow and does not add another request
-- Guided prewarm/finalize logs and responses now include `requestMode`, `flowPath`, reuse/fallback metadata, prior size/count, stage latency, and token usage by stage so the experiment is easy to inspect locally and on Vercel
-- Guided finalize now trims prompt weight by dropping variant tokens and reducing trust metadata to a score-only signal, while keeping reasons and attributes in the AI selection context
-- Promo-only shopping snippets such as `20% OFF` / `LOW PRICE` are now ignored as normalized descriptions, and finalize AI summaries now omit empty/generic filler descriptions plus redundant source/price/delivery boilerplate to cut prompt waste
-- Guided finalize prompt slimming now also removes top-level search-state/similar-query prompt text, drops backend-only match-signal and duplicate numeric-price fields from each AI candidate summary, flattens trust metadata to a single `trustScore`, and minifies the candidate JSON block before sending it to OpenAI
-- The active one-shot finalize prompt has also now taken one more conservative wording trim:
-  - removed the standalone `Prioritize:` heading
-  - merged diversity and near-duplicate guidance
-  - dropped the redundant allowed badge-label line
-  - shortened badge strategy wording while keeping the explicit `Best match` requirement
-- Guided discovery filtering now also collapses some clearly redundant same-family candidates before finalize:
-  - this only applies when the duplicate-family key and variant signature match, and the merchant matches or the prices are effectively the same
-  - broader family differences should still remain available to the AI pool
-- The compact shard-scoring finalize experiment was measured and then rolled back after it regressed latency and token usage.
-- Guided finalize is back on the slimmer one-shot selector as the active implementation path.
-- Guided finalize step 1 is now complete on that baseline:
-  - finalized blocking results keep one concise fit reason per pick
-  - badge reasons were removed from the blocking result contract
-  - drawback/caution text moved off the result card grid and is now modal-only
-- Guided finalize step 2 is now complete as frontend-only polish on top of that baseline:
-  - homepage copy now better explains that the first query should be the product search itself, closer to what a user would type into Google
-  - the refine step is now framed more clearly as the place for natural-language narrowing such as budget, size, comfort, style, or use case
-  - AI no longer assigns badge labels in the blocking finalize response
-  - finalized results now get deterministic frontend badge labels after the shortlist loads, with a slight delayed reveal so results land before badge polish
-  - this does not widen finalize into more blocking backend work
-- The backend candidate pool now includes provider-agnostic duplicate-family keys, variant tokens, compact attribute tags, and trust signals before finalize so future search-provider changes can reuse the same internal model more easily
-- That candidate pool now also drops a narrow slice of clearly redundant same-family same-variant listings before the AI handoff
-- Re-measured cached same-query guided finalize on 2026-03-30 after the badge-scope reduction:
-  - finalize average latency: about 7.5 s
-  - finalize average total tokens: about 2479
-  - full guided-search average total tokens: about 2651
-  - compared with the prior cached baseline, finalize improved by about 2.5 seconds on average and crossed the under-8-second finalize milestone the user cared about
-- A separate context-added finalize measurement on 2026-03-31 showed the fast-lane model path was materially quicker on the same guided flow:
-  - baseline context-added finalize average latency: about 12.1 s
-  - nano context-added finalize average latency: about 4.6 s
-  - nano kept total tokens roughly flat while cutting OpenAI time by about 7.4 seconds on average
-- A separate fresh-discovery rerun was also captured after the conservative family-collapse pass:
-  - treat it as directional only, not as the clean comparison point for the badge win
-  - the badge-scope reduction is the strongest confirmed latency improvement from this pass; the family-collapse effect is still not isolated yet
-- Guided discovery telemetry now records the scoped discovery cache key in `search_history`, so debug history lines up with the actual cached entry
-- A new best-effort analytics endpoint now exists at `/api/analytics/track` for optional funnel instrumentation
-- The homepage now tracks guided-search funnel steps, result impressions, card opens, and retailer click-throughs when the optional analytics tables are present in Supabase
-- Analytics result events distinguish preview, final, retry, and previous-result sets so `Show products now` behavior can be compared against finalized AI picks
-- Backend env fallback loading now caches the parsed `.env` file in-process, so repeated `getEnv()` reads no longer hit sync disk I/O on request paths
-- The Vercel route wrappers now share a tiny bridge helper instead of each manually recreating the same Node-like adapter logic
-- `/api/search/debug` should be read as guided-primary debug output, with `/api/search/live` treated as the manual combined route
-- `/api/health/supabase` now reports local fallback as a supported state when Supabase is not configured
-- Supabase-backed guided discovery cache is now confirmed working in production on `focama.vercel.app`
-- Guided `/api/search/finalize` and `/api/search/live` remain intentionally uncached
-- Open layout behavior:
-  - centered hero
-  - search input first
-  - refinement area expands after submit
-  - `Start a new search` resets the homepage back to a clean blank search state
-  - final results now include a `Didn't find anything you like? Tell us why.` retry path
-  - retrying requires feedback and is capped at 2 follow-up retries
-  - retrying excludes the previously rejected shortlist from reselection
-  - earlier rejected shortlists collapse into a `Previous picks` section after a retry
-  - scroll transitions between refinement and results should move once without overshooting
-  - pressing `Show focused picks` now scrolls to the results region immediately and shows skeletons while final AI selection runs
-  - if preview results are already visible during finalization, they now stay on screen with a calmer narrowing-state message instead of disappearing behind a blank loading state
-  - no chips
-  - `Show products now` stays disabled until discovery is ready
-  - skeletons show in a 2x3 layout and only peek into view
-
-## Header/logo notes
-- The header uses a separate sharper SVG logo asset for small-size display
-- The richer master logo is still kept for larger/fancier contexts
-- User noticed the original master logo looked softer on-site because the header version was small and inside extra chrome
+- Small header logo: `/src/assets/logo_header_mark.svg`
+- Preferred wordmark: `/src/assets/wordmark.PNG`
+- Attempted SVG wordmark exists but is not preferred: `/src/assets/wordmark.svg`
+- Boot splash lives in `/index.html`, shows `Focused shopping`, and fades after app readiness plus minimum display time.
 
 ## Testing state
-- In the latest backend cleanup pass:
-  - `npm test -- backend/server.test.js` passed
-  - `npm test -- api/search/routes.test.js` passed in the earlier pass
-  - after the non-blocking discovery-cache write change, `npm test -- backend/server.test.js` passed again
-  - rerunning `npm test -- api/search/routes.test.js` from PowerShell hit a Windows `EPERM` path-resolution error before Vitest ran
+- Recent relevant backend tests have passed in earlier passes:
+  - `npm test -- backend/server.test.js`
+  - `npm test -- api/search/routes.test.js`
+- A later PowerShell rerun of `npm test -- api/search/routes.test.js` hit a Windows `EPERM` path-resolution error before Vitest ran.
 
 ## Recent user preferences
-- Prefer minimal copy in the open layout
-- Prefer no chips in the open layout
-- Prefer the PNG wordmark for now rather than forcing a bad SVG recreation
-- Want the app to stay production-minded but not overengineered too early
-
-## Strategic context
-- User is thinking about:
-  - future Next.js migration
-  - possible future React Native app using the open layout theme
-  - unit economics of search/API costs
-  - caching as the major early cost-reduction lever
+- Minimal copy in the open layout.
+- No chips in the open layout.
+- Prefer the PNG wordmark unless explicitly revisiting branding.
+- Stay production-minded without overengineering before v1 usage justifies it.
+- For backend changes, explain request flow, data shape, and tradeoffs plainly.
 
 ## If continuing from here
-- First read `project-notes/active-experiment-override.md` if the task touches the current prewarm/finalize experiment
-- First read `project-notes/layered-latency-plan.md` if the task is about the preferred next latency architecture
-- First read `project-notes/finalize-strategy.md` before making more finalize changes
-- Treat the archived reset notes as historical context only, not as current implementation marching orders
-- Treat `wordmark.PNG` as the preferred current wordmark asset unless the user explicitly wants another attempt
-- Treat `project-notes/layered-latency-plan.md` as the current planning reference for the next layered latency attempt
-- The finalize-prompt slimming step is now complete and was re-measured on the same sample queries
-- Re-measured finalize on 2026-03-30 after the slimming step:
-  - average latency: about 13.9 s
-  - average total tokens: about 5403
-  - average full guided-search total tokens: about 5574
-- Compared with the reset baseline:
-  - finalize latency improved from 16.1 s to 13.9 s
-  - finalize total tokens improved from 5485 to 5403
-  - full guided-search total tokens improved from 5803 to 5574
-- The shard-scoring test step was implemented and measured on the same sample queries
-- Re-measured finalize on 2026-03-30 after the shard step:
-  - average latency: about 16.9 s
-  - average total tokens: about 6139
-  - average full guided-search total tokens: about 6311
-- Compared with the slimmer one-shot finalize step:
-  - finalize latency regressed from 13.9 s to 16.9 s
-  - finalize total tokens increased from 5403 to 6139
-  - full guided-search total tokens increased from 5574 to 6311
-- The shard experiment should be treated as a measured failed branch, not as the active path
-- The next strategy step is to keep the current guided flow and reassess AI scope, explanation strategy, and badge strategy before more finalize implementation work
-- Step 2 is now done; keep future work from drifting back into heavier blocking finalize work by accident
-- The thin contract-definition step from `project-notes/layered-latency-plan.md` is now done:
-  - `backend/lib/layered-contracts.js` defines the planned thin contracts for query framing, candidate-aware prewarm, finalize-fast, and enrichment
-  - this is a source-of-truth groundwork file, not proof that the layered runtime flow is already implemented
-- The query-framing separation step is now done:
-  - `backend/lib/query-framing.js` owns query-only framing and now exposes separate `question_fast` and `framing_fields` OpenAI lanes
-  - `backend/lib/refinement-assistant.js` now adapts only `question_fast` into the current `/api/search/refine` response
-  - `/api/search/refine` no longer waits for richer AI field reasoning before returning the user-facing question
-  - `/api/search/framing-fields` now exposes the richer `framing_fields` lane as a separate background route
-  - current runtime orchestration starts discover, question-fast, and background framing-fields independently on search submit
-  - background framing-fields telemetry is visible, but those fields are not yet stored server-side or consumed by finalize
-- The candidate-aware prewarm re-scope step is now done:
-  - frontend prewarm starts only after discovery returns a usable candidate pool
-  - `/api/search/prewarm` stores a `candidate_aware_prewarm` prior instead of a directly materializable final answer
-  - guided discovery cache writes `candidateAwarePrior` and still supports the older `preRankArtifact` alias for compatibility
-  - guided finalize no longer has the direct prewarmed-card shortcut; shortlist certainty stays in finalize
-- The next pending layered-latency step is to refactor finalize into a clear `finalize-fast` contract that returns only shortlist-safe card data for the chosen 6
-- Treat the intended v1 split as `results first, polish later`:
-  - finalize should return the shortlist as soon as core selection is ready
-  - badge/explanation after-touch work should not quietly become required blocking work again
-- For v1, perceived speed is the priority:
-  - prefer showing a trustworthy shortlist sooner over waiting for fuller first-paint polish
+- For product behavior questions, read `app_flow.md`.
+- For measurement conclusions, read `active-experiment-override.md` plus `temp-data/layered-latency-measurement-summary.md` if resuming that exact line.
+- For implementation planning, read `layered-latency-plan.md` and do one pending checklist step at a time.
+- For the stream experiment, the mini-vs-nano decision is closed: keep nano as the only plausible fast stream model, reject mini for one-call streamed finalize, and keep prewarm out of the latency argument.
+- For the next harness-only experiment, implement only the smallest nano-lock plus mini async-enrichment measurement path when asked; do not wire UI.
+- Keep measurement-only fields temporary:
+  - `measurementPreparedQueryFraming`
+  - `measurementSelectionMode: selection_only`
+  - `measurementSelectionMode: winner_lock_ids_only`

@@ -76,6 +76,8 @@ Read this file first at the start of every chat.
 - After finishing a meaningful chunk of work, update `project-notes/handoff.md` if remaining work or priorities changed.
 - Update `project-notes/cleanup-backlog.md` only when a cleanup item is actually completed, split, or blocked.
 - Keep note updates small and accurate. Do not rewrite history just to make notes look cleaner.
+- Prefer concise, de-duplicated active notes, but do not enforce a hard line-count limit.
+- Let canonical source-of-truth notes be as long as needed to preserve guardrails, current/planned clarity, and measurement conclusions.
 
 ## Cleanup and archive rules
 - Do not leave old strategies, unused UI paths, dead components, stale notes, or retired assets in active folders just because they might be useful later.

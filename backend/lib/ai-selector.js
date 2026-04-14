@@ -232,8 +232,7 @@ function buildSelectionPrompt({ candidatePool, finalResultLimit }) {
     '2. Relevance to the product query.',
     '3. Quality and trust using rating and review count.',
     '4. Prefer diversity across style, merchant, or use case when helpful, and avoid near-duplicates unless they are meaningfully different.',
-    '6. For each pick, write one short fit reason that explains why it belongs in this shortlist.',
-    '7. Be honest about tradeoffs. Each pick should include one short drawback or caution.',
+    '5. For each pick, write one short fit reason that explains why it belongs in this shortlist.',
     `Return up to ${desiredCount} picks. If there are at least ${desiredCount} strong candidates, return exactly ${desiredCount}.`,
     'Only choose from the provided candidate ids.',
     '',
@@ -260,11 +259,8 @@ function buildSelectionSchema() {
             rationale: {
               type: 'string',
             },
-            drawback: {
-              type: 'string',
-            },
           },
-          required: ['candidate_id', 'rationale', 'drawback'],
+          required: ['candidate_id', 'rationale'],
           additionalProperties: false,
         },
       },
@@ -319,7 +315,11 @@ function buildCandidateAwarePriorSchema() {
   }
 }
 
-function buildPriorRerankPrompt({ priorCandidates, candidatePool, finalResultLimit }) {
+function buildPriorRerankPrompt({
+  priorCandidates,
+  candidatePool,
+  finalResultLimit,
+}) {
   const desiredCount = Math.min(finalResultLimit, priorCandidates.length)
 
   return [
@@ -623,7 +623,6 @@ function mapSelectionPicksToResults(picks, candidates, finalResultLimit) {
     selected.push({
       candidateId,
       rationale: pick?.rationale?.trim() || '',
-      drawback: pick?.drawback?.trim() || '',
       candidate,
     })
     seen.add(candidateId)
@@ -635,10 +634,7 @@ function mapSelectionPicksToResults(picks, candidates, finalResultLimit) {
 
   return {
     selectedCandidateIds: selected.map((entry) => entry.candidateId),
-    results: selected.map((entry) => ({
-      ...buildUiResult(entry.candidate, entry.rationale),
-      drawbacks: entry.drawback ? [entry.drawback] : [],
-    })),
+    results: selected.map((entry) => buildUiResult(entry.candidate, entry.rationale)),
   }
 }
 
@@ -674,14 +670,14 @@ function mapPriorRerankPicksToResults(picks, reusableEntries, finalResultLimit) 
 
   return {
     selectedCandidateIds: selected.map((entry) => entry.candidateId),
-    results: selected.map(({ entry, rationale }) => ({
-      ...buildUiResult(entry.candidate, rationale),
-      drawbacks: entry.baselineCaution ? [entry.baselineCaution] : [],
-    })),
+    results: selected.map(({ entry, rationale }) => buildUiResult(entry.candidate, rationale)),
   }
 }
 
-async function runOneShotSelection({ candidatePool, finalResultLimit, apiKey, model }, fetchImpl) {
+async function runOneShotSelection(
+  { candidatePool, finalResultLimit, apiKey, model },
+  fetchImpl,
+) {
   const { parsed, usage } = await requestStructuredSelection(
     {
       prompt: buildSelectionPrompt({ candidatePool, finalResultLimit }),
