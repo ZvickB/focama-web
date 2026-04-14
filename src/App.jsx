@@ -3,7 +3,6 @@ import { Route, Routes } from 'react-router-dom'
 import SiteLayout from '@/components/SiteLayout.jsx'
 
 const HomePage = lazy(() => import('@/pages/HomePage.jsx'))
-const FontComparisonPage = lazy(() => import('@/pages/FontComparisonPage.jsx'))
 const AboutPage = lazy(() => import('@/pages/AboutPage.jsx'))
 const AffiliateDisclosurePage = lazy(() => import('@/pages/AffiliateDisclosurePage.jsx'))
 const ContactPage = lazy(() => import('@/pages/ContactPage.jsx'))
@@ -22,7 +21,6 @@ function AppRoutes({ onReady }) {
     <Routes>
       <Route element={<SiteLayout />}>
         <Route path="/" element={<HomePage />} />
-        <Route path="/font-comparison" element={<FontComparisonPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
