@@ -55,7 +55,9 @@ function createFallbackRefinementPrompt(productQuery) {
 }
 
 function isGuidedPrewarmDisabled() {
-  return typeof window !== 'undefined' && window.__FOCAMAI_DISABLE_SKIP_PREWARM__ === true
+  // Prewarm is off by default — experiment concluded it is not a latency win.
+  // Re-enable explicitly with window.__FOCAMAI_ENABLE_PREWARM__ = true in the console.
+  return typeof window === 'undefined' || window.__FOCAMAI_ENABLE_PREWARM__ !== true
 }
 
 function isBackgroundFramingDisabled() {

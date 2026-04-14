@@ -52,7 +52,7 @@
 - A thinner selection-only shortlist-lock pass materially improved speed but did not preserve quality consistently enough to validate the exact payload.
 - A cleaner full-evidence ids-only winner-lock pass then averaged about 2.45 s server-side, kept the same candidate-aware prior evidence path, and matched baseline top result in 5/5 cases; continue cautiously because post-lock badge/enrichment cost is still high.
 - Important correction: that clean split run measured separate AI calls for winner lock, badges, and enrichment. The next measured pass became one streamed finalize AI session with ordered events: `winners_locked`, `badges_ready`, `enrichment_ready`, and `done`.
-- That one-call stream pass is now measured; the new next experiment is separate: nano lock/badges first, then mini async enrichment in a harness-only second call.
+- That one-call stream pass is now measured; the nano-lock + mini async-enrichment experiment is also measured and UX-validated.
 - The current open question is quality-preserving shortlist locking near or under the corrected about-6000 ms target.
 
 ## Current planning read
@@ -75,8 +75,9 @@
   - decision: `gpt-5-mini` is rejected for the one-call streamed finalize path because it is far too slow for the lock and full-stream targets
   - `gpt-5.4-nano` remains the only plausible fast one-call streamed finalize model from current measurements
   - mini may still be useful later for asynchronous writing/enrichment only
-  - next experiment is separate from the one-call stream experiment: nano locks winners/badges fast, then mini writes nicer copy in a non-blocking second call
-  - do not wire frontend, do not implement the new experiment until explicitly asked, and do not redesign the whole architecture
+  - nano-lock + mini async-enrichment is measured and UX-validated; next step is wiring it into the real product flow
+  - `HomeShared.jsx` has an intentional `SIMULATE_ENRICHMENT_DELAY_MS = 8000` simulation block — keep it until the real async path is wired, then remove it
+  - when wiring: split mini schema into `fit_reason` + `caveat` fields so the modal "Possible drawbacks" section populates; remove fit reason from blocking finalize card payload
 
 ## Brand and loading notes
 - Master logo: `/src/assets/logo_master_version.svg`

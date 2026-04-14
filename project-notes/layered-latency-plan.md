@@ -88,11 +88,18 @@
 - Must explain the chosen shortlist, not question it or quietly re-rank it.
 - For the active finalize-stream experiment, enrichment means "later in the same stream," not "a later OpenAI request."
 
+### Card and modal split
+- Product cards should show metadata only: image, title, merchant/source, price, ratings, and a deterministic badge label.
+- AI-generated copy (fit reasons, explanations, tradeoff notes) belongs in the modal only, not on the card surface.
+- This means cards can render immediately from shortlist-safe data with no dependency on AI enrichment latency.
+- Current implementation still includes a fit reason in the blocking finalize card payload — this needs to be adjusted once async enrichment strategy is settled.
+
 ### Modal fallback behavior
 - The modal should be useful immediately after shortlist-safe data exists.
 - Core facts should open right away: image, title, merchant, price, ratings, link, and other safe factual fields.
 - If enrichment is not ready yet, only explanation sections should show loading states.
 - Do not block the whole modal on explanation generation.
+- Modal graceful loading state is a known pending implementation step — implement after async enrichment strategy is decided.
 
 ## Guardrails
 - Keep implemented behavior and planned behavior clearly separated in future chats.
@@ -118,8 +125,10 @@
 - [x] `status: done` Measure the streamed finalize path for time to first token, time to `winners_locked`, time to `badges_ready`, time to first/top enrichment, time to all enrichment, total tokens, winner validity, and locked-ID/order preservation.
 - [x] `status: done` Compare stream-with-prewarm against a no-prewarm stream variant so prewarm has to earn its place in the streamed architecture.
 - [x] `status: done` Close the mini one-call stream model question: `gpt-5-mini` is too slow for one-call streamed finalize, while `gpt-5.4-nano` remains the only plausible fast stream model from current measurements.
-- [ ] `status: pending` Add only a smallest harness mode for the new nano-lock plus mini async-enrichment experiment.
-- [ ] `status: pending` Measure nano winner/badge lock latency, mini enrichment latency, model-specific tokens, and locked-ID/order preservation on `context5`.
+- [x] `status: done` Add harness mode for nano-lock plus mini async-enrichment experiment (`--mode nano-mini-split`).
+- [x] `status: done` Measure nano winner/badge lock latency, mini enrichment latency, tokens, and order preservation on `context5`. Nano locks at ~2s, mini enriches at ~8.5–11.7s (longer with honest-caveat prompt). Order preserved 5/5. UX judgment: acceptable given cards show metadata-only and enrichment lives in modal only.
+- [x] `status: done` Validated async enrichment UX pattern: cards render with metadata + deterministic badge at ~2s; modal shows "Personalising explanation…" placeholder until enrichment arrives. Felt acceptable in local simulation at 8s delay.
+- [ ] `status: pending` Wire nano-lock + mini async-enrichment into the real product flow. When doing so: (1) split mini enrichment schema into separate `fit_reason` and `caveat` fields so the modal "Possible drawbacks" section populates correctly, (2) remove the `SIMULATE_ENRICHMENT_DELAY_MS` simulation block from `HomeShared.jsx`, (3) remove the fit reason from the blocking finalize card payload since it will arrive async.
 - [ ] `status: pending` Make the latest user follow-up or retry feedback the strongest later-stage decision signal in finalize-fast.
 - [ ] `status: pending` Remove any too-early recommendation-style reveal path so real cards appear only after shortlist certainty.
 - [ ] `status: pending` Update modal behavior so it opens immediately with core facts and lets explanation sections load progressively when enrichment is still in flight.

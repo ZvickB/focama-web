@@ -1,7 +1,34 @@
 # Focama — Claude Code Context
 
+## Claude vs Codex — When to Use Which
+**Use Claude Code (this tool) when:**
+- The task touches multiple parts of the system or needs codebase-wide understanding
+- You want to think it through together — tradeoffs, architecture, back-and-forth
+- The task involves a judgment call about what fits existing patterns
+- You want to stay in the loop and redirect as you go
+
+**Use Codex when:**
+- The task is well-scoped and self-contained — you can write a clear spec
+- You want to step away and come back to a finished result
+- The task is pure implementation with no ambiguity about approach
+
+**Rule of thumb:** Conversation and judgment → Claude. Autonomous heads-down execution → Codex.
+
 ## What This Is
 AI-powered shopping assistant. User enters a query → AI asks one follow-up question → returns 6 focused product picks with fit explanations. Main value prop: calm, focused results — not a marketplace.
+
+## Product Voice — AI Copy Tone
+This is a non-negotiable product direction. Apply it to every AI prompt that generates user-facing copy.
+
+- Write like a **trusted assistant**, not a salesperson or a review site.
+- For each pick, explain **why the AI chose it** AND surface **at least one honest drawback or caveat** — without being harsh.
+- Drawbacks can be practical (exceeds stated budget, heavier than alternatives, requires X to work well) or contextual (better if you care more about Y than Z, not ideal if you also need W).
+- Do **not** write copy that implies the product is definitely the right choice. Help the user decide for themselves.
+- Avoid superlatives, hype phrases, and generic positives ("renowned for", "ideal for", "go-to choice", "perfectly suited").
+- Be specific to the user's stated context — not generic product descriptions.
+- Honest caveats make the product feel more trustworthy, not less. A note like "exceeds your $300 budget at $309" or "heavier than the other picks — fine if support matters more than portability" is better than silence.
+
+**The office chair case is the reference example of the right tone** — it flagged budget overruns and noted when a pick prioritized support over minimalism. That is the target.
 
 ## Run Commands
 ```bash

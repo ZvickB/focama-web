@@ -674,6 +674,87 @@ function mapPriorRerankPicksToResults(picks, reusableEntries, finalResultLimit) 
   }
 }
 
+function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }) {
+  const desiredCount = Math.min(finalResultLimit, candidatePool.candidates.length)
+
+  return [
+    'Choose the best final products and assign one short badge label to each.',
+    '1. Fit to the extra context/details. This is the main decision signal.',
+    '2. Relevance to the product query.',
+    '3. Quality and trust using rating and review count.',
+    '4. Prefer diversity across style, merchant, or use case when helpful.',
+    `Return exactly ${desiredCount} picks from the candidates below. For each, write one short badge label (under 4 words) that captures the strongest reason it belongs.`,
+    'Only choose from the provided candidate ids.',
+    '',
+    `Product query: ${candidatePool.query}`,
+    `Extra context: ${candidatePool.details || 'None provided.'}`,
+    '',
+    'Candidates:',
+    JSON.stringify(buildCandidateSummary(candidatePool)),
+  ].join('\n')
+}
+
+function buildNanoLockAndBadgesSchema() {
+  return {
+    type: 'object',
+    properties: {
+      picks: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            candidate_id: { type: 'string' },
+            badge_label: { type: 'string' },
+          },
+          required: ['candidate_id', 'badge_label'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['picks'],
+    additionalProperties: false,
+  }
+}
+
+function buildMiniEnrichmentPrompt({ lockedCandidates, query, details }) {
+  return [
+    'Write a short explanation for each of these selected products. Write like a trusted assistant, not a salesperson.',
+    'The shortlist is already decided. Do not change the order or swap any product.',
+    'For each product:',
+    '1. Explain in one or two sentences why it was picked for this specific need.',
+    '2. Add one honest caveat or drawback — practical (e.g. exceeds budget, heavier than alternatives) or contextual (e.g. better if X matters more than Y). Do not skip this even if the pick is strong.',
+    'Be specific to the user context. Avoid superlatives, hype phrases, and generic positives.',
+    '',
+    `Product query: ${query}`,
+    `User context: ${details || 'None provided.'}`,
+    '',
+    'Selected products (preserve this exact order and these exact candidate_ids):',
+    JSON.stringify(lockedCandidates),
+  ].join('\n')
+}
+
+function buildMiniEnrichmentSchema() {
+  return {
+    type: 'object',
+    properties: {
+      enriched: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            candidate_id: { type: 'string' },
+            fit_reason: { type: 'string' },
+          },
+          required: ['candidate_id', 'fit_reason'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['enriched'],
+    additionalProperties: false,
+  }
+}
+
 async function runOneShotSelection(
   { candidatePool, finalResultLimit, apiKey, model },
   fetchImpl,
@@ -756,6 +837,120 @@ export async function createCandidateAwarePrior(
 }
 
 export const createPreRankArtifact = createCandidateAwarePrior
+
+export async function nanoLockWinnersAndBadges(
+  {
+    candidatePool,
+    finalResultLimit,
+    apiKey,
+    model = DEFAULT_CONTEXT_FINALIZE_MODEL,
+  },
+  fetchImpl = fetch,
+) {
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is missing from the root .env file.')
+  }
+
+  const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
+
+  if (candidates.length === 0) {
+    return { model, lockedIds: [], lockedBadges: [], usage: null }
+  }
+
+  const { parsed, usage } = await requestStructuredSelection(
+    {
+      prompt: buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }),
+      schema: buildNanoLockAndBadgesSchema(),
+      responseName: 'nano_lock_and_badges',
+      apiKey,
+      model,
+    },
+    fetchImpl,
+  )
+
+  const picks = Array.isArray(parsed?.picks) ? parsed.picks : []
+  const candidateById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]))
+  const seen = new Set()
+  const lockedIds = []
+  const lockedBadges = []
+
+  for (const pick of picks) {
+    const candidateId = String(pick?.candidate_id || '')
+
+    if (!candidateId || seen.has(candidateId) || !candidateById.has(candidateId)) {
+      continue
+    }
+
+    lockedIds.push(candidateId)
+    lockedBadges.push({ candidateId, badgeLabel: String(pick?.badge_label || '') })
+    seen.add(candidateId)
+
+    if (lockedIds.length >= finalResultLimit) {
+      break
+    }
+  }
+
+  return { model, lockedIds, lockedBadges, usage }
+}
+
+export async function miniEnrichSelectedCandidates(
+  {
+    lockedIds,
+    candidatePool,
+    apiKey,
+    model = DEFAULT_OPENAI_MODEL,
+  },
+  fetchImpl = fetch,
+) {
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is missing from the root .env file.')
+  }
+
+  if (!Array.isArray(lockedIds) || lockedIds.length === 0) {
+    return { model, enriched: [], enrichedIds: [], usage: null, preservedOrder: true }
+  }
+
+  const candidateById = new Map(
+    (Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []).map((candidate) => [
+      String(candidate.id),
+      candidate,
+    ]),
+  )
+
+  const lockedCandidates = lockedIds
+    .map((id) => candidateById.get(String(id)))
+    .filter(Boolean)
+    .map((candidate) => ({
+      candidate_id: String(candidate.id),
+      title: candidate.title,
+      source: candidate.source,
+      price: candidate.price,
+      rating: candidate.rating,
+      reviewCount: candidate.reviewCount,
+    }))
+
+  const { parsed, usage } = await requestStructuredSelection(
+    {
+      prompt: buildMiniEnrichmentPrompt({
+        lockedCandidates,
+        query: candidatePool.query,
+        details: candidatePool.details || '',
+      }),
+      schema: buildMiniEnrichmentSchema(),
+      responseName: 'mini_enrichment',
+      apiKey,
+      model,
+    },
+    fetchImpl,
+  )
+
+  const rawEnriched = Array.isArray(parsed?.enriched) ? parsed.enriched : []
+  const enrichedIds = rawEnriched.map((entry) => String(entry?.candidate_id || ''))
+  const enrichedLockedIds = enrichedIds.filter((id) => lockedIds.includes(id))
+  const preservedOrder = lockedIds.join(',') === enrichedLockedIds.join(',')
+
+  return { model, enriched: rawEnriched, enrichedIds, usage, preservedOrder }
+}
 
 export async function selectAiResults(
   {

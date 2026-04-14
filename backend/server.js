@@ -6,6 +6,8 @@ import {
   DEFAULT_CONTEXT_FINALIZE_MODEL,
   createCandidateAwarePrior,
   selectAiResults,
+  nanoLockWinnersAndBadges,
+  miniEnrichSelectedCandidates,
 } from './lib/ai-selector.js'
 import { createFinalizeFastContract } from './lib/layered-contracts.js'
 import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, takeRateLimitToken } from './lib/rate-limit.js'
@@ -1404,6 +1406,102 @@ export async function handleSearchDebug(requestUrl, response) {
   })
 }
 
+// Temporary harness-only handler — not wired to Vercel or frontend.
+// Measures nano lock/badges then mini async enrichment as two separate AI calls.
+export async function handleNanoMiniSplitFinalize(request, response) {
+  const requestStartedAt = nowMs()
+  const openAiApiKey = getEnv('OPENAI_API_KEY')
+
+  if (!openAiApiKey) {
+    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
+    return
+  }
+
+  let body
+
+  try {
+    body = await readJsonBody(request, { maxBytes: FINALIZE_BODY_LIMIT_BYTES })
+  } catch (error) {
+    sendJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid request body.' })
+    return
+  }
+
+  const sanitizedDiscoveryContext = sanitizeFinalizeDiscoveryContext(body)
+
+  if (!sanitizedDiscoveryContext.isValid) {
+    sendJson(response, 400, { error: sanitizedDiscoveryContext.error })
+    return
+  }
+
+  const resolvedCandidatePool = await readFinalizeCandidatePoolFromDiscovery(
+    sanitizedDiscoveryContext.normalizedQuery,
+  )
+
+  if (!resolvedCandidatePool.isValid) {
+    sendJson(response, resolvedCandidatePool.statusCode, { error: resolvedCandidatePool.error })
+    return
+  }
+
+  const followUpNotes = truncateText(body?.followUpNotes, FINALIZE_MAX_NOTE_LENGTH)
+  const candidatePool = {
+    ...resolvedCandidatePool.candidatePool,
+    details: followUpNotes || '',
+  }
+
+  const nanoModel = DEFAULT_CONTEXT_FINALIZE_MODEL
+  const miniModel = DEFAULT_FINALIZE_MODEL
+
+  try {
+    const nanoStartedAt = nowMs()
+    const nanoResult = await nanoLockWinnersAndBadges({
+      candidatePool,
+      finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
+      apiKey: openAiApiKey,
+      model: nanoModel,
+    })
+    const nanoDuration = nowMs() - nanoStartedAt
+
+    const miniStartedAt = nowMs()
+    const miniResult = await miniEnrichSelectedCandidates({
+      lockedIds: nanoResult.lockedIds,
+      candidatePool,
+      apiKey: openAiApiKey,
+      model: miniModel,
+    })
+    const miniDuration = nowMs() - miniStartedAt
+
+    sendJson(
+      response,
+      200,
+      {
+        nanoModel,
+        miniModel,
+        nanoLockMs: roundTimingDuration(nanoDuration),
+        miniEnrichMs: roundTimingDuration(miniDuration),
+        totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+        lockedIds: nanoResult.lockedIds,
+        lockedBadges: nanoResult.lockedBadges,
+        nanoUsage: nanoResult.usage,
+        miniUsage: miniResult.usage,
+        miniPreservedOrder: miniResult.preservedOrder,
+        enriched: miniResult.enriched,
+        candidateCount: candidatePool.candidates.length,
+      },
+      {
+        serverTiming: [
+          { name: 'nano-lock', duration: nanoDuration },
+          { name: 'mini-enrich', duration: miniDuration },
+          { name: 'total', duration: nowMs() - requestStartedAt },
+        ],
+      },
+    )
+  } catch (error) {
+    sendJson(response, 500, {
+      error: error instanceof Error ? error.message : 'nano-mini split finalize failed.',
+    })
+  }
+}
+
 export async function handleFinalizeSelection(request, response) {
   const requestStartedAt = nowMs()
   const openAiApiKey = getEnv('OPENAI_API_KEY')
@@ -1928,6 +2026,11 @@ export function createApiServer() {
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search/debug') {
       await handleSearchDebug(requestUrl, response)
+      return
+    }
+
+    if (request.method === 'POST' && requestUrl.pathname === '/api/search/finalize-nano-mini-split') {
+      await handleNanoMiniSplitFinalize(request, response)
       return
     }
 

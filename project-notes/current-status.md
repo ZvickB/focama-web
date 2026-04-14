@@ -20,6 +20,11 @@
 - Search/refine copy now tells users to start with a normal product search and use the refine step for natural-language narrowing such as budget, size, comfort, style, or use case.
 - The homepage supports preview results, final focused picks, a `Start a new search` reset path, and up to 2 feedback-based retry passes that exclude rejected shortlist items.
 
+## Prewarm status
+- Prewarm is **disabled in the frontend** as of 2026-04-14. The experiment concluded it is not a latency win and it was causing finalize to wait up to 23s before running.
+- The backend `/api/search/prewarm` route still exists for measurement purposes.
+- Re-enable in the browser console with `window.__FOCAMAI_ENABLE_PREWARM__ = true` if needed for experiments.
+
 ## Current backend state
 - The primary product flow is guided search:
   - `/api/search/discover`

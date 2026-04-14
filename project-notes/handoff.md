@@ -76,6 +76,7 @@
 - Do not let temporary measurement tooling become product architecture without an explicit decision.
 
 ## Known remaining work
+- Add loading states to improve the experience between steps — discover, refine question appearing, and results loading all need intentional loading treatment. Currently functional but unpolished. Do this after core architecture is settled.
 - Watch how the feedback-based retry loop performs with real searches and tighten copy, friction, or retry cap only if testers treat it like browsing.
 - Watch whether hard exclusion of rejected picks is too strict in small candidate pools; decide later whether to broaden discovery instead of reusing rejected items.
 - Keep checking whether users understand that the first query should be the product search itself and the refine step is for narrowing.
@@ -87,6 +88,7 @@
 - After products load, add a concise explanation prompt such as `We think the best choice is X. Click to find out why.` Use tap-oriented wording on small screens.
 - Improve low-confidence search handling so weak or ambiguous searches get a clearer fallback.
 - Decide whether to add post-search quality checks in addition to current pre-search validation.
+- **Pool mismatch detection + query nudge (not yet designed):** when finalize returns fewer than 6 strong picks and the follow-up context looks like it would have made a better first query (e.g. user searched "lego", context was "for a 9 year old" but the pool was all adult collector sets), the app should: (1) still show the closest available results so the screen isn't empty, and (2) offer an honest nudge like "These are the closest matches we found, but for better results try starting a new search with 'lego sets for kids'". The suggested query should be derived from the user's own follow-up context, not invented. Trigger only when the pool-to-context mismatch is clear — don't fire on strong shortlists. This directly addresses the case where the bare discovery query was too generic for the user's real intent.
 - Keep rule-based filtering focused on removing junk, duplicates, and weak candidates rather than making the final shortlist by itself.
 - Keep the textarea context/details as the main AI final-selection signal.
 - Keep ratings and review counts as important supporting quality signals.

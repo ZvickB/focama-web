@@ -46,6 +46,7 @@ function parseArgs(argv) {
     label: 'current',
     sampleSet: 'small',
     summaryOnly: false,
+    mode: 'default',
   }
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -59,6 +60,12 @@ function parseArgs(argv) {
 
     if (value === '--sample-set' && argv[index + 1]) {
       args.sampleSet = argv[index + 1]
+      index += 1
+      continue
+    }
+
+    if (value === '--mode' && argv[index + 1]) {
+      args.mode = argv[index + 1]
       index += 1
       continue
     }
@@ -257,6 +264,123 @@ function buildSummary(results) {
   }
 }
 
+async function measureCaseNanoMiniSplit(baseUrl, sampleCase, index) {
+  const discoverUrl = new URL('/api/search/discover', baseUrl)
+  discoverUrl.searchParams.set('query', sampleCase.query)
+  const discovery = await fetchJson(discoverUrl)
+
+  const splitFinalize = await fetchJson(new URL('/api/search/finalize-nano-mini-split', baseUrl), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-forwarded-for': buildIpAddress(index),
+    },
+    body: JSON.stringify({
+      query: sampleCase.query,
+      discoveryToken: discovery.payload?.discoveryToken,
+      followUpNotes: sampleCase.followUpNotes,
+    }),
+  })
+
+  const payload = splitFinalize.payload
+
+  return {
+    query: sampleCase.query,
+    followUpNotes: sampleCase.followUpNotes,
+    discovery: {
+      candidateCount: Array.isArray(discovery.payload?.candidatePool?.candidates)
+        ? discovery.payload.candidatePool.candidates.length
+        : 0,
+      discoveryTokenPresent: Boolean(discovery.payload?.discoveryToken),
+      roundTripMs: discovery.roundTripMs,
+      clientTotalMs: discovery.totalMs,
+    },
+    nanoLock: {
+      model: payload?.nanoModel || '',
+      serverMs: payload?.nanoLockMs ?? null,
+      serverTimingMs: splitFinalize.serverTiming?.['nano-lock'] ?? null,
+      lockedIds: Array.isArray(payload?.lockedIds) ? payload.lockedIds : [],
+      lockedBadges: Array.isArray(payload?.lockedBadges) ? payload.lockedBadges : [],
+      usage: payload?.nanoUsage || null,
+      lockCount: Array.isArray(payload?.lockedIds) ? payload.lockedIds.length : 0,
+    },
+    miniEnrich: {
+      model: payload?.miniModel || '',
+      serverMs: payload?.miniEnrichMs ?? null,
+      serverTimingMs: splitFinalize.serverTiming?.['mini-enrich'] ?? null,
+      preservedOrder: payload?.miniPreservedOrder ?? null,
+      enriched: Array.isArray(payload?.enriched) ? payload.enriched : [],
+      usage: payload?.miniUsage || null,
+    },
+    splitFinalize: {
+      roundTripMs: splitFinalize.roundTripMs,
+      clientTotalMs: splitFinalize.totalMs,
+      serverTiming: splitFinalize.serverTiming,
+      totalServerMs: payload?.totalMs ?? null,
+      candidateCount: payload?.candidateCount ?? null,
+    },
+  }
+}
+
+function buildNanoMiniSplitSummary(results) {
+  return {
+    nanoLockAverageServerMs: average(results.map((result) => result.nanoLock.serverMs)),
+    nanoLockAverageServerTimingMs: average(results.map((result) => result.nanoLock.serverTimingMs)),
+    nanoAverageTotalTokens: average(
+      results.map((result) => Number(result.nanoLock.usage?.totalTokens)),
+    ),
+    miniEnrichAverageServerMs: average(results.map((result) => result.miniEnrich.serverMs)),
+    miniEnrichAverageServerTimingMs: average(
+      results.map((result) => result.miniEnrich.serverTimingMs),
+    ),
+    miniAverageTotalTokens: average(
+      results.map((result) => Number(result.miniEnrich.usage?.totalTokens)),
+    ),
+    combinedAverageTotalTokens: average(
+      results.map(
+        (result) =>
+          Number(result.nanoLock.usage?.totalTokens || 0) +
+          Number(result.miniEnrich.usage?.totalTokens || 0),
+      ),
+    ),
+    splitClientAverageMs: average(results.map((result) => result.splitFinalize.roundTripMs)),
+    miniPreservedOrderRate:
+      results.filter((result) => result.miniEnrich.preservedOrder === true).length /
+      results.filter((result) => result.miniEnrich.preservedOrder !== null).length,
+    averageLockCount: average(results.map((result) => result.nanoLock.lockCount)),
+    casesCompleted: results.length,
+  }
+}
+
+function buildNanoMiniSplitConsoleSummary(output, outputPath) {
+  const summary = output.summary || {}
+
+  return [
+    `Saved full measurement JSON: ${outputPath}`,
+    `label: ${output.label}`,
+    `sample set: ${output.sampleSet}`,
+    `mode: ${output.mode}`,
+    `cases: ${output.caseCount}`,
+    '',
+    `nano lock avg (payload ms): ${summary.nanoLockAverageServerMs ?? 'n/a'} ms`,
+    `nano lock avg (server-timing ms): ${summary.nanoLockAverageServerTimingMs ?? 'n/a'} ms`,
+    `nano tokens avg: ${summary.nanoAverageTotalTokens ?? 'n/a'}`,
+    `mini enrich avg (payload ms): ${summary.miniEnrichAverageServerMs ?? 'n/a'} ms`,
+    `mini enrich avg (server-timing ms): ${summary.miniEnrichAverageServerTimingMs ?? 'n/a'} ms`,
+    `mini tokens avg: ${summary.miniAverageTotalTokens ?? 'n/a'}`,
+    `combined tokens avg: ${summary.combinedAverageTotalTokens ?? 'n/a'}`,
+    `split client avg: ${summary.splitClientAverageMs ?? 'n/a'} ms`,
+    `mini preserved order rate: ${Number.isFinite(summary.miniPreservedOrderRate) ? summary.miniPreservedOrderRate.toFixed(2) : 'n/a'}`,
+    `avg lock count: ${summary.averageLockCount ?? 'n/a'}`,
+    '',
+    'per-case nano lock ms / mini enrich ms / order preserved:',
+    ...output.cases.map(
+      (caseResult) =>
+        `  ${caseResult.query}: ${caseResult.nanoLock.serverMs ?? 'n/a'} ms / ${caseResult.miniEnrich.serverMs ?? 'n/a'} ms / ${caseResult.miniEnrich.preservedOrder}`,
+    ),
+  ].join('\n')
+}
+
 function buildConsoleSummary(output, outputPath) {
   const summary = output.summary || {}
 
@@ -276,7 +400,7 @@ function buildConsoleSummary(output, outputPath) {
 }
 
 async function main() {
-  const { label, sampleSet, summaryOnly } = parseArgs(process.argv.slice(2))
+  const { label, sampleSet, summaryOnly, mode } = parseArgs(process.argv.slice(2))
   const server = createApiServer()
   const outputDirectory = resolve(process.cwd(), 'temp-data')
   mkdirSync(outputDirectory, { recursive: true })
@@ -297,21 +421,37 @@ async function main() {
     const measuredCases = []
 
     for (const [index, sampleCase] of getSampleCases(sampleSet).entries()) {
-      measuredCases.push(await measureCase(baseUrl, sampleCase, index))
+      if (mode === 'nano-mini-split') {
+        measuredCases.push(await measureCaseNanoMiniSplit(baseUrl, sampleCase, index))
+      } else {
+        measuredCases.push(await measureCase(baseUrl, sampleCase, index))
+      }
     }
+
+    const isNanoMiniMode = mode === 'nano-mini-split'
 
     const output = {
       measuredAt: new Date().toISOString(),
       label,
       sampleSet,
+      mode,
       caseCount: measuredCases.length,
       cases: measuredCases,
-      summary: buildSummary(measuredCases),
+      summary: isNanoMiniMode ? buildNanoMiniSplitSummary(measuredCases) : buildSummary(measuredCases),
     }
 
     const outputPath = resolve(outputDirectory, `guided-finalize-measurement-${label}.json`)
     writeFileSync(outputPath, `${JSON.stringify(output, null, 2)}\n`)
-    console.log(summaryOnly ? buildConsoleSummary(output, outputPath) : JSON.stringify(output, null, 2))
+
+    if (summaryOnly) {
+      console.log(
+        isNanoMiniMode
+          ? buildNanoMiniSplitConsoleSummary(output, outputPath)
+          : buildConsoleSummary(output, outputPath),
+      )
+    } else {
+      console.log(JSON.stringify(output, null, 2))
+    }
   } finally {
     await new Promise((resolvePromise, rejectPromise) => {
       server.close((error) => {

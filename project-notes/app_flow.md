@@ -55,12 +55,19 @@
 
 ## Final result behavior
 - Result lists display up to 6 normalized product cards.
-- Finalized card results include shortlist-safe fields: image, title, merchant/source, price, ratings when available, link when available, and one concise fit reason.
+- Finalized card results currently include shortlist-safe fields: image, title, merchant/source, price, ratings when available, link when available, and one concise fit reason.
 - Finalized cards no longer include drawback/caution copy.
 - AI no longer returns badge labels or badge reasons in the blocking finalize response.
 - Frontend deterministic presentation logic assigns scan-friendly badge labels after the shortlist arrives, with a slight delayed reveal.
 - Clicking a product opens a detail modal with product image, fit explanation, price/ratings, available tradeoff data, and an outbound retailer link when available.
 - Richer drawback/caution explanation is planned for a later enrichment layer, not part of blocking finalize today.
+
+### Planned card and modal split (not yet implemented)
+- The intended direction is that product cards show metadata only: image, title, merchant/source, price, ratings, and a deterministic badge label.
+- AI-generated copy (fit reasons, explanations, tradeoff notes) belongs in the modal only, not on the card surface.
+- This decoupling lets cards render immediately from shortlist-safe data while AI copy loads progressively inside the modal.
+- The current implementation still includes a fit reason in the blocking finalize card payload. This will need to be adjusted once the async enrichment strategy is settled and the modal loading state is implemented.
+- Modal graceful loading state (core facts immediately, explanation sections load progressively) is a known pending implementation step.
 
 ## Data, cache, and observability
 - Product data comes from the live guided backend path, not a frontend mock catalog.
@@ -95,6 +102,14 @@
 - Mobile-first layout decisions remain the default.
 - Loading states should feel intentional, not abrupt.
 - Brand elements like wordmark, nav, logo, and footer should remain consistent.
+
+## AI copy tone
+- AI-generated copy must read like a trusted assistant, not marketing.
+- For each pick, the copy should explain why the AI chose it AND note any meaningful drawback or caveat — without being harsh.
+- Drawbacks can be practical (exceeds budget, heavier than alternatives, only works if X) or contextual (better if you care more about Y than Z).
+- Do not write copy that sounds like the product is definitely the right choice. Write copy that helps the user decide for themselves.
+- Avoid superlatives, hype phrasing, and generic positives. Be specific to the user's stated context.
+- This tone applies to all AI copy — fit reasons, modal explanations, and any future enrichment layers.
 
 ## Placeholder vs real
 - Real now: shell, routing, open homepage, branding/loading fallback, product-card interaction, guided search endpoints, AI-assisted shortlist selection, retailer links when available, Supabase cache/history path, guided-primary debug output.
