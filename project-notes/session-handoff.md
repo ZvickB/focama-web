@@ -44,40 +44,26 @@
 - Badge labels are frontend-owned after final results arrive.
 - Drawback/caution copy is not part of the blocking finalized card payload.
 
-## Current experiment read
-- Canonical experiment details are in `project-notes/active-experiment-override.md`.
-- The primary latency goal is the context-added finalize path, not empty-notes finalize.
-- The current prewarm implementation is useful groundwork but not the final validated solution.
-- Prepared framing injected into the current finalize call is paused as a simple injection strategy because quality was mixed and token cost increased.
-- A thinner selection-only shortlist-lock pass materially improved speed but did not preserve quality consistently enough to validate the exact payload.
-- A cleaner full-evidence ids-only winner-lock pass then averaged about 2.45 s server-side, kept the same candidate-aware prior evidence path, and matched baseline top result in 5/5 cases; continue cautiously because post-lock badge/enrichment cost is still high.
-- Important correction: that clean split run measured separate AI calls for winner lock, badges, and enrichment. The next measured pass became one streamed finalize AI session with ordered events: `winners_locked`, `badges_ready`, `enrichment_ready`, and `done`.
-- That one-call stream pass is now measured; the nano-lock + mini async-enrichment experiment is also measured and UX-validated.
-- The current open question is quality-preserving shortlist locking near or under the corrected about-6000 ms target.
+## Current experiment status — CLOSED
+All latency experiments are concluded. Decisions:
+- **Prewarm: off.** Disabled in frontend as of 2026-04-14. Not a latency win, was blocking finalize for up to 23s. Backend route still exists for measurement only.
+- **nano-lock + mini async-enrichment: validated.** Nano locks winners+badges at ~2s, mini enriches async at ~8-12s with honest-caveat tone. UX acceptable because cards show metadata only and AI copy lives in modal.
+- **One-call stream: measured.** nano is the only viable fast model (~2.24s lock). mini is too slow for one-call stream (~8s lock, ~19s full).
+- **Next step: wire nano-lock + mini async-enrichment into the real product flow.**
 
-## Current planning read
-- Canonical layered plan: `project-notes/layered-latency-plan.md`.
-- Completed groundwork:
-  - thin contracts for query framing, candidate-aware prewarm, finalize-fast, and enrichment
-  - query framing split into `question_fast` and `framing_fields`
-  - discover, question-fast refine, and background framing-fields start independently
-  - candidate-aware prewarm starts only after usable candidates exist
-  - finalize returns a `finalizeFast` contract plus compatible `results`
-- Current temporary harness step:
-  - `POST /api/search/finalize-stream` exists on the local Node server only and is not wired to UI or Vercel
-  - `backend/scripts/measure-guided-finalize.js --mode stream-clean` compares baseline finalize against the one-call streamed finalize path in the same run
-  - small smoke measurement `stream-clean-smoke-small` completed 3/3 cases
-  - full context5 measurement `stream-clean-context5` completed 5/5 cases: average `winners_locked` was about 2.24 s vs baseline shortlist lock about 4.29 s, later badge/enrichment phases preserved locked order in 5/5, top result matched baseline in 5/5, and average winner overlap was 5.4/6
-  - full stream completion averaged about 6.92 s server-side and about 2534 tokens
-  - Chat 2 prewarm-vs-no-prewarm context5 measurement completed: no-prewarm locked winners about 265 ms earlier, but full stream completion was effectively tied, no-prewarm used about 387 more tokens, and winner overlap was worse at 4.6/6 vs 5.6/6 with prewarm
-  - conclusion: prewarm is not justified as a streamed-finalize latency feature; if kept, frame it as an explicit quality/cost hedge
-  - Chat 3 mini model-routing measurement completed with `OPENAI_FINALIZE_CONTEXT_MODEL=gpt-5-mini`: with prewarm winners locked about 8.13 s and full stream about 19.14 s; without prewarm winners locked about 8.48 s and full stream about 19.08 s; both completed 5/5 and preserved later-phase locked order
-  - decision: `gpt-5-mini` is rejected for the one-call streamed finalize path because it is far too slow for the lock and full-stream targets
-  - `gpt-5.4-nano` remains the only plausible fast one-call streamed finalize model from current measurements
-  - mini may still be useful later for asynchronous writing/enrichment only
-  - nano-lock + mini async-enrichment is measured and UX-validated; next step is wiring it into the real product flow
-  - `HomeShared.jsx` has an intentional `SIMULATE_ENRICHMENT_DELAY_MS = 8000` simulation block — keep it until the real async path is wired, then remove it
-  - when wiring: split mini schema into `fit_reason` + `caveat` fields so the modal "Possible drawbacks" section populates; remove fit reason from blocking finalize card payload
+## What needs wiring (next implementation task)
+1. Finalize returns nano shortlist fast (cards appear at ~2s)
+2. Mini enrichment runs async server-side after nano lock
+3. Frontend polls or receives enrichment and fills modal when ready
+4. Split mini schema into `fit_reason` + `caveat` fields so both modal sections populate
+5. Remove fit reason from blocking finalize card payload (cards = metadata only)
+6. Remove `SIMULATE_ENRICHMENT_DELAY_MS` simulation from `HomeShared.jsx`
+
+## Current real-world timings (no prewarm, fresh cache miss)
+- Discover: ~6.5s (SerpApi ~5.3s cache miss; ~150ms on cache hit)
+- Refine: ~1.7s
+- Framing fields: ~4.4s (background, doesn't block)
+- Finalize: ~4.3s (OpenAI ~3.7s)
 
 ## Brand and loading notes
 - Master logo: `/src/assets/logo_master_version.svg`
