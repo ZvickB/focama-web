@@ -87,7 +87,9 @@ export function ResultSkeleton({ className = '' }) {
 }
 
 export function ProductDetailModal({ item, onClose, onRetailerClick }) {
-  const enrichmentReady = Boolean(item?.fit_reason)
+  const fitReason = item?.fit_reason || item?.fitReason || ''
+  const caveat = item?.caveat || ''
+  const enrichmentReady = Boolean(fitReason)
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -189,7 +191,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
                 <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
                   <div className="flex items-start gap-3">
                     <Star className="mt-1 h-4 w-4 text-amber-500" />
-                    <span>{item.fit_reason}</span>
+                    <span>{fitReason}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -204,7 +206,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
               </Card>
             )}
 
-            {enrichmentReady && item.caveat ? (
+            {enrichmentReady && caveat ? (
               <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg text-slate-900">Possible drawbacks</CardTitle>
@@ -212,7 +214,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
                 <CardContent className="text-sm leading-6 text-slate-600">
                   <div className="flex items-start gap-3">
                     <span className="mt-1 h-2.5 w-2.5 rounded-full bg-stone-400" />
-                    <span>{item.caveat}</span>
+                    <span>{caveat}</span>
                   </div>
                 </CardContent>
               </Card>

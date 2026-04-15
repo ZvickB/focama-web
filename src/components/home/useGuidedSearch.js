@@ -190,7 +190,10 @@ function mergeEnrichmentIntoResults(results, enrichmentEntries) {
   }
 
   const enrichmentById = new Map(
-    enrichmentEntries.map((entry) => [String(entry.candidate_id || ''), entry]),
+    enrichmentEntries.map((entry) => [
+      String(entry?.candidate_id || entry?.candidateId || ''),
+      entry,
+    ]),
   )
 
   return results.map((result) => {
@@ -202,8 +205,8 @@ function mergeEnrichmentIntoResults(results, enrichmentEntries) {
 
     return {
       ...result,
-      fit_reason: entry.fit_reason || '',
-      caveat: entry.caveat || '',
+      fit_reason: entry?.fit_reason || entry?.fitReason || '',
+      caveat: entry?.caveat || '',
     }
   })
 }
