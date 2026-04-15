@@ -32,18 +32,6 @@ function handleRetryFeedbackKeyDown(event, { canSubmit, onSubmit }) {
   }
 }
 
-function getUserFacingReasons(reasons = []) {
-  return reasons.filter((reason) => {
-    const normalizedReason = String(reason || '').trim()
-
-    if (!normalizedReason) {
-      return false
-    }
-
-    return !/serpapi search route|live product result returned/i.test(normalizedReason)
-  })
-}
-
 function getUserFacingDescription(description) {
   const normalizedDescription = String(description || '').trim()
 
@@ -297,22 +285,20 @@ export function ResultsSection({
   const hasExplicitBadges = shouldShowBadgeLabels && displayedResults.some((item) => item.badgeLabel)
   const hasDisplayedResults = orderedResults.length > 0
   const shouldShowResultsIntro = !hasDisplayedResults || hasFinalResults
-  const [areCardsVisible, setAreCardsVisible] = useState(false)
+  const [visibleResultSetKey, setVisibleResultSetKey] = useState('')
   const resultSetKey = `${hasFinalResults ? 'final' : showPreviewResults ? 'preview' : 'none'}:${displayedResults
     .map((item) => String(item.id))
     .join('|')}`
   const orderedPreviousResults = previousResults
+  const areCardsVisible = visibleResultSetKey === resultSetKey
 
   useEffect(() => {
     if (orderedResults.length === 0) {
-      setAreCardsVisible(false)
       return undefined
     }
 
-    setAreCardsVisible(false)
-
     const frameId = window.requestAnimationFrame(() => {
-      setAreCardsVisible(true)
+      setVisibleResultSetKey(resultSetKey)
     })
 
     return () => {

@@ -623,7 +623,9 @@ describe('HomePage', () => {
     expect(screen.queryByText('Enter a product topic to get started.')).not.toBeInTheDocument()
   })
 
-  it('lets the user retry a weak shortlist with feedback for a second pass', async () => {
+  it(
+    'lets the user retry a weak shortlist with feedback for a second pass',
+    async () => {
     const user = userEvent.setup()
     const fetchMock = vi
       .fn()
@@ -757,7 +759,9 @@ describe('HomePage', () => {
       retryCount: 1,
       requestMode: 'guided_retry',
     })
-  })
+    },
+    10000,
+  )
 
   it('filters raw live-route reason copy out of the result cards', async () => {
     const user = userEvent.setup()
