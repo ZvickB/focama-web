@@ -28,13 +28,48 @@ const buttonVariants = cva(
   },
 )
 
-const Button = React.forwardRef(({ className, variant, size, ...props }, ref) => (
-  <button
-    className={cn(buttonVariants({ variant, size, className }))}
-    ref={ref}
-    {...props}
-  />
-))
+function setRef(ref, value) {
+  if (typeof ref === 'function') {
+    ref(value)
+    return
+  }
+
+  if (ref) {
+    ref.current = value
+  }
+}
+
+function composeRefs(...refs) {
+  return (value) => {
+    refs.forEach((ref) => setRef(ref, value))
+  }
+}
+
+const Button = React.forwardRef(
+  ({ asChild = false, children, className, variant, size, ...props }, ref) => {
+    const buttonClassName = cn(buttonVariants({ variant, size, className }))
+
+    if (asChild) {
+      const child = React.Children.only(children)
+
+      if (!React.isValidElement(child)) {
+        return null
+      }
+
+      return React.cloneElement(child, {
+        ...props,
+        className: cn(buttonClassName, child.props.className),
+        ref: composeRefs(ref, child.props.ref),
+      })
+    }
+
+    return (
+      <button className={buttonClassName} ref={ref} {...props}>
+        {children}
+      </button>
+    )
+  },
+)
 
 Button.displayName = 'Button'
 

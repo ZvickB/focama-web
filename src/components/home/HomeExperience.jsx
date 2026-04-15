@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { LoaderCircle, Search, Sparkles } from 'lucide-react'
 
 import wordmark from '@/assets/wordmark.PNG'
@@ -72,47 +72,75 @@ function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
 }
 
 function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
-  const [displayedCopy, setDisplayedCopy] = useState(() =>
-    buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }),
+  const displayedCopy = useMemo(
+    () => buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }),
+    [isGeneratingPrompt, prompt, submittedQuery],
   )
-  const [displayedTitle, setDisplayedTitle] = useState(() =>
-    buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }),
-  )
+  const [displayedTitle, setDisplayedTitle] = useState(() => ({
+    titleEyebrow: displayedCopy.titleEyebrow,
+    titleQuestion: displayedCopy.titleQuestion,
+  }))
   const [isTitleVisible, setIsTitleVisible] = useState(true)
-  const [isQuestionVisible, setIsQuestionVisible] = useState(false)
-  const [streamedHelper, setStreamedHelper] = useState(() =>
-    isGeneratingPrompt ? '' : buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }).helper,
-  )
+  const [visibleQuestionKey, setVisibleQuestionKey] = useState('')
+  const [streamedHelper, setStreamedHelper] = useState('')
+  const [streamedHelperTarget, setStreamedHelperTarget] = useState('')
+  const helperTarget = `${isGeneratingPrompt ? 'generating' : 'idle'}:${displayedCopy.helper}`
+  const isQuestionVisible =
+    Boolean(displayedTitle.titleQuestion) && visibleQuestionKey === displayedTitle.titleQuestion
+  const helperCopy =
+    isGeneratingPrompt
+      ? streamedHelperTarget === helperTarget
+        ? streamedHelper
+        : ''
+      : displayedCopy.helper
 
   useEffect(() => {
-    const nextCopy = buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery })
-
-    if (
-      displayedCopy.titleEyebrow === nextCopy.titleEyebrow &&
-      displayedCopy.titleQuestion === nextCopy.titleQuestion &&
-      displayedCopy.helper === nextCopy.helper &&
-      displayedCopy.placeholder === nextCopy.placeholder
-    ) {
-      return
+    if (!displayedTitle.titleQuestion) {
+      return undefined
     }
 
-    setDisplayedCopy(nextCopy)
-  }, [
-    displayedCopy.helper,
-    displayedCopy.placeholder,
-    displayedCopy.titleEyebrow,
-    displayedCopy.titleQuestion,
-    isGeneratingPrompt,
-    prompt,
-    submittedQuery,
-  ])
+    const questionTimer = window.setTimeout(() => {
+      setVisibleQuestionKey(displayedTitle.titleQuestion)
+    }, 220)
+
+    return () => {
+      window.clearTimeout(questionTimer)
+    }
+  }, [displayedTitle.titleQuestion])
+
+  useEffect(() => {
+    if (!isGeneratingPrompt) {
+      return undefined
+    }
+
+    const resetTimer = window.setTimeout(() => {
+      setStreamedHelper('')
+      setStreamedHelperTarget(helperTarget)
+    }, 0)
+
+    let characterIndex = 0
+    const intervalId = window.setInterval(() => {
+      characterIndex += 2
+      setStreamedHelper(displayedCopy.helper.slice(0, characterIndex))
+      setStreamedHelperTarget(helperTarget)
+
+      if (characterIndex >= displayedCopy.helper.length) {
+        window.clearInterval(intervalId)
+      }
+    }, 40)
+
+    return () => {
+      window.clearTimeout(resetTimer)
+      window.clearInterval(intervalId)
+    }
+  }, [displayedCopy.helper, helperTarget, isGeneratingPrompt])
 
   useEffect(() => {
     if (
       displayedTitle.titleEyebrow === displayedCopy.titleEyebrow &&
       displayedTitle.titleQuestion === displayedCopy.titleQuestion
     ) {
-      return
+      return undefined
     }
 
     const hideTimer = window.setTimeout(() => {
@@ -125,54 +153,19 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
         titleQuestion: displayedCopy.titleQuestion,
       })
       setIsTitleVisible(true)
-      setIsQuestionVisible(false)
+      setVisibleQuestionKey('')
     }, 300)
 
     return () => {
       window.clearTimeout(hideTimer)
       window.clearTimeout(swapTimer)
     }
-  }, [displayedCopy.titleEyebrow, displayedCopy.titleQuestion, displayedTitle])
-
-  useEffect(() => {
-    if (!displayedTitle.titleQuestion) {
-      setIsQuestionVisible(false)
-      return undefined
-    }
-
-    setIsQuestionVisible(false)
-
-    const questionTimer = window.setTimeout(() => {
-      setIsQuestionVisible(true)
-    }, 220)
-
-    return () => {
-      window.clearTimeout(questionTimer)
-    }
-  }, [displayedTitle.titleQuestion])
-
-  useEffect(() => {
-    if (!isGeneratingPrompt) {
-      setStreamedHelper(displayedCopy.helper)
-      return
-    }
-
-    setStreamedHelper('')
-
-    let characterIndex = 0
-    const intervalId = window.setInterval(() => {
-      characterIndex += 2
-      setStreamedHelper(displayedCopy.helper.slice(0, characterIndex))
-
-      if (characterIndex >= displayedCopy.helper.length) {
-        window.clearInterval(intervalId)
-      }
-    }, 40)
-
-    return () => {
-      window.clearInterval(intervalId)
-    }
-  }, [displayedCopy.helper, isGeneratingPrompt])
+  }, [
+    displayedCopy.titleEyebrow,
+    displayedCopy.titleQuestion,
+    displayedTitle.titleEyebrow,
+    displayedTitle.titleQuestion,
+  ])
 
   return (
     <div className="space-y-2">
@@ -202,7 +195,7 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
           </p>
         ) : null}
         <p className="max-w-2xl text-sm leading-7 text-slate-600">
-          {isGeneratingPrompt ? streamedHelper : displayedCopy.helper}
+          {helperCopy}
           {isGeneratingPrompt ? (
             <span className="ml-0.5 inline-block h-4 w-px translate-y-0.5 animate-pulse bg-slate-400 align-middle" />
           ) : null}
@@ -449,7 +442,6 @@ function OpenLayout(props) {
                   <input
                     id="open-variant-query"
                     aria-label="Product topic"
-                    autoFocus
                     value={state.productQuery}
                     onChange={(event) => setProductQuery(event.target.value)}
                     placeholder='Try "travel stroller for airplane", "ergonomic office chair", or "lego botanical set"'

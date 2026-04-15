@@ -315,7 +315,7 @@ export function useGuidedSearch() {
     refine: null,
     framingFields: null,
   })
-  const [showFinalResultBadges, setShowFinalResultBadges] = useState(false)
+  const [revealedBadgeResultsKey, setRevealedBadgeResultsKey] = useState('')
   const [showPreviewResults, setShowPreviewResults] = useState(false)
   const [isDiscovering, setIsDiscovering] = useState(false)
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false)
@@ -461,7 +461,7 @@ export function useGuidedSearch() {
     setCandidatePool(variables.originalCandidatePool || null)
     setPreviousResults(previousDisplayResults)
     setResults(finalizedResults)
-    setShowFinalResultBadges(false)
+    setRevealedBadgeResultsKey('')
     setIsEnrichmentReady(false)
 
     const token = variables.discoveryToken
@@ -676,20 +676,22 @@ export function useGuidedSearch() {
     onError: handleFinalizeError,
   })
 
+  const finalResultsKey = results.map((item) => String(item.id)).join('|')
+  const showFinalResultBadges = results.length > 0 && revealedBadgeResultsKey === finalResultsKey
+
   useEffect(() => {
     if (results.length === 0) {
-      setShowFinalResultBadges(false)
       return undefined
     }
 
     const timeoutId = window.setTimeout(() => {
-      setShowFinalResultBadges(true)
+      setRevealedBadgeResultsKey(finalResultsKey)
     }, FINAL_RESULT_BADGE_REVEAL_DELAY_MS)
 
     return () => {
       window.clearTimeout(timeoutId)
     }
-  }, [results])
+  }, [finalResultsKey, results.length])
 
   useEffect(() => () => {
     resetPrewarmState()
@@ -729,7 +731,7 @@ export function useGuidedSearch() {
       refine: null,
       framingFields: null,
     })
-    setShowFinalResultBadges(false)
+    setRevealedBadgeResultsKey('')
     setShowPreviewResults(false)
     setRefinementPrompt(null)
     setQueryFramingFields(null)
@@ -765,7 +767,7 @@ export function useGuidedSearch() {
       refine: null,
       framingFields: null,
     })
-    setShowFinalResultBadges(false)
+    setRevealedBadgeResultsKey('')
     setPreviousResults([])
     setShowPreviewResults(false)
     setIsDiscovering(false)
