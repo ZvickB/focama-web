@@ -9,6 +9,8 @@ Read this file first at the start of every chat.
 
 ## First reads
 - Read `project-notes/session-handoff.md` first for the fastest current reset.
+- Read `project-notes/active-experiment-override.md` immediately after `session-handoff.md` when the task touches the current prewarm/finalize experiment.
+- Read `project-notes/finalize-strategy.md` before finalize or latency-architecture changes; use it for active finalize/AI strategy and hard guardrails.
 - Read `project-notes/current-status.md` next for the immediate snapshot and active constraints.
 - Read `project-notes/app_flow.md` for current implemented behavior.
 - Read `project-notes/handoff.md` for medium-term work and open product questions.
@@ -18,6 +20,8 @@ Read this file first at the start of every chat.
 - Read `project-notes/cleanup-backlog.md` only when the task is specifically cleanup or when the user asks to work a section from it.
 
 ## Source of truth
+- `project-notes/active-experiment-override.md`: highest-priority note for the current prewarm/finalize experiment when it conflicts with older finalize guidance.
+- `project-notes/finalize-strategy.md`: active finalize/AI strategy and hard guardrails for future finalize or latency-architecture changes.
 - `project-notes/app_flow.md`: what the app does now.
 - `project-notes/current-status.md`: short snapshot for the next chat.
 - `project-notes/handoff.md`: durable remaining work and open questions.
@@ -29,6 +33,9 @@ Read this file first at the start of every chat.
 - Treat implemented behavior and planned work as different things.
 - Do not present a future idea as already decided unless the user explicitly chose it.
 - If current implementation and future direction differ, write both clearly.
+- Project notes and constraints are guardrails for the assistant, not limits on the user.
+- If the user explicitly wants a direction that conflicts with existing notes or prior guidance, give a clear warning about the tradeoff or risk once, then follow the user's decision.
+- When the user overrides a prior note or planned direction, update the relevant notes so future chats do not keep treating the older direction as the active one.
 - Keep changes scoped. Finish one feature, fix, or cleanup section cleanly before starting another.
 - After any meaningful revision, clean up superseded code, copy, notes, and assets in the same pass when it is safe to do so.
 - If an old strategy, UI, asset, or note may still be useful for reference, move it to a clearly named archive location instead of leaving it mixed into the active product path.
@@ -69,6 +76,8 @@ Read this file first at the start of every chat.
 - After finishing a meaningful chunk of work, update `project-notes/handoff.md` if remaining work or priorities changed.
 - Update `project-notes/cleanup-backlog.md` only when a cleanup item is actually completed, split, or blocked.
 - Keep note updates small and accurate. Do not rewrite history just to make notes look cleaner.
+- Prefer concise, de-duplicated active notes, but do not enforce a hard line-count limit.
+- Let canonical source-of-truth notes be as long as needed to preserve guardrails, current/planned clarity, and measurement conclusions.
 
 ## Cleanup and archive rules
 - Do not leave old strategies, unused UI paths, dead components, stale notes, or retired assets in active folders just because they might be useful later.
@@ -89,6 +98,16 @@ Read this file first at the start of every chat.
 - After finishing that item or section, change its status from `pending` to `done`.
 - If the task grows, split it into a new item instead of widening the original one.
 
+## Communication preferences
+- The user is stronger in React/frontend than backend architecture.
+- Assume solid general web-dev knowledge, but do not assume deep backend expertise.
+- When making backend changes, explain the reasoning in clear practical terms.
+- Prefer concrete explanations of request flow, data shape, and tradeoffs over backend jargon.
+- For non-trivial backend changes, briefly state:
+  - what changed
+  - why it changed
+  - what could break
+
 ## Workflow preferences
 - This repo is worked in PowerShell on Windows. Prefer PowerShell-safe commands.
 - For small UI or copy changes, prefer manual verification over running a full build every time.
@@ -100,3 +119,20 @@ Read this file first at the start of every chat.
 - Prefer the smallest change that keeps the codebase and notes aligned.
 - Ask before making a product decision with non-obvious consequences.
 - If there is any ambiguity, describe current reality first and label speculation as future/planned.
+
+## If you are going to deviate from instructions
+If your next action would meaningfully differ from my instruction or preference, say so before proceeding. Briefly state the mismatch and why. Do not silently override my intent. Do not warn for minor details.
+
+## Commit Workflow
+
+When the user says "commit":
+
+- Use only the current git diff (no full repo scan)
+- Write a commit message with:
+  - short subject
+  - blank line
+  - concise body (what + why)
+- Avoid vague wording
+- If changes are unrelated, warn instead
+
+Then commit and push.

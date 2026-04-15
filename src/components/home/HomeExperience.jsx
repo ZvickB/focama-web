@@ -56,6 +56,9 @@ function formatTimingValue(value) {
 }
 
 function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
+  const suggestedQuestion =
+    prompt?.prompt || `What should we optimize for with this ${submittedQuery}?`
+
   return {
     helper:
       prompt?.helperText ||
@@ -63,9 +66,8 @@ function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     placeholder:
       prompt?.followUpPlaceholder ||
       'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
-    title: isGeneratingPrompt
-      ? 'You can add more detail right away'
-      : prompt?.prompt || `What should we optimize for with this ${submittedQuery}?`,
+    titleEyebrow: isGeneratingPrompt ? 'You can add more detail right away' : 'One suggestion, such as:',
+    titleQuestion: isGeneratingPrompt ? '' : suggestedQuestion,
   }
 }
 
@@ -74,9 +76,10 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }),
   )
   const [displayedTitle, setDisplayedTitle] = useState(() =>
-    buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }).title,
+    buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }),
   )
   const [isTitleVisible, setIsTitleVisible] = useState(true)
+  const [isQuestionVisible, setIsQuestionVisible] = useState(false)
   const [streamedHelper, setStreamedHelper] = useState(() =>
     isGeneratingPrompt ? '' : buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }).helper,
   )
@@ -85,7 +88,8 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     const nextCopy = buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery })
 
     if (
-      displayedCopy.title === nextCopy.title &&
+      displayedCopy.titleEyebrow === nextCopy.titleEyebrow &&
+      displayedCopy.titleQuestion === nextCopy.titleQuestion &&
       displayedCopy.helper === nextCopy.helper &&
       displayedCopy.placeholder === nextCopy.placeholder
     ) {
@@ -93,10 +97,21 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     }
 
     setDisplayedCopy(nextCopy)
-  }, [displayedCopy.helper, displayedCopy.placeholder, displayedCopy.title, isGeneratingPrompt, prompt, submittedQuery])
+  }, [
+    displayedCopy.helper,
+    displayedCopy.placeholder,
+    displayedCopy.titleEyebrow,
+    displayedCopy.titleQuestion,
+    isGeneratingPrompt,
+    prompt,
+    submittedQuery,
+  ])
 
   useEffect(() => {
-    if (displayedTitle === displayedCopy.title) {
+    if (
+      displayedTitle.titleEyebrow === displayedCopy.titleEyebrow &&
+      displayedTitle.titleQuestion === displayedCopy.titleQuestion
+    ) {
       return
     }
 
@@ -105,15 +120,36 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     }, 0)
 
     const swapTimer = window.setTimeout(() => {
-      setDisplayedTitle(displayedCopy.title)
+      setDisplayedTitle({
+        titleEyebrow: displayedCopy.titleEyebrow,
+        titleQuestion: displayedCopy.titleQuestion,
+      })
       setIsTitleVisible(true)
+      setIsQuestionVisible(false)
     }, 300)
 
     return () => {
       window.clearTimeout(hideTimer)
       window.clearTimeout(swapTimer)
     }
-  }, [displayedCopy.title, displayedTitle])
+  }, [displayedCopy.titleEyebrow, displayedCopy.titleQuestion, displayedTitle])
+
+  useEffect(() => {
+    if (!displayedTitle.titleQuestion) {
+      setIsQuestionVisible(false)
+      return undefined
+    }
+
+    setIsQuestionVisible(false)
+
+    const questionTimer = window.setTimeout(() => {
+      setIsQuestionVisible(true)
+    }, 220)
+
+    return () => {
+      window.clearTimeout(questionTimer)
+    }
+  }, [displayedTitle.titleQuestion])
 
   useEffect(() => {
     if (!isGeneratingPrompt) {
@@ -146,12 +182,25 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
       </div>
       <div className="space-y-3">
         <p
-          className={`text-xl font-medium leading-8 text-slate-900 transition-opacity duration-300 ${
+          className={`text-[13px] font-semibold uppercase tracking-[0.14em] text-primary/70 transition-opacity duration-300 sm:text-sm ${
             isTitleVisible ? 'opacity-100' : 'opacity-0'
           }`}
+          style={{ fontFamily: '"Instrument Sans", sans-serif' }}
         >
-          {displayedTitle}
+          {displayedTitle.titleEyebrow}
         </p>
+        {displayedTitle.titleQuestion ? (
+          <p
+            className={`max-w-2xl text-xl font-medium leading-8 text-[#8f4e2f] transition-all duration-500 sm:text-[1.65rem] ${
+              isTitleVisible && isQuestionVisible
+                ? 'translate-y-0 opacity-100'
+                : 'translate-y-1 opacity-0'
+            }`}
+            style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+          >
+            {displayedTitle.titleQuestion}
+          </p>
+        ) : null}
         <p className="max-w-2xl text-sm leading-7 text-slate-600">
           {isGeneratingPrompt ? streamedHelper : displayedCopy.helper}
           {isGeneratingPrompt ? (
@@ -167,6 +216,8 @@ function TimingPanel({ requestTiming }) {
   const entries = [
     ['Discover', requestTiming?.discover],
     ['Refine', requestTiming?.refine],
+    ['Framing fields', requestTiming?.framingFields],
+    ['Prewarm', requestTiming?.prewarm],
     ['Finalize', requestTiming?.finalize],
   ].filter(([, timing]) => timing)
 
@@ -398,10 +449,11 @@ function OpenLayout(props) {
                   <input
                     id="open-variant-query"
                     aria-label="Product topic"
+                    autoFocus
                     value={state.productQuery}
                     onChange={(event) => setProductQuery(event.target.value)}
                     placeholder='Try "travel stroller for airplane", "ergonomic office chair", or "lego botanical set"'
-                    className="h-16 w-full rounded-[28px] border border-stone-200 bg-white px-5 text-lg text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary/50"
+                    className="h-16 w-full rounded-[28px] border border-stone-200 bg-white px-5 text-lg text-slate-900 outline-none transition placeholder:text-[15px] placeholder:text-slate-400 sm:placeholder:text-base focus:border-primary/50"
                     disabled={isLoading}
                   />
                 </div>
@@ -479,7 +531,7 @@ function OpenLayout(props) {
                           <span className="absolute inset-0 rounded-full bg-primary/20 animate-soft-pulse" />
                           <span className="relative h-2.5 w-2.5 rounded-full bg-primary/65" />
                           </span>
-                          You can start typing while we put together a suggestion.
+                          You can start typing while we put together an example suggestion, or just write your own.
                         </div>
                         <div className="relative overflow-hidden rounded-full bg-stone-200/80">
                           <div className="h-2.5 w-full" />
@@ -489,11 +541,29 @@ function OpenLayout(props) {
                     ) : null}
                   </div>
 
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-end">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="order-2 flex flex-col gap-1 sm:order-1">
+                      <Button
+                        type="button"
+                        disabled={!hasDiscoveryResults || state.isFinalizing}
+                        variant="ghost"
+                        className={`h-10 w-full justify-start rounded-[20px] px-4 text-sm transition sm:w-auto ${
+                          hasDiscoveryResults && !state.isFinalizing
+                            ? 'text-slate-600 hover:bg-stone-100 hover:text-slate-900'
+                            : 'text-slate-400'
+                        }`}
+                        onClick={onShowProductsNow}
+                      >
+                        Show products now
+                      </Button>
+                      <p className="px-4 text-xs text-slate-400">
+                        Skip refinement — faster but less focused.
+                      </p>
+                    </div>
                     <Button
                       type="button"
                       disabled={!hasDiscoveryResults || state.isFinalizing}
-                      className="h-14 w-full rounded-[24px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_18px_40px_-24px_rgba(37,99,235,0.7)] hover:bg-primary/90 sm:min-w-[220px]"
+                      className="order-1 h-14 w-full rounded-[24px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_18px_40px_-24px_rgba(37,99,235,0.7)] hover:bg-primary/90 sm:order-2 sm:w-auto sm:min-w-[220px]"
                       onClick={onFinalize}
                     >
                       {state.isFinalizing ? 'Narrowing your picks...' : 'Show focused picks'}
@@ -503,23 +573,6 @@ function OpenLayout(props) {
                         <Sparkles className="ml-2 h-4 w-4" />
                       )}
                     </Button>
-                    <div className="space-y-1 text-right sm:max-w-[240px] sm:flex sm:min-h-[56px] sm:flex-col sm:justify-between">
-                      <Button
-                        type="button"
-                        disabled={!hasDiscoveryResults || state.isFinalizing}
-                        className={`h-13 w-full rounded-[24px] px-5 text-sm transition sm:min-w-[220px] ${
-                          hasDiscoveryResults && !state.isFinalizing
-                            ? 'bg-accent/70 text-accent-foreground hover:bg-accent/80'
-                            : 'bg-stone-200 text-slate-500 hover:bg-stone-200'
-                        }`}
-                        onClick={onShowProductsNow}
-                      >
-                        Show products now
-                      </Button>
-                      <p className="text-xs text-slate-500">
-                        Fast picks now. Add detail for a more focused shortlist.
-                      </p>
-                    </div>
                   </div>
                 </div>
               ) : null}
@@ -527,7 +580,7 @@ function OpenLayout(props) {
           </form>
         </section>
 
-        <section className="w-full max-w-5xl space-y-4">
+        <section className="w-full max-w-[1100px] space-y-4">
           {showLoadingResults ? (
             <div ref={resultsViewportRef} className="max-h-[360px] scroll-mt-28 overflow-hidden">
               {state.isFinalizing ? (
@@ -559,7 +612,7 @@ function OpenLayout(props) {
           ) : (
             <div
               ref={resultsViewportRef}
-              className="scroll-mt-28 rounded-[32px] border border-white/70 bg-white/72 p-4 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.28)] backdrop-blur sm:p-6"
+              className="scroll-mt-28"
             >
               <ResultsSection
                 displayedResults={displayedResults}

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowUpRight,
   ChevronDown,
@@ -17,18 +17,8 @@ import logo from '@/assets/logo_master_version.svg'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
 
-const BADGE_DISPLAY_PRIORITY = new Map([
-  ['Best match', 0],
-  ['Best value', 1],
-  ['Best budget pick', 1],
-  ['Best premium pick', 1],
-  ['Best for durability', 1],
-  ['Best for comfort', 1],
-  ['Best for small spaces', 1],
-  ['Best for beginners', 1],
-  ['Best lightweight option', 1],
-  ['Best all-rounder', 1],
-])
+const RESULT_CARD_FADE_DURATION_MS = 900
+const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 
 function handleRetryFeedbackKeyDown(event, { canSubmit, onSubmit }) {
   if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) {
@@ -109,6 +99,8 @@ export function ResultSkeleton({ className = '' }) {
 }
 
 export function ProductDetailModal({ item, onClose, onRetailerClick }) {
+  const enrichmentReady = Boolean(item?.fit_reason)
+
   useEffect(() => {
     document.body.style.overflow = 'hidden'
 
@@ -130,7 +122,6 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
     return null
   }
 
-  const userFacingReasons = getUserFacingReasons(item.reasons)
   const userFacingDescription = getUserFacingDescription(item.description)
 
   return (
@@ -202,32 +193,39 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
               ) : null}
             </div>
 
-            <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg text-slate-900">Why this pick stands out</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
-                {userFacingReasons.map((reason) => (
-                  <div key={reason} className="flex items-start gap-3">
+            {enrichmentReady ? (
+              <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg text-slate-900">Why this pick stands out</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
+                  <div className="flex items-start gap-3">
                     <Star className="mt-1 h-4 w-4 text-amber-500" />
-                    <span>{reason}</span>
+                    <span>{item.fit_reason}</span>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg text-slate-900">Why this pick stands out</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-slate-400">
+                  Personalising explanation…
+                </CardContent>
+              </Card>
+            )}
 
-            {item.drawbacks?.length ? (
+            {enrichmentReady && item.caveat ? (
               <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg text-slate-900">Possible drawbacks</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
-                  {item.drawbacks.map((drawback) => (
-                    <div key={drawback} className="flex items-start gap-3">
-                      <span className="mt-1 h-2.5 w-2.5 rounded-full bg-stone-400" />
-                      <span>{drawback}</span>
-                    </div>
-                  ))}
+                <CardContent className="text-sm leading-6 text-slate-600">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-1 h-2.5 w-2.5 rounded-full bg-stone-400" />
+                    <span>{item.caveat}</span>
+                  </div>
                 </CardContent>
               </Card>
             ) : null}
@@ -296,36 +294,31 @@ export function ResultsSection({
 }) {
   const shouldShowBadgeLabels = !hasFinalResults || showFinalResultBadges
   const orderedResults = displayedResults
-    .map((item, index) => ({
-      item,
-      index,
-      priority: BADGE_DISPLAY_PRIORITY.get(shouldShowBadgeLabels ? item.badgeLabel || '' : '') ?? 2,
-    }))
-    .sort((left, right) => {
-      if (left.priority !== right.priority) {
-        return left.priority - right.priority
-      }
-
-      return left.index - right.index
-    })
-    .map((entry) => entry.item)
   const hasExplicitBadges = shouldShowBadgeLabels && displayedResults.some((item) => item.badgeLabel)
   const hasDisplayedResults = orderedResults.length > 0
   const shouldShowResultsIntro = !hasDisplayedResults || hasFinalResults
+  const [areCardsVisible, setAreCardsVisible] = useState(false)
+  const resultSetKey = `${hasFinalResults ? 'final' : showPreviewResults ? 'preview' : 'none'}:${displayedResults
+    .map((item) => String(item.id))
+    .join('|')}`
   const orderedPreviousResults = previousResults
-    .map((item, index) => ({
-      item,
-      index,
-      priority: BADGE_DISPLAY_PRIORITY.get(item.badgeLabel || '') ?? 2,
-    }))
-    .sort((left, right) => {
-      if (left.priority !== right.priority) {
-        return left.priority - right.priority
-      }
 
-      return left.index - right.index
+  useEffect(() => {
+    if (orderedResults.length === 0) {
+      setAreCardsVisible(false)
+      return undefined
+    }
+
+    setAreCardsVisible(false)
+
+    const frameId = window.requestAnimationFrame(() => {
+      setAreCardsVisible(true)
     })
-    .map((entry) => entry.item)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [orderedResults.length, resultSetKey])
 
   return (
     <section className="space-y-5">
@@ -452,7 +445,21 @@ export function ResultsSection({
                 }
 
                 return (
-                  <div key={item.id}>
+                  <div
+                    key={item.id}
+                    className={`transform-gpu transition-[opacity,transform] motion-reduce:transform-none motion-reduce:transition-none ${
+                      areCardsVisible
+                        ? 'translate-y-0 opacity-100'
+                        : 'translate-y-2 opacity-0 duration-0'
+                    }`}
+                    style={{
+                      transitionDuration: areCardsVisible ? `${RESULT_CARD_FADE_DURATION_MS}ms` : '0ms',
+                      transitionDelay: areCardsVisible
+                        ? `${RESULT_CARD_FADE_DELAYS_MS[index] ?? index * RESULT_CARD_FADE_DURATION_MS}ms`
+                        : '0ms',
+                      transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+                    }}
+                  >
                     <ProductCard
                       {...visibleItem}
                       onRetailerClick={() =>

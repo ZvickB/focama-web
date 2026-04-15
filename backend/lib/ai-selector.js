@@ -1,17 +1,13 @@
+import { createCandidateAwarePrewarmContract, toFinalizeFastCard } from './layered-contracts.js'
+
 export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses'
 export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini'
-export const ALLOWED_RESULT_BADGES = [
-  'Best match',
-  'Best value',
-  'Best budget pick',
-  'Best premium pick',
-  'Best for durability',
-  'Best for comfort',
-  'Best for small spaces',
-  'Best for beginners',
-  'Best lightweight option',
-  'Best all-rounder',
-]
+export const DEFAULT_REFINEMENT_MODEL = DEFAULT_OPENAI_MODEL
+export const DEFAULT_FINALIZE_MODEL = DEFAULT_OPENAI_MODEL
+export const DEFAULT_CONTEXT_FINALIZE_MODEL = 'gpt-5.4-nano'
+export const CANDIDATE_AWARE_PRIOR_VERSION = 1
+export const PRE_RANK_ARTIFACT_VERSION = CANDIDATE_AWARE_PRIOR_VERSION
+const ARTIFACT_RERANK_CANDIDATE_LIMIT = 12
 const DESCRIPTION_BOILERPLATE_TOKENS = new Set([
   'at',
   'buy',
@@ -236,8 +232,7 @@ function buildSelectionPrompt({ candidatePool, finalResultLimit }) {
     '2. Relevance to the product query.',
     '3. Quality and trust using rating and review count.',
     '4. Prefer diversity across style, merchant, or use case when helpful, and avoid near-duplicates unless they are meaningfully different.',
-    '6. For each pick, write one short fit reason that explains why it belongs in this shortlist.',
-    '7. Be honest about tradeoffs. Each pick should include one short drawback or caution.',
+    '5. For each pick, write one short fit reason that explains why it belongs in this shortlist.',
     `Return up to ${desiredCount} picks. If there are at least ${desiredCount} strong candidates, return exactly ${desiredCount}.`,
     'Only choose from the provided candidate ids.',
     '',
@@ -264,11 +259,8 @@ function buildSelectionSchema() {
             rationale: {
               type: 'string',
             },
-            drawback: {
-              type: 'string',
-            },
           },
-          required: ['candidate_id', 'rationale', 'drawback'],
+          required: ['candidate_id', 'rationale'],
           additionalProperties: false,
         },
       },
@@ -278,21 +270,103 @@ function buildSelectionSchema() {
   }
 }
 
-function buildUiResult(candidate, rationale) {
+function buildCandidateAwarePriorPrompt(candidatePool) {
+  return [
+    'Create a reusable candidate-aware shopping prior from this candidate pool.',
+    'This is not the final shortlist.',
+    'Rank every candidate from strongest to weakest baseline fit before any future follow-up context.',
+    'Use product-query relevance, quality/trust, and overall shopping usefulness as the baseline ranking signals.',
+    'For each candidate, write one short baseline fit note and one short baseline caution.',
+    'Keep the notes concise because another step may use this prior later.',
+    '',
+    `Product query: ${candidatePool.query}`,
+    '',
+    'Candidates:',
+    JSON.stringify(buildCandidateSummary(candidatePool)),
+  ].join('\n')
+}
+
+function buildCandidateAwarePriorSchema() {
   return {
-    id: candidate.id,
-    title: candidate.title,
-    subtitle: candidate.source,
-    price: candidate.price,
-    rating: candidate.rating,
-    reviewCount: candidate.reviewCount,
-    description: candidate.description,
-    reasons: rationale ? [`AI fit: ${rationale}`] : candidate.reasons.slice(0, 1),
-    drawbacks: [],
-    image: candidate.image,
-    link: candidate.link,
-    badgeLabel: '',
+    type: 'object',
+    properties: {
+      ranked_candidates: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            candidate_id: {
+              type: 'string',
+            },
+            baseline_fit: {
+              type: 'string',
+            },
+            baseline_caution: {
+              type: 'string',
+            },
+          },
+          required: ['candidate_id', 'baseline_fit', 'baseline_caution'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['ranked_candidates'],
+    additionalProperties: false,
   }
+}
+
+function buildPriorRerankPrompt({
+  priorCandidates,
+  candidatePool,
+  finalResultLimit,
+}) {
+  const desiredCount = Math.min(finalResultLimit, priorCandidates.length)
+
+  return [
+    'Choose the best final products with help from this reusable candidate-aware prior.',
+    '1. Intent match to the extra context/details is the strongest signal and should outweigh the baseline prerank when they disagree.',
+    '2. Retry feedback and exclusions are high-priority intent signals.',
+    '3. Use the baseline ranking and notes as helpful prior context, not as a hard rule.',
+    '4. Preserve diversity only when it still fits the stated intent well.',
+    '5. Return only the selected candidate ids plus one short intent-fit reason for each pick.',
+    `Return up to ${desiredCount} picks. If there are at least ${desiredCount} strong candidates, return exactly ${desiredCount}.`,
+    '',
+    `Product query: ${candidatePool.query}`,
+    `Extra context: ${candidatePool.details || 'None provided.'}`,
+    '',
+    'Reusable candidate-aware prior:',
+    JSON.stringify(priorCandidates),
+  ].join('\n')
+}
+
+function buildPriorRerankSchema() {
+  return {
+    type: 'object',
+    properties: {
+      picks: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            candidate_id: {
+              type: 'string',
+            },
+            rationale: {
+              type: 'string',
+            },
+          },
+          required: ['candidate_id', 'rationale'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['picks'],
+    additionalProperties: false,
+  }
+}
+
+function buildUiResult(candidate) {
+  return toFinalizeFastCard(candidate)
 }
 
 async function requestStructuredSelection(
@@ -358,6 +432,176 @@ async function requestStructuredSelection(
   }
 }
 
+function createFallbackBaselineFit(candidate) {
+  const summaryReason = getCandidateSummaryReasons(candidate)[0]
+
+  if (summaryReason) {
+    return summaryReason
+  }
+
+  if (candidate.source) {
+    return `Strong baseline option from ${candidate.source}.`
+  }
+
+  return 'Strong baseline option for this query.'
+}
+
+function createFallbackBaselineCaution(candidate) {
+  if (candidate.price) {
+    return `Check whether ${candidate.price} fits the budget.`
+  }
+
+  return 'Double-check the tradeoffs against your exact needs.'
+}
+
+function mapCandidateAwarePrior(rankedCandidates, candidatePool, model) {
+  const candidateById = new Map(candidatePool.candidates.map((candidate) => [String(candidate.id), candidate]))
+  const seen = new Set()
+  const artifactCandidates = []
+
+  for (const entry of rankedCandidates) {
+    const candidateId = String(entry?.candidate_id || '')
+
+    if (!candidateId || seen.has(candidateId)) {
+      continue
+    }
+
+    const candidate = candidateById.get(candidateId)
+
+    if (!candidate) {
+      continue
+    }
+
+    artifactCandidates.push({
+      candidateId,
+      prewarmRank: artifactCandidates.length + 1,
+      title: candidate.title,
+      source: candidate.source,
+      price: candidate.price,
+      rating: candidate.rating,
+      reviewCount: candidate.reviewCount,
+      attributes: Array.isArray(candidate.attributes) ? candidate.attributes.slice(0, 6) : [],
+      trustScore:
+        candidate.trustSignals && typeof candidate.trustSignals === 'object' && !Array.isArray(candidate.trustSignals)
+          ? Number.isFinite(Number(candidate.trustSignals.score))
+            ? Number(candidate.trustSignals.score)
+            : 0
+          : null,
+      baselineFit: truncateText(entry?.baseline_fit, 160) || createFallbackBaselineFit(candidate),
+      baselineCaution: truncateText(entry?.baseline_caution, 160) || createFallbackBaselineCaution(candidate),
+    })
+    seen.add(candidateId)
+  }
+
+  for (const candidate of candidatePool.candidates) {
+    const candidateId = String(candidate.id)
+
+    if (seen.has(candidateId)) {
+      continue
+    }
+
+    artifactCandidates.push({
+      candidateId,
+      prewarmRank: artifactCandidates.length + 1,
+      title: candidate.title,
+      source: candidate.source,
+      price: candidate.price,
+      rating: candidate.rating,
+      reviewCount: candidate.reviewCount,
+      attributes: Array.isArray(candidate.attributes) ? candidate.attributes.slice(0, 6) : [],
+      trustScore:
+        candidate.trustSignals && typeof candidate.trustSignals === 'object' && !Array.isArray(candidate.trustSignals)
+          ? Number.isFinite(Number(candidate.trustSignals.score))
+            ? Number(candidate.trustSignals.score)
+            : 0
+          : null,
+      baselineFit: createFallbackBaselineFit(candidate),
+      baselineCaution: createFallbackBaselineCaution(candidate),
+    })
+  }
+
+  return createCandidateAwarePrewarmContract({
+    generatedAt: new Date().toISOString(),
+    model,
+    query: candidatePool.query,
+    details: candidatePool.details || '',
+    discoveryToken: candidatePool.discoveryToken || '',
+    candidateCount: candidatePool.candidates.length,
+    rankedCandidates: artifactCandidates,
+  })
+}
+
+function getReusablePriorEntries(candidateAwarePrior, candidates) {
+  if (
+    !candidateAwarePrior ||
+    typeof candidateAwarePrior !== 'object' ||
+    Array.isArray(candidateAwarePrior) ||
+    candidateAwarePrior.version !== CANDIDATE_AWARE_PRIOR_VERSION ||
+    !Array.isArray(candidateAwarePrior.rankedCandidates)
+  ) {
+    return []
+  }
+
+  const candidateById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]))
+  const reusableEntries = []
+
+  for (const entry of candidateAwarePrior.rankedCandidates) {
+    const candidateId = String(entry?.candidateId || entry?.candidate_id || '')
+
+    if (!candidateId) {
+      continue
+    }
+
+    const candidate = candidateById.get(candidateId)
+
+    if (!candidate) {
+      continue
+    }
+
+    reusableEntries.push({
+      candidate,
+      candidateId,
+      baselineCaution: truncateText(entry?.baselineCaution || entry?.baseline_caution, 160),
+      baselineFit: truncateText(entry?.baselineFit || entry?.baseline_fit, 160),
+      rank: Number.isFinite(Number(entry?.prewarmRank))
+        ? Number(entry.prewarmRank)
+        : Number.isFinite(Number(entry?.rank))
+          ? Number(entry.rank)
+          : reusableEntries.length + 1,
+      reusableSummary: {
+        candidate_id: candidateId,
+        prewarm_rank: Number.isFinite(Number(entry?.prewarmRank))
+          ? Number(entry.prewarmRank)
+          : Number.isFinite(Number(entry?.rank))
+            ? Number(entry.rank)
+            : reusableEntries.length + 1,
+        title: candidate.title,
+        source: candidate.source,
+        price: candidate.price,
+        rating: candidate.rating,
+        reviewCount: candidate.reviewCount,
+        attributes: Array.isArray(entry?.attributes)
+          ? entry.attributes.slice(0, 6)
+          : Array.isArray(candidate.attributes)
+            ? candidate.attributes.slice(0, 6)
+            : [],
+        baseline_fit: truncateText(entry?.baselineFit || entry?.baseline_fit, 160),
+        baseline_caution: truncateText(entry?.baselineCaution || entry?.baseline_caution, 160),
+        trustScore:
+          Number.isFinite(Number(entry?.trustScore))
+            ? Number(entry.trustScore)
+            : candidate.trustSignals && typeof candidate.trustSignals === 'object' && !Array.isArray(candidate.trustSignals)
+              ? Number.isFinite(Number(candidate.trustSignals.score))
+                ? Number(candidate.trustSignals.score)
+                : 0
+              : null,
+      },
+    })
+  }
+
+  return reusableEntries.sort((left, right) => left.rank - right.rank)
+}
+
 function mapSelectionPicksToResults(picks, candidates, finalResultLimit) {
   const candidateById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]))
   const seen = new Set()
@@ -379,7 +623,6 @@ function mapSelectionPicksToResults(picks, candidates, finalResultLimit) {
     selected.push({
       candidateId,
       rationale: pick?.rationale?.trim() || '',
-      drawback: pick?.drawback?.trim() || '',
       candidate,
     })
     seen.add(candidateId)
@@ -391,14 +634,131 @@ function mapSelectionPicksToResults(picks, candidates, finalResultLimit) {
 
   return {
     selectedCandidateIds: selected.map((entry) => entry.candidateId),
-    results: selected.map((entry) => ({
-      ...buildUiResult(entry.candidate, entry.rationale),
-      drawbacks: entry.drawback ? [entry.drawback] : [],
-    })),
+    results: selected.map((entry) => buildUiResult(entry.candidate)),
   }
 }
 
-async function runOneShotSelection({ candidatePool, finalResultLimit, apiKey, model }, fetchImpl) {
+function mapPriorRerankPicksToResults(picks, reusableEntries, finalResultLimit) {
+  const entryById = new Map(reusableEntries.map((entry) => [entry.candidateId, entry]))
+  const seen = new Set()
+  const selected = []
+
+  for (const pick of picks) {
+    const candidateId = String(pick?.candidate_id || '')
+
+    if (!candidateId || seen.has(candidateId)) {
+      continue
+    }
+
+    const entry = entryById.get(candidateId)
+
+    if (!entry) {
+      continue
+    }
+
+    selected.push({
+      candidateId,
+      rationale: truncateText(pick?.rationale, 160) || entry.baselineFit,
+      entry,
+    })
+    seen.add(candidateId)
+
+    if (selected.length >= finalResultLimit) {
+      break
+    }
+  }
+
+  return {
+    selectedCandidateIds: selected.map((entry) => entry.candidateId),
+    results: selected.map(({ entry, rationale }) => buildUiResult(entry.candidate, rationale)),
+  }
+}
+
+function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }) {
+  const desiredCount = Math.min(finalResultLimit, candidatePool.candidates.length)
+
+  return [
+    'Choose the best final products and assign one short badge label to each.',
+    '1. Fit to the extra context/details. This is the main decision signal.',
+    '2. Relevance to the product query.',
+    '3. Quality and trust using rating and review count.',
+    '4. Prefer diversity across style, merchant, or use case when helpful.',
+    `Return exactly ${desiredCount} picks from the candidates below. For each, write one short badge label (under 4 words) that captures the strongest reason it belongs.`,
+    'Only choose from the provided candidate ids.',
+    '',
+    `Product query: ${candidatePool.query}`,
+    `Extra context: ${candidatePool.details || 'None provided.'}`,
+    '',
+    'Candidates:',
+    JSON.stringify(buildCandidateSummary(candidatePool)),
+  ].join('\n')
+}
+
+function buildNanoLockAndBadgesSchema() {
+  return {
+    type: 'object',
+    properties: {
+      picks: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            candidate_id: { type: 'string' },
+            badge_label: { type: 'string' },
+          },
+          required: ['candidate_id', 'badge_label'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['picks'],
+    additionalProperties: false,
+  }
+}
+
+function buildMiniEnrichmentPrompt({ lockedCandidates, query, details }) {
+  return [
+    'Write a short explanation for each of these selected products. Write like a trusted assistant, not a salesperson.',
+    'The shortlist is already decided. Do not change the order or swap any product.',
+    'For each product, write two separate fields:',
+    '1. fit_reason: One or two sentences explaining why it was picked for this specific need. Be specific to the user context. Avoid superlatives, hype phrases, and generic positives.',
+    '2. caveat: One honest drawback or caveat — practical (e.g. exceeds budget, heavier than alternatives) or contextual (e.g. better if X matters more than Y). Do not skip this even if the pick is strong.',
+    '',
+    `Product query: ${query}`,
+    `User context: ${details || 'None provided.'}`,
+    '',
+    'Selected products (preserve this exact order and these exact candidate_ids):',
+    JSON.stringify(lockedCandidates),
+  ].join('\n')
+}
+
+function buildMiniEnrichmentSchema() {
+  return {
+    type: 'object',
+    properties: {
+      enriched: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            candidate_id: { type: 'string' },
+            fit_reason: { type: 'string' },
+            caveat: { type: 'string' },
+          },
+          required: ['candidate_id', 'fit_reason', 'caveat'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['enriched'],
+    additionalProperties: false,
+  }
+}
+
+async function runOneShotSelection(
+  { candidatePool, finalResultLimit, apiKey, model },
+  fetchImpl,
+) {
   const { parsed, usage } = await requestStructuredSelection(
     {
       prompt: buildSelectionPrompt({ candidatePool, finalResultLimit }),
@@ -419,12 +779,187 @@ async function runOneShotSelection({ candidatePool, finalResultLimit, apiKey, mo
   }
 }
 
+export async function createCandidateAwarePrior(
+  {
+    candidatePool,
+    apiKey,
+    model = DEFAULT_OPENAI_MODEL,
+  },
+  fetchImpl = fetch,
+) {
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is missing from the root .env file.')
+  }
+
+  const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
+
+  if (candidates.length === 0) {
+    const prior = {
+      version: CANDIDATE_AWARE_PRIOR_VERSION,
+      layer: 'candidate_aware_prewarm',
+      generatedAt: new Date().toISOString(),
+      model,
+      query: candidatePool?.query || '',
+      details: candidatePool?.details || '',
+      candidateCount: 0,
+      rankedCandidates: [],
+    }
+
+    return {
+      model,
+      prior,
+      artifact: prior,
+      usage: null,
+      strategy: 'candidate_aware_prior',
+    }
+  }
+
+  const { parsed, usage } = await requestStructuredSelection(
+    {
+      prompt: buildCandidateAwarePriorPrompt(candidatePool),
+      schema: buildCandidateAwarePriorSchema(),
+      responseName: 'candidate_aware_prior',
+      apiKey,
+      model,
+    },
+    fetchImpl,
+  )
+
+  const prior = mapCandidateAwarePrior(parsed?.ranked_candidates || [], candidatePool, model)
+
+  return {
+    model,
+    prior,
+    artifact: prior,
+    usage,
+    strategy: 'candidate_aware_prior',
+  }
+}
+
+export const createPreRankArtifact = createCandidateAwarePrior
+
+export async function nanoLockWinnersAndBadges(
+  {
+    candidatePool,
+    finalResultLimit,
+    apiKey,
+    model = DEFAULT_CONTEXT_FINALIZE_MODEL,
+  },
+  fetchImpl = fetch,
+) {
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is missing from the root .env file.')
+  }
+
+  const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
+
+  if (candidates.length === 0) {
+    return { model, lockedIds: [], lockedBadges: [], usage: null }
+  }
+
+  const { parsed, usage } = await requestStructuredSelection(
+    {
+      prompt: buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }),
+      schema: buildNanoLockAndBadgesSchema(),
+      responseName: 'nano_lock_and_badges',
+      apiKey,
+      model,
+    },
+    fetchImpl,
+  )
+
+  const picks = Array.isArray(parsed?.picks) ? parsed.picks : []
+  const candidateById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]))
+  const seen = new Set()
+  const lockedIds = []
+  const lockedBadges = []
+
+  for (const pick of picks) {
+    const candidateId = String(pick?.candidate_id || '')
+
+    if (!candidateId || seen.has(candidateId) || !candidateById.has(candidateId)) {
+      continue
+    }
+
+    lockedIds.push(candidateId)
+    lockedBadges.push({ candidateId, badgeLabel: String(pick?.badge_label || '') })
+    seen.add(candidateId)
+
+    if (lockedIds.length >= finalResultLimit) {
+      break
+    }
+  }
+
+  return { model, lockedIds, lockedBadges, usage }
+}
+
+export async function miniEnrichSelectedCandidates(
+  {
+    lockedIds,
+    candidatePool,
+    apiKey,
+    model = DEFAULT_OPENAI_MODEL,
+  },
+  fetchImpl = fetch,
+) {
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is missing from the root .env file.')
+  }
+
+  if (!Array.isArray(lockedIds) || lockedIds.length === 0) {
+    return { model, enriched: [], enrichedIds: [], usage: null, preservedOrder: true }
+  }
+
+  const candidateById = new Map(
+    (Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []).map((candidate) => [
+      String(candidate.id),
+      candidate,
+    ]),
+  )
+
+  const lockedCandidates = lockedIds
+    .map((id) => candidateById.get(String(id)))
+    .filter(Boolean)
+    .map((candidate) => ({
+      candidate_id: String(candidate.id),
+      title: candidate.title,
+      source: candidate.source,
+      price: candidate.price,
+      rating: candidate.rating,
+      reviewCount: candidate.reviewCount,
+    }))
+
+  const { parsed, usage } = await requestStructuredSelection(
+    {
+      prompt: buildMiniEnrichmentPrompt({
+        lockedCandidates,
+        query: candidatePool.query,
+        details: candidatePool.details || '',
+      }),
+      schema: buildMiniEnrichmentSchema(),
+      responseName: 'mini_enrichment',
+      apiKey,
+      model,
+    },
+    fetchImpl,
+  )
+
+  const rawEnriched = Array.isArray(parsed?.enriched) ? parsed.enriched : []
+  const enrichedIds = rawEnriched.map((entry) => String(entry?.candidate_id || ''))
+  const enrichedLockedIds = enrichedIds.filter((id) => lockedIds.includes(id))
+  const preservedOrder = lockedIds.join(',') === enrichedLockedIds.join(',')
+
+  return { model, enriched: rawEnriched, enrichedIds, usage, preservedOrder }
+}
+
 export async function selectAiResults(
   {
     candidatePool,
     finalResultLimit,
     apiKey,
     model = DEFAULT_OPENAI_MODEL,
+    candidateAwarePrior = null,
+    preRankArtifact = null,
   },
   fetchImpl = fetch,
 ) {
@@ -440,6 +975,59 @@ export async function selectAiResults(
       selectedCandidateIds: [],
       results: [],
       usage: null,
+      debug: {
+        artifactCandidateCount: 0,
+        intentMatchRerankUsed: false,
+        candidateAwarePriorReused: false,
+        candidateAwarePriorReuseReason: 'no_candidates',
+        preRankArtifactReused: false,
+        preRankReuseReason: 'no_candidates',
+      },
+    }
+  }
+
+  const reusablePrior = candidateAwarePrior || preRankArtifact
+  const reusableEntries = getReusablePriorEntries(reusablePrior, candidates)
+
+  if (reusableEntries.length > 0) {
+    const priorCandidates = reusableEntries
+      .slice(0, Math.max(finalResultLimit, Math.min(reusableEntries.length, ARTIFACT_RERANK_CANDIDATE_LIMIT)))
+      .map((entry) => entry.reusableSummary)
+
+    const { parsed, usage } = await requestStructuredSelection(
+      {
+        prompt: buildPriorRerankPrompt({
+          priorCandidates,
+          candidatePool,
+          finalResultLimit,
+        }),
+        schema: buildPriorRerankSchema(),
+        responseName: 'candidate_aware_prior_rerank',
+        apiKey,
+        model,
+      },
+      fetchImpl,
+    )
+    const picks = Array.isArray(parsed?.picks) ? parsed.picks : []
+    const mapped = mapPriorRerankPicksToResults(picks, reusableEntries, finalResultLimit)
+
+    if (mapped.results.length > 0) {
+      return {
+        model,
+        selectedCandidateIds: mapped.selectedCandidateIds,
+        results: mapped.results,
+        usage,
+        strategy: 'candidate_aware_prior_rerank',
+        debug: {
+          artifactCandidateCount: reusableEntries.length,
+          priorCandidateCount: reusableEntries.length,
+          intentMatchRerankUsed: true,
+          candidateAwarePriorReused: true,
+          candidateAwarePriorReuseReason: 'candidate_aware_prior_rerank',
+          preRankArtifactReused: true,
+          preRankReuseReason: 'candidate_aware_prior_rerank',
+        },
+      }
     }
   }
 
@@ -451,5 +1039,14 @@ export async function selectAiResults(
     results: selection.results,
     usage: selection.usage,
     strategy: selection.strategy,
+    debug: {
+      artifactCandidateCount: reusableEntries.length,
+      priorCandidateCount: reusableEntries.length,
+      intentMatchRerankUsed: false,
+      candidateAwarePriorReused: false,
+      candidateAwarePriorReuseReason: reusableEntries.length > 0 ? 'prior_rerank_empty_fallback' : 'prior_missing_or_invalid',
+      preRankArtifactReused: false,
+      preRankReuseReason: reusableEntries.length > 0 ? 'artifact_rerank_empty_fallback' : 'artifact_missing_or_invalid',
+    },
   }
 }

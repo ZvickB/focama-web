@@ -9,6 +9,7 @@
     "server": "node backend/server.js",
     "cache:search": "node backend/scripts/save-serpapi-cache.js",
     "cache:full-response": "node backend/scripts/save-serpapi-full-response.js",
+    "analytics:prewarm-summary": "node backend/scripts/summarize-prewarm-analytics.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",

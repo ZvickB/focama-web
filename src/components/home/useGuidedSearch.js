@@ -13,6 +13,13 @@ export const RESULT_CARD_COUNT = 6
 export const RESULT_CARD_SLOTS = Array.from({ length: RESULT_CARD_COUNT }, (_, index) => index)
 export const MAX_REFINEMENT_RETRIES = 2
 const FINAL_RESULT_BADGE_REVEAL_DELAY_MS = 240
+const ENRICHMENT_POLL_INTERVAL_MS = 1500
+const ENRICHMENT_POLL_TIMEOUT_MS = 30000
+const PREWARM_REQUEST_MODE_DEFAULT = 'guided_prerank_prewarm'
+const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
+const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
+const FINALIZE_REQUEST_MODE_REFINED = 'guided_refined'
+const FINALIZE_REQUEST_MODE_RETRY = 'guided_retry'
 
 function roundTiming(value) {
   return Math.round(value * 10) / 10
@@ -47,6 +54,20 @@ function createFallbackRefinementPrompt(productQuery) {
     followUpPlaceholder:
       'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
   }
+}
+
+function isGuidedPrewarmDisabled() {
+  // Prewarm is off by default — experiment concluded it is not a latency win.
+  // Re-enable explicitly with window.__FOCAMAI_ENABLE_PREWARM__ = true in the console.
+  return typeof window === 'undefined' || window.__FOCAMAI_ENABLE_PREWARM__ !== true
+}
+
+function isBackgroundFramingDisabled() {
+  return typeof window !== 'undefined' && window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__ === true
+}
+
+function hasUsableCandidatePool(candidatePool) {
+  return Array.isArray(candidatePool?.candidates) && candidatePool.candidates.length > 0
 }
 
 async function readJsonResponse(response, requestStartedAt) {
@@ -94,6 +115,37 @@ async function fetchRefinementPrompt(query) {
   return readJsonResponse(response, requestStartedAt)
 }
 
+async function fetchFramingFields(query) {
+  const searchParams = new URLSearchParams({ query })
+  const requestStartedAt = performance.now()
+  const response = await fetch(`/api/search/framing-fields?${searchParams.toString()}`)
+  return readJsonResponse(response, requestStartedAt)
+}
+
+async function prewarmGuidedSearch({
+  query,
+  discoveryToken,
+  candidatePool,
+  signal,
+}) {
+  const requestStartedAt = performance.now()
+  const response = await fetch('/api/search/prewarm', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    signal,
+    body: JSON.stringify({
+      query,
+      discoveryToken,
+      candidatePool,
+      requestMode: PREWARM_REQUEST_MODE_DEFAULT,
+    }),
+  })
+
+  return readJsonResponse(response, requestStartedAt)
+}
+
 async function finalizeGuidedSearch({
   query,
   discoveryToken,
@@ -101,6 +153,8 @@ async function finalizeGuidedSearch({
   rejectionFeedback,
   retryCount,
   excludedCandidateIds,
+  requestMode = FINALIZE_REQUEST_MODE_DEFAULT,
+  signal,
 }) {
   const requestStartedAt = performance.now()
   const response = await fetch('/api/search/finalize', {
@@ -108,6 +162,7 @@ async function finalizeGuidedSearch({
     headers: {
       'Content-Type': 'application/json',
     },
+    signal,
     body: JSON.stringify({
       query,
       discoveryToken,
@@ -115,10 +170,42 @@ async function finalizeGuidedSearch({
       rejectionFeedback,
       retryCount,
       excludedCandidateIds,
+      requestMode,
     }),
   })
 
   return readJsonResponse(response, requestStartedAt)
+}
+
+async function fetchEnrichment({ token, query }) {
+  const searchParams = new URLSearchParams({ token, query })
+  const requestStartedAt = performance.now()
+  const response = await fetch(`/api/search/enrichment?${searchParams.toString()}`)
+  return readJsonResponse(response, requestStartedAt)
+}
+
+function mergeEnrichmentIntoResults(results, enrichmentEntries) {
+  if (!Array.isArray(results) || !Array.isArray(enrichmentEntries) || enrichmentEntries.length === 0) {
+    return results
+  }
+
+  const enrichmentById = new Map(
+    enrichmentEntries.map((entry) => [String(entry.candidate_id || ''), entry]),
+  )
+
+  return results.map((result) => {
+    const entry = enrichmentById.get(String(result.id))
+
+    if (!entry) {
+      return result
+    }
+
+    return {
+      ...result,
+      fit_reason: entry.fit_reason || '',
+      caveat: entry.caveat || '',
+    }
+  })
 }
 
 function mergeFinalizeResults(results, sourceCandidatePool) {
@@ -159,9 +246,54 @@ function buildResultAnalyticsItems(results) {
   }))
 }
 
+function findResultById(results, id) {
+  if (!Array.isArray(results) || !id) {
+    return null
+  }
+
+  return results.find((item) => String(item.id) === String(id)) || null
+}
+
+export function resolveSelectedProductForDisplay({
+  previousResults = [],
+  previewResults = [],
+  results = [],
+  selectedProduct,
+}) {
+  if (!selectedProduct) {
+    return null
+  }
+
+  const selectedProductResultSet = selectedProduct.analyticsMeta?.resultSet || 'final'
+  const selectedProductLiveSource =
+    selectedProductResultSet === 'previous'
+      ? previousResults
+      : selectedProductResultSet === 'preview'
+        ? previewResults
+        : results
+  const liveSelectedProduct =
+    selectedProduct.id
+      ? findResultById(selectedProductLiveSource, selectedProduct.id) ||
+        findResultById(results, selectedProduct.id) ||
+        findResultById(previousResults, selectedProduct.id) ||
+        findResultById(previewResults, selectedProduct.id)
+      : null
+
+  if (!liveSelectedProduct) {
+    return selectedProduct
+  }
+
+  return {
+    ...liveSelectedProduct,
+    analyticsMeta: selectedProduct.analyticsMeta,
+  }
+}
+
 export function useGuidedSearch() {
+  const prewarmDisabled = isGuidedPrewarmDisabled()
+  const backgroundFramingDisabled = isBackgroundFramingDisabled()
   const [productQuery, setProductQuery] = useState('')
-  const [selectedProduct, setSelectedProduct] = useState(null)
+  const [selectedProductState, setSelectedProductState] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [hasStartedSearch, setHasStartedSearch] = useState(false)
   const [submittedQuery, setSubmittedQuery] = useState('')
@@ -171,6 +303,7 @@ export function useGuidedSearch() {
   const [results, setResults] = useState([])
   const [previousResults, setPreviousResults] = useState([])
   const [refinementPrompt, setRefinementPrompt] = useState(null)
+  const [queryFramingFields, setQueryFramingFields] = useState(null)
   const [followUpNotes, setFollowUpNotes] = useState('')
   const [retryFeedback, setRetryFeedback] = useState('')
   const [retryCount, setRetryCount] = useState(0)
@@ -178,89 +311,369 @@ export function useGuidedSearch() {
   const [requestTiming, setRequestTiming] = useState({
     discover: null,
     finalize: null,
+    prewarm: null,
     refine: null,
+    framingFields: null,
   })
   const [showFinalResultBadges, setShowFinalResultBadges] = useState(false)
   const [showPreviewResults, setShowPreviewResults] = useState(false)
   const [isDiscovering, setIsDiscovering] = useState(false)
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false)
+  const [isAwaitingPrewarmedFinalize, setIsAwaitingPrewarmedFinalize] = useState(false)
+  const [isEnrichmentReady, setIsEnrichmentReady] = useState(false)
   const activeSearchIdRef = useRef(0)
+  const enrichmentPollRef = useRef({ timerId: null, searchId: 0 })
   const analyticsSearchIdRef = useRef('')
   const analyticsSessionIdRef = useRef('')
   const hasTrackedRefinementViewRef = useRef(false)
   const hasTrackedPreviewImpressionsRef = useRef(false)
+  const isAwaitingPrewarmedFinalizeRef = useRef(false)
+  const pendingFinalizeRequestRef = useRef(null)
+  const prewarmRef = useRef({
+    abortedReason: '',
+    activeSearchId: 0,
+    clickStartedAt: 0,
+    controller: null,
+    promise: null,
+    metadata: null,
+    status: 'idle',
+  })
+
+  function trackSearchEvent(name, eventData = {}) {
+    if (!analyticsSearchIdRef.current || !analyticsSessionIdRef.current) {
+      return
+    }
+
+    trackAnalytics({
+      eventType: 'search_event',
+      searchId: analyticsSearchIdRef.current,
+      sessionId: analyticsSessionIdRef.current,
+      name,
+      eventData,
+    })
+  }
+
+  function stopEnrichmentPolling() {
+    if (enrichmentPollRef.current.timerId !== null) {
+      window.clearTimeout(enrichmentPollRef.current.timerId)
+      enrichmentPollRef.current.timerId = null
+    }
+
+    enrichmentPollRef.current.searchId = 0
+  }
+
+  function startEnrichmentPolling({ token, query, searchId }) {
+    if (window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__) return
+    stopEnrichmentPolling()
+    enrichmentPollRef.current.searchId = searchId
+
+    const startedAt = performance.now()
+
+    function schedulePoll() {
+      enrichmentPollRef.current.timerId = window.setTimeout(async () => {
+        if (enrichmentPollRef.current.searchId !== searchId) {
+          return
+        }
+
+        if (performance.now() - startedAt > ENRICHMENT_POLL_TIMEOUT_MS) {
+          stopEnrichmentPolling()
+          return
+        }
+
+        try {
+          const payload = await fetchEnrichment({ token, query })
+
+          if (enrichmentPollRef.current.searchId !== searchId) {
+            return
+          }
+
+          if (payload.ready && Array.isArray(payload.entries) && payload.entries.length > 0) {
+            stopEnrichmentPolling()
+            setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
+            setIsEnrichmentReady(true)
+            return
+          }
+        } catch {
+          // Poll silently — enrichment is best-effort
+        }
+
+        if (enrichmentPollRef.current.searchId === searchId) {
+          schedulePoll()
+        }
+      }, ENRICHMENT_POLL_INTERVAL_MS)
+    }
+
+    schedulePoll()
+  }
+
+  function resetPrewarmState({ preserveTiming = false } = {}) {
+    if (prewarmRef.current.controller) {
+      prewarmRef.current.controller.abort()
+    }
+
+    prewarmRef.current = {
+      abortedReason: '',
+      activeSearchId: 0,
+      clickStartedAt: 0,
+      controller: null,
+      promise: null,
+      metadata: null,
+      status: 'idle',
+    }
+
+    isAwaitingPrewarmedFinalizeRef.current = false
+    pendingFinalizeRequestRef.current = null
+    setIsAwaitingPrewarmedFinalize(false)
+
+    if (!preserveTiming) {
+      setRequestTiming((current) => ({
+        ...current,
+        prewarm: null,
+      }))
+    }
+  }
+
+  function discardPrewarm(reason, extraEventData = {}) {
+    const prewarmState = prewarmRef.current
+
+    if (prewarmState.status === 'pending' && prewarmState.controller) {
+      prewarmState.abortedReason = reason
+      prewarmState.controller.abort()
+    } else if (prewarmState.status === 'ready' && prewarmState.metadata) {
+      trackSearchEvent('prerank_prewarm_unused', {
+        reason,
+        ...extraEventData,
+      })
+    }
+
+    resetPrewarmState({ preserveTiming: true })
+  }
+
+  function applyFinalizePayload(payload, variables) {
+    const finalizedResults = enrichFinalResultsForDisplay(
+      mergeFinalizeResults(payload.results, variables.originalCandidatePool),
+    )
+    const previousDisplayResults =
+      variables.retryCount > 0 && Array.isArray(variables.previousResults)
+        ? enrichFinalResultsForDisplay(variables.previousResults)
+        : []
+
+    setCandidatePool(variables.originalCandidatePool || null)
+    setPreviousResults(previousDisplayResults)
+    setResults(finalizedResults)
+    setShowFinalResultBadges(false)
+    setIsEnrichmentReady(false)
+
+    const token = variables.discoveryToken
+    const query = variables.query
+    const pollSearchId = activeSearchIdRef.current
+
+    if (token && query && finalizedResults.length > 0) {
+      startEnrichmentPolling({ token, query, searchId: pollSearchId })
+    }
+    setRequestTiming((current) => ({
+      ...current,
+      finalize: payload.timing || null,
+    }))
+    setRetryFeedback('')
+    setRetryCount(payload.retryCount ?? variables.retryCount ?? 0)
+    setSelectionState(payload.selection || null)
+
+    const searchId = analyticsSearchIdRef.current
+    const sessionId = analyticsSessionIdRef.current
+    const resultSet = variables.retryCount > 0 ? 'retry' : 'final'
+
+    if (searchId && sessionId) {
+      trackAnalytics({
+        eventType: 'search_run_upsert',
+        searchId,
+        sessionId,
+        productQuery: variables.query,
+        details: variables.followUpNotes || '',
+        enteredAiRefinement: Boolean(variables.followUpNotes),
+        usedShowProductsNow: showPreviewResults,
+        completedFinalize: true,
+        retryRound: payload.retryCount ?? variables.retryCount ?? 0,
+        bestResultKey: finalizedResults[0]?.id ? String(finalizedResults[0].id) : '',
+      })
+      trackAnalytics({
+        eventType: 'search_event',
+        searchId,
+        sessionId,
+        name: 'final_results_shown',
+        eventData: {
+          resultCount: finalizedResults.length,
+          resultSet,
+          retryRound: payload.retryCount ?? variables.retryCount ?? 0,
+          requestMode: variables.requestMode || FINALIZE_REQUEST_MODE_DEFAULT,
+          usedPrewarm: Boolean(
+            payload.selection?.reusedCandidateAwarePrior || payload.selection?.reusedPreRankArtifact,
+          ),
+          usedIntentMatchRerank: Boolean(payload.selection?.usedIntentMatchRerank),
+          flowPath: payload.selection?.flowPath || '',
+        },
+      })
+
+      if (payload.selection?.reusedCandidateAwarePrior || payload.selection?.reusedPreRankArtifact) {
+        trackSearchEvent('prerank_finalize_reused', {
+          priorFlowPath: payload.selection?.flowPath || '',
+          priorReuseReason: payload.selection?.fallbackReason || '',
+          artifactFlowPath: payload.selection?.flowPath || '',
+          artifactReuseReason: payload.selection?.fallbackReason || '',
+          requestMode: variables.requestMode || FINALIZE_REQUEST_MODE_DEFAULT,
+          usedIntentMatchRerank: Boolean(payload.selection?.usedIntentMatchRerank),
+        })
+      }
+
+      const impressionItems = buildResultAnalyticsItems(finalizedResults)
+
+      if (impressionItems.length > 0) {
+        trackAnalytics({
+          eventType: 'result_impressions',
+          searchId,
+          sessionId,
+          resultSet,
+          items: impressionItems,
+        })
+      }
+    }
+  }
+
+  function handleFinalizeError(error) {
+    setErrorMessage(error instanceof Error ? error.message : 'Unable to finalize the search.')
+  }
+
+  function startFinalizeMutation(variables) {
+    finalizeMutation.mutate(variables)
+  }
+
+  function queueFinalizeUntilPrewarm(variables) {
+    pendingFinalizeRequestRef.current = variables
+    prewarmRef.current.clickStartedAt = performance.now()
+    setErrorMessage('')
+    isAwaitingPrewarmedFinalizeRef.current = true
+    setIsAwaitingPrewarmedFinalize(true)
+    trackSearchEvent('prerank_prewarm_waited_on', {
+      requestMode: variables.requestMode,
+    })
+  }
+
+  function startArtifactPrewarm({ discoveryToken: nextDiscoveryToken, originalCandidatePool, query, searchId }) {
+    if (prewarmDisabled || !nextDiscoveryToken || !query || !hasUsableCandidatePool(originalCandidatePool)) {
+      return
+    }
+
+    resetPrewarmState()
+
+    const controller = new AbortController()
+    const nextPrewarmState = {
+      abortedReason: '',
+      activeSearchId: searchId,
+      clickStartedAt: 0,
+      controller,
+      promise: null,
+      metadata: null,
+      status: 'pending',
+    }
+
+    prewarmRef.current = nextPrewarmState
+
+    trackSearchEvent('prerank_prewarm_started', {
+      candidateCount: Array.isArray(originalCandidatePool?.candidates)
+        ? originalCandidatePool.candidates.length
+        : 0,
+      requestMode: PREWARM_REQUEST_MODE_DEFAULT,
+    })
+
+    const promise = prewarmGuidedSearch({
+      query,
+      discoveryToken: nextDiscoveryToken,
+      candidatePool: originalCandidatePool,
+      signal: controller.signal,
+    })
+
+    nextPrewarmState.promise = promise
+
+    promise
+      .then((payload) => {
+        if (prewarmRef.current !== nextPrewarmState || activeSearchIdRef.current !== searchId) {
+          return
+        }
+
+        prewarmRef.current = {
+          ...nextPrewarmState,
+          controller: null,
+          metadata: payload.prewarm || null,
+          status: 'ready',
+        }
+
+        setRequestTiming((current) => ({
+          ...current,
+          prewarm: payload.timing || null,
+        }))
+
+        trackSearchEvent('prerank_prewarm_ready', {
+          openaiMs: payload.timing?.server?.openai ?? null,
+          requestMode: PREWARM_REQUEST_MODE_DEFAULT,
+          totalMs: payload.timing?.client?.totalMs ?? null,
+          totalTokens: payload.usage?.openai?.totalTokens ?? null,
+          priorCandidateCount:
+            payload.prewarm?.priorCandidateCount ?? payload.prewarm?.artifactCandidateCount ?? null,
+          priorByteLength: payload.prewarm?.priorByteLength ?? payload.prewarm?.artifactByteLength ?? null,
+          artifactCandidateCount: payload.prewarm?.artifactCandidateCount ?? null,
+          artifactByteLength: payload.prewarm?.artifactByteLength ?? null,
+        })
+
+        if (
+          isAwaitingPrewarmedFinalizeRef.current &&
+          prewarmRef.current.clickStartedAt > 0 &&
+          pendingFinalizeRequestRef.current
+        ) {
+          const queuedFinalize = pendingFinalizeRequestRef.current
+          isAwaitingPrewarmedFinalizeRef.current = false
+          pendingFinalizeRequestRef.current = null
+          setIsAwaitingPrewarmedFinalize(false)
+          trackSearchEvent('prerank_prewarm_consumed', {
+            clickToResultsMs: roundTiming(performance.now() - prewarmRef.current.clickStartedAt),
+            requestMode: queuedFinalize.requestMode,
+            totalPrewarmMs: payload.timing?.client?.totalMs ?? null,
+          })
+          startFinalizeMutation(queuedFinalize)
+        }
+      })
+      .catch((error) => {
+        if (error?.name === 'AbortError') {
+          trackSearchEvent('prerank_prewarm_aborted', {
+            reason: nextPrewarmState.abortedReason || 'aborted',
+          })
+          return
+        }
+
+        if (prewarmRef.current !== nextPrewarmState || activeSearchIdRef.current !== searchId) {
+          return
+        }
+
+        trackSearchEvent('prerank_prewarm_failed', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        })
+
+        const queuedFinalize = pendingFinalizeRequestRef.current
+        const shouldFallback = isAwaitingPrewarmedFinalizeRef.current && queuedFinalize
+        resetPrewarmState({ preserveTiming: true })
+
+        if (shouldFallback) {
+          startFinalizeMutation(queuedFinalize)
+        }
+      })
+  }
 
   const finalizeMutation = useMutation({
     mutationFn: finalizeGuidedSearch,
     onMutate: () => {
       setErrorMessage('')
     },
-    onSuccess: (payload, variables) => {
-      const finalizedResults = enrichFinalResultsForDisplay(
-        mergeFinalizeResults(payload.results, variables.originalCandidatePool),
-      )
-      const previousDisplayResults =
-        variables.retryCount > 0 && Array.isArray(variables.previousResults)
-          ? enrichFinalResultsForDisplay(variables.previousResults)
-          : []
-
-      setCandidatePool(variables.originalCandidatePool || null)
-      setPreviousResults(previousDisplayResults)
-      setResults(finalizedResults)
-      setShowFinalResultBadges(false)
-      setRequestTiming((current) => ({
-        ...current,
-        finalize: payload.timing || null,
-      }))
-      setRetryFeedback('')
-      setRetryCount(payload.retryCount ?? variables.retryCount ?? 0)
-      setSelectionState(payload.selection || null)
-
-      const searchId = analyticsSearchIdRef.current
-      const sessionId = analyticsSessionIdRef.current
-      const resultSet = variables.retryCount > 0 ? 'retry' : 'final'
-
-      if (searchId && sessionId) {
-        trackAnalytics({
-          eventType: 'search_run_upsert',
-          searchId,
-          sessionId,
-          productQuery: variables.query,
-          details: variables.followUpNotes || '',
-          enteredAiRefinement: true,
-          usedShowProductsNow: showPreviewResults,
-          completedFinalize: true,
-          retryRound: payload.retryCount ?? variables.retryCount ?? 0,
-          bestResultKey: finalizedResults[0]?.id ? String(finalizedResults[0].id) : '',
-        })
-        trackAnalytics({
-          eventType: 'search_event',
-          searchId,
-          sessionId,
-          name: 'final_results_shown',
-          eventData: {
-            resultCount: finalizedResults.length,
-            resultSet,
-            retryRound: payload.retryCount ?? variables.retryCount ?? 0,
-          },
-        })
-
-        const impressionItems = buildResultAnalyticsItems(finalizedResults)
-
-        if (impressionItems.length > 0) {
-          trackAnalytics({
-            eventType: 'result_impressions',
-            searchId,
-            sessionId,
-            resultSet,
-            items: impressionItems,
-          })
-        }
-      }
-    },
-    onError: (error) => {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to finalize the search.')
-    },
+    onSuccess: applyFinalizePayload,
+    onError: handleFinalizeError,
   })
 
   useEffect(() => {
@@ -278,15 +691,27 @@ export function useGuidedSearch() {
     }
   }, [results])
 
-  const isFinalizing = finalizeMutation.isPending
+  useEffect(() => () => {
+    resetPrewarmState()
+    stopEnrichmentPolling()
+  }, [])
+
+  const isFinalizing = finalizeMutation.isPending || isAwaitingPrewarmedFinalize
   const isLoading = isDiscovering || isGeneratingPrompt || isFinalizing
   const hasFinalResults = results.length > 0
   const displayedResults = hasFinalResults ? results : showPreviewResults ? previewResults : []
+  const selectedProductForDisplay = resolveSelectedProductForDisplay({
+    previousResults,
+    previewResults,
+    results,
+    selectedProduct: selectedProductState,
+  })
 
   function resetGuidedState(nextSubmittedQuery) {
+    stopEnrichmentPolling()
     setHasStartedSearch(true)
     setSubmittedQuery(nextSubmittedQuery)
-    setSelectedProduct(null)
+    setSelectedProductState(null)
     setErrorMessage('')
     setDiscoveryToken('')
     setCandidatePool(null)
@@ -300,20 +725,26 @@ export function useGuidedSearch() {
     setRequestTiming({
       discover: null,
       finalize: null,
+      prewarm: null,
       refine: null,
+      framingFields: null,
     })
     setShowFinalResultBadges(false)
     setShowPreviewResults(false)
     setRefinementPrompt(null)
+    setQueryFramingFields(null)
+    setIsEnrichmentReady(false)
     hasTrackedRefinementViewRef.current = false
     hasTrackedPreviewImpressionsRef.current = false
   }
 
   function resetToNewSearch() {
     activeSearchIdRef.current += 1
+    stopEnrichmentPolling()
+    discardPrewarm('new_search')
     finalizeMutation.reset()
     setProductQuery('')
-    setSelectedProduct(null)
+    setSelectedProductState(null)
     setErrorMessage('')
     setHasStartedSearch(false)
     setSubmittedQuery('')
@@ -322,6 +753,7 @@ export function useGuidedSearch() {
     setPreviewResults([])
     setResults([])
     setRefinementPrompt(null)
+    setQueryFramingFields(null)
     setFollowUpNotes('')
     setRetryFeedback('')
     setRetryCount(0)
@@ -329,13 +761,16 @@ export function useGuidedSearch() {
     setRequestTiming({
       discover: null,
       finalize: null,
+      prewarm: null,
       refine: null,
+      framingFields: null,
     })
     setShowFinalResultBadges(false)
     setPreviousResults([])
     setShowPreviewResults(false)
     setIsDiscovering(false)
     setIsGeneratingPrompt(false)
+    setIsEnrichmentReady(false)
     analyticsSearchIdRef.current = ''
     hasTrackedRefinementViewRef.current = false
     hasTrackedPreviewImpressionsRef.current = false
@@ -405,6 +840,12 @@ export function useGuidedSearch() {
           ...current,
           discover: payload.timing || null,
         }))
+        startArtifactPrewarm({
+          discoveryToken: payload.discoveryToken || '',
+          originalCandidatePool: payload.candidatePool || null,
+          query: normalizedQuery,
+          searchId: nextSearchId,
+        })
 
         trackAnalytics({
           eventType: 'search_event',
@@ -481,6 +922,44 @@ export function useGuidedSearch() {
           setIsGeneratingPrompt(false)
         }
       })
+
+    if (!backgroundFramingDisabled) {
+      trackSearchEvent('query_framing_fields_started', {
+        lane: 'framing_fields',
+      })
+
+      fetchFramingFields(normalizedQuery)
+        .then((payload) => {
+          if (activeSearchIdRef.current !== nextSearchId) {
+            return
+          }
+
+          setQueryFramingFields(payload.queryFraming || null)
+          setRequestTiming((current) => ({
+            ...current,
+            framingFields: payload.timing || null,
+          }))
+          trackSearchEvent('query_framing_fields_ready', {
+            lane: 'framing_fields',
+            openaiMs: payload.timing?.server?.openai ?? null,
+            totalMs: payload.timing?.client?.totalMs ?? null,
+            totalTokens: payload.usage?.totalTokens ?? null,
+            tradeoffAxisCount: Array.isArray(payload.queryFraming?.tradeoffAxes)
+              ? payload.queryFraming.tradeoffAxes.length
+              : 0,
+          })
+        })
+        .catch((error) => {
+          if (activeSearchIdRef.current !== nextSearchId) {
+            return
+          }
+
+          trackSearchEvent('query_framing_fields_failed', {
+            lane: 'framing_fields',
+            error: error instanceof Error ? error.message : 'Unknown error',
+          })
+        })
+    }
   }
 
   function handleFinalizeRefinement() {
@@ -493,6 +972,8 @@ export function useGuidedSearch() {
       return
     }
 
+    const normalizedFollowUpNotes = followUpNotes.trim()
+
     if (analyticsSearchIdRef.current && analyticsSessionIdRef.current) {
       trackAnalytics({
         eventType: 'search_run_upsert',
@@ -500,32 +981,56 @@ export function useGuidedSearch() {
         sessionId: analyticsSessionIdRef.current,
         productQuery: submittedQuery,
         details: followUpNotes,
-        enteredAiRefinement: true,
+        enteredAiRefinement: Boolean(normalizedFollowUpNotes),
         usedShowProductsNow: showPreviewResults,
         completedFinalize: false,
         retryRound: 0,
       })
-      trackAnalytics({
-        eventType: 'search_event',
-        searchId: analyticsSearchIdRef.current,
-        sessionId: analyticsSessionIdRef.current,
-        name: 'ai_followup_submitted',
-        eventData: {
-          noteLength: followUpNotes.trim().length,
-        },
+      trackSearchEvent('ai_followup_submitted', {
+        noteLength: normalizedFollowUpNotes.length,
       })
     }
 
-    finalizeMutation.mutate({
+    if (normalizedFollowUpNotes) {
+      const nextFinalizeRequest = {
+        query: submittedQuery,
+        discoveryToken,
+        originalCandidatePool: candidatePool,
+        followUpNotes,
+        rejectionFeedback: '',
+        retryCount: 0,
+        excludedCandidateIds: [],
+        previousResults: [],
+        requestMode: FINALIZE_REQUEST_MODE_REFINED,
+      }
+
+      if (!prewarmDisabled && prewarmRef.current.status === 'pending') {
+        queueFinalizeUntilPrewarm(nextFinalizeRequest)
+        return
+      }
+
+      startFinalizeMutation(nextFinalizeRequest)
+      return
+    }
+
+    const nextFinalizeRequest = {
       query: submittedQuery,
       discoveryToken,
       originalCandidatePool: candidatePool,
-      followUpNotes,
+      followUpNotes: '',
       rejectionFeedback: '',
       retryCount: 0,
       excludedCandidateIds: [],
       previousResults: [],
-    })
+      requestMode: FINALIZE_REQUEST_MODE_EMPTY_NOTES,
+    }
+
+    if (!prewarmDisabled && prewarmRef.current.status === 'pending') {
+      queueFinalizeUntilPrewarm(nextFinalizeRequest)
+      return
+    }
+
+    startFinalizeMutation(nextFinalizeRequest)
   }
 
   function handleShowProductsNow() {
@@ -583,19 +1088,13 @@ export function useGuidedSearch() {
     }
 
     if (analyticsSearchIdRef.current && analyticsSessionIdRef.current) {
-      trackAnalytics({
-        eventType: 'search_event',
-        searchId: analyticsSearchIdRef.current,
-        sessionId: analyticsSessionIdRef.current,
-        name: 'retry_started',
-        eventData: {
-          retryRound: retryCount + 1,
-          feedbackLength: retryFeedback.trim().length,
-        },
+      trackSearchEvent('retry_started', {
+        retryRound: retryCount + 1,
+        feedbackLength: retryFeedback.trim().length,
       })
     }
 
-    finalizeMutation.mutate({
+    const nextFinalizeRequest = {
       query: submittedQuery,
       discoveryToken,
       originalCandidatePool: candidatePool,
@@ -604,12 +1103,20 @@ export function useGuidedSearch() {
       retryCount: retryCount + 1,
       excludedCandidateIds: results.map((result) => result.id),
       previousResults: results,
-    })
+      requestMode: FINALIZE_REQUEST_MODE_RETRY,
+    }
+
+    if (!prewarmDisabled && prewarmRef.current.status === 'pending') {
+      queueFinalizeUntilPrewarm(nextFinalizeRequest)
+      return
+    }
+
+    startFinalizeMutation(nextFinalizeRequest)
   }
 
   function handleSelectProduct(item, { position = 0, resultSet = 'final' } = {}) {
-    setSelectedProduct({
-      ...item,
+    setSelectedProductState({
+      id: item.id,
       analyticsMeta: {
         badgeType: item.badgeLabel || '',
         isBestPick: position === 0 || item.badgeLabel === 'Best match',
@@ -669,17 +1176,19 @@ export function useGuidedSearch() {
     handleRetailerClick,
     handleSelectProduct,
     isDiscovering,
+    isEnrichmentReady,
     isFinalizing,
     isGeneratingPrompt,
     isLoading,
     previousResults,
     productQuery,
+    queryFramingFields,
     requestTiming,
     refinementPrompt,
     selectionState,
     retryCount,
     retryFeedback,
-    selectedProduct,
+    selectedProduct: selectedProductForDisplay,
     showFinalResultBadges,
     showPreviewResults,
     submittedQuery,
@@ -691,6 +1200,6 @@ export function useGuidedSearch() {
     setRetryFeedback,
     setFollowUpNotes,
     setProductQuery,
-    setSelectedProduct,
+    setSelectedProduct: setSelectedProductState,
   }
 }

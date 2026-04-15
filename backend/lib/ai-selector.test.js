@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { DEFAULT_OPENAI_MODEL, OPENAI_RESPONSES_ENDPOINT, selectAiResults } from './ai-selector.js'
+import {
+  DEFAULT_OPENAI_MODEL,
+  OPENAI_RESPONSES_ENDPOINT,
+  createCandidateAwarePrior,
+  selectAiResults,
+} from './ai-selector.js'
 
 function createCandidate(overrides = {}) {
   return {
@@ -104,8 +109,8 @@ describe('ai selector', () => {
     })
     expect(result.selectedCandidateIds).toEqual(['prod-2', 'prod-1'])
     expect(result.results[0].title).toBe('Compact airport stroller')
-    expect(result.results[0].reasons[0]).toBe('AI fit: Best fit for airport travel and strong reviews.')
-    expect(result.results[0].drawbacks).toEqual(['Pricier than the cheapest compact options.'])
+    expect(result.results[0]).not.toHaveProperty('reasons')
+    expect(result.results[0]).not.toHaveProperty('drawbacks')
     expect(result.results[0].badgeLabel).toBe('')
     expect(result.results[1].badgeLabel).toBe('')
   })
@@ -157,11 +162,11 @@ describe('ai selector', () => {
 
     expect(result.selectedCandidateIds).toEqual(['prod-1'])
     expect(result.results).toHaveLength(1)
-    expect(result.results[0].drawbacks).toEqual(['Some caution.'])
+    expect(result.results[0]).not.toHaveProperty('drawbacks')
     expect(result.results[0].badgeLabel).toBe('')
   })
 
-  it('does not ask the model to assign badge labels in the blocking selection schema', async () => {
+  it('keeps badge labels and drawbacks out of the blocking selection schema', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -216,8 +221,12 @@ describe('ai selector', () => {
     const prompt = requestBody.input[1].content
 
     expect(prompt).not.toContain('Badge strategy')
+    expect(prompt).not.toContain('drawback')
+    expect(prompt).not.toContain('tradeoffs')
     expect(JSON.stringify(requestBody.text.format.schema)).not.toContain('badge_label')
+    expect(JSON.stringify(requestBody.text.format.schema)).not.toContain('drawback')
     expect(result.results.every((item) => item.badgeLabel === '')).toBe(true)
+    expect(result.results.every((item) => !Object.hasOwn(item, 'drawbacks'))).toBe(true)
   })
 
   it('omits low-value descriptions from the AI candidate summary', async () => {
@@ -424,6 +433,156 @@ describe('ai selector', () => {
     expect(prompt).not.toContain('"matchSignals"')
     expect(prompt).not.toContain('"numericPrice"')
     expect(prompt).toContain('"trustScore":null')
+  })
+
+  it('creates a reusable prerank artifact from the full candidate pool', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        usage: {
+          input_tokens: 300,
+          output_tokens: 80,
+          total_tokens: 380,
+          output_tokens_details: {
+            reasoning_tokens: 20,
+          },
+        },
+        output_text: JSON.stringify({
+          ranked_candidates: [
+            {
+              candidate_id: 'prod-2',
+              baseline_fit: 'Best baseline option for frequent flights.',
+              baseline_caution: 'Costs more than entry-level picks.',
+            },
+            {
+              candidate_id: 'prod-1',
+              baseline_fit: 'Strong all-round fallback option.',
+              baseline_caution: 'Fewer reviews than the top baseline pick.',
+            },
+          ],
+        }),
+      }),
+    })
+
+    const result = await createCandidateAwarePrior(
+      {
+        apiKey: 'test-key',
+        candidatePool: {
+          query: 'stroller',
+          details: '',
+          candidates: [
+            createCandidate(),
+            createCandidate({
+              id: 'prod-2',
+              title: 'Compact airport stroller',
+            }),
+          ],
+        },
+      },
+      fetchMock,
+    )
+
+    expect(result.model).toBe(DEFAULT_OPENAI_MODEL)
+    expect(result.usage).toEqual({
+      inputTokens: 300,
+      outputTokens: 80,
+      totalTokens: 380,
+      reasoningTokens: 20,
+    })
+    expect(result.artifact.rankedCandidates).toEqual([
+      expect.objectContaining({
+        candidateId: 'prod-2',
+        prewarmRank: 1,
+        baselineFit: 'Best baseline option for frequent flights.',
+        baselineCaution: 'Costs more than entry-level picks.',
+      }),
+      expect.objectContaining({
+        candidateId: 'prod-1',
+        prewarmRank: 2,
+        baselineFit: 'Strong all-round fallback option.',
+        baselineCaution: 'Fewer reviews than the top baseline pick.',
+      }),
+    ])
+    expect(result.artifact.layer).toBe('candidate_aware_prewarm')
+    expect(result.artifact).not.toHaveProperty('selectedCandidateIds')
+  })
+
+  it('uses a lighter candidate-aware prior rerank when a reusable prior is available', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        usage: {
+          input_tokens: 180,
+          output_tokens: 24,
+          total_tokens: 204,
+          output_tokens_details: {
+            reasoning_tokens: 4,
+          },
+        },
+        output_text: JSON.stringify({
+          picks: [
+            {
+              candidate_id: 'prod-2',
+              rationale: 'Best match for airport travel and compact storage.',
+            },
+          ],
+        }),
+      }),
+    })
+
+    const result = await selectAiResults(
+      {
+        apiKey: 'test-key',
+        candidatePool: {
+          query: 'stroller',
+          details: 'airport travel and compact storage',
+          candidates: [
+            createCandidate(),
+            createCandidate({
+              id: 'prod-2',
+              title: 'Compact airport stroller',
+            }),
+          ],
+        },
+        finalResultLimit: 6,
+        candidateAwarePrior: {
+          version: 1,
+          rankedCandidates: [
+            {
+              candidateId: 'prod-2',
+              prewarmRank: 1,
+              baselineFit: 'Best baseline option for frequent flights.',
+              baselineCaution: 'Costs more than entry-level picks.',
+            },
+            {
+              candidateId: 'prod-1',
+              prewarmRank: 2,
+              baselineFit: 'Strong all-round fallback option.',
+              baselineCaution: 'Fewer reviews than the top baseline pick.',
+            },
+          ],
+        },
+      },
+      fetchMock,
+    )
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
+    const prompt = requestBody.input[1].content
+
+    expect(prompt).toContain('Reusable candidate-aware prior:')
+    expect(prompt).toContain('airport travel and compact storage')
+    expect(result.strategy).toBe('candidate_aware_prior_rerank')
+    expect(result.selectedCandidateIds).toEqual(['prod-2'])
+    expect(result.results[0]).not.toHaveProperty('drawbacks')
+    expect(result.debug).toEqual({
+      priorCandidateCount: 2,
+      artifactCandidateCount: 2,
+      intentMatchRerankUsed: true,
+      candidateAwarePriorReused: true,
+      candidateAwarePriorReuseReason: 'candidate_aware_prior_rerank',
+      preRankArtifactReused: true,
+      preRankReuseReason: 'candidate_aware_prior_rerank',
+    })
   })
 
 })

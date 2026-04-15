@@ -5,6 +5,15 @@ vi.mock('./lib/ai-selector.js', async () => {
 
   return {
     ...actual,
+    createCandidateAwarePrior: vi.fn(),
+    nanoLockWinnersAndBadges: vi.fn(),
+    miniEnrichSelectedCandidates: vi.fn().mockResolvedValue({
+      model: 'gpt-5-mini',
+      enriched: [],
+      enrichedIds: [],
+      usage: null,
+      preservedOrder: true,
+    }),
     selectAiResults: vi.fn(),
   }
 })
@@ -44,13 +53,16 @@ vi.mock('./lib/search-storage.js', () => ({
 import {
   handleCachedSearch,
   handleDiscoverySearch,
+  handleEnrichmentPoll,
   handleFinalizeSelection,
   handleLiveSearch,
+  handlePrewarmSelection,
+  handleQueryFramingFields,
   handleSearchDebug,
   handleSupabaseHealth,
 } from './server.js'
 import { resetRateLimitStore } from './lib/rate-limit.js'
-import { selectAiResults } from './lib/ai-selector.js'
+import { createCandidateAwarePrior, nanoLockWinnersAndBadges, selectAiResults } from './lib/ai-selector.js'
 import { getFilteredSearchArtifacts } from './lib/result-filter.js'
 import { getSupabaseHealth, readStoredSearchCacheEntry, writeStoredSearchCacheEntry } from './lib/search-storage.js'
 import {
@@ -114,7 +126,11 @@ function createFinalizeCandidate(id) {
   }
 }
 
-function createDiscoveryCacheEntry(query, candidates = [createFinalizeCandidate('one')]) {
+function createDiscoveryCacheEntry(
+  query,
+  candidates = [createFinalizeCandidate('one')],
+  selection = { mode: 'discovery_preview' },
+) {
   return {
     cachedAt: '2026-03-17T12:00:00.000Z',
     candidatePool: {
@@ -129,7 +145,7 @@ function createDiscoveryCacheEntry(query, candidates = [createFinalizeCandidate(
       id: candidate.id,
       title: candidate.title,
     })),
-    selection: { mode: 'discovery_preview' },
+    selection,
     source: 'guided_discovery',
   }
 }
@@ -232,6 +248,12 @@ describe('server handlers', () => {
           badgeLabel: 'Best match',
         },
       ],
+      prewarm: {
+        priorReady: false,
+        priorGeneratedAt: null,
+        artifactReady: false,
+        artifactGeneratedAt: null,
+      },
       source: 'cache',
       cachedAt: '2026-03-17T12:00:00.000Z',
     })
@@ -296,6 +318,10 @@ describe('server handlers', () => {
         candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
       },
       previewResults: [{ id: 'live-1', title: 'Thermos bottle' }],
+      prewarm: {
+        artifactReady: false,
+        artifactGeneratedAt: null,
+      },
     })
   })
 
@@ -359,6 +385,12 @@ describe('server handlers', () => {
           candidateCount: 1,
           previewResultCount: 1,
           selectionMode: 'discovery_preview',
+          candidateAwarePriorReady: false,
+          candidateAwarePriorGeneratedAt: null,
+          candidateAwarePriorCandidateCount: 0,
+          prewarmArtifactReady: false,
+          prewarmArtifactGeneratedAt: null,
+          prewarmArtifactCandidateCount: 0,
         },
       },
       environment: {
@@ -369,6 +401,7 @@ describe('server handlers', () => {
       architecture: {
         primaryProductFlow: [
           '/api/search/discover',
+          '/api/search/prewarm',
           '/api/search/refine',
           '/api/search/finalize',
         ],
@@ -387,6 +420,13 @@ describe('server handlers', () => {
           usesCache: true,
           callsSerpApi: false,
           callsOpenAi: true,
+        },
+        guidedPrewarm: {
+          usesCache: true,
+          callsSerpApi: false,
+          callsOpenAi: true,
+          priorReady: false,
+          artifactReady: false,
         },
         liveSearch: {
           usesCache: false,
@@ -444,6 +484,63 @@ describe('server handlers', () => {
       ],
       storageMode: 'supabase',
       status: 'ok',
+    })
+  })
+
+  it('returns background query-framing fields without blocking the refine question lane', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      return ''
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          usage: {
+            input_tokens: 24,
+            output_tokens: 12,
+            total_tokens: 36,
+            output_tokens_details: {
+              reasoning_tokens: 3,
+            },
+          },
+          output_text: JSON.stringify({
+            category_hint: 'travel stroller',
+            framing_summary: 'Portability is likely the main tradeoff.',
+            tradeoff_axes: ['fold size', 'weight'],
+            refinement_hints: ['Ask about airline carry-on fit.'],
+          }),
+        }),
+      }),
+    )
+
+    const response = createResponseRecorder()
+
+    await handleQueryFramingFields(
+      new URL('http://localhost/api/search/framing-fields?query=travel%20stroller'),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['Server-Timing']).toContain('openai')
+    expect(JSON.parse(response.body)).toEqual({
+      queryFraming: expect.objectContaining({
+        layer: 'query_framing',
+        query: 'travel stroller',
+        categoryHint: 'travel stroller',
+        tradeoffAxes: ['fold size', 'weight'],
+      }),
+      usage: {
+        inputTokens: 24,
+        outputTokens: 12,
+        totalTokens: 36,
+        reasoningTokens: 3,
+      },
+      queryFramingMode: 'framing_fields',
     })
   })
 
@@ -568,7 +665,7 @@ describe('server handlers', () => {
       }),
     )
 
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 15; index += 1) {
       const response = createResponseRecorder()
 
       await handleLiveSearch(
@@ -590,7 +687,7 @@ describe('server handlers', () => {
 
     expect(limitedResponse.statusCode).toBe(429)
     expect(JSON.parse(limitedResponse.body)).toEqual({
-      error: 'Too many searches from this connection. Please wait a minute and try again.',
+      error: 'Too many searches from this connection. Please wait about 10 seconds and try again.',
     })
   })
 
@@ -616,7 +713,7 @@ describe('server handlers', () => {
       }),
     )
 
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 15; index += 1) {
       const response = createResponseRecorder()
 
       await handleDiscoverySearch(
@@ -638,7 +735,7 @@ describe('server handlers', () => {
 
     expect(limitedResponse.statusCode).toBe(429)
     expect(JSON.parse(limitedResponse.body)).toEqual({
-      error: 'Too many searches from this connection. Please wait a minute and try again.',
+      error: 'Too many searches from this connection. Please wait about 10 seconds and try again.',
     })
   })
 
@@ -1001,21 +1098,204 @@ describe('server handlers', () => {
     expect(JSON.parse(response.body)).toEqual({
       error: 'The guided search context expired. Please start the search again.',
     })
-    expect(selectAiResults).not.toHaveBeenCalled()
+    expect(nanoLockWinnersAndBadges).not.toHaveBeenCalled()
+  })
+
+  it('generates and stores a reusable prerank artifact through the prewarm route', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    createCandidateAwarePrior.mockResolvedValue({
+      model: 'gpt-5-mini',
+      strategy: 'candidate_aware_prior',
+      usage: {
+        inputTokens: 320,
+        outputTokens: 70,
+        totalTokens: 390,
+        reasoningTokens: 18,
+      },
+      prior: {
+        version: 1,
+        layer: 'candidate_aware_prewarm',
+        generatedAt: '2026-03-31T12:00:00.000Z',
+        model: 'gpt-5-mini',
+        query: 'stroller',
+        candidateCount: 1,
+        rankedCandidates: [
+          {
+            candidateId: 'one',
+            prewarmRank: 1,
+            baselineFit: 'Strong overall baseline fit.',
+            baselineCaution: 'A bit pricier than budget picks.',
+          },
+        ],
+      },
+    })
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+
+    const response = createResponseRecorder()
+
+    await handlePrewarmSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          candidatePool: {
+            query: 'stroller',
+            details: '',
+            combinedSearchText: 'stroller',
+            searchState: 'Results for exact spelling',
+            similarQueries: ['compact stroller'],
+            candidates: [createFinalizeCandidate('one')],
+          },
+        }),
+        { 'x-forwarded-for': '203.0.113.34' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(createCandidateAwarePrior).toHaveBeenCalledWith({
+      candidatePool: expect.objectContaining({
+        query: 'stroller',
+        candidates: [expect.objectContaining({ id: 'one' })],
+      }),
+      apiKey: 'openai-key',
+      model: expect.any(String),
+    })
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productQuery: 'stroller',
+        scope: 'guided_discovery',
+        selection: expect.objectContaining({
+          mode: 'discovery_preview',
+          candidateAwarePrior: expect.objectContaining({
+            generatedAt: '2026-03-31T12:00:00.000Z',
+          }),
+          preRankArtifact: expect.objectContaining({
+            generatedAt: '2026-03-31T12:00:00.000Z',
+          }),
+          prewarm: expect.objectContaining({
+            priorCandidateCount: 1,
+            artifactCandidateCount: 1,
+            model: 'gpt-5-mini',
+            strategy: 'candidate_aware_prior',
+            usage: {
+              inputTokens: 320,
+              outputTokens: 70,
+              totalTokens: 390,
+              reasoningTokens: 18,
+            },
+          }),
+        }),
+      }),
+    )
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        requestMode: 'guided_prerank_prewarm',
+        prewarm: expect.objectContaining({
+          artifactReady: true,
+          priorReady: true,
+          priorCandidateCount: 1,
+          artifactCandidateCount: 1,
+          model: 'gpt-5-mini',
+          requestMode: 'guided_prerank_prewarm',
+          reusedStoredArtifact: false,
+          strategy: 'candidate_aware_prior',
+        }),
+        usage: {
+          openai: {
+            inputTokens: 320,
+            outputTokens: 70,
+            totalTokens: 390,
+            reasoningTokens: 18,
+          },
+        },
+      }),
+    )
+  })
+
+  it('nano locks the shortlist for empty-note finalize and returns a fast response', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    nanoLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5-mini',
+      lockedIds: ['one'],
+      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
+      usage: {
+        inputTokens: 180,
+        outputTokens: 30,
+        totalTokens: 210,
+        reasoningTokens: 6,
+      },
+    })
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')], {
+        mode: 'discovery_preview',
+      }),
+    )
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          requestMode: 'guided_empty_notes',
+        }),
+        { 'x-forwarded-for': '203.0.113.35' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(nanoLockWinnersAndBadges).toHaveBeenCalledWith({
+      candidatePool: expect.objectContaining({
+        details: '',
+        candidates: [expect.objectContaining({ id: 'one' })],
+      }),
+      finalResultLimit: 6,
+      apiKey: 'openai-key',
+      model: expect.any(String),
+    })
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        requestMode: 'guided_empty_notes',
+        debug: expect.objectContaining({
+          finalizeFastLayer: 'finalize_fast',
+          flowPath: 'nano_lock',
+        }),
+        finalizeFast: expect.objectContaining({
+          layer: 'finalize_fast',
+          shortlistLocked: true,
+          selectedCandidateIds: ['one'],
+          shortlist: [
+            expect.not.objectContaining({
+              reasons: expect.any(Array),
+            }),
+          ],
+        }),
+        selection: expect.objectContaining({
+          layer: 'finalize_fast',
+          mode: 'ai',
+          shortlistLocked: true,
+          strategy: 'nano_lock',
+          flowPath: 'nano_lock',
+        }),
+        usage: expect.objectContaining({
+          openai: expect.objectContaining({
+            totalTokens: 210,
+          }),
+        }),
+      }),
+    )
   })
 
   it('caps finalize note length before calling OpenAI', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
-    selectAiResults.mockResolvedValue({
-      model: 'gpt-5-mini',
-      usage: {
-        inputTokens: 510,
-        outputTokens: 84,
-        totalTokens: 594,
-        reasoningTokens: 38,
-      },
-      selectedCandidateIds: ['one'],
-      results: [{ id: 'one', title: 'Candidate one', reasons: [], drawbacks: [] }],
+    nanoLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5.4-nano',
+      lockedIds: ['id-1'],
+      lockedBadges: [{ candidateId: 'id-1', badgeLabel: '' }],
+      usage: { inputTokens: 510, outputTokens: 84, totalTokens: 594, reasoningTokens: 38 },
     })
 
     const response = createResponseRecorder()
@@ -1036,8 +1316,8 @@ describe('server handlers', () => {
     )
 
     expect(response.statusCode).toBe(200)
-    expect(selectAiResults).toHaveBeenCalledTimes(1)
-    expect(selectAiResults).toHaveBeenCalledWith({
+    expect(nanoLockWinnersAndBadges).toHaveBeenCalledTimes(1)
+    expect(nanoLockWinnersAndBadges).toHaveBeenCalledWith({
       candidatePool: expect.objectContaining({
         details: `Priorities: lightweight, easy fold. Notes: ${'n'.repeat(500)}`,
         candidates: expect.arrayContaining(candidates.map((candidate) => expect.objectContaining({ id: candidate.id }))),
@@ -1046,22 +1326,299 @@ describe('server handlers', () => {
       apiKey: 'openai-key',
       model: expect.any(String),
     })
-    expect(selectAiResults.mock.calls[0][0].candidatePool.candidates).toHaveLength(20)
-    expect(selectAiResults.mock.calls[0][0].candidatePool.details.endsWith('n'.repeat(500))).toBe(true)
+    expect(nanoLockWinnersAndBadges.mock.calls[0][0].candidatePool.candidates).toHaveLength(20)
+    expect(nanoLockWinnersAndBadges.mock.calls[0][0].candidatePool.details.endsWith('n'.repeat(500))).toBe(true)
+  })
+
+  it('nano locks the shortlist for refined finalize and includes notes in candidatePool details', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    nanoLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5.4-nano',
+      lockedIds: ['one'],
+      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
+      usage: { inputTokens: 180, outputTokens: 30, totalTokens: 210, reasoningTokens: 6 },
+    })
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')], {
+        mode: 'discovery_preview',
+      }),
+    )
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          followUpNotes: 'best for city travel',
+          requestMode: 'guided_refined',
+        }),
+        { 'x-forwarded-for': '203.0.113.36' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(nanoLockWinnersAndBadges).toHaveBeenCalledWith({
+      candidatePool: expect.objectContaining({
+        details: 'Notes: best for city travel',
+      }),
+      finalResultLimit: 6,
+      apiKey: 'openai-key',
+      model: expect.any(String),
+    })
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        requestMode: 'guided_refined',
+        debug: expect.objectContaining({
+          finalizeFastLayer: 'finalize_fast',
+          flowPath: 'nano_lock',
+          tokenUsageByStage: expect.objectContaining({
+            finalize: {
+              inputTokens: 180,
+              outputTokens: 30,
+              totalTokens: 210,
+              reasoningTokens: 6,
+            },
+          }),
+        }),
+        finalizeFast: expect.objectContaining({
+          layer: 'finalize_fast',
+          shortlistLocked: true,
+          latestUserContext: 'Notes: best for city travel',
+          selectedCandidateIds: ['one'],
+        }),
+        selection: expect.objectContaining({
+          layer: 'finalize_fast',
+          shortlistLocked: true,
+          strategy: 'nano_lock',
+          flowPath: 'nano_lock',
+        }),
+      }),
+    )
+  })
+
+  it('prefers OPENAI_FINALIZE_CONTEXT_MODEL over the shared model for guided finalize with context', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      if (name === 'OPENAI_FINALIZE_CONTEXT_MODEL') {
+        return 'gpt-5.4-nano'
+      }
+
+      if (name === 'OPENAI_MODEL') {
+        return 'gpt-5-mini'
+      }
+
+      return ''
+    })
+    nanoLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5.4-nano',
+      lockedIds: ['one'],
+      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
+      usage: null,
+    })
+
+    const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          followUpNotes: 'keep it lightweight',
+        }),
+        { 'x-forwarded-for': '203.0.113.30' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(nanoLockWinnersAndBadges).toHaveBeenCalledTimes(1)
+    expect(nanoLockWinnersAndBadges.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        apiKey: 'openai-key',
+        model: 'gpt-5.4-nano',
+      }),
+    )
+  })
+
+  it('defaults context-added finalize requests to the nano model lane', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      if (name === 'OPENAI_FINALIZE_MODEL') {
+        return 'gpt-5-mini'
+      }
+
+      return ''
+    })
+    nanoLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5.4-nano',
+      lockedIds: ['one'],
+      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
+      usage: null,
+    })
+
+    const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          followUpNotes: 'keep it lightweight and compact',
+        }),
+        { 'x-forwarded-for': '203.0.113.31' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(nanoLockWinnersAndBadges).toHaveBeenCalledTimes(1)
+    expect(nanoLockWinnersAndBadges.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        apiKey: 'openai-key',
+        model: 'gpt-5.4-nano',
+      }),
+    )
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        debug: expect.objectContaining({
+          finalizeModel: 'gpt-5.4-nano',
+          finalizeModelPath: 'context_added',
+        }),
+        selection: expect.objectContaining({
+          model: 'gpt-5.4-nano',
+          modelPath: 'context_added',
+        }),
+      }),
+    )
+  })
+
+  it('lets OPENAI_FINALIZE_CONTEXT_MODEL override the default context finalize lane', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      if (name === 'OPENAI_FINALIZE_MODEL') {
+        return 'gpt-5-mini'
+      }
+
+      if (name === 'OPENAI_FINALIZE_CONTEXT_MODEL') {
+        return 'gpt-5.2'
+      }
+
+      return ''
+    })
+    nanoLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5.2',
+      lockedIds: ['one'],
+      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
+      usage: null,
+    })
+
+    const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          priorities: ['lightweight'],
+        }),
+        { 'x-forwarded-for': '203.0.113.32' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(nanoLockWinnersAndBadges).toHaveBeenCalledTimes(1)
+    expect(nanoLockWinnersAndBadges.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        apiKey: 'openai-key',
+        model: 'gpt-5.2',
+      }),
+    )
+  })
+
+  it('keeps empty-note finalize requests on the baseline finalize model lane', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      if (name === 'OPENAI_FINALIZE_MODEL') {
+        return 'gpt-5-mini'
+      }
+
+      return ''
+    })
+    nanoLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5-mini',
+      lockedIds: ['one'],
+      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
+      usage: null,
+    })
+
+    const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify(createFinalizeDiscoveryBody()),
+        { 'x-forwarded-for': '203.0.113.33' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(nanoLockWinnersAndBadges).toHaveBeenCalledTimes(1)
+    expect(nanoLockWinnersAndBadges.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        apiKey: 'openai-key',
+        model: 'gpt-5-mini',
+      }),
+    )
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        debug: expect.objectContaining({
+          finalizeModel: 'gpt-5-mini',
+          finalizeModelPath: 'baseline',
+        }),
+        selection: expect.objectContaining({
+          model: 'gpt-5-mini',
+          modelPath: 'baseline',
+        }),
+      }),
+    )
   })
 
   it('passes retry feedback into finalize selection details and returns the retry count', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
-    selectAiResults.mockResolvedValue({
-      model: 'gpt-5-mini',
+    nanoLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5.4-nano',
+      lockedIds: ['two'],
+      lockedBadges: [{ candidateId: 'two', badgeLabel: '' }],
       usage: {
         inputTokens: 510,
         outputTokens: 84,
         totalTokens: 594,
         reasoningTokens: 38,
       },
-      selectedCandidateIds: ['one'],
-      results: [{ id: 'one', title: 'Candidate one', reasons: [], drawbacks: [] }],
     })
 
     const response = createResponseRecorder()
@@ -1084,8 +1641,8 @@ describe('server handlers', () => {
     )
 
     expect(response.statusCode).toBe(200)
-    expect(selectAiResults).toHaveBeenCalledTimes(1)
-    expect(selectAiResults.mock.calls[0][0]).toEqual(
+    expect(nanoLockWinnersAndBadges).toHaveBeenCalledTimes(1)
+    expect(nanoLockWinnersAndBadges.mock.calls[0][0]).toEqual(
       expect.objectContaining({
         candidatePool: expect.objectContaining({
           details:
@@ -1120,6 +1677,42 @@ describe('server handlers', () => {
     )
   })
 
+  it('echoes finalize request mode so prewarm traffic can be measured separately', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    nanoLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5-mini',
+      lockedIds: ['one'],
+      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
+      usage: { inputTokens: 200, outputTokens: 40, totalTokens: 240, reasoningTokens: 12 },
+    })
+
+    const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          requestMode: 'guided_empty_notes',
+        }),
+        { 'x-forwarded-for': '203.0.113.29' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        requestMode: 'guided_empty_notes',
+        selection: expect.objectContaining({
+          requestMode: 'guided_empty_notes',
+        }),
+      }),
+    )
+  })
+
   it('returns an honest empty retry response when all previous picks are excluded', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
 
@@ -1142,21 +1735,27 @@ describe('server handlers', () => {
     )
 
     expect(response.statusCode).toBe(200)
-    expect(selectAiResults).not.toHaveBeenCalled()
+    expect(nanoLockWinnersAndBadges).not.toHaveBeenCalled()
     expect(JSON.parse(response.body)).toEqual({
-      candidatePool: {
+      finalizeFast: expect.objectContaining({
+        version: 1,
+        layer: 'finalize_fast',
         query: 'stroller',
-        details: 'Retry feedback: Not right for city travel. Excluded previous picks: one',
-        combinedSearchText: 'stroller',
-        searchState: 'Results for exact spelling',
-        similarQueries: ['compact stroller'],
-        candidates: [],
-      },
+        latestUserContext: 'Retry feedback: Not right for city travel. Excluded previous picks: one',
+        shortlistLocked: true,
+        selectedCandidateIds: [],
+        shortlist: [],
+        strategy: 'retry_exhausted',
+      }),
+      requestMode: 'guided_finalize',
       retryCount: 1,
       results: [],
       selection: {
+        layer: 'finalize_fast',
         mode: 'retry_exhausted',
         model: null,
+        requestMode: 'guided_finalize',
+        shortlistLocked: true,
         selectedCandidateIds: [],
         details: 'No new candidates remained after excluding the previously rejected picks.',
       },
@@ -1165,10 +1764,11 @@ describe('server handlers', () => {
 
   it('rate limits repeated finalize requests from the same ip address', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
-    selectAiResults.mockResolvedValue({
+    nanoLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5-mini',
-      selectedCandidateIds: ['one'],
-      results: [{ id: 'one', title: 'Candidate one', reasons: [], drawbacks: [] }],
+      lockedIds: ['one'],
+      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
+      usage: null,
     })
 
     const requestBody = JSON.stringify({
@@ -1178,7 +1778,7 @@ describe('server handlers', () => {
 
     readStoredSearchCacheEntry.mockResolvedValue(createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]))
 
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 15; index += 1) {
       const response = createResponseRecorder()
 
       await handleFinalizeSelection(
@@ -1198,7 +1798,111 @@ describe('server handlers', () => {
 
     expect(limitedResponse.statusCode).toBe(429)
     expect(JSON.parse(limitedResponse.body)).toEqual({
-      error: 'Too many finalize requests from this connection. Please wait a minute and try again.',
+      error: 'Too many finalize requests from this connection. Please wait about 10 seconds and try again.',
     })
+  })
+
+  it('returns ready:false from enrichment poll when enrichment is not yet stored', async () => {
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')], { mode: 'discovery_preview' }),
+    )
+
+    const response = createResponseRecorder()
+    const url = new URL('http://localhost/api/search/enrichment?token=guided_discovery%3Astroller%7C&query=stroller')
+    url.searchParams.set('token', 'guided_discovery:stroller|')
+    url.searchParams.set('query', 'stroller')
+
+    await handleEnrichmentPoll({ url: url.toString() }, response)
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({ ready: false })
+  })
+
+  it('returns enrichment entries from poll when enrichment is stored in discovery cache', async () => {
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')], {
+        mode: 'discovery_preview',
+        enrichment: {
+          entries: [
+            { candidate_id: 'one', fit_reason: 'Good city stroller', caveat: 'Slightly pricey' },
+          ],
+          model: 'gpt-5-mini',
+          generatedAt: '2026-04-14T12:00:00.000Z',
+          preservedOrder: true,
+        },
+      }),
+    )
+
+    const response = createResponseRecorder()
+    const url = new URL('http://localhost/api/search/enrichment')
+    url.searchParams.set('token', 'guided_discovery:stroller|')
+    url.searchParams.set('query', 'stroller')
+
+    await handleEnrichmentPoll({ url: url.toString() }, response)
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({
+      ready: true,
+      entries: [{ candidate_id: 'one', fit_reason: 'Good city stroller', caveat: 'Slightly pricey' }],
+      model: 'gpt-5-mini',
+    })
+  })
+
+  it('rejects enrichment poll with missing token or query', async () => {
+    const response = createResponseRecorder()
+
+    await handleEnrichmentPoll({ url: 'http://localhost/api/search/enrichment' }, response)
+
+    expect(response.statusCode).toBe(400)
+    expect(JSON.parse(response.body)).toEqual({ error: 'token and query are required.' })
+  })
+
+  it('stores mini enrichment in discovery cache after nano finalizes', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    nanoLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5.4-nano',
+      lockedIds: ['one'],
+      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
+      usage: null,
+    })
+    const { miniEnrichSelectedCandidates } = await import('./lib/ai-selector.js')
+    miniEnrichSelectedCandidates.mockResolvedValue({
+      model: 'gpt-5-mini',
+      enriched: [{ candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey' }],
+      enrichedIds: ['one'],
+      usage: null,
+      preservedOrder: true,
+    })
+    const cacheEntry = createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')])
+    readStoredSearchCacheEntry.mockResolvedValue(cacheEntry)
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({ ...createFinalizeDiscoveryBody(), followUpNotes: 'city use' }),
+        { 'x-forwarded-for': '203.0.113.40' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+
+    // Allow the fire-and-forget enrichment to complete
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productQuery: 'stroller',
+        scope: 'guided_discovery',
+        selection: expect.objectContaining({
+          enrichment: expect.objectContaining({
+            entries: [{ candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey' }],
+            model: 'gpt-5-mini',
+            preservedOrder: true,
+          }),
+        }),
+      }),
+    )
   })
 })

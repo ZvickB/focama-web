@@ -67,4 +67,49 @@ describe('rate-limit helpers', () => {
       }),
     )
   })
+
+  it('allows the same key again after the rate-limit window resets', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-12T12:00:00.000Z'))
+
+    await expect(
+      takeRateLimitToken('203.0.113.57', {
+        limit: 1,
+        windowMs: 3_000,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        allowed: true,
+        remaining: 0,
+      }),
+    )
+
+    await expect(
+      takeRateLimitToken('203.0.113.57', {
+        limit: 1,
+        windowMs: 3_000,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        allowed: false,
+        remaining: 0,
+      }),
+    )
+
+    vi.setSystemTime(new Date('2026-04-12T12:00:03.001Z'))
+
+    await expect(
+      takeRateLimitToken('203.0.113.57', {
+        limit: 1,
+        windowMs: 3_000,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        allowed: true,
+        remaining: 0,
+      }),
+    )
+
+    vi.useRealTimers()
+  })
 })

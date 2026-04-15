@@ -7,8 +7,6 @@ const navItems = [
   { to: '/', label: 'Home', end: true },
   { to: '/about', label: 'About' },
   { to: '/contact', label: 'Contact' },
-  { to: '/privacy', label: 'Privacy' },
-  { to: '/affiliate-disclosure', label: 'Disclosure' },
 ]
 
 const mobileMenuItems = navItems.filter((item) =>

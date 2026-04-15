@@ -8,6 +8,21 @@ const handleDiscoverySearch = vi.fn((requestUrl, response) => {
   response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
   response.end(JSON.stringify({ pathname: requestUrl.pathname }))
 })
+const handleQueryFramingFields = vi.fn((requestUrl, response) => {
+  response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+  response.end(JSON.stringify({ pathname: requestUrl.pathname }))
+})
+const handlePrewarmSelection = vi.fn((request, response) => {
+  let rawBody = ''
+
+  request.on('data', (chunk) => {
+    rawBody += chunk
+  })
+  request.on('end', () => {
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+    response.end(rawBody)
+  })
+})
 const handleFinalizeSelection = vi.fn((request, response) => {
   let rawBody = ''
 
@@ -22,12 +37,16 @@ const handleFinalizeSelection = vi.fn((request, response) => {
 
 vi.mock('../../backend/server.js', () => ({
   handleDiscoverySearch,
+  handleQueryFramingFields,
+  handlePrewarmSelection,
   handleFinalizeSelection,
   handleLiveSearch,
 }))
 
 const { GET: getLiveSearch } = await import('./live.js')
 const { GET: getDiscoverySearch } = await import('./discover.js')
+const { GET: getQueryFramingFields } = await import('./framing-fields.js')
+const { POST: postPrewarmSelection } = await import('./prewarm.js')
 const { POST: postFinalizeSelection } = await import('./finalize.js')
 
 describe('Vercel search route wrappers', () => {
@@ -83,6 +102,18 @@ describe('Vercel search route wrappers', () => {
     })
   })
 
+  it('forwards query-framing fields requests into the background framing wrapper', async () => {
+    const request = new Request('https://example.com/api/search/framing-fields?query=stroller')
+
+    const response = await getQueryFramingFields(request)
+
+    expect(response.status).toBe(200)
+    expect(handleQueryFramingFields).toHaveBeenCalledWith(expect.any(URL), expect.any(Object))
+    expect(await response.json()).toEqual({
+      pathname: '/api/search/framing-fields',
+    })
+  })
+
   it('keeps forwarded headers and raw body when wrapping finalize requests', async () => {
     const request = new Request('https://example.com/api/search/finalize', {
       method: 'POST',
@@ -113,6 +144,50 @@ describe('Vercel search route wrappers', () => {
       JSON.stringify({
         query: 'stroller',
         discoveryToken: 'guided_discovery:stroller|',
+      }),
+    )
+  })
+
+  it('keeps forwarded headers and raw body when wrapping prewarm requests', async () => {
+    const request = new Request('https://example.com/api/search/prewarm', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-forwarded-for': '203.0.113.33',
+      },
+      body: JSON.stringify({
+        query: 'stroller',
+        discoveryToken: 'guided_discovery:stroller|',
+        candidatePool: {
+          query: 'stroller',
+          details: '',
+          candidates: [{ id: 'one', title: 'Travel stroller' }],
+        },
+      }),
+    })
+
+    const response = await postPrewarmSelection(request)
+
+    expect(response.status).toBe(200)
+    expect(handlePrewarmSelection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'content-type': 'application/json',
+          'x-forwarded-for': '203.0.113.33',
+        }),
+        on: expect.any(Function),
+      }),
+      expect.any(Object),
+    )
+    expect(await response.text()).toBe(
+      JSON.stringify({
+        query: 'stroller',
+        discoveryToken: 'guided_discovery:stroller|',
+        candidatePool: {
+          query: 'stroller',
+          details: '',
+          candidates: [{ id: 'one', title: 'Travel stroller' }],
+        },
       }),
     )
   })
