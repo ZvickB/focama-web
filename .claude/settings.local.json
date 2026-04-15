@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(wc -l backend/server.js backend/lib/*.js api/**/*.js)",
-      "Skill(update-config)"
-    ]
-  }
+      "Skill(update-config)",
+      "Bash(node backend/scripts/measure-guided-finalize.js --label nano-mini-smoke --mode nano-mini-split --sample-set small --summary-only)",
+      "Bash(node backend/scripts/measure-guided-finalize.js --label nano-mini-context5 --mode nano-mini-split --sample-set context5 --summary-only)",
+      "Bash(node backend/scripts/measure-guided-finalize.js --label nano-mini-honest-context5 --mode nano-mini-split --sample-set context5 --summary-only)",
+      "Bash(node -e ':*)",
+      "Bash(npm test:*)"
+    ],
+    "defaultMode": "bypassPermissions"
+  },
+  "skipDangerousModePermissionPrompt": true
 }
