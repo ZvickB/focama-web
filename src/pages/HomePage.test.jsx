@@ -131,7 +131,7 @@ describe('HomePage', () => {
     const fetchMock = vi.fn((input) => {
       const url = String(input)
 
-      if (url.includes('/api/search/discover')) {
+      if (url.includes('/api/search/rainforest-discover')) {
         return Promise.resolve({
           ok: true,
           headers: { get: () => '' },
@@ -198,7 +198,7 @@ describe('HomePage', () => {
 
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(
       expect.arrayContaining([
-        expect.stringContaining('/api/search/discover'),
+        expect.stringContaining('/api/search/rainforest-discover'),
         expect.stringContaining('/api/search/refine'),
         expect.stringContaining('/api/search/framing-fields'),
       ]),
@@ -447,7 +447,7 @@ describe('HomePage', () => {
     const fetchMock = vi.fn((input) => {
       const url = typeof input === 'string' ? input : input?.toString?.() || ''
 
-      if (url.includes('/api/search/discover')) {
+      if (url.includes('/api/search/rainforest-discover')) {
         return Promise.resolve({
           ok: true,
           headers: { get: () => '' },
@@ -1097,7 +1097,7 @@ describe('HomePage', () => {
     const fetchMock = vi.fn((input) => {
       const url = String(input)
 
-      if (url.includes('/api/search/discover')) {
+      if (url.includes('/api/search/rainforest-discover')) {
         return Promise.resolve({
           ok: true,
           headers: { get: () => '' },

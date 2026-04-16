@@ -21,6 +21,7 @@ import {
   recordSearchCacheEvent,
   writeSearchSnapshot,
 } from './lib/search-pipeline.js'
+import { fetchRainforestArtifacts } from './lib/rainforest-pipeline.js'
 import {
   getSupabaseHealth,
   isSupabaseConfigured,
@@ -55,6 +56,7 @@ const FINALIZE_MAX_PRIORITIES = 8
 const FINALIZE_MAX_PRIORITY_LENGTH = 80
 const FINALIZE_MAX_RETRY_COUNT = 2
 const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
+const CACHE_SCOPE_RAINFOREST = 'rainforest_discovery'
 const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 const PREWARM_REQUEST_MODE_DEFAULT = 'guided_prerank_prewarm'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
@@ -283,16 +285,20 @@ function sanitizeFinalizeDiscoveryContext(body) {
   }
 
   const expectedDiscoveryToken = buildCacheKey(normalizedQuery, '', CACHE_SCOPE_DISCOVERY)
+  const expectedRainforestToken = buildCacheKey(normalizedQuery, '', CACHE_SCOPE_RAINFOREST)
 
-  if (discoveryToken !== expectedDiscoveryToken) {
+  if (discoveryToken !== expectedDiscoveryToken && discoveryToken !== expectedRainforestToken) {
     return {
       error: 'The guided discovery token is invalid for this query. Please start the search again.',
       isValid: false,
     }
   }
 
+  const discoveryScope = discoveryToken === expectedRainforestToken ? CACHE_SCOPE_RAINFOREST : CACHE_SCOPE_DISCOVERY
+
   return {
     discoveryToken,
+    discoveryScope,
     isValid: true,
     normalizedQuery,
     requestMode: truncateText(body?.requestMode, 80) || FINALIZE_REQUEST_MODE_DEFAULT,
@@ -460,11 +466,11 @@ function sanitizeFinalizeCandidatePool(candidatePool) {
   }
 }
 
-async function readFinalizeCandidatePoolFromDiscovery(normalizedQuery) {
+async function readFinalizeCandidatePoolFromDiscovery(normalizedQuery, scope = CACHE_SCOPE_DISCOVERY) {
   const { cachedEntry } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: '',
-    scope: CACHE_SCOPE_DISCOVERY,
+    scope,
   })
 
   if (!cachedEntry?.candidatePool?.candidates?.length) {
@@ -860,6 +866,179 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   }
 }
 
+export async function handleRainforestDiscoverySearch(requestUrl, response, request = { headers: {} }) {
+  const requestStartedAt = nowMs()
+  const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
+
+  if (!rainforestApiKey) {
+    sendJson(response, 500, { error: 'RAINFOREST_API_KEY is missing from the root .env file.' })
+    return
+  }
+
+  const clientIpAddress = getClientIpAddress(request.headers || {})
+  const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
+
+  if (!rateLimit.allowed) {
+    sendJson(response, 429, {
+      error: `Too many searches from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
+    })
+    return
+  }
+
+  const { error, isValid, normalizedQuery } = getValidatedSearchRequest(requestUrl, {
+    includeDetails: false,
+  })
+
+  if (!isValid) {
+    sendJson(response, 400, { error })
+    return
+  }
+
+  const normalizedDetails = ''
+  const discoveryCacheKey = buildCacheKey(normalizedQuery, normalizedDetails, CACHE_SCOPE_RAINFOREST)
+  const cacheLookupStartedAt = nowMs()
+  const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
+    productQuery: normalizedQuery,
+    details: normalizedDetails,
+    scope: CACHE_SCOPE_RAINFOREST,
+  })
+  const cacheLookupDuration = nowMs() - cacheLookupStartedAt
+
+  if (cachedEntry?.candidatePool && cachedEntry?.results?.length) {
+    const cachedCandidateAwarePrior = getStoredCandidateAwarePrior(cachedEntry.selection)
+
+    await recordSearchCacheEvent({
+      cacheKey: discoveryCacheKey,
+      cacheStatus: 'hit',
+      candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
+        ? cachedEntry.candidatePool.candidates.length
+        : normalizedCachedResults.length,
+      details: normalizedDetails,
+      productQuery: normalizedQuery,
+      resultCount: normalizedCachedResults.length,
+      selectionMode: cachedEntry.selection?.mode || 'discovery_cache',
+      source: cachedEntry.source || 'cache',
+    })
+
+    logSearchFlowEvent('rainforest_discovery_cache_hit', {
+      route: '/api/search/rainforest-discover',
+      query: normalizedQuery,
+      candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
+        ? cachedEntry.candidatePool.candidates.length
+        : normalizedCachedResults.length,
+      previewCount: normalizedCachedResults.length,
+      candidateAwarePriorReady: Boolean(cachedCandidateAwarePrior),
+      cacheMs: roundTimingDuration(cacheLookupDuration),
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+    })
+
+    sendJson(response, 200, {
+      discoveryToken: discoveryCacheKey,
+      candidatePool: cachedEntry.candidatePool,
+      previewResults: normalizedCachedResults,
+      prewarm: {
+        priorReady: Boolean(cachedCandidateAwarePrior),
+        priorGeneratedAt: cachedCandidateAwarePrior?.generatedAt || null,
+        artifactReady: Boolean(cachedCandidateAwarePrior),
+        artifactGeneratedAt: cachedCandidateAwarePrior?.generatedAt || null,
+      },
+      source: 'cache',
+      cachedAt: cachedEntry.cachedAt,
+    }, {
+      serverTiming: [
+        { name: 'cache', duration: cacheLookupDuration },
+        { name: 'total', duration: nowMs() - requestStartedAt },
+      ],
+    })
+    return
+  }
+
+  try {
+    const rainforestStartedAt = nowMs()
+    const { artifacts, error: artifactsError } = await fetchRainforestArtifacts({
+      filterConfig: LIVE_RESULT_FILTER_CONFIG,
+      productQuery: normalizedQuery,
+      details: normalizedDetails,
+      reasonFallback: 'Returned by the Rainforest API search route',
+      rainforestApiKey,
+    })
+
+    if (artifactsError) {
+      sendJson(response, artifactsError.statusCode, {
+        error: artifactsError.error,
+        ...(artifactsError.details ? { details: artifactsError.details } : {}),
+      })
+      return
+    }
+    const rainforestDuration = nowMs() - rainforestStartedAt
+
+    runInBackground(
+      writeSearchSnapshot({
+        productQuery: normalizedQuery,
+        details: normalizedDetails,
+        candidatePool: artifacts.candidatePool,
+        results: artifacts.results,
+        selection: buildDiscoveryPreviewSelection(artifacts.results),
+        source: 'rainforest_discovery',
+        scope: CACHE_SCOPE_RAINFOREST,
+      }),
+    )
+
+    await recordSearchCacheEvent({
+      cacheKey: discoveryCacheKey,
+      cacheStatus: 'miss',
+      candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
+        ? artifacts.candidatePool.candidates.length
+        : 0,
+      details: normalizedDetails,
+      productQuery: normalizedQuery,
+      resultCount: artifacts.results.length,
+      selectionMode: 'discovery_preview',
+      source: 'rainforest_discovery',
+    })
+
+    logSearchFlowEvent('rainforest_discovery_completed', {
+      route: '/api/search/rainforest-discover',
+      query: normalizedQuery,
+      cacheStatus: 'miss',
+      candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
+        ? artifacts.candidatePool.candidates.length
+        : 0,
+      previewCount: artifacts.results.length,
+      cacheMs: roundTimingDuration(cacheLookupDuration),
+      rainforestMs: roundTimingDuration(rainforestDuration),
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+    })
+
+    sendJson(response, 200, {
+      discoveryToken: discoveryCacheKey,
+      candidatePool: artifacts.candidatePool,
+      previewResults: artifacts.results,
+      prewarm: {
+        artifactReady: false,
+        artifactGeneratedAt: null,
+      },
+    }, {
+      serverTiming: [
+        { name: 'cache', duration: cacheLookupDuration },
+        { name: 'rainforest', duration: rainforestDuration },
+        { name: 'total', duration: nowMs() - requestStartedAt },
+      ],
+    })
+  } catch (error) {
+    logSearchFlowEvent('rainforest_discovery_failed', {
+      route: '/api/search/rainforest-discover',
+      query: normalizedQuery,
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+    sendJson(response, 500, {
+      error: 'Unable to reach Rainforest API.',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    })
+  }
+}
+
 export async function handleRefinementPrompt(requestUrl, response) {
   const requestStartedAt = nowMs()
   const openAiApiKey = getEnv('OPENAI_API_KEY')
@@ -1069,6 +1248,7 @@ export async function handlePrewarmSelection(request, response) {
   const cacheLookupStartedAt = nowMs()
   const resolvedCandidatePool = await readFinalizeCandidatePoolFromDiscovery(
     sanitizedDiscoveryContext.normalizedQuery,
+    sanitizedDiscoveryContext.discoveryScope,
   )
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
   let candidatePool = resolvedCandidatePool.isValid ? resolvedCandidatePool.candidatePool : null
@@ -1208,7 +1388,7 @@ export async function handlePrewarmSelection(request, response) {
           },
         ),
         source: 'guided_discovery',
-        scope: CACHE_SCOPE_DISCOVERY,
+        scope: sanitizedDiscoveryContext.discoveryScope,
       })
       storageWriteCompleted = true
     } catch {
@@ -1491,7 +1671,7 @@ export async function handleNanoMiniSplitFinalize(request, response) {
 }
 
 // Runs mini enrichment after nano has locked the shortlist, stores result in discovery cache.
-async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model, normalizedQuery }) {
+async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model, normalizedQuery, discoveryScope = CACHE_SCOPE_DISCOVERY }) {
   const miniResult = await miniEnrichSelectedCandidates({
     lockedIds,
     candidatePool,
@@ -1502,7 +1682,7 @@ async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model,
   const { cachedEntry } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: '',
-    scope: CACHE_SCOPE_DISCOVERY,
+    scope: discoveryScope,
   })
 
   if (!cachedEntry) {
@@ -1526,7 +1706,7 @@ async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model,
     results: Array.isArray(cachedEntry.results) ? cachedEntry.results : [],
     selection: updatedSelection,
     source: 'enrichment_update',
-    scope: CACHE_SCOPE_DISCOVERY,
+    scope: discoveryScope,
   })
 
   logSearchFlowEvent('mini_enrichment_stored', {
@@ -1555,16 +1735,19 @@ export async function handleEnrichmentPoll(request, response) {
   }
 
   const expectedToken = buildCacheKey(normalizedQuery, '', CACHE_SCOPE_DISCOVERY)
+  const expectedRainforestToken = buildCacheKey(normalizedQuery, '', CACHE_SCOPE_RAINFOREST)
 
-  if (token !== expectedToken) {
+  if (token !== expectedToken && token !== expectedRainforestToken) {
     sendJson(response, 400, { error: 'The enrichment token is invalid for this query.' })
     return
   }
 
+  const enrichmentScope = token === expectedRainforestToken ? CACHE_SCOPE_RAINFOREST : CACHE_SCOPE_DISCOVERY
+
   const { cachedEntry } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: '',
-    scope: CACHE_SCOPE_DISCOVERY,
+    scope: enrichmentScope,
   })
 
   const enrichment = cachedEntry?.selection?.enrichment
@@ -1634,6 +1817,7 @@ export async function handleFinalizeSelection(request, response) {
   const cacheLookupStartedAt = nowMs()
   const resolvedCandidatePool = await readFinalizeCandidatePoolFromDiscovery(
     sanitizedDiscoveryContext.normalizedQuery,
+    sanitizedDiscoveryContext.discoveryScope,
   )
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
 
@@ -1861,6 +2045,7 @@ export async function handleFinalizeSelection(request, response) {
         apiKey: openAiApiKey,
         model: miniModel,
         normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
+        discoveryScope: sanitizedDiscoveryContext.discoveryScope,
       }).catch((error) => {
         logSearchFlowEvent('mini_enrichment_failed', {
           query: sanitizedDiscoveryContext.normalizedQuery,
@@ -2041,6 +2226,11 @@ export function createApiServer() {
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search/discover') {
       await handleDiscoverySearch(requestUrl, response, request)
+      return
+    }
+
+    if (request.method === 'GET' && requestUrl.pathname === '/api/search/rainforest-discover') {
+      await handleRainforestDiscoverySearch(requestUrl, response, request)
       return
     }
 

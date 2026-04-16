@@ -148,7 +148,7 @@ function ProductCard({
               onRetailerClick?.()
             }}
           >
-            View site
+            {subtitle ? `View on ${subtitle}` : 'View site'}
             <ChevronRight className="h-4 w-4 text-slate-400" />
           </a>
         ) : (

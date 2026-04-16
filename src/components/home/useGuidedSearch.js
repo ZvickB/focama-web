@@ -104,7 +104,7 @@ async function readJsonResponse(response, requestStartedAt) {
 async function fetchDiscoveryResults(query) {
   const searchParams = new URLSearchParams({ query })
   const requestStartedAt = performance.now()
-  const response = await fetch(`/api/search/discover?${searchParams.toString()}`)
+  const response = await fetch(`/api/search/rainforest-discover?${searchParams.toString()}`)
   return readJsonResponse(response, requestStartedAt)
 }
 

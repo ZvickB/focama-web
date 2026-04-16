@@ -408,7 +408,7 @@ function OpenLayout(props) {
             </div>
             <div className="space-y-3">
               <h2
-                className={`text-2xl font-medium tracking-tight text-slate-900 transition-opacity duration-300 sm:text-4xl ${
+                className={`text-2xl font-medium tracking-tight text-primary transition-opacity duration-300 sm:text-4xl ${
                   showHeroCopy ? 'opacity-100' : 'opacity-0'
                 }`}
               >

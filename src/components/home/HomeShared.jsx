@@ -228,7 +228,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
                     className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
                   >
                     <a href={item.link} target="_blank" rel="noreferrer" onClick={onRetailerClick}>
-                      View on retailer site
+                      {item.subtitle ? `View on ${item.subtitle}` : 'View on retailer site'}
                       <ArrowUpRight className="h-4 w-4" />
                     </a>
                   </Button>
