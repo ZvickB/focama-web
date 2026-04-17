@@ -26,9 +26,9 @@ AI maintains this file. Each item should be one plain sentence.
 
 | Status | Item |
 |--------|------|
-| pending | Add stagger + drop entrance animation to result cards using Motion for React — buys ~1s of visual activity while enrichment arrives, parameters: y:-12, duration 0.45s, stagger 0.13s between cards |
-| pending | Replace manual timer animation in `RefinementCopy` with Motion `AnimatePresence` — removes ~90 lines of fragile useEffect/setTimeout code |
-| pending | Add scale + fade entrance/exit to `ProductDetailModal` using Motion `AnimatePresence` |
+| done | Add stagger rise entrance animation to result cards using Motion — y:12→0, duration 0.45s, stagger 0.13s, replaces CSS state machine |
+| done | Replace manual timer animation in `RefinementCopy` with Motion `AnimatePresence` — removed 3 state vars and 2 useEffects |
+| done | Add scale + fade entrance/exit to `ProductDetailModal` using Motion `AnimatePresence` |
 | pending | When Amazon bullet point descriptions are available, surface them on product cards or in the modal so users can read them before AI personalization loads |
 | done | Add a shimmer or skeleton animation to the AI personalization area while it is still generating, so users can see it is actively loading |
 | done | Make the "Show products now" button more visually prominent — it should be obvious and inviting, not easy to miss |
@@ -57,6 +57,7 @@ AI maintains this file. Each item should be one plain sentence.
 | done | Pass user location to both Rainforest API and SerpApi so results default to localized pricing, availability, and listings |
 | pending | Trim `server.js` — route logic, request parsing, and business logic are all mixed in one 1300+ line file |
 | done | Strip internal error details from API error responses before public launch |
+| done | Add unit tests for getCountryCode, getAmazonDomain, and ErrorBoundary |
 
 ---
 

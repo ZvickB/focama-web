@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import {
   ArrowUpRight,
   ChevronDown,
@@ -16,9 +17,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.j
 import logo from '@/assets/logo_master_version.svg'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
-
-const RESULT_CARD_FADE_DURATION_MS = 900
-const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 
 function handleRetryFeedbackKeyDown(event, { canSubmit, onSubmit }) {
   if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) {
@@ -115,11 +113,19 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
   const userFacingDescription = getUserFacingDescription(item.description)
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
       className="fixed inset-0 z-50 flex items-end bg-slate-950/45 lg:items-center lg:justify-center"
       onClick={onClose}
     >
-      <div
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
         className="max-h-[94vh] w-full overflow-y-auto rounded-t-[32px] bg-[#fcf8f1] shadow-2xl lg:max-h-[88vh] lg:max-w-4xl lg:rounded-[32px]"
         onClick={(event) => event.stopPropagation()}
       >
@@ -273,8 +279,8 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   )
 }
 
@@ -304,26 +310,7 @@ export function ResultsSection({
   const hasExplicitBadges = shouldShowBadgeLabels && displayedResults.some((item) => item.badgeLabel)
   const hasDisplayedResults = orderedResults.length > 0
   const shouldShowResultsIntro = !hasDisplayedResults || hasFinalResults
-  const [visibleResultSetKey, setVisibleResultSetKey] = useState('')
-  const resultSetKey = `${hasFinalResults ? 'final' : showPreviewResults ? 'preview' : 'none'}:${displayedResults
-    .map((item) => String(item.id))
-    .join('|')}`
   const orderedPreviousResults = previousResults
-  const areCardsVisible = visibleResultSetKey === resultSetKey
-
-  useEffect(() => {
-    if (orderedResults.length === 0) {
-      return undefined
-    }
-
-    const frameId = window.requestAnimationFrame(() => {
-      setVisibleResultSetKey(resultSetKey)
-    })
-
-    return () => {
-      window.cancelAnimationFrame(frameId)
-    }
-  }, [orderedResults.length, resultSetKey])
 
   return (
     <section className="space-y-5">
@@ -450,20 +437,11 @@ export function ResultsSection({
                 }
 
                 return (
-                  <div
+                  <motion.div
                     key={item.id}
-                    className={`transform-gpu transition-[opacity,transform] motion-reduce:transform-none motion-reduce:transition-none ${
-                      areCardsVisible
-                        ? 'translate-y-0 opacity-100'
-                        : '-translate-y-3 opacity-0 duration-0'
-                    }`}
-                    style={{
-                      transitionDuration: areCardsVisible ? `${RESULT_CARD_FADE_DURATION_MS}ms` : '0ms',
-                      transitionDelay: areCardsVisible
-                        ? `${RESULT_CARD_FADE_DELAYS_MS[index] ?? index * RESULT_CARD_FADE_DURATION_MS}ms`
-                        : '0ms',
-                      transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
-                    }}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.45, delay: index * 0.13, ease: [0.22, 1, 0.36, 1] }}
                   >
                     <ProductCard
                       {...visibleItem}
@@ -480,7 +458,7 @@ export function ResultsSection({
                         })
                       }
                     />
-                  </div>
+                  </motion.div>
                 )
               })}
             </div>

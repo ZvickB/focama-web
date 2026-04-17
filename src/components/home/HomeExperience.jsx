@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { LoaderCircle, Search, Sparkles } from 'lucide-react'
 
 import wordmark from '@/assets/wordmark.PNG'
@@ -76,37 +77,15 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     () => buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }),
     [isGeneratingPrompt, prompt, submittedQuery],
   )
-  const [displayedTitle, setDisplayedTitle] = useState(() => ({
-    titleEyebrow: displayedCopy.titleEyebrow,
-    titleQuestion: displayedCopy.titleQuestion,
-  }))
-  const [isTitleVisible, setIsTitleVisible] = useState(true)
-  const [visibleQuestionKey, setVisibleQuestionKey] = useState('')
   const [streamedHelper, setStreamedHelper] = useState('')
   const [streamedHelperTarget, setStreamedHelperTarget] = useState('')
   const helperTarget = `${isGeneratingPrompt ? 'generating' : 'idle'}:${displayedCopy.helper}`
-  const isQuestionVisible =
-    Boolean(displayedTitle.titleQuestion) && visibleQuestionKey === displayedTitle.titleQuestion
   const helperCopy =
     isGeneratingPrompt
       ? streamedHelperTarget === helperTarget
         ? streamedHelper
         : ''
       : displayedCopy.helper
-
-  useEffect(() => {
-    if (!displayedTitle.titleQuestion) {
-      return undefined
-    }
-
-    const questionTimer = window.setTimeout(() => {
-      setVisibleQuestionKey(displayedTitle.titleQuestion)
-    }, 220)
-
-    return () => {
-      window.clearTimeout(questionTimer)
-    }
-  }, [displayedTitle.titleQuestion])
 
   useEffect(() => {
     if (!isGeneratingPrompt) {
@@ -135,38 +114,6 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     }
   }, [displayedCopy.helper, helperTarget, isGeneratingPrompt])
 
-  useEffect(() => {
-    if (
-      displayedTitle.titleEyebrow === displayedCopy.titleEyebrow &&
-      displayedTitle.titleQuestion === displayedCopy.titleQuestion
-    ) {
-      return undefined
-    }
-
-    const hideTimer = window.setTimeout(() => {
-      setIsTitleVisible(false)
-    }, 0)
-
-    const swapTimer = window.setTimeout(() => {
-      setDisplayedTitle({
-        titleEyebrow: displayedCopy.titleEyebrow,
-        titleQuestion: displayedCopy.titleQuestion,
-      })
-      setIsTitleVisible(true)
-      setVisibleQuestionKey('')
-    }, 300)
-
-    return () => {
-      window.clearTimeout(hideTimer)
-      window.clearTimeout(swapTimer)
-    }
-  }, [
-    displayedCopy.titleEyebrow,
-    displayedCopy.titleQuestion,
-    displayedTitle.titleEyebrow,
-    displayedTitle.titleQuestion,
-  ])
-
   return (
     <div className="space-y-2">
       <div className="inline-flex items-center gap-2 rounded-full bg-primary/8 px-3 py-1 text-sm text-primary">
@@ -174,26 +121,34 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
         A little more context
       </div>
       <div className="space-y-3">
-        <p
-          className={`text-[13px] font-semibold uppercase tracking-[0.14em] text-primary/70 transition-opacity duration-300 sm:text-sm ${
-            isTitleVisible ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{ fontFamily: '"Instrument Sans", sans-serif' }}
-        >
-          {displayedTitle.titleEyebrow}
-        </p>
-        {displayedTitle.titleQuestion ? (
-          <p
-            className={`max-w-2xl text-xl font-medium leading-8 text-[#8f4e2f] transition-all duration-500 sm:text-[1.65rem] ${
-              isTitleVisible && isQuestionVisible
-                ? 'translate-y-0 opacity-100'
-                : 'translate-y-1 opacity-0'
-            }`}
-            style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+        <AnimatePresence mode="wait">
+          <motion.p
+            key={displayedCopy.titleEyebrow}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="text-[13px] font-semibold uppercase tracking-[0.14em] text-primary/70 sm:text-sm"
+            style={{ fontFamily: '"Instrument Sans", sans-serif' }}
           >
-            {displayedTitle.titleQuestion}
-          </p>
-        ) : null}
+            {displayedCopy.titleEyebrow}
+          </motion.p>
+        </AnimatePresence>
+        <AnimatePresence mode="wait">
+          {displayedCopy.titleQuestion ? (
+            <motion.p
+              key={displayedCopy.titleQuestion}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="max-w-2xl text-xl font-medium leading-8 text-[#8f4e2f] sm:text-[1.65rem]"
+              style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+            >
+              {displayedCopy.titleQuestion}
+            </motion.p>
+          ) : null}
+        </AnimatePresence>
         <p className="max-w-2xl text-sm leading-7 text-slate-600">
           {helperCopy}
           {isGeneratingPrompt ? (
@@ -668,18 +623,20 @@ export function HomeExperience() {
   return (
     <>
       <OpenLayout {...layoutProps} />
-      {state.selectedProduct ? (
-        <ProductDetailModal
-          item={state.selectedProduct}
-          onRetailerClick={() =>
-            state.handleRetailerClick(state.selectedProduct, {
-              position: state.selectedProduct?.analyticsMeta?.position ?? 0,
-              resultSet: state.selectedProduct?.analyticsMeta?.resultSet || 'final',
-            })
-          }
-          onClose={() => state.setSelectedProduct(null)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {state.selectedProduct ? (
+          <ProductDetailModal
+            item={state.selectedProduct}
+            onRetailerClick={() =>
+              state.handleRetailerClick(state.selectedProduct, {
+                position: state.selectedProduct?.analyticsMeta?.position ?? 0,
+                resultSet: state.selectedProduct?.analyticsMeta?.resultSet || 'final',
+              })
+            }
+            onClose={() => state.setSelectedProduct(null)}
+          />
+        ) : null}
+      </AnimatePresence>
     </>
   )
 }
