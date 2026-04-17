@@ -492,18 +492,16 @@ describe('ai selector', () => {
     expect(result.artifact.rankedCandidates).toEqual([
       expect.objectContaining({
         candidateId: 'prod-2',
-        prewarmRank: 1,
         baselineFit: 'Best baseline option for frequent flights.',
         baselineCaution: 'Costs more than entry-level picks.',
       }),
       expect.objectContaining({
         candidateId: 'prod-1',
-        prewarmRank: 2,
         baselineFit: 'Strong all-round fallback option.',
         baselineCaution: 'Fewer reviews than the top baseline pick.',
       }),
     ])
-    expect(result.artifact.layer).toBe('candidate_aware_prewarm')
+    expect(result.artifact.layer).toBe('candidate_aware_prior')
     expect(result.artifact).not.toHaveProperty('selectedCandidateIds')
   })
 
@@ -550,13 +548,13 @@ describe('ai selector', () => {
           rankedCandidates: [
             {
               candidateId: 'prod-2',
-              prewarmRank: 1,
+              rank: 1,
               baselineFit: 'Best baseline option for frequent flights.',
               baselineCaution: 'Costs more than entry-level picks.',
             },
             {
               candidateId: 'prod-1',
-              prewarmRank: 2,
+              rank: 2,
               baselineFit: 'Strong all-round fallback option.',
               baselineCaution: 'Fewer reviews than the top baseline pick.',
             },

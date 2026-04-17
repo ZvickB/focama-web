@@ -5,7 +5,6 @@ vi.mock('./lib/ai-selector.js', async () => {
 
   return {
     ...actual,
-    createCandidateAwarePrior: vi.fn(),
     nanoLockWinnersAndBadges: vi.fn(),
     miniEnrichSelectedCandidates: vi.fn().mockResolvedValue({
       model: 'gpt-5-mini',
@@ -56,13 +55,12 @@ import {
   handleEnrichmentPoll,
   handleFinalizeSelection,
   handleLiveSearch,
-  handlePrewarmSelection,
   handleQueryFramingFields,
   handleSearchDebug,
   handleSupabaseHealth,
 } from './server.js'
 import { resetRateLimitStore } from './lib/rate-limit.js'
-import { createCandidateAwarePrior, nanoLockWinnersAndBadges, selectAiResults } from './lib/ai-selector.js'
+import { nanoLockWinnersAndBadges, selectAiResults } from './lib/ai-selector.js'
 import { getFilteredSearchArtifacts } from './lib/result-filter.js'
 import { getSupabaseHealth, readStoredSearchCacheEntry, writeStoredSearchCacheEntry } from './lib/search-storage.js'
 import {
@@ -248,12 +246,6 @@ describe('server handlers', () => {
           badgeLabel: 'Best match',
         },
       ],
-      prewarm: {
-        priorReady: false,
-        priorGeneratedAt: null,
-        artifactReady: false,
-        artifactGeneratedAt: null,
-      },
       source: 'cache',
       cachedAt: '2026-03-17T12:00:00.000Z',
     })
@@ -318,10 +310,6 @@ describe('server handlers', () => {
         candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
       },
       previewResults: [{ id: 'live-1', title: 'Thermos bottle' }],
-      prewarm: {
-        artifactReady: false,
-        artifactGeneratedAt: null,
-      },
     })
   })
 
@@ -388,9 +376,6 @@ describe('server handlers', () => {
           candidateAwarePriorReady: false,
           candidateAwarePriorGeneratedAt: null,
           candidateAwarePriorCandidateCount: 0,
-          prewarmArtifactReady: false,
-          prewarmArtifactGeneratedAt: null,
-          prewarmArtifactCandidateCount: 0,
         },
       },
       environment: {
@@ -401,7 +386,6 @@ describe('server handlers', () => {
       architecture: {
         primaryProductFlow: [
           '/api/search/discover',
-          '/api/search/prewarm',
           '/api/search/refine',
           '/api/search/finalize',
         ],
@@ -420,13 +404,6 @@ describe('server handlers', () => {
           usesCache: true,
           callsSerpApi: false,
           callsOpenAi: true,
-        },
-        guidedPrewarm: {
-          usesCache: true,
-          callsSerpApi: false,
-          callsOpenAi: true,
-          priorReady: false,
-          artifactReady: false,
         },
         liveSearch: {
           usesCache: false,
@@ -1099,119 +1076,6 @@ describe('server handlers', () => {
       error: 'The guided search context expired. Please start the search again.',
     })
     expect(nanoLockWinnersAndBadges).not.toHaveBeenCalled()
-  })
-
-  it('generates and stores a reusable prerank artifact through the prewarm route', async () => {
-    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
-    createCandidateAwarePrior.mockResolvedValue({
-      model: 'gpt-5-mini',
-      strategy: 'candidate_aware_prior',
-      usage: {
-        inputTokens: 320,
-        outputTokens: 70,
-        totalTokens: 390,
-        reasoningTokens: 18,
-      },
-      prior: {
-        version: 1,
-        layer: 'candidate_aware_prewarm',
-        generatedAt: '2026-03-31T12:00:00.000Z',
-        model: 'gpt-5-mini',
-        query: 'stroller',
-        candidateCount: 1,
-        rankedCandidates: [
-          {
-            candidateId: 'one',
-            prewarmRank: 1,
-            baselineFit: 'Strong overall baseline fit.',
-            baselineCaution: 'A bit pricier than budget picks.',
-          },
-        ],
-      },
-    })
-    readStoredSearchCacheEntry.mockResolvedValueOnce(
-      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
-    )
-
-    const response = createResponseRecorder()
-
-    await handlePrewarmSelection(
-      createFinalizeRequest(
-        JSON.stringify({
-          ...createFinalizeDiscoveryBody(),
-          candidatePool: {
-            query: 'stroller',
-            details: '',
-            combinedSearchText: 'stroller',
-            searchState: 'Results for exact spelling',
-            similarQueries: ['compact stroller'],
-            candidates: [createFinalizeCandidate('one')],
-          },
-        }),
-        { 'x-forwarded-for': '203.0.113.34' },
-      ),
-      response,
-    )
-
-    expect(response.statusCode).toBe(200)
-    expect(createCandidateAwarePrior).toHaveBeenCalledWith({
-      candidatePool: expect.objectContaining({
-        query: 'stroller',
-        candidates: [expect.objectContaining({ id: 'one' })],
-      }),
-      apiKey: 'openai-key',
-      model: expect.any(String),
-    })
-    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
-      expect.objectContaining({
-        productQuery: 'stroller',
-        scope: 'guided_discovery',
-        selection: expect.objectContaining({
-          mode: 'discovery_preview',
-          candidateAwarePrior: expect.objectContaining({
-            generatedAt: '2026-03-31T12:00:00.000Z',
-          }),
-          preRankArtifact: expect.objectContaining({
-            generatedAt: '2026-03-31T12:00:00.000Z',
-          }),
-          prewarm: expect.objectContaining({
-            priorCandidateCount: 1,
-            artifactCandidateCount: 1,
-            model: 'gpt-5-mini',
-            strategy: 'candidate_aware_prior',
-            usage: {
-              inputTokens: 320,
-              outputTokens: 70,
-              totalTokens: 390,
-              reasoningTokens: 18,
-            },
-          }),
-        }),
-      }),
-    )
-    expect(JSON.parse(response.body)).toEqual(
-      expect.objectContaining({
-        requestMode: 'guided_prerank_prewarm',
-        prewarm: expect.objectContaining({
-          artifactReady: true,
-          priorReady: true,
-          priorCandidateCount: 1,
-          artifactCandidateCount: 1,
-          model: 'gpt-5-mini',
-          requestMode: 'guided_prerank_prewarm',
-          reusedStoredArtifact: false,
-          strategy: 'candidate_aware_prior',
-        }),
-        usage: {
-          openai: {
-            inputTokens: 320,
-            outputTokens: 70,
-            totalTokens: 390,
-            reasoningTokens: 18,
-          },
-        },
-      }),
-    )
   })
 
   it('nano locks the shortlist for empty-note finalize and returns a fast response', async () => {

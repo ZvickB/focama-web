@@ -1,7 +1,48 @@
+import { mkdir, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './result-filter.js'
 import { buildQuery } from './search-data.js'
 
+const SAMPLES_DIR = join(process.cwd(), 'temp-data', 'rainforest-samples')
+
+function saveRainforestSample(query, payload) {
+  const slug = query.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 60)
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const filename = `${slug}_${timestamp}.json`
+  mkdir(SAMPLES_DIR, { recursive: true })
+    .then(() => writeFile(join(SAMPLES_DIR, filename), JSON.stringify(payload, null, 2)))
+    .catch(() => {}) // fire-and-forget, never block the response
+}
+
 export const RAINFOREST_ENDPOINT = 'https://api.rainforestapi.com/request'
+
+const COUNTRY_TO_AMAZON_DOMAIN = {
+  AT: 'amazon.de',
+  AE: 'amazon.ae',
+  AU: 'amazon.com.au',
+  BE: 'amazon.com.be',
+  BR: 'amazon.com.br',
+  CA: 'amazon.ca',
+  DE: 'amazon.de',
+  EG: 'amazon.eg',
+  ES: 'amazon.es',
+  FR: 'amazon.fr',
+  GB: 'amazon.co.uk',
+  IN: 'amazon.in',
+  IT: 'amazon.it',
+  JP: 'amazon.co.jp',
+  MX: 'amazon.com.mx',
+  NL: 'amazon.nl',
+  PL: 'amazon.pl',
+  SA: 'amazon.sa',
+  SE: 'amazon.se',
+  SG: 'amazon.sg',
+  TR: 'amazon.com.tr',
+}
+
+export function getAmazonDomain(countryCode = 'US') {
+  return COUNTRY_TO_AMAZON_DOMAIN[countryCode] ?? 'amazon.com'
+}
 
 function normalizeRainforestItem(item) {
   return {
@@ -30,21 +71,19 @@ export async function fetchRainforestArtifacts({
   details = '',
   reasonFallback,
   rainforestApiKey,
+  countryCode = 'US',
 }) {
   const searchUrl = new URL(RAINFOREST_ENDPOINT)
   searchUrl.searchParams.set('api_key', rainforestApiKey)
   searchUrl.searchParams.set('type', 'search')
   searchUrl.searchParams.set('search_term', buildQuery(productQuery, details))
-  searchUrl.searchParams.set('amazon_domain', 'amazon.com')
+  searchUrl.searchParams.set('amazon_domain', getAmazonDomain(countryCode))
 
-  const apiResponse = await fetch(searchUrl)
+  const apiResponse = await fetch(searchUrl, { signal: AbortSignal.timeout(15000) })
 
   if (!apiResponse.ok) {
-    const errorText = await apiResponse.text()
-
     return {
       error: {
-        details: errorText.slice(0, 300),
         error: 'Rainforest API request failed.',
         statusCode: 502,
       },
@@ -53,6 +92,7 @@ export async function fetchRainforestArtifacts({
   }
 
   const payload = await apiResponse.json()
+  saveRainforestSample(buildQuery(productQuery, details), payload)
   const rawItems = Array.isArray(payload.search_results) ? payload.search_results : []
   const normalizedItems = rawItems.map(normalizeRainforestItem)
 

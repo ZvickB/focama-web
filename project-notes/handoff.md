@@ -7,11 +7,11 @@
 
 ## Current reality
 - The app is live on Vercel.
-- The homepage uses the `open` layout and the guided `/api/search/discover -> /api/search/refine -> /api/search/finalize` product path.
-- `/api/search/prewarm` and `/api/search/framing-fields` now support the current latency groundwork.
+- The homepage uses the `open` layout and the guided `/api/search/discover -> /api/search/refine -> /api/search/finalize -> /api/search/enrichment` product path.
+- `/api/search/framing-fields` runs as a background lane; prewarm is being removed.
 - `/api/search/live` remains an explicit manual/debug combined route.
 - Product shortlists are 6 results.
-- SerpApi is wired through Vercel functions.
+- Rainforest API is the primary discovery endpoint; SerpAPI is preserved as secondary fallback.
 - The backend prepares a cleaned candidate pool and uses AI to improve final shortlist selection.
 - TanStack Query is used for homepage search request flow.
 - Basic test coverage exists for backend behavior and homepage search flow.
@@ -30,50 +30,19 @@
 - Current Supabase table summary: `project-notes/db-needs.md`
 
 ## Latency and finalize status
-- The reset baseline, refine slimming, prompt slimming, shard regression, badge-scope win, prepared-framing measurement, layered harness measurement, and selection-only shortlist-lock measurement are summarized canonically in `current-status.md` and `active-experiment-override.md`.
-- Working conclusion:
-  - keep AI in the product
-  - narrow AI's blocking critical-path role
-  - preserve shortlist quality, concise fit explanation, and scan-friendly badges
-  - avoid drifting back into one heavy AI pass that must finish all polish before results appear
-- The current open latency question is no longer whether thinning the blocking shortlist-lock step can help at all; it can.
-- The clean full-evidence ids-only winner-lock measurement is the strongest current shortlist-lock signal:
-  - winner-lock averaged about 2.45 s server-side and cleared the corrected about-6000 ms target
-  - it preserved the same candidate-aware prior evidence path as baseline
-  - top result matched baseline in all 5 sample cases, with high winner overlap
-  - post-lock badge plus enrichment raised total split-pass usage to about 3399 tokens, so polish cost still needs work
-- Correction for the measured one-call stream pass:
-  - the clean split measurement used separate AI calls for winner lock, badges, and enrichment
-  - the intended next experiment at that point was not separate post-lock calls
-  - that measured next experiment was one streamed finalize AI session that emits `winners_locked`, then `badges_ready`, then `enrichment_ready`, then `done`
-  - later phases must preserve locked IDs and order and must never re-rank
+Canonical detail: `project-notes/active-experiment-override.md` and `project-notes/layered-latency-plan.md`.
+
+Summary:
+- Nano-lock + mini async-enrichment is wired into the real product flow.
+- Prewarm is disabled (not a latency win). Backend route being removed — see `agent-tasks/remove-prewarm.md`.
+- `gpt-5.4-nano` is the only viable fast model; mini is rejected for blocking/stream paths.
+- One-call stream experiment is measured and concluded; not yet productized.
+- Working conclusion: keep AI in the product, narrow its blocking critical-path role.
 
 ## Next likely work
 - Follow `project-notes/layered-latency-plan.md` one checklist step at a time.
-- Current temporary layered step: the one-session finalize-stream harness path has been built; small smoke and full context5 `--mode stream-clean` measurements passed the early-lock/order-preservation question.
-- Chat 2 stream-with-prewarm vs stream-without-prewarm context5 measurement is complete.
-- Stream no-prewarm locked winners about 265 ms earlier, but full stream completion was effectively tied, token usage was about 387 tokens higher, and winner overlap was worse at 4.6/6 vs 5.6/6 with prewarm.
-- Chat 3 Task 1 mini model-routing measurement is complete with `OPENAI_FINALIZE_CONTEXT_MODEL=gpt-5-mini`.
-- Mini with prewarm locked winners at about 8.13 s, completed the full stream at about 19.14 s, and used about 2708 tokens; mini without prewarm locked at about 8.48 s, completed at about 19.08 s, and used about 3099 tokens.
-- Decision: mini is rejected for the one-call streamed finalize path because winners locked around 8.1-8.5 s and full stream completion was around 19 s.
-- `gpt-5.4-nano` remains the only plausible fast streamed finalize model from current measurements.
-- Prewarm is not justified as a streamed-finalize latency feature; at most, it is a quality/cost hedge.
-- Mini may still be useful later for asynchronous writing/enrichment only.
-- Next latency experiment, when asked, should be separate from one-call stream productization: nano locks winners/badges fast, then mini writes nicer copy in a non-blocking second harness call.
-- Do not wire frontend or redesign architecture for that experiment.
-- Keep current implementation reality and planned layered behavior clearly separated.
-- Do not restart the architecture discussion unless the user asks.
-- Re-measure the same sample queries after meaningful finalize/latency changes; for the next experiment, add only a harness mode for nano lock plus mini async enrichment and run it on `context5`.
-- Use `npm run analytics:prewarm-summary -- --hours=24` for a quick Supabase-backed summary of prewarm usage, waste, and timing.
 - Use `npm run dev:all` at meaningful integration checkpoints.
-- Commit after each completed narrow step when the user asks for commits or when that workflow is active.
-
-## Temporary cleanup reminders
-- `measurementPreparedQueryFraming` is a measurement-only finalize input and should be removed after the prepared-framing question is closed.
-- `measurementSelectionMode: selection_only` and the harness `selection-only` mode are temporary and should be removed after the shortlist-lock go/no-go question is closed.
-- `measurementSelectionMode: winner_lock_ids_only`, the harness `split-clean` mode, and the temporary badge/enrichment measurement helpers are temporary and should be removed after the clean split-finalize go/no-go question is closed.
-- The temporary `/api/search/finalize-stream` local route, stream selector/parser, and `stream-clean` harness mode are temporary and should be removed or explicitly kept after the stream measurement decision is captured.
-- Do not let temporary measurement tooling become product architecture without an explicit decision.
+- Commit after each completed narrow step when the user asks.
 
 ## Known remaining work
 - Add loading states to improve the experience between steps — discover, refine question appearing, and results loading all need intentional loading treatment. Currently functional but unpolished. Do this after core architecture is settled.

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import {
   LAYERED_CONTRACTS,
-  createCandidateAwarePrewarmContract,
   createEnrichmentContract,
   createFinalizeFastContract,
   createQueryFramingContract,
@@ -42,44 +41,6 @@ describe('layered contracts', () => {
       generatedAt: '2026-04-12T00:00:00.000Z',
     })
     expect(contract).not.toHaveProperty('candidates')
-  })
-
-  it('defines a candidate-aware prewarm contract without locking a shortlist', () => {
-    const contract = createCandidateAwarePrewarmContract({
-      query: 'travel stroller',
-      discoveryToken: 'guided_discovery:travel stroller|',
-      candidateCount: 2,
-      model: 'gpt-5-mini',
-      rankedCandidates: [
-        {
-          candidateId: 'prod-2',
-          rank: 1,
-          title: 'Compact airport stroller',
-          baselineFit: 'Best baseline fit for flights.',
-          baselineCaution: 'Pricier than entry-level options.',
-          attributes: ['compact', 'lightweight'],
-          trustScore: 4,
-        },
-      ],
-    })
-
-    expect(contract.layer).toBe('candidate_aware_prewarm')
-    expect(contract.rankedCandidates).toEqual([
-      {
-        candidateId: 'prod-2',
-        prewarmRank: 1,
-        title: 'Compact airport stroller',
-        source: '',
-        price: '',
-        rating: null,
-        reviewCount: null,
-        attributes: ['compact', 'lightweight'],
-        trustScore: 4,
-        baselineFit: 'Best baseline fit for flights.',
-        baselineCaution: 'Pricier than entry-level options.',
-      },
-    ])
-    expect(contract).not.toHaveProperty('selectedCandidateIds')
   })
 
   it('defines finalize-fast cards as shortlist-safe only', () => {

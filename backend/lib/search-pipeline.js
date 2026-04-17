@@ -75,22 +75,20 @@ export async function fetchSearchArtifacts({
   details = '',
   reasonFallback,
   serpApiKey,
+  countryCode = 'US',
 }) {
   const searchUrl = new URL(SERPAPI_ENDPOINT)
   searchUrl.searchParams.set('engine', 'google_shopping')
   searchUrl.searchParams.set('q', buildQuery(productQuery, details))
   searchUrl.searchParams.set('api_key', serpApiKey)
-  searchUrl.searchParams.set('gl', 'us')
+  searchUrl.searchParams.set('gl', countryCode.toLowerCase())
   searchUrl.searchParams.set('hl', 'en')
 
-  const apiResponse = await fetch(searchUrl)
+  const apiResponse = await fetch(searchUrl, { signal: AbortSignal.timeout(15000) })
 
   if (!apiResponse.ok) {
-    const errorText = await apiResponse.text()
-
     return {
       error: {
-        details: errorText.slice(0, 300),
         error: 'SerpApi request failed.',
         statusCode: 502,
       },

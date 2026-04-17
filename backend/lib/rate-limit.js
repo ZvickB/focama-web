@@ -11,6 +11,14 @@ function toKey(ipAddress) {
   return ipAddress?.trim() || 'anonymous'
 }
 
+export function getCountryCode(headers = {}) {
+  const country = headers['x-vercel-ip-country'] || headers['X-Vercel-Ip-Country']
+  if (typeof country === 'string' && /^[A-Z]{2}$/.test(country.trim())) {
+    return country.trim()
+  }
+  return 'US'
+}
+
 export function getClientIpAddress(headers = {}) {
   const forwardedFor = headers['x-forwarded-for'] || headers['X-Forwarded-For']
 

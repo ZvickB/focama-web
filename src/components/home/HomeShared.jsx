@@ -198,10 +198,27 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
             ) : (
               <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-lg text-slate-900">Why this pick stands out</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-lg text-slate-900">Why this pick stands out</CardTitle>
+                    <span className="relative flex h-2 w-2 shrink-0">
+                      <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
+                      <span className="relative h-2 w-2 rounded-full bg-primary/60" />
+                    </span>
+                  </div>
                 </CardHeader>
-                <CardContent className="text-sm text-slate-400">
-                  Personalising explanation…
+                <CardContent className="space-y-2.5">
+                  <div className="relative overflow-hidden rounded-full bg-stone-200/80">
+                    <div className="h-3.5 w-full" />
+                    <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" />
+                  </div>
+                  <div className="relative overflow-hidden rounded-full bg-stone-200/80">
+                    <div className="h-3.5 w-5/6" />
+                    <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" style={{ animationDelay: '0.3s' }} />
+                  </div>
+                  <div className="relative overflow-hidden rounded-full bg-stone-200/80">
+                    <div className="h-3.5 w-3/4" />
+                    <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" style={{ animationDelay: '0.6s' }} />
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -438,7 +455,7 @@ export function ResultsSection({
                     className={`transform-gpu transition-[opacity,transform] motion-reduce:transform-none motion-reduce:transition-none ${
                       areCardsVisible
                         ? 'translate-y-0 opacity-100'
-                        : 'translate-y-2 opacity-0 duration-0'
+                        : '-translate-y-3 opacity-0 duration-0'
                     }`}
                     style={{
                       transitionDuration: areCardsVisible ? `${RESULT_CARD_FADE_DURATION_MS}ms` : '0ms',

@@ -44,13 +44,11 @@ function renderHomePage() {
 describe('HomePage', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
-    window.__FOCAMAI_DISABLE_SKIP_PREWARM__ = true
     window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__ = true
     window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__ = true
   })
 
   afterEach(() => {
-    delete window.__FOCAMAI_DISABLE_SKIP_PREWARM__
     delete window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__
     delete window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__
     vi.useRealTimers()
@@ -439,130 +437,6 @@ describe('HomePage', () => {
 
     expect(await screen.findByText('Travel stroller')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /show focused picks/i })).toBeInTheDocument()
-  })
-
-  it('uses the prewarmed candidate-aware prior when focused picks are requested without notes', async () => {
-    window.__FOCAMAI_DISABLE_SKIP_PREWARM__ = false
-    const user = userEvent.setup()
-    const fetchMock = vi.fn((input) => {
-      const url = typeof input === 'string' ? input : input?.toString?.() || ''
-
-      if (url.includes('/api/search/rainforest-discover')) {
-        return Promise.resolve({
-          ok: true,
-          headers: { get: () => '' },
-          text: async () =>
-            JSON.stringify({
-              discoveryToken: 'guided_discovery:stroller|',
-              candidatePool: {
-                query: 'stroller',
-                details: '',
-                candidates: [
-                  {
-                    id: 'result-1',
-                    title: 'Travel stroller',
-                    source: 'Target',
-                    price: '$129.99',
-                    rating: 4.4,
-                    reviewCount: 87,
-                    description: 'Lightweight and easy to fold.',
-                    reasons: ['Available from Target'],
-                    image: 'https://example.com/stroller.jpg',
-                    link: 'https://example.com/stroller',
-                  },
-                ],
-              },
-              previewResults: [createMockResult()],
-            }),
-        })
-      }
-
-      if (url.includes('/api/search/refine')) {
-        return Promise.resolve({
-          ok: true,
-          headers: { get: () => '' },
-          text: async () =>
-            JSON.stringify({
-              prompt: 'What should we optimize for with this stroller?',
-              helperText: 'Pick anything that matters.',
-              followUpPlaceholder: 'Anything else?',
-            }),
-        })
-      }
-
-      if (url.includes('/api/search/prewarm')) {
-        return Promise.resolve({
-          ok: true,
-          headers: { get: () => '' },
-          text: async () =>
-            JSON.stringify({
-              requestMode: 'guided_prerank_prewarm',
-              prewarm: {
-                artifactReady: true,
-                artifactCandidateCount: 1,
-                requestMode: 'guided_prerank_prewarm',
-                reusedStoredArtifact: false,
-              },
-            }),
-        })
-      }
-
-      if (url.includes('/api/search/finalize')) {
-        return Promise.resolve({
-          ok: true,
-          headers: { get: () => '' },
-          text: async () =>
-            JSON.stringify({
-              requestMode: 'guided_empty_notes',
-              candidatePool: {
-                query: 'stroller',
-                details: '',
-                candidates: [],
-              },
-              debug: {
-                flowPath: 'candidate_aware_prior_rerank',
-                reusedPreRankArtifact: true,
-                usedIntentMatchRerank: true,
-              },
-              results: [
-                createMockResult(),
-                createMockResult({
-                  id: 'result-2',
-                  title: 'Compact airport stroller',
-                  price: '$149.99',
-                }),
-              ],
-              selection: {
-                mode: 'ai',
-                requestMode: 'guided_empty_notes',
-                strategy: 'candidate_aware_prior_rerank',
-                flowPath: 'candidate_aware_prior_rerank',
-                reusedPreRankArtifact: true,
-                usedIntentMatchRerank: true,
-              },
-              usage: {
-                openai: {
-                  totalTokens: 1234,
-                },
-              },
-            }),
-        })
-      }
-
-      throw new Error(`Unexpected fetch call: ${url}`)
-    })
-
-    vi.stubGlobal('fetch', fetchMock)
-
-    renderHomePage()
-
-    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
-    await user.click(screen.getByRole('button', { name: /start search/i }))
-    await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.click(screen.getByRole('button', { name: /show focused picks/i }))
-
-    expect(await screen.findByText('Compact airport stroller')).toBeInTheDocument()
-    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/search/finalize'))).toHaveLength(1)
   })
 
   it('lets the user reset to a brand-new search after results are shown', async () => {
@@ -1192,7 +1066,6 @@ describe('HomePage', () => {
     await screen.findByText('Travel stroller')
 
     await user.click(screen.getByText('Travel stroller'))
-    expect(await screen.findByText(/personalising explanation/i)).toBeInTheDocument()
 
     await waitFor(
       () => {

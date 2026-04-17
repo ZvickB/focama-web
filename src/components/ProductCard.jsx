@@ -73,7 +73,7 @@ function ProductCard({
 
   return (
     <Card
-      className="group h-full overflow-hidden rounded-[22px] border-stone-200/80 bg-white/90 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur transition hover:-translate-y-1"
+      className="group h-full overflow-hidden rounded-[22px] border-stone-200/80 bg-white/90 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur transition hover:-translate-y-1 hover:shadow-[0_32px_80px_-40px_rgba(15,23,42,0.6)]"
       role="button"
       tabIndex={0}
       onClick={onSelect}
@@ -102,10 +102,10 @@ function ProductCard({
           >
             {subtitle}
           </Badge>
-          <p className="text-lg font-semibold text-primary">{price}</p>
           <p className="line-clamp-2 text-sm leading-5 text-slate-900 sm:text-[15px]">
             {title}
           </p>
+          <p className="text-lg font-semibold text-primary">{price}</p>
         </div>
         <div className="flex items-center gap-2 text-sm text-amber-600">
           <div className="flex items-center gap-1">
@@ -122,12 +122,12 @@ function ProductCard({
           <span className="text-slate-500">({reviewCount} reviews)</span>
         </div>
         {userFacingDescription ? (
-          <p className="hidden line-clamp-2 text-sm leading-5 text-slate-600 sm:block">
+          <p className="line-clamp-2 text-sm leading-5 text-slate-600">
             {userFacingDescription}
           </p>
         ) : null}
         {primaryReason ? (
-          <p className="hidden line-clamp-2 text-sm leading-5 text-slate-600 sm:block">
+          <p className="line-clamp-2 text-sm leading-5 text-slate-600">
             {primaryReason}
           </p>
         ) : null}

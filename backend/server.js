@@ -10,7 +10,7 @@ import {
   miniEnrichSelectedCandidates,
 } from './lib/ai-selector.js'
 import { createFinalizeFastContract, toFinalizeFastCard } from './lib/layered-contracts.js'
-import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, takeRateLimitToken } from './lib/rate-limit.js'
+import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, getCountryCode, takeRateLimitToken } from './lib/rate-limit.js'
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
 import { generateFramingFields } from './lib/query-framing.js'
 import { DEFAULT_FILTER_CONFIG } from './lib/result-filter.js'
@@ -33,6 +33,7 @@ import {
 import { buildCacheKey, getEnv, validateSearchInput } from './lib/search-data.js'
 
 const PORT = Number(process.env.PORT || 8787)
+const ALLOWED_ORIGIN = getEnv('ALLOWED_ORIGIN') || (process.env.NODE_ENV === 'production' ? 'https://focama.vercel.app' : 'http://localhost:5173')
 const LIVE_RESULT_FILTER_CONFIG = {
   ...DEFAULT_FILTER_CONFIG,
   candidatePoolSize: 20,
@@ -41,13 +42,9 @@ const LIVE_RESULT_FILTER_CONFIG = {
 const LIVE_SEARCH_RATE_LIMIT = {
   ...DEFAULT_RATE_LIMIT_CONFIG,
 }
-const PREWARM_SELECTION_RATE_LIMIT = {
-  ...DEFAULT_RATE_LIMIT_CONFIG,
-}
 const FINALIZE_SELECTION_RATE_LIMIT = {
   ...DEFAULT_RATE_LIMIT_CONFIG,
 }
-const PREWARM_BODY_LIMIT_BYTES = 96 * 1024
 const FINALIZE_BODY_LIMIT_BYTES = 32 * 1024
 const FINALIZE_MAX_CANDIDATES = LIVE_RESULT_FILTER_CONFIG.candidatePoolSize
 const FINALIZE_MAX_NOTE_LENGTH = 500
@@ -58,7 +55,6 @@ const FINALIZE_MAX_RETRY_COUNT = 2
 const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
 const CACHE_SCOPE_RAINFOREST = 'rainforest_discovery'
 const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
-const PREWARM_REQUEST_MODE_DEFAULT = 'guided_prerank_prewarm'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const RATE_LIMIT_WAIT_MESSAGE = 'Please wait about 10 seconds and try again.'
@@ -175,7 +171,7 @@ export function sendJson(response, statusCode, payload, headers = {}) {
   const responseHeaders = {
     ...headers,
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   }
 
   delete responseHeaders.serverTiming
@@ -573,6 +569,7 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
   }
 
   const clientIpAddress = getClientIpAddress(request.headers || {})
+  const countryCode = getCountryCode(request.headers || {})
   const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
 
   if (!rateLimit.allowed) {
@@ -608,12 +605,12 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
       details: normalizedDetails,
       reasonFallback: 'Returned by the live SerpApi search route',
       serpApiKey,
+      countryCode,
     })
 
     if (artifactsError) {
       sendJson(response, artifactsError.statusCode, {
         error: artifactsError.error,
-        ...(artifactsError.details ? { details: artifactsError.details } : {}),
       })
       return
     }
@@ -699,6 +696,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   }
 
   const clientIpAddress = getClientIpAddress(request.headers || {})
+  const countryCode = getCountryCode(request.headers || {})
   const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
 
   if (!rateLimit.allowed) {
@@ -752,7 +750,6 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
         : normalizedCachedResults.length,
       previewCount: normalizedCachedResults.length,
       candidateAwarePriorReady: Boolean(cachedCandidateAwarePrior),
-      prewarmArtifactReady: Boolean(cachedCandidateAwarePrior),
       cacheMs: roundTimingDuration(cacheLookupDuration),
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
@@ -761,12 +758,6 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
       discoveryToken: discoveryCacheKey,
       candidatePool: cachedEntry.candidatePool,
       previewResults: normalizedCachedResults,
-      prewarm: {
-        priorReady: Boolean(cachedCandidateAwarePrior),
-        priorGeneratedAt: cachedCandidateAwarePrior?.generatedAt || null,
-        artifactReady: Boolean(cachedCandidateAwarePrior),
-        artifactGeneratedAt: cachedCandidateAwarePrior?.generatedAt || null,
-      },
       source: 'cache',
       cachedAt: cachedEntry.cachedAt,
     }, {
@@ -786,12 +777,12 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
       details: normalizedDetails,
       reasonFallback: 'Returned by the live SerpApi search route',
       serpApiKey,
+      countryCode,
     })
 
     if (artifactsError) {
       sendJson(response, artifactsError.statusCode, {
         error: artifactsError.error,
-        ...(artifactsError.details ? { details: artifactsError.details } : {}),
       })
       return
     }
@@ -840,10 +831,6 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
       discoveryToken: discoveryCacheKey,
       candidatePool: artifacts.candidatePool,
       previewResults: artifacts.results,
-      prewarm: {
-        artifactReady: false,
-        artifactGeneratedAt: null,
-      },
     }, {
       serverTiming: [
         { name: 'cache', duration: cacheLookupDuration },
@@ -876,6 +863,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   }
 
   const clientIpAddress = getClientIpAddress(request.headers || {})
+  const countryCode = getCountryCode(request.headers || {})
   const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
 
   if (!rateLimit.allowed) {
@@ -936,12 +924,6 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       discoveryToken: discoveryCacheKey,
       candidatePool: cachedEntry.candidatePool,
       previewResults: normalizedCachedResults,
-      prewarm: {
-        priorReady: Boolean(cachedCandidateAwarePrior),
-        priorGeneratedAt: cachedCandidateAwarePrior?.generatedAt || null,
-        artifactReady: Boolean(cachedCandidateAwarePrior),
-        artifactGeneratedAt: cachedCandidateAwarePrior?.generatedAt || null,
-      },
       source: 'cache',
       cachedAt: cachedEntry.cachedAt,
     }, {
@@ -961,12 +943,12 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       details: normalizedDetails,
       reasonFallback: 'Returned by the Rainforest API search route',
       rainforestApiKey,
+      countryCode,
     })
 
     if (artifactsError) {
       sendJson(response, artifactsError.statusCode, {
         error: artifactsError.error,
-        ...(artifactsError.details ? { details: artifactsError.details } : {}),
       })
       return
     }
@@ -1014,10 +996,6 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       discoveryToken: discoveryCacheKey,
       candidatePool: artifacts.candidatePool,
       previewResults: artifacts.results,
-      prewarm: {
-        artifactReady: false,
-        artifactGeneratedAt: null,
-      },
     }, {
       serverTiming: [
         { name: 'cache', duration: cacheLookupDuration },
@@ -1192,277 +1170,6 @@ export async function handleQueryFramingFields(requestUrl, response) {
   }
 }
 
-export async function handlePrewarmSelection(request, response) {
-  const requestStartedAt = nowMs()
-  const openAiApiKey = getEnv('OPENAI_API_KEY')
-
-  if (!openAiApiKey) {
-    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
-    return
-  }
-
-  const clientIpAddress = getClientIpAddress(request.headers || {})
-  const rateLimit = await takeRateLimitToken(clientIpAddress, PREWARM_SELECTION_RATE_LIMIT)
-
-  if (!rateLimit.allowed) {
-    logSearchFlowEvent('guided_prewarm_rate_limited', {
-      route: '/api/search/prewarm',
-      clientIpAddress,
-    })
-    sendJson(response, 429, {
-      error: `Too many prewarm requests from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
-    })
-    return
-  }
-
-  let body
-
-  try {
-    const bodyReadStartedAt = nowMs()
-    body = await readJsonBody(request, { maxBytes: PREWARM_BODY_LIMIT_BYTES })
-    body.bodyReadDuration = nowMs() - bodyReadStartedAt
-  } catch (error) {
-    logSearchFlowEvent('guided_prewarm_invalid_body', {
-      route: '/api/search/prewarm',
-      error: error instanceof Error ? error.message : 'Invalid request body.',
-    })
-    sendJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid request body.' })
-    return
-  }
-
-  const sanitizedDiscoveryContext = sanitizeFinalizeDiscoveryContext({
-    ...body,
-    requestMode: truncateText(body?.requestMode, 80) || PREWARM_REQUEST_MODE_DEFAULT,
-  })
-
-  if (!sanitizedDiscoveryContext.isValid) {
-    logSearchFlowEvent('guided_prewarm_invalid', {
-      route: '/api/search/prewarm',
-      query: typeof body?.query === 'string' ? body.query : '',
-      error: sanitizedDiscoveryContext.error,
-    })
-    sendJson(response, 400, { error: sanitizedDiscoveryContext.error })
-    return
-  }
-
-  const cacheLookupStartedAt = nowMs()
-  const resolvedCandidatePool = await readFinalizeCandidatePoolFromDiscovery(
-    sanitizedDiscoveryContext.normalizedQuery,
-    sanitizedDiscoveryContext.discoveryScope,
-  )
-  const cacheLookupDuration = nowMs() - cacheLookupStartedAt
-  let candidatePool = resolvedCandidatePool.isValid ? resolvedCandidatePool.candidatePool : null
-  let cachedEntry = resolvedCandidatePool.isValid ? resolvedCandidatePool.cachedEntry : null
-  let candidateAwarePrior = resolvedCandidatePool.isValid ? resolvedCandidatePool.candidateAwarePrior : null
-  let candidatePoolSource = resolvedCandidatePool.isValid ? 'discovery_cache' : 'request_candidate_pool'
-  const prewarmPriorSummary =
-    cachedEntry?.selection &&
-    typeof cachedEntry.selection === 'object' &&
-    !Array.isArray(cachedEntry.selection) &&
-    cachedEntry.selection.prewarm &&
-    typeof cachedEntry.selection.prewarm === 'object' &&
-    !Array.isArray(cachedEntry.selection.prewarm)
-      ? cachedEntry.selection.prewarm
-      : null
-
-  if (!candidatePool) {
-    const requestCandidatePool = sanitizeFinalizeCandidatePool(body?.candidatePool)
-
-    if (requestCandidatePool.isValid) {
-      candidatePool = requestCandidatePool.candidatePool
-      cachedEntry = null
-      candidateAwarePrior = null
-    } else {
-      logSearchFlowEvent('guided_prewarm_missing_discovery_context', {
-        route: '/api/search/prewarm',
-        query: sanitizedDiscoveryContext.normalizedQuery,
-        error: resolvedCandidatePool.error,
-      })
-      sendJson(response, resolvedCandidatePool.statusCode || 409, {
-        error: resolvedCandidatePool.error || 'The guided search context expired. Please start the search again.',
-      })
-      return
-    }
-  }
-
-  if (candidateAwarePrior?.rankedCandidates?.length) {
-    const priorCandidateCount = Array.isArray(candidateAwarePrior.rankedCandidates)
-      ? candidateAwarePrior.rankedCandidates.length
-      : 0
-    const priorByteLength = safeJsonByteLength(candidateAwarePrior)
-    const priorSummary = {
-      priorByteLength,
-      priorCandidateCount,
-      priorGeneratedAt: candidateAwarePrior.generatedAt || null,
-      priorReady: true,
-      artifactByteLength: priorByteLength,
-      artifactCandidateCount: priorCandidateCount,
-      artifactGeneratedAt: candidateAwarePrior.generatedAt || null,
-      artifactReady: true,
-      candidatePoolSource,
-      model: candidateAwarePrior.model || null,
-      openaiMs: prewarmPriorSummary?.openaiMs ?? null,
-      requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-      reusedStoredPrior: true,
-      reusedStoredArtifact: true,
-      storageWriteCompleted: true,
-      strategy: prewarmPriorSummary?.strategy || 'candidate_aware_prior',
-      totalMs: prewarmPriorSummary?.totalMs ?? null,
-      usage: prewarmPriorSummary?.usage || null,
-    }
-
-    logSearchFlowEvent('guided_prewarm_reused', {
-      route: '/api/search/prewarm',
-      query: sanitizedDiscoveryContext.normalizedQuery,
-      candidateCount: candidatePool.candidates.length,
-      ...priorSummary,
-      cacheMs: roundTimingDuration(cacheLookupDuration),
-      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
-    })
-
-    sendJson(response, 200, {
-      requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-      prewarm: priorSummary,
-    }, {
-      serverTiming: [
-        { name: 'body', duration: body.bodyReadDuration || 0 },
-        { name: 'cache', duration: cacheLookupDuration },
-        { name: 'total', duration: nowMs() - requestStartedAt },
-      ],
-    })
-    return
-  }
-
-  logSearchFlowEvent('guided_prewarm_started', {
-    route: '/api/search/prewarm',
-    query: sanitizedDiscoveryContext.normalizedQuery,
-    candidateCount: candidatePool.candidates.length,
-    candidatePoolSource,
-    requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-  })
-
-  try {
-    const openAiStartedAt = nowMs()
-    const prewarmed = await createCandidateAwarePrior({
-      candidatePool,
-      apiKey: openAiApiKey,
-      model: getFinalizeModel(),
-    })
-    const openAiDuration = nowMs() - openAiStartedAt
-    const prior = prewarmed.prior || prewarmed.artifact
-    const priorByteLength = safeJsonByteLength(prior)
-    const priorCandidateCount = Array.isArray(prior?.rankedCandidates)
-      ? prior.rankedCandidates.length
-      : 0
-    const totalDuration = nowMs() - requestStartedAt
-
-    let storageWriteCompleted = false
-    const persistedPreviewResults = Array.isArray(cachedEntry?.results) && cachedEntry.results.length > 0
-      ? cachedEntry.results
-      : buildFinalizeFallbackResults(candidatePool)
-
-    try {
-      await writeSearchSnapshot({
-        productQuery: sanitizedDiscoveryContext.normalizedQuery,
-        details: '',
-        candidatePool,
-        results: persistedPreviewResults,
-        selection: buildDiscoveryPreviewSelection(
-          persistedPreviewResults,
-          {
-            candidateAwarePrior: prior,
-            preRankArtifact: prior,
-            prewarm: {
-              priorByteLength,
-              priorCandidateCount,
-              priorGeneratedAt: prior?.generatedAt || null,
-              artifactByteLength: priorByteLength,
-              artifactCandidateCount: priorCandidateCount,
-              artifactGeneratedAt: prior?.generatedAt || null,
-              model: prewarmed.model,
-              openaiMs: roundTimingDuration(openAiDuration),
-              strategy: prewarmed.strategy || 'candidate_aware_prior',
-              totalMs: roundTimingDuration(totalDuration),
-              usage: prewarmed.usage || null,
-            },
-          },
-        ),
-        source: 'guided_discovery',
-        scope: sanitizedDiscoveryContext.discoveryScope,
-      })
-      storageWriteCompleted = true
-    } catch {
-      storageWriteCompleted = false
-    }
-
-    logSearchFlowEvent('guided_prewarm_completed', {
-      route: '/api/search/prewarm',
-      query: sanitizedDiscoveryContext.normalizedQuery,
-      priorByteLength,
-      priorCandidateCount,
-      artifactByteLength: priorByteLength,
-      artifactCandidateCount: priorCandidateCount,
-      candidateCount: candidatePool.candidates.length,
-      candidatePoolSource,
-      cacheMs: roundTimingDuration(cacheLookupDuration),
-      openaiMs: roundTimingDuration(openAiDuration),
-      openaiUsage: prewarmed.usage || null,
-      requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-      storageWriteCompleted,
-      totalMs: roundTimingDuration(totalDuration),
-    })
-
-    sendJson(response, 200, {
-      requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-      prewarm: {
-        priorByteLength,
-        priorCandidateCount,
-        priorGeneratedAt: prior?.generatedAt || null,
-        priorReady: true,
-        artifactByteLength: priorByteLength,
-        artifactCandidateCount: priorCandidateCount,
-        artifactGeneratedAt: prior?.generatedAt || null,
-        artifactReady: true,
-        candidatePoolSource,
-        model: prewarmed.model,
-        openaiMs: roundTimingDuration(openAiDuration),
-        requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-        reusedStoredPrior: false,
-        reusedStoredArtifact: false,
-        storageWriteCompleted,
-        strategy: prewarmed.strategy || 'candidate_aware_prior',
-        totalMs: roundTimingDuration(totalDuration),
-        usage: prewarmed.usage || null,
-      },
-      usage: {
-        openai: prewarmed.usage || null,
-      },
-    }, {
-      serverTiming: [
-        { name: 'body', duration: body.bodyReadDuration || 0 },
-        { name: 'cache', duration: cacheLookupDuration },
-        { name: 'openai', duration: openAiDuration },
-        { name: 'total', duration: totalDuration },
-      ],
-    })
-  } catch (error) {
-    logSearchFlowEvent('guided_prewarm_failed', {
-      route: '/api/search/prewarm',
-      query: sanitizedDiscoveryContext.normalizedQuery,
-      candidateCount: candidatePool.candidates.length,
-      candidatePoolSource,
-      cacheMs: roundTimingDuration(cacheLookupDuration),
-      requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    })
-    sendJson(response, 500, {
-      error: 'Unable to generate the candidate-aware prior.',
-      details: error instanceof Error ? error.message : 'Unknown error',
-    })
-  }
-}
-
 export async function handleSupabaseHealth(response) {
   const health = await getSupabaseHealth()
 
@@ -1523,11 +1230,6 @@ export async function handleSearchDebug(requestUrl, response) {
         candidateAwarePriorCandidateCount: Array.isArray(guidedDiscoveryCandidateAwarePrior?.rankedCandidates)
           ? guidedDiscoveryCandidateAwarePrior.rankedCandidates.length
           : 0,
-        prewarmArtifactReady: Boolean(guidedDiscoveryCandidateAwarePrior),
-        prewarmArtifactGeneratedAt: guidedDiscoveryCandidateAwarePrior?.generatedAt || null,
-        prewarmArtifactCandidateCount: Array.isArray(guidedDiscoveryCandidateAwarePrior?.rankedCandidates)
-          ? guidedDiscoveryCandidateAwarePrior.rankedCandidates.length
-          : 0,
       },
     },
     environment: {
@@ -1538,7 +1240,6 @@ export async function handleSearchDebug(requestUrl, response) {
       architecture: {
         primaryProductFlow: [
           '/api/search/discover',
-          '/api/search/prewarm',
           '/api/search/refine',
           '/api/search/finalize',
         ],
@@ -1558,13 +1259,6 @@ export async function handleSearchDebug(requestUrl, response) {
           callsSerpApi: false,
           callsOpenAi: true,
         },
-      guidedPrewarm: {
-        usesCache: true,
-        callsSerpApi: false,
-        callsOpenAi: true,
-        priorReady: Boolean(guidedDiscoveryCandidateAwarePrior),
-        artifactReady: Boolean(guidedDiscoveryCandidateAwarePrior),
-      },
       liveSearch: {
         usesCache: false,
         callsSerpApi: true,
@@ -2216,7 +1910,7 @@ export function createApiServer() {
 
     if (request.method === 'OPTIONS') {
       response.writeHead(204, {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       })
@@ -2241,11 +1935,6 @@ export function createApiServer() {
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search/framing-fields') {
       await handleQueryFramingFields(requestUrl, response)
-      return
-    }
-
-    if (request.method === 'POST' && requestUrl.pathname === '/api/search/prewarm') {
-      await handlePrewarmSelection(request, response)
       return
     }
 

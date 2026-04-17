@@ -210,7 +210,6 @@ function TimingPanel({ requestTiming }) {
     ['Discover', requestTiming?.discover],
     ['Refine', requestTiming?.refine],
     ['Framing fields', requestTiming?.framingFields],
-    ['Prewarm', requestTiming?.prewarm],
     ['Finalize', requestTiming?.finalize],
   ].filter(([, timing]) => timing)
 
@@ -538,18 +537,18 @@ function OpenLayout(props) {
                       <Button
                         type="button"
                         disabled={!hasDiscoveryResults || state.isFinalizing}
-                        variant="ghost"
-                        className={`h-10 w-full justify-start rounded-[20px] px-4 text-sm transition sm:w-auto ${
+                        variant="outline"
+                        className={`h-12 w-full rounded-[24px] border-stone-300 px-6 text-sm font-medium transition sm:w-auto ${
                           hasDiscoveryResults && !state.isFinalizing
-                            ? 'text-slate-600 hover:bg-stone-100 hover:text-slate-900'
+                            ? 'bg-white text-slate-700 hover:border-stone-400 hover:bg-stone-50 hover:text-slate-900'
                             : 'text-slate-400'
                         }`}
                         onClick={onShowProductsNow}
                       >
                         Show products now
                       </Button>
-                      <p className="px-4 text-xs text-slate-400">
-                        Skip refinement — faster but less focused.
+                      <p className="px-1 text-xs text-slate-400">
+                        Jump straight to results — no extra step needed.
                       </p>
                     </div>
                     <Button

@@ -151,41 +151,19 @@
   - mini's quality/order-preservation signal is not enough to justify the latency regression for blocking or one-call stream use
   - mini remains plausible later only as asynchronous writing/enrichment after a fast shortlist is already locked
 
-## Next experiment: nano lock + mini async enrichment
-- This is a new, separate harness-only experiment, not a continuation of the one-call stream productization path.
-- Goal: test whether `gpt-5.4-nano` can lock winners and cheap badges quickly while `gpt-5-mini` writes nicer per-product copy after the lock without blocking shortlist display.
-- Do not wire the frontend.
-- Do not change normal `/api/search/finalize` behavior.
-- Do not redesign the whole layered architecture.
-- Do not reintroduce prewarm as a latency feature; current measurements do not justify it.
-- Pending smallest useful tasks:
-  - [ ] Add a harness-only mode that runs nano for lock/badges and then runs mini enrichment as a second, non-blocking measurement call.
-  - [ ] Record time to nano lock, time to badges, mini enrichment duration, total tokens by model, and whether mini preserves locked IDs/order.
-  - [ ] Compare the harness against the existing nano one-call stream results on the same `context5` sample set.
-  - [ ] Write a concise temp-data summary before considering any route/UI/product changes.
+## Nano lock + mini async enrichment — completed and wired
+
+All tasks complete as of 2026-04-14:
+- [x] Harness mode added (`--mode nano-mini-split`) and measured on `context5`
+- [x] Nano locks winners/badges at ~2s; mini enrichment arrives at ~8.5–11.7s; order preserved 5/5
+- [x] Wired into real product flow: `/api/search/finalize` uses nano, fires mini enrichment async
+- [x] `/api/search/enrichment` polling endpoint live; frontend merges `fit_reason`/`caveat` by candidateId
+
+Remaining cleanup tracked in `project-notes/todo.md`:
+- Remove temporary measurement fields (`measurementPreparedQueryFraming`, `measurementSelectionMode: selection_only/winner_lock_ids_only`)
+- Remove `/api/search/finalize-stream` local route and `stream-clean` harness mode
 
 ## Current working rule
-- Start from current branch because prewarm route, prior storage, logging, contracts, and tests are useful groundwork.
-- Do not treat current refined/retry prior reuse as the validated answer.
-- Do not restart the architecture discussion; follow `layered-latency-plan.md`.
-- Current implementation question: can a smallest harness-only split use nano to lock winners/badges quickly and then use mini for better non-blocking enrichment copy while preserving locked winner order?
-- Candidate-aware prewarm should not be assumed into the stream path as a latency feature. The Chat 2 comparison showed no-prewarm locked winners slightly earlier, but used more tokens and had lower winner overlap; treat prewarm as an optional quality/cost hedge only if future review explicitly values that tradeoff.
-- The mini model-routing measurement and comparison are complete enough for a practical decision: mini is too slow for one-call streamed finalize; nano remains the fast stream candidate.
-- Temporary support for that question now exists:
-  - local-only `POST /api/search/finalize-stream`
-  - temporary stream selector/parser in `backend/lib/ai-selector.js`
-  - `backend/scripts/measure-guided-finalize.js --mode stream-clean`
-- Small smoke measurement `stream-clean-smoke-small` completed 3/3 stream cases and full context5 stream measurements completed; current `/api/search/finalize` remains the product path.
-- Full context5 `stream-clean-context5` measurement completed 5/5 stream cases; winner lock was materially earlier than baseline and later phases preserved locked order, but full stream completion was slower and used more tokens than baseline.
-- Next measured question: in a separate harness-only experiment, test nano lock/badges plus mini async enrichment without frontend wiring or architecture redesign.
-- Required measurement fields for that next pass:
-  - time to nano lock
-  - time to nano badges
-  - mini enrichment duration
-  - tokens by model/stage
-  - winner validity
-  - whether mini enrichment preserved locked IDs and order
-- Keep temporary measurement hooks temporary:
-  - `measurementPreparedQueryFraming`
-  - `measurementSelectionMode: selection_only`
-  - `measurementSelectionMode: winner_lock_ids_only`
+- All latency experiments are concluded. Follow `layered-latency-plan.md` for remaining pending steps.
+- Do not restart the architecture discussion unless the user asks.
+- Prewarm is removed — see `agent-tasks/remove-prewarm.md`.

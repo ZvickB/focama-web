@@ -92,8 +92,30 @@ Plain-language summary:
 - Only add product-memory tables later if the app needs to remember real search flows as product data.
 - If you want analytics next, add only the focused funnel tables above instead of a broad analytics schema.
 
+## Environment variables
+Add these to the root `.env`:
+
+```env
+SERPAPI_API_KEY=your-serpapi-key
+OPENAI_API_KEY=your-openai-key
+OPENAI_MODEL=gpt-5-mini
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SECRET_KEY=your-supabase-secret-key
+SEARCH_CACHE_TTL_MINUTES=1440
+```
+
+Notes:
+- `SUPABASE_SECRET_KEY` is the preferred server-side key.
+- Legacy `SUPABASE_SERVICE_ROLE_KEY` is also accepted as a fallback.
+- Do not expose either server-side key to the browser.
+- `SEARCH_CACHE_TTL_MINUTES` defaults to `1440` if omitted.
+
+## Cache behavior notes
+- Cache keys are scoped by flow: guided discovery uses `guided_discovery:query`, Rainforest uses `rainforest_discovery:query`.
+- TTL-based invalidation only — expired rows are ignored but not actively deleted (future: add pg_cron cleanup).
+- Guided discovery is the only persistent cache path; finalize and live search are intentionally uncached.
+
 ## Related notes
-- `project-notes/db-cache-setup.md`
 - `project-notes/current-status.md`
 - `project-notes/app_flow.md`
 - `project-notes/analytics-funnel-schema.sql`

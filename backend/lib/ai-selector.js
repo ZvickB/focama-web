@@ -1,4 +1,4 @@
-import { createCandidateAwarePrewarmContract, toFinalizeFastCard } from './layered-contracts.js'
+import { toFinalizeFastCard } from './layered-contracts.js'
 
 export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses'
 export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini'
@@ -381,6 +381,7 @@ async function requestStructuredSelection(
 ) {
   const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
     method: 'POST',
+    signal: AbortSignal.timeout(30000),
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
@@ -474,7 +475,7 @@ function mapCandidateAwarePrior(rankedCandidates, candidatePool, model) {
 
     artifactCandidates.push({
       candidateId,
-      prewarmRank: artifactCandidates.length + 1,
+
       title: candidate.title,
       source: candidate.source,
       price: candidate.price,
@@ -502,7 +503,7 @@ function mapCandidateAwarePrior(rankedCandidates, candidatePool, model) {
 
     artifactCandidates.push({
       candidateId,
-      prewarmRank: artifactCandidates.length + 1,
+
       title: candidate.title,
       source: candidate.source,
       price: candidate.price,
@@ -520,7 +521,9 @@ function mapCandidateAwarePrior(rankedCandidates, candidatePool, model) {
     })
   }
 
-  return createCandidateAwarePrewarmContract({
+  return {
+    version: CANDIDATE_AWARE_PRIOR_VERSION,
+    layer: 'candidate_aware_prior',
     generatedAt: new Date().toISOString(),
     model,
     query: candidatePool.query,
@@ -528,7 +531,7 @@ function mapCandidateAwarePrior(rankedCandidates, candidatePool, model) {
     discoveryToken: candidatePool.discoveryToken || '',
     candidateCount: candidatePool.candidates.length,
     rankedCandidates: artifactCandidates,
-  })
+  }
 }
 
 function getReusablePriorEntries(candidateAwarePrior, candidates) {
@@ -563,18 +566,14 @@ function getReusablePriorEntries(candidateAwarePrior, candidates) {
       candidateId,
       baselineCaution: truncateText(entry?.baselineCaution || entry?.baseline_caution, 160),
       baselineFit: truncateText(entry?.baselineFit || entry?.baseline_fit, 160),
-      rank: Number.isFinite(Number(entry?.prewarmRank))
-        ? Number(entry.prewarmRank)
-        : Number.isFinite(Number(entry?.rank))
-          ? Number(entry.rank)
-          : reusableEntries.length + 1,
+      rank: Number.isFinite(Number(entry?.rank))
+        ? Number(entry.rank)
+        : reusableEntries.length + 1,
       reusableSummary: {
         candidate_id: candidateId,
-        prewarm_rank: Number.isFinite(Number(entry?.prewarmRank))
-          ? Number(entry.prewarmRank)
-          : Number.isFinite(Number(entry?.rank))
-            ? Number(entry.rank)
-            : reusableEntries.length + 1,
+        prewarm_rank: Number.isFinite(Number(entry?.rank))
+          ? Number(entry.rank)
+          : reusableEntries.length + 1,
         title: candidate.title,
         source: candidate.source,
         price: candidate.price,
@@ -796,7 +795,7 @@ export async function createCandidateAwarePrior(
   if (candidates.length === 0) {
     const prior = {
       version: CANDIDATE_AWARE_PRIOR_VERSION,
-      layer: 'candidate_aware_prewarm',
+      layer: 'candidate_aware_prior',
       generatedAt: new Date().toISOString(),
       model,
       query: candidatePool?.query || '',

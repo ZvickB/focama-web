@@ -36,7 +36,7 @@
 
 ## Current guided flow
 - `/api/search/discover` builds the candidate pool and preview set.
-- `/api/search/prewarm` backend route still exists but is disabled in frontend.
+- `/api/search/prewarm` is fully removed (2026-04-17).
 - `/api/search/refine` returns one fast user-facing follow-up question.
 - `/api/search/framing-fields` returns slower background framing fields for timing/debug visibility.
 - `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache, locks the shortlist via nano (~2s), fires mini enrichment async, and returns `flowPath: 'nano_lock'` plus metadata-only cards.
@@ -47,7 +47,7 @@
 
 ## Current experiment status — CLOSED AND WIRED
 All latency experiments are concluded and wired into the real product flow. Decisions:
-- **Prewarm: off.** Disabled in frontend as of 2026-04-14. Backend route still exists.
+- **Prewarm: off and removed.** Fully deleted from codebase 2026-04-17.
 - **nano-lock + mini async-enrichment: live.** Nano locks winners at ~2s (cards appear), mini enriches async at ~8-12s (modal AI copy arrives via polling).
 - **One-call stream: measured but not wired.** nano is the only viable fast model.
 
@@ -60,7 +60,7 @@ All latency experiments are concluded and wired into the real product flow. Deci
 6. Enrichment stored in discovery cache `selection.enrichment` field — no new DB tables needed
 
 ## Current real-world timings (no prewarm, fresh cache miss)
-- Discover: ~6.5s (SerpApi ~5.3s cache miss; ~150ms on cache hit)
+- Discover: ~6.5s (Rainforest cache miss; ~150ms on cache hit)
 - Refine: ~1.7s
 - Framing fields: ~4.4s (background, doesn't block)
 - Finalize: ~4.3s (OpenAI ~3.7s)
@@ -73,9 +73,9 @@ All latency experiments are concluded and wired into the real product flow. Deci
 - Boot splash lives in `/index.html`, shows `Focused shopping`, and fades after app readiness plus minimum display time.
 
 ## Testing state
-- 102 tests passing as of 2026-04-14. All suites green.
-- Key coverage added this session: nano lock, enrichment poll endpoint, async enrichment storage, enrichment contract fields (`fit_reason`/`caveat`), cards without AI copy.
-- `window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__ = true` is set in all `HomePage.test.jsx` beforeEach calls to suppress background polling in tests (same pattern as prewarm disable flag).
+- 101 tests passing as of 2026-04-17. All suites green.
+- Prewarm tests removed; stale `personalising explanation` loading text assertion updated to match skeleton shimmer UI.
+- `window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__ = true` is set in all `HomePage.test.jsx` beforeEach calls to suppress background polling in tests.
 
 ## Recent user preferences
 - Minimal copy in the open layout.
@@ -86,11 +86,7 @@ All latency experiments are concluded and wired into the real product flow. Deci
 
 ## If continuing from here
 - For product behavior questions, read `app_flow.md`.
-- For measurement conclusions, read `active-experiment-override.md` plus `temp-data/layered-latency-measurement-summary.md` if resuming that exact line.
+- For measurement conclusions, read `active-experiment-override.md`.
 - For implementation planning, read `layered-latency-plan.md` and do one pending checklist step at a time.
-- For the stream experiment, the mini-vs-nano decision is closed: keep nano as the only plausible fast stream model, reject mini for one-call streamed finalize, and keep prewarm out of the latency argument.
-- For the next harness-only experiment, implement only the smallest nano-lock plus mini async-enrichment measurement path when asked; do not wire UI.
-- Keep measurement-only fields temporary:
-  - `measurementPreparedQueryFraming`
-  - `measurementSelectionMode: selection_only`
-  - `measurementSelectionMode: winner_lock_ids_only`
+- All latency experiments are concluded. Nano-lock + mini async-enrichment is the wired product path.
+- Pending cleanup: remove `measurementPreparedQueryFraming`, `measurementSelectionMode: selection_only/winner_lock_ids_only`, the local `/api/search/finalize-stream` route, and `stream-clean` harness mode — see `todo.md`.
