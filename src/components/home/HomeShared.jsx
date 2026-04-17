@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
+
+const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 import {
   ArrowUpRight,
   ChevronDown,
@@ -441,7 +443,7 @@ export function ResultsSection({
                     key={item.id}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.45, delay: index * 0.13, ease: [0.22, 1, 0.36, 1] }}
+                    transition={{ duration: 0.9, delay: (RESULT_CARD_FADE_DELAYS_MS[index] ?? index * 900) / 1000, ease: [0.22, 1, 0.36, 1] }}
                   >
                     <ProductCard
                       {...visibleItem}
