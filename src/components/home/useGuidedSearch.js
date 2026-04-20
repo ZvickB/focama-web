@@ -176,6 +176,13 @@ function mergeEnrichmentIntoResults(results, enrichmentEntries) {
       ...result,
       fit_reason: entry?.fit_reason || entry?.fitReason || '',
       caveat: entry?.caveat || '',
+      feature_bullets: Array.isArray(entry?.feature_bullets)
+        ? entry.feature_bullets
+        : Array.isArray(entry?.featureBullets)
+          ? entry.featureBullets
+          : Array.isArray(result?.feature_bullets)
+            ? result.feature_bullets
+            : [],
     }
   })
 }

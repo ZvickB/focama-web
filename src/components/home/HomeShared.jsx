@@ -89,6 +89,7 @@ export function ResultSkeleton({ className = '' }) {
 export function ProductDetailModal({ item, onClose, onRetailerClick }) {
   const fitReason = item?.fit_reason || item?.fitReason || ''
   const caveat = item?.caveat || ''
+  const featureBullets = Array.isArray(item?.feature_bullets) ? item.feature_bullets.slice(0, 5) : []
   const enrichmentReady = Boolean(fitReason)
 
   useEffect(() => {
@@ -188,6 +189,13 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
               </div>
               {userFacingDescription ? (
                 <p className="text-base leading-7 text-slate-600">{userFacingDescription}</p>
+              ) : null}
+              {featureBullets.length > 0 ? (
+                <ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-slate-600">
+                  {featureBullets.map((bullet, index) => (
+                    <li key={`${item.id}-feature-bullet-${index}`}>{bullet}</li>
+                  ))}
+                </ul>
               ) : null}
             </div>
 
