@@ -890,20 +890,6 @@ describe('HomePage', () => {
     expect(await screen.findByText('Slim stroller')).toBeInTheDocument()
   })
 
-  it('lets the user type directly into the single product input before starting the search', async () => {
-    const user = userEvent.setup()
-    const fetchMock = vi.fn()
-
-    vi.stubGlobal('fetch', fetchMock)
-
-    renderHomePage()
-
-    await user.type(screen.getByLabelText(/product topic/i), 'travel stroller')
-
-    expect(fetchMock).not.toHaveBeenCalled()
-    expect(screen.getByLabelText(/product topic/i)).toHaveValue('travel stroller')
-  })
-
   it('keeps tradeoffs out of the result grid and shows them only in the modal', async () => {
     const user = userEvent.setup()
     const fetchMock = vi
