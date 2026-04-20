@@ -90,3 +90,12 @@ All latency experiments are concluded and wired into the real product flow. Deci
 - For implementation planning, read `layered-latency-plan.md` and do one pending checklist step at a time.
 - All latency experiments are concluded. Nano-lock + mini async-enrichment is the wired product path.
 - Pending cleanup: remove `measurementPreparedQueryFraming`, `measurementSelectionMode: selection_only/winner_lock_ids_only`, the local `/api/search/finalize-stream` route, and `stream-clean` harness mode — see `todo.md`.
+
+## Active exploration — Oxylabs as cheap Rainforest substitute (2026-04-19)
+- Goal: test whether Oxylabs can replace Rainforest `type=product` calls for the dual-endpoint enrichment flow during development, before paying Rainforest credits closer to launch.
+- Feasibility test completed — Oxylabs works. Bullets, brand, specs all present.
+- Full results and next steps: `project-notes/rainforest-strategy/oxylabs-feasibility.md`
+- Raw samples saved: `temp-data/oxylabs-samples/`
+- Test script: `backend/scripts/test-oxylabs.js`
+- Credentials: `OXYLABS_USERNAME` / `OXYLABS_PASSWORD` in `.env`
+- **Next task:** resolve 3 small gaps (reviews_count, category, link prefix), then write the normalizer functions.
