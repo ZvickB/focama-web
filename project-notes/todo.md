@@ -25,6 +25,7 @@ AI maintains this file. Each item should be one plain sentence.
 ## UI Polish
 
 | Status | Item |
+| **IMPORTANT** | Fix onboarding copy and flow clarity — new users are not understanding what to do; full audit and all suggested changes are in `project-notes/onboarding-copy-audit.md` |
 |--------|------|
 | done | Add stagger rise entrance animation to result cards using Motion — y:12→0, duration 0.45s, stagger 0.13s, replaces CSS state machine |
 | done | Replace manual timer animation in `RefinementCopy` with Motion `AnimatePresence` — removed 3 state vars and 2 useEffects |
@@ -40,6 +41,7 @@ AI maintains this file. Each item should be one plain sentence.
 | done | Add an empty / no-good-results screen so the page isn't just blank when nothing comes back |
 | pending | Improve low-confidence search handling — weak or ambiguous searches should get a clearer fallback message instead of showing poor results silently |
 | pending | Pool mismatch nudge — when the discovery pool doesn't match the user's follow-up context (e.g. searched "lego", context was "for a 9-year-old" but pool was adult sets), show closest results and suggest a better search query derived from their own context |
+| pending | "Nothing here for me" escape hatch — if results don't match what the user wanted, offer an AI-generated improved search query (based on their original query + follow-up context) that triggers a fresh search, rather than relying on re-picking from the same candidate pool |
 | done | Recheck mobile product-detail sheet behavior and CTA placement |
 | pending | Replace the About page with a "Why Focamai" page explaining the product |
 | pending | Update header/nav links to point to Why Focamai once the page exists |
