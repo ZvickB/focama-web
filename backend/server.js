@@ -58,6 +58,7 @@ const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const RATE_LIMIT_WAIT_MESSAGE = 'Please wait about 10 seconds and try again.'
+const RAINFOREST_PRODUCT_DETAIL_TIMEOUT_MS = 6000
 
 function getRefinementModel() {
   return getEnv('OPENAI_REFINEMENT_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_REFINEMENT_MODEL
@@ -522,6 +523,104 @@ function buildFinalizeFastResponseContract({
     strategy,
     generatedAt: new Date().toISOString(),
   })
+}
+
+function sanitizeFeatureBullets(value, { maxItems = 10, maxLength = 320 } = {}) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((entry) => truncateText(entry, maxLength))
+    .filter(Boolean)
+    .slice(0, maxItems)
+}
+
+function sanitizeProductDescription(value, maxLength = 3000) {
+  return truncateText(value, maxLength)
+}
+
+async function fetchRainforestProductDetailsByAsin({ asins = [], rainforestApiKey }) {
+  if (!rainforestApiKey) {
+    return new Map()
+  }
+
+  const uniqueAsins = Array.from(
+    new Set(
+      asins
+        .map((asin) => truncateText(asin, 200))
+        .filter(Boolean),
+    ),
+  )
+
+  if (uniqueAsins.length === 0) {
+    return new Map()
+  }
+
+  const settledResults = await Promise.allSettled(
+    uniqueAsins.map(async (asin) => {
+      const requestUrl = new URL('https://api.rainforestapi.com/request')
+      requestUrl.searchParams.set('api_key', rainforestApiKey)
+      requestUrl.searchParams.set('type', 'product')
+      requestUrl.searchParams.set('asin', asin)
+      requestUrl.searchParams.set('amazon_domain', 'amazon.com')
+
+      const apiResponse = await fetch(requestUrl, {
+        signal: AbortSignal.timeout(RAINFOREST_PRODUCT_DETAIL_TIMEOUT_MS),
+      })
+
+      if (!apiResponse.ok) {
+        throw new Error(`Rainforest product request failed with status ${apiResponse.status}.`)
+      }
+
+      const payload = await apiResponse.json()
+      const product = payload?.product || payload?.result?.product || payload?.result || null
+
+      return {
+        asin,
+        feature_bullets: sanitizeFeatureBullets(product?.feature_bullets),
+        productDescription: sanitizeProductDescription(product?.description),
+      }
+    }),
+  )
+
+  const detailsByAsin = new Map()
+
+  for (const settledResult of settledResults) {
+    if (settledResult.status !== 'fulfilled') {
+      continue
+    }
+
+    detailsByAsin.set(settledResult.value.asin, {
+      feature_bullets: settledResult.value.feature_bullets,
+      productDescription: settledResult.value.productDescription,
+    })
+  }
+
+  return detailsByAsin
+}
+
+function mergeProductDetailsIntoCandidatePool(candidatePool, productDetailsById) {
+  if (!productDetailsById?.size) {
+    return candidatePool
+  }
+
+  return {
+    ...candidatePool,
+    candidates: candidatePool.candidates.map((candidate) => {
+      const productDetails = productDetailsById.get(String(candidate.id))
+
+      if (!productDetails) {
+        return candidate
+      }
+
+      return {
+        ...candidate,
+        feature_bullets: productDetails.feature_bullets,
+        productDescription: productDetails.productDescription,
+      }
+    }),
+  }
 }
 
 export async function handleCachedSearch(requestUrl, response) {
@@ -1342,7 +1441,6 @@ export async function handleNanoMiniSplitFinalize(request, response) {
         miniEnrichMs: roundTimingDuration(miniDuration),
         totalMs: roundTimingDuration(nowMs() - requestStartedAt),
         lockedIds: nanoResult.lockedIds,
-        lockedBadges: nanoResult.lockedBadges,
         nanoUsage: nanoResult.usage,
         miniUsage: miniResult.usage,
         miniPreservedOrder: miniResult.preservedOrder,
@@ -1636,9 +1734,17 @@ export async function handleFinalizeSelection(request, response) {
     })
     const openAiDuration = nowMs() - openAiStartedAt
     tokenUsageByStage.finalize = nanoResult.usage || null
+    const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
+    const productDetailsStartedAt = nowMs()
+    const productDetailsById = await fetchRainforestProductDetailsByAsin({
+      asins: nanoResult.lockedIds,
+      rainforestApiKey,
+    })
+    const productDetailsDuration = nowMs() - productDetailsStartedAt
+    const enrichedCandidatePool = mergeProductDetailsIntoCandidatePool(nextCandidatePool, productDetailsById)
 
     const candidateById = new Map(
-      nextCandidatePool.candidates.map((c) => [String(c.id), c]),
+      enrichedCandidatePool.candidates.map((c) => [String(c.id), c]),
     )
     const nanoResults = nanoResult.lockedIds
       .map((id) => {
@@ -1674,6 +1780,7 @@ export async function handleFinalizeSelection(request, response) {
       requestMode,
       cacheMs: roundTimingDuration(cacheLookupDuration),
       openaiMs: roundTimingDuration(openAiDuration),
+      productDetailsMs: roundTimingDuration(productDetailsDuration),
       totalMs: roundTimingDuration(totalDuration),
       openaiUsage: nanoResult.usage || null,
       rankingOwner: nanoResults.length > 0 ? 'nano_lock' : 'deterministic_fallback',
@@ -1695,6 +1802,7 @@ export async function handleFinalizeSelection(request, response) {
           body: roundTimingDuration(body.bodyReadDuration || 0),
           cache: roundTimingDuration(cacheLookupDuration),
           openai: roundTimingDuration(openAiDuration),
+          productDetails: roundTimingDuration(productDetailsDuration),
           total: roundTimingDuration(totalDuration),
         },
         tokenUsageByStage,
@@ -1726,6 +1834,7 @@ export async function handleFinalizeSelection(request, response) {
         { name: 'body', duration: body.bodyReadDuration || 0 },
         { name: 'cache', duration: cacheLookupDuration },
         { name: 'openai', duration: openAiDuration },
+        { name: 'product-details', duration: productDetailsDuration },
         { name: 'total', duration: totalDuration },
       ],
     })
@@ -1735,7 +1844,7 @@ export async function handleFinalizeSelection(request, response) {
       const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
       runMiniEnrichmentAsync({
         lockedIds: nanoResult.lockedIds,
-        candidatePool: nextCandidatePool,
+        candidatePool: enrichedCandidatePool,
         apiKey: openAiApiKey,
         model: miniModel,
         normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,

@@ -52,6 +52,7 @@ describe('layered contracts', () => {
       rating: 4.7,
       reviewCount: 342,
       description: 'Lightweight stroller for flights',
+      feature_bullets: ['One-hand fold', 'Carry-on friendly'],
       reasons: ['Fallback reason'],
       drawbacks: ['Should not be forwarded'],
       image: 'https://example.com/stroller.jpg',
@@ -66,6 +67,7 @@ describe('layered contracts', () => {
       rating: 4.7,
       reviewCount: 342,
       description: 'Lightweight stroller for flights',
+      feature_bullets: ['One-hand fold', 'Carry-on friendly'],
       image: 'https://example.com/stroller.jpg',
       link: 'https://example.com/stroller',
       badgeLabel: '',
@@ -105,6 +107,7 @@ describe('layered contracts', () => {
           candidateId: 'prod-2',
           fitReason: 'Fits frequent travel because the fold is compact and easy to carry.',
           caveat: 'The price is a little higher than bulkier budget picks.',
+          featureBullets: ['One-hand fold', 'Compact enough for airport days'],
         },
       ],
     })
@@ -121,6 +124,7 @@ describe('layered contracts', () => {
           candidateId: 'prod-2',
           fitReason: 'Fits frequent travel because the fold is compact and easy to carry.',
           caveat: 'The price is a little higher than bulkier budget picks.',
+          featureBullets: ['One-hand fold', 'Compact enough for airport days'],
         },
       ],
     })

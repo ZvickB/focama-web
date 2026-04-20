@@ -4,6 +4,7 @@ import {
   DEFAULT_OPENAI_MODEL,
   OPENAI_RESPONSES_ENDPOINT,
   createCandidateAwarePrior,
+  miniEnrichSelectedCandidates,
   selectAiResults,
 } from './ai-selector.js'
 
@@ -581,6 +582,55 @@ describe('ai selector', () => {
       preRankArtifactReused: true,
       preRankReuseReason: 'candidate_aware_prior_rerank',
     })
+  })
+
+  it('passes feature bullets into mini enrichment and preserves them in the stored entries', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          enriched: [
+            {
+              candidate_id: 'prod-1',
+              fit_reason: 'Fits travel days because it folds quickly and stays easy to carry.',
+              caveat: 'Storage is tighter than on larger everyday strollers.',
+            },
+          ],
+        }),
+      }),
+    })
+
+    const result = await miniEnrichSelectedCandidates(
+      {
+        apiKey: 'test-key',
+        lockedIds: ['prod-1'],
+        candidatePool: {
+          query: 'stroller',
+          details: 'best for airport travel',
+          candidates: [
+            createCandidate({
+              feature_bullets: ['One-hand fold', 'Compact carry strap'],
+              productDescription: 'A compact stroller built for airport travel.',
+            }),
+          ],
+        },
+      },
+      fetchMock,
+    )
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
+    const prompt = requestBody.input[1].content
+
+    expect(prompt).toContain('"feature_bullets":["One-hand fold","Compact carry strap"]')
+    expect(prompt).toContain('"product_description":"A compact stroller built for airport travel."')
+    expect(result.enriched).toEqual([
+      {
+        candidate_id: 'prod-1',
+        fit_reason: 'Fits travel days because it folds quickly and stays easy to carry.',
+        caveat: 'Storage is tighter than on larger everyday strollers.',
+        feature_bullets: ['One-hand fold', 'Compact carry strap'],
+      },
+    ])
   })
 
 })
