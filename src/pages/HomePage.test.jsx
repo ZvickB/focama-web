@@ -1045,6 +1045,10 @@ describe('HomePage', () => {
                   candidateId: 'result-1',
                   fitReason: 'Fits travel days well because it folds quickly and stays easy to carry.',
                   caveat: 'Storage is tighter than on larger everyday strollers.',
+                  featureBullets: [
+                    'One-hand fold for quick airport transfers.',
+                    'Compact carry strap for travel days.',
+                  ],
                 },
               ],
             }),
@@ -1078,6 +1082,9 @@ describe('HomePage', () => {
 
     expect(
       screen.getByText(/storage is tighter than on larger everyday strollers\./i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/one-hand fold for quick airport transfers\./i),
     ).toBeInTheDocument()
   }, 10000)
 })
