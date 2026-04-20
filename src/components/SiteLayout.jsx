@@ -134,7 +134,9 @@ function SiteLayout() {
                     isCompact ? 'h-12 w-12 sm:h-14 sm:w-14' : 'h-16 w-16 sm:h-20 sm:w-20'
                   }`}
                 />
-                <span className="text-lg font-semibold tracking-[0.08em] sm:text-xl">FOCAMAI</span>
+                <span className="text-lg font-semibold tracking-[0.08em] sm:text-xl">
+                  <span className="text-[#0F6175]">FOCAMA</span><span className="italic text-[#E59B26]">I</span>
+                </span>
               </NavLink>
               <p
                 className={`text-sm text-slate-500 transition-all duration-300 ease-out ${

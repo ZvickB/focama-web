@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { ChevronRight, Star } from 'lucide-react'
 import { Badge } from '@/components/ui/badge.jsx'
 import {
   Card,
   CardContent,
 } from '@/components/ui/card.jsx'
+import logo from '@/assets/logo_master_version.svg'
 
 function getUserFacingReasons(reasons = []) {
   return reasons.filter((reason) => {
@@ -68,6 +70,7 @@ function ProductCard({
   subtitle,
   title,
 }) {
+  const [imgError, setImgError] = useState(false)
   const primaryReason = getUserFacingReasons(reasons)[0] || ''
   const userFacingDescription = getUserFacingDescription(description)
 
@@ -86,13 +89,25 @@ function ProductCard({
     >
       <div className="relative overflow-hidden border-b border-stone-100 bg-stone-50">
         <ProductBadge label={badgeLabel} />
-        <img
-          className="aspect-square w-full object-contain bg-stone-50 p-4 transition duration-300 group-hover:scale-[1.02]"
-          src={image}
-          alt={title}
-          loading="lazy"
-          decoding="async"
-        />
+        {imgError ? (
+          <div className="flex aspect-square w-full items-center justify-center bg-stone-200/90">
+            <img
+              src={logo}
+              alt=""
+              aria-hidden="true"
+              className="h-20 w-20 object-contain opacity-[0.14] sm:h-24 sm:w-24"
+            />
+          </div>
+        ) : (
+          <img
+            className="aspect-square w-full object-contain bg-stone-50 p-4 transition duration-300 group-hover:scale-[1.02]"
+            src={image}
+            alt={title}
+            loading="lazy"
+            decoding="async"
+            onError={() => setImgError(true)}
+          />
+        )}
       </div>
       <CardContent className="space-y-3 p-4">
         <div className="space-y-2">
