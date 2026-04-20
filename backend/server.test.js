@@ -60,7 +60,7 @@ import {
   handleSupabaseHealth,
 } from './server.js'
 import { resetRateLimitStore } from './lib/rate-limit.js'
-import { nanoLockWinnersAndBadges, selectAiResults } from './lib/ai-selector.js'
+import { miniEnrichSelectedCandidates, nanoLockWinnersAndBadges, selectAiResults } from './lib/ai-selector.js'
 import { getFilteredSearchArtifacts } from './lib/result-filter.js'
 import { getSupabaseHealth, readStoredSearchCacheEntry, writeStoredSearchCacheEntry } from './lib/search-storage.js'
 import {
@@ -1083,7 +1083,6 @@ describe('server handlers', () => {
     nanoLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5-mini',
       lockedIds: ['one'],
-      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
       usage: {
         inputTokens: 180,
         outputTokens: 30,
@@ -1158,7 +1157,6 @@ describe('server handlers', () => {
     nanoLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['id-1'],
-      lockedBadges: [{ candidateId: 'id-1', badgeLabel: '' }],
       usage: { inputTokens: 510, outputTokens: 84, totalTokens: 594, reasoningTokens: 38 },
     })
 
@@ -1199,7 +1197,6 @@ describe('server handlers', () => {
     nanoLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['one'],
-      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
       usage: { inputTokens: 180, outputTokens: 30, totalTokens: 210, reasoningTokens: 6 },
     })
     readStoredSearchCacheEntry.mockResolvedValueOnce(
@@ -1262,6 +1259,220 @@ describe('server handlers', () => {
     )
   })
 
+  it('adds Rainforest feature bullets to the finalize response and mini enrichment context when available', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      if (name === 'RAINFOREST_API_KEY') {
+        return 'rainforest-key'
+      }
+
+      return ''
+    })
+    nanoLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5.4-nano',
+      lockedIds: ['one'],
+      usage: null,
+    })
+    miniEnrichSelectedCandidates.mockResolvedValue({
+      model: 'gpt-5-mini',
+      enriched: [{ candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey', feature_bullets: ['One-hand fold'] }],
+      enrichedIds: ['one'],
+      usage: null,
+      preservedOrder: true,
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          product: {
+            feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+            description: 'A compact stroller built for airport travel.',
+          },
+        }),
+      }),
+    )
+    readStoredSearchCacheEntry.mockResolvedValue(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')], {
+        mode: 'discovery_preview',
+      }),
+    )
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          followUpNotes: 'best for city travel',
+          requestMode: 'guided_refined',
+        }),
+        { 'x-forwarded-for': '203.0.113.41' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        results: [
+          expect.objectContaining({
+            id: 'one',
+            feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+          }),
+        ],
+        finalizeFast: expect.objectContaining({
+          shortlist: [
+            expect.objectContaining({
+              id: 'one',
+              feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+            }),
+          ],
+        }),
+      }),
+    )
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(miniEnrichSelectedCandidates).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidatePool: expect.objectContaining({
+          candidates: [
+            expect.objectContaining({
+              id: 'one',
+              feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+              productDescription: 'A compact stroller built for airport travel.',
+            }),
+          ],
+        }),
+      }),
+    )
+  })
+
+  it('keeps shortlisted products when a Rainforest detail call fails and falls back to empty feature bullets', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      if (name === 'RAINFOREST_API_KEY') {
+        return 'rainforest-key'
+      }
+
+      return ''
+    })
+    nanoLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5.4-nano',
+      lockedIds: ['one', 'two'],
+      usage: null,
+    })
+    miniEnrichSelectedCandidates.mockResolvedValue({
+      model: 'gpt-5-mini',
+      enriched: [
+        { candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey', feature_bullets: ['One-hand fold'] },
+        { candidate_id: 'two', fit_reason: 'Good backup', caveat: 'Less storage', feature_bullets: [] },
+      ],
+      enrichedIds: ['one', 'two'],
+      usage: null,
+      preservedOrder: true,
+    })
+
+    const fetchMock = vi.fn(async (requestUrl) => {
+      const asin = new URL(requestUrl).searchParams.get('asin')
+
+      if (asin === 'one') {
+        return {
+          ok: true,
+          json: async () => ({
+            product: {
+              feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+              description: 'A compact stroller built for airport travel.',
+            },
+          }),
+        }
+      }
+
+      throw new Error('detail request timed out')
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+    readStoredSearchCacheEntry.mockResolvedValue(
+      createDiscoveryCacheEntry('stroller', [
+        createFinalizeCandidate('one'),
+        createFinalizeCandidate('two'),
+      ], {
+        mode: 'discovery_preview',
+      }),
+    )
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          followUpNotes: 'best for city travel',
+          requestMode: 'guided_refined',
+        }),
+        { 'x-forwarded-for': '203.0.113.42' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+
+    const payload = JSON.parse(response.body)
+
+    expect(payload.results).toEqual([
+      expect.objectContaining({
+        id: 'one',
+        feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+      }),
+      expect.objectContaining({
+        id: 'two',
+        feature_bullets: [],
+      }),
+    ])
+    expect(payload.finalizeFast).toEqual(expect.objectContaining({
+      shortlist: [
+        expect.objectContaining({
+          id: 'one',
+          feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+        }),
+        expect.objectContaining({
+          id: 'two',
+          feature_bullets: [],
+        }),
+      ],
+    }))
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(miniEnrichSelectedCandidates).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidatePool: expect.objectContaining({
+          candidates: [
+            expect.objectContaining({
+              id: 'one',
+              feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+              productDescription: 'A compact stroller built for airport travel.',
+            }),
+            expect.objectContaining({
+              id: 'two',
+            }),
+          ],
+        }),
+      }),
+    )
+    expect(
+      miniEnrichSelectedCandidates.mock.calls[0][0].candidatePool.candidates[1].feature_bullets ?? [],
+    ).toEqual([])
+    expect(miniEnrichSelectedCandidates.mock.calls[0][0].candidatePool.candidates[1].productDescription ?? '').toBe('')
+  })
+
   it('prefers OPENAI_FINALIZE_CONTEXT_MODEL over the shared model for guided finalize with context', async () => {
     getEnv.mockImplementation((name) => {
       if (name === 'OPENAI_API_KEY') {
@@ -1281,7 +1492,6 @@ describe('server handlers', () => {
     nanoLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['one'],
-      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
       usage: null,
     })
 
@@ -1326,7 +1536,6 @@ describe('server handlers', () => {
     nanoLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['one'],
-      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
       usage: null,
     })
 
@@ -1387,7 +1596,6 @@ describe('server handlers', () => {
     nanoLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.2',
       lockedIds: ['one'],
-      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
       usage: null,
     })
 
@@ -1432,7 +1640,6 @@ describe('server handlers', () => {
     nanoLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5-mini',
       lockedIds: ['one'],
-      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
       usage: null,
     })
 
@@ -1476,7 +1683,6 @@ describe('server handlers', () => {
     nanoLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['two'],
-      lockedBadges: [{ candidateId: 'two', badgeLabel: '' }],
       usage: {
         inputTokens: 510,
         outputTokens: 84,
@@ -1541,12 +1747,11 @@ describe('server handlers', () => {
     )
   })
 
-  it('echoes finalize request mode so prewarm traffic can be measured separately', async () => {
+  it('echoes requestMode back in the finalize response', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
     nanoLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5-mini',
       lockedIds: ['one'],
-      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
       usage: { inputTokens: 200, outputTokens: 40, totalTokens: 240, reasoningTokens: 12 },
     })
 
@@ -1631,7 +1836,6 @@ describe('server handlers', () => {
     nanoLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5-mini',
       lockedIds: ['one'],
-      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
       usage: null,
     })
 
@@ -1726,7 +1930,6 @@ describe('server handlers', () => {
     nanoLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['one'],
-      lockedBadges: [{ candidateId: 'one', badgeLabel: '' }],
       usage: null,
     })
     const { miniEnrichSelectedCandidates } = await import('./lib/ai-selector.js')
