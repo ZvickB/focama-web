@@ -269,7 +269,6 @@ async function measureCaseNanoMiniSplit(baseUrl, sampleCase, index) {
       serverMs: payload?.nanoLockMs ?? null,
       serverTimingMs: splitFinalize.serverTiming?.['nano-lock'] ?? null,
       lockedIds: Array.isArray(payload?.lockedIds) ? payload.lockedIds : [],
-      lockedBadges: Array.isArray(payload?.lockedBadges) ? payload.lockedBadges : [],
       usage: payload?.nanoUsage || null,
       lockCount: Array.isArray(payload?.lockedIds) ? payload.lockedIds.length : 0,
     },
