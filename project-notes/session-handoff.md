@@ -39,10 +39,10 @@
 - `/api/search/prewarm` is fully removed (2026-04-17).
 - `/api/search/refine` returns one fast user-facing follow-up question.
 - `/api/search/framing-fields` returns slower background framing fields for timing/debug visibility.
-- `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache, locks the shortlist via nano (~2s), fires mini enrichment async, and returns `flowPath: 'nano_lock'` plus metadata-only cards.
+- `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache, locks the shortlist via nano, fetches Rainforest product details for the locked winners, then returns `flowPath: 'nano_lock'` plus shortlist cards that now include `feature_bullets` when available.
 - `/api/search/enrichment` GET — frontend polls with `?token=&query=` until `ready: true` then merges `fit_reason`/`caveat` into results.
-- Cards = metadata only: image, title, source, price, ratings, badge label. No AI copy.
-- AI copy (`fit_reason`, `caveat`) lives in the modal only, populated when enrichment arrives.
+- Grid cards still stay metadata-only on the surface: image, title, source, price, ratings, badge label. No AI copy.
+- Product detail modals can now show `feature_bullets` immediately from finalize, while AI copy (`fit_reason`, `caveat`) still arrives via enrichment polling.
 - Badge labels are frontend-owned and assigned deterministically after shortlist arrives.
 
 ## Current experiment status — CLOSED AND WIRED
@@ -56,7 +56,7 @@ All latency experiments are concluded and wired into the real product flow. Deci
 2. `/api/search/enrichment` GET endpoint — frontend polls this for enrichment readiness
 3. Mini enrichment schema uses `fit_reason` + `caveat` as separate fields
 4. Cards = metadata only (no AI copy). Modal shows `fit_reason` + `caveat` when enrichment arrives
-5. `HomeShared.jsx` modal shows placeholder until enrichment ready (`enrichmentReady = Boolean(item?.fit_reason)`)
+5. `HomeShared.jsx` modal shows Rainforest `feature_bullets` immediately when present, and still shows a placeholder until AI enrichment is ready (`enrichmentReady = Boolean(item?.fit_reason)`)
 6. Enrichment stored in discovery cache `selection.enrichment` field — no new DB tables needed
 
 ## Current real-world timings (no prewarm, fresh cache miss)

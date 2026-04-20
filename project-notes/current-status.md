@@ -42,11 +42,12 @@
 - Guided search responses expose `Server-Timing`; the homepage timing panel appears in development or when `?timing=1` is present.
 
 ## Current finalize reality
-- `/api/search/finalize` uses nano to lock the shortlist fast (~2s), then fires mini enrichment async after responding.
-- Blocking finalize cards are metadata only: image, title, source, price, ratings, badge label. No AI copy in the blocking response.
-- AI copy (`fit_reason` + `caveat`) is written by mini and stored in the discovery cache `selection.enrichment` field.
+- `/api/search/finalize` uses nano to lock the shortlist, then fetches Rainforest product details for the 6 locked winners before responding.
+- Blocking finalize response now includes `feature_bullets` per shortlisted product when Rainforest product detail calls succeed; failed detail calls fall back to `feature_bullets: []`.
+- AI copy (`fit_reason` + `caveat`) is still written by mini and stored in the discovery cache `selection.enrichment` field.
 - `/api/search/enrichment` GET endpoint — frontend polls with `?token=&query=` until enrichment is ready, then merges `fit_reason`/`caveat` into results by `candidateId`.
-- Modal shows a loading placeholder until enrichment arrives (`enrichmentReady = Boolean(item?.fit_reason)`).
+- `/api/search/enrichment` entries also carry `feature_bullets` so an already-open modal can hydrate them from polling if needed.
+- Modal shows feature bullets immediately when present and keeps the `fit_reason`/`caveat` loading placeholder until enrichment arrives (`enrichmentReady = Boolean(item?.fit_reason)`).
 - Badge labels are frontend-owned deterministic heuristics assigned after the shortlist arrives.
 - Finalize response shape: `flowPath: 'nano_lock'`, `strategy: 'nano_lock'`, no `reusedCandidateAwarePrior`.
 - Normal guided finalize responses do not echo the rich candidate pool back to the browser.
@@ -72,7 +73,8 @@
 Full measurement history: `project-notes/active-experiment-override.md`.
 
 Key outcomes:
-- Nano locks winners at ~2s; mini async enrichment arrives at ~8–12s. Both wired into product.
+- Nano still locks winners first; finalize now spends additional time fetching Rainforest product details for the locked winners so cards/modal data can ship with feature bullets before AI copy is ready.
+- Mini async enrichment still arrives later and uses product bullets/descriptions for more specific fit/caveat copy.
 - Prewarm removed — not a latency win. Backend route and all references fully deleted.
 - `gpt-5.4-nano` is the only plausible fast model for streamed finalize; `gpt-5-mini` rejected (8s+ lock time).
 - One-call stream experiment measured and concluded; nano-lock + mini async-enrichment is the wired path.

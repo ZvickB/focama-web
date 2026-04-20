@@ -34,7 +34,7 @@
 - `/api/search/prewarm` backend route is being removed — see `project-notes/agent-tasks/remove-prewarm.md`.
 - `/api/search/refine` returns one short user-facing follow-up question with static helper/placeholder copy.
 - `/api/search/framing-fields` returns background query-framing fields for timing/debug visibility only.
-- `/api/search/finalize` accepts lightweight context, reconstructs the rich candidate pool server-side from guided discovery cache, locks the shortlist via nano (~2s), and returns metadata-only cards immediately. Mini enrichment fires async after the response is sent and stores `fit_reason`/`caveat` in the discovery cache.
+- `/api/search/finalize` accepts lightweight context, reconstructs the rich candidate pool server-side from guided discovery cache, locks the shortlist via nano, fetches Rainforest product details for the locked winners, and returns shortlist cards with `feature_bullets` immediately. Mini enrichment still fires async after the response is sent and stores `fit_reason`/`caveat` in the discovery cache.
 - `/api/search/enrichment` GET — accepts `?token=&query=`, returns `{ ready: false }` or `{ ready: true, entries: [...] }` where each entry has `candidateId`, `fitReason`, `caveat`.
 - `/api/search/live` is the explicit manual/debug combined route.
 - `/api/search/debug` should describe guided flow as primary.
@@ -55,8 +55,9 @@
 
 ## Final result behavior
 - Result lists display up to 6 normalized product cards.
-- Cards show metadata only: image, title, merchant/source, price, ratings, and a deterministic badge label. No AI copy on the card surface.
-- AI copy (`fit_reason`, `caveat`) lives in the modal only and arrives via enrichment polling.
+- Cards still stay clean on the grid surface: image, title, merchant/source, price, ratings, and a deterministic badge label. No AI copy on the card surface.
+- The modal now shows manufacturer/product `feature_bullets` immediately when available, before async AI copy arrives.
+- AI copy (`fit_reason`, `caveat`) still lives in the modal and arrives via enrichment polling.
 - AI no longer returns badge labels in the blocking finalize response. Frontend heuristics assign scan-friendly badges after the shortlist arrives with a slight delayed reveal.
 - Clicking a product opens a detail modal. If enrichment has arrived, the modal shows "Why this pick stands out" (`fit_reason`) and "Possible drawbacks" (`caveat`). If enrichment is still pending, those sections show a loading placeholder.
 - `enrichmentReady = Boolean(item?.fit_reason)` drives the modal loading state.

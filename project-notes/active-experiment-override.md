@@ -159,6 +159,11 @@ All tasks complete as of 2026-04-14:
 - [x] Wired into real product flow: `/api/search/finalize` uses nano, fires mini enrichment async
 - [x] `/api/search/enrichment` polling endpoint live; frontend merges `fit_reason`/`caveat` by candidateId
 
+Current product nuance after the Rainforest detail follow-up:
+- `/api/search/finalize` still uses nano to lock the shortlist first, but it now fetches Rainforest `type=product` details for the locked winners before responding.
+- Blocking finalize now ships `feature_bullets` for the locked shortlist when available.
+- Mini enrichment still runs async afterward and now uses those product bullets/descriptions to write more specific `fit_reason` and `caveat` copy.
+
 Remaining cleanup tracked in `project-notes/todo.md`:
 - Remove temporary measurement fields (`measurementPreparedQueryFraming`, `measurementSelectionMode: selection_only/winner_lock_ids_only`)
 - Remove `/api/search/finalize-stream` local route and `stream-clean` harness mode
