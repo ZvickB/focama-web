@@ -1259,14 +1259,18 @@ describe('server handlers', () => {
     )
   })
 
-  it('adds Rainforest feature bullets to the finalize response and mini enrichment context when available', async () => {
+  it('adds Oxylabs feature bullets to the finalize response and mini enrichment context when available', async () => {
     getEnv.mockImplementation((name) => {
       if (name === 'OPENAI_API_KEY') {
         return 'openai-key'
       }
 
-      if (name === 'RAINFOREST_API_KEY') {
-        return 'rainforest-key'
+      if (name === 'OXYLABS_USERNAME') {
+        return 'oxy-user'
+      }
+
+      if (name === 'OXYLABS_PASSWORD') {
+        return 'oxy-pass'
       }
 
       return ''
@@ -1288,10 +1292,12 @@ describe('server handlers', () => {
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
-          product: {
-            feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
-            description: 'A compact stroller built for airport travel.',
-          },
+          results: [{
+            content: {
+              bullet_points: 'One-hand fold\nCompact enough for overhead bins',
+              description: 'A compact stroller built for airport travel.',
+            },
+          }],
         }),
       }),
     )
@@ -1352,14 +1358,18 @@ describe('server handlers', () => {
     )
   })
 
-  it('keeps shortlisted products when a Rainforest detail call fails and falls back to empty feature bullets', async () => {
+  it('keeps shortlisted products when an Oxylabs detail call fails and falls back to empty feature bullets', async () => {
     getEnv.mockImplementation((name) => {
       if (name === 'OPENAI_API_KEY') {
         return 'openai-key'
       }
 
-      if (name === 'RAINFOREST_API_KEY') {
-        return 'rainforest-key'
+      if (name === 'OXYLABS_USERNAME') {
+        return 'oxy-user'
+      }
+
+      if (name === 'OXYLABS_PASSWORD') {
+        return 'oxy-pass'
       }
 
       return ''
@@ -1380,17 +1390,19 @@ describe('server handlers', () => {
       preservedOrder: true,
     })
 
-    const fetchMock = vi.fn(async (requestUrl) => {
-      const asin = new URL(requestUrl).searchParams.get('asin')
+    const fetchMock = vi.fn(async (_requestUrl, requestInit) => {
+      const asin = JSON.parse(requestInit.body).query
 
       if (asin === 'one') {
         return {
           ok: true,
           json: async () => ({
-            product: {
-              feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
-              description: 'A compact stroller built for airport travel.',
-            },
+            results: [{
+              content: {
+                bullet_points: 'One-hand fold\nCompact enough for overhead bins',
+                description: 'A compact stroller built for airport travel.',
+              },
+            }],
           }),
         }
       }

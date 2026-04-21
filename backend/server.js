@@ -22,6 +22,7 @@ import {
   writeSearchSnapshot,
 } from './lib/search-pipeline.js'
 import { fetchRainforestArtifacts } from './lib/rainforest-pipeline.js'
+import { fetchOxylabsArtifacts, fetchOxylabsProductDetailsByAsin } from './lib/oxylabs-pipeline.js'
 import {
   getSupabaseHealth,
   isSupabaseConfigured,
@@ -59,7 +60,6 @@ const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const RATE_LIMIT_WAIT_MESSAGE = 'Please wait about 10 seconds and try again.'
 const RAINFOREST_PRODUCT_DETAIL_TIMEOUT_MS = 6000
-
 function getRefinementModel() {
   return getEnv('OPENAI_REFINEMENT_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_REFINEMENT_MODEL
 }
@@ -954,10 +954,11 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
 
 export async function handleRainforestDiscoverySearch(requestUrl, response, request = { headers: {} }) {
   const requestStartedAt = nowMs()
-  const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
+  const oxylabsUsername = getEnv('OXYLABS_USERNAME') // TODO: swap back to Rainforest before launch.
+  const oxylabsPassword = getEnv('OXYLABS_PASSWORD') // TODO: swap back to Rainforest before launch.
 
-  if (!rainforestApiKey) {
-    sendJson(response, 500, { error: 'RAINFOREST_API_KEY is missing from the root .env file.' })
+  if (!oxylabsUsername || !oxylabsPassword) {
+    sendJson(response, 500, { error: 'OXYLABS_USERNAME and OXYLABS_PASSWORD are required in the root .env file.' })
     return
   }
 
@@ -1036,12 +1037,13 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
 
   try {
     const rainforestStartedAt = nowMs()
-    const { artifacts, error: artifactsError } = await fetchRainforestArtifacts({
+    const { artifacts, error: artifactsError } = await fetchOxylabsArtifacts({ // TODO: swap back to Rainforest before launch.
       filterConfig: LIVE_RESULT_FILTER_CONFIG,
       productQuery: normalizedQuery,
       details: normalizedDetails,
       reasonFallback: 'Returned by the Rainforest API search route',
-      rainforestApiKey,
+      oxylabsUsername,
+      oxylabsPassword,
       countryCode,
     })
 
@@ -1734,11 +1736,13 @@ export async function handleFinalizeSelection(request, response) {
     })
     const openAiDuration = nowMs() - openAiStartedAt
     tokenUsageByStage.finalize = nanoResult.usage || null
-    const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
+    const oxylabsUsername = getEnv('OXYLABS_USERNAME') // TODO: swap back to Rainforest before launch.
+    const oxylabsPassword = getEnv('OXYLABS_PASSWORD') // TODO: swap back to Rainforest before launch.
     const productDetailsStartedAt = nowMs()
-    const productDetailsById = await fetchRainforestProductDetailsByAsin({
+    const productDetailsById = await fetchOxylabsProductDetailsByAsin({ // TODO: swap back to Rainforest before launch.
       asins: nanoResult.lockedIds,
-      rainforestApiKey,
+      oxylabsUsername,
+      oxylabsPassword,
     })
     const productDetailsDuration = nowMs() - productDetailsStartedAt
     const enrichedCandidatePool = mergeProductDetailsIntoCandidatePool(nextCandidatePool, productDetailsById)
