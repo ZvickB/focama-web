@@ -137,7 +137,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
               Product details
             </p>
-            <p className="text-sm text-slate-600">A closer look at this recommendation.</p>
+            <p className="text-sm text-slate-600">What works for you, and what to know.</p>
           </div>
           <Button
             type="button"
@@ -338,7 +338,7 @@ export function ResultsSection({
           </h2>
           <p className="max-w-3xl text-base leading-7 text-slate-600">
             {hasFinalResults
-              ? 'These picks were finalized after your guided refinement. You now have six focused options.'
+              ? 'Six picks, chosen around what you told us.'
               : hasStartedSearch
                 ? 'The shortlist is being built below while the AI helps narrow what matters.'
                 : 'Search to see a calmer shortlist with clear tradeoffs instead of a noisy marketplace wall.'}

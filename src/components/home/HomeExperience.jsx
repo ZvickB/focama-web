@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button.jsx'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
 
-const HERO_SUBLINE = 'From too many choices to yours'
+const HERO_SUBLINE = "Tell us what you need. We'll find your six."
 
 function shouldShowTimingPanel() {
   if (import.meta.env.DEV) {
@@ -118,7 +118,7 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     <div className="space-y-2">
       <div className="inline-flex items-center gap-2 rounded-full bg-primary/8 px-3 py-1 text-sm text-primary">
         <Sparkles className={`h-4 w-4 ${isGeneratingPrompt ? 'animate-pulse' : ''}`} />
-        A little more context
+        The more you share, the better the picks
       </div>
       <div className="space-y-3">
         <AnimatePresence mode="wait">
@@ -376,6 +376,26 @@ function OpenLayout(props) {
               >
                 {HERO_SUBLINE}
               </p>
+              <div
+                className="text-[13px] font-semibold uppercase tracking-[0.14em] sm:text-sm"
+                style={{ fontFamily: '"Instrument Sans", sans-serif' }}
+              >
+                <span className={hasDiscoveryResults ? 'text-slate-400' : 'text-primary'}>
+                  Search
+                </span>
+                <span className="px-2 text-slate-300">·</span>
+                <span
+                  className={
+                    hasDiscoveryResults && !state.hasFinalResults ? 'text-primary' : 'text-slate-400'
+                  }
+                >
+                  Refine
+                </span>
+                <span className="px-2 text-slate-300">·</span>
+                <span className={state.hasFinalResults ? 'text-primary' : 'text-slate-400'}>
+                  Get 6 picks
+                </span>
+              </div>
             </div>
           </div>
 
@@ -431,8 +451,7 @@ function OpenLayout(props) {
               </div>
               {!hasStartedSearch ? (
                 <p className="mt-3 px-2 text-sm leading-6 text-slate-500">
-                  Start with the product search you&apos;d normally type into Google. Use the next
-                  step for budget, size, comfort, style, or other must-haves.
+                  Just the product for now — budget, size, and other details come next.
                 </p>
               ) : null}
 
@@ -446,7 +465,7 @@ function OpenLayout(props) {
 
                   <div className="space-y-2">
                     <Label htmlFor="open-follow-up-notes" className="text-slate-700">
-                      Add details to narrow the search
+                      Your answer
                     </Label>
                     <div
                       className={`rounded-[30px] border border-stone-200 bg-[#fffdf9] p-1 transition-all duration-300 ${
@@ -500,25 +519,30 @@ function OpenLayout(props) {
                         }`}
                         onClick={onShowProductsNow}
                       >
-                        Show products now
+                        Just show me results
                       </Button>
                       <p className="px-1 text-xs text-slate-400">
-                        Jump straight to results — no extra step needed.
+                        No AI refinement — results based on your search only.
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      disabled={!hasDiscoveryResults || state.isFinalizing}
-                      className="order-1 h-14 w-full rounded-[24px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_18px_40px_-24px_rgba(37,99,235,0.7)] hover:bg-primary/90 sm:order-2 sm:w-auto sm:min-w-[220px]"
-                      onClick={onFinalize}
-                    >
-                      {state.isFinalizing ? 'Narrowing your picks...' : 'Show focused picks'}
-                      {state.isFinalizing ? (
-                        <LoaderCircle className="ml-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="ml-2 h-4 w-4" />
-                      )}
-                    </Button>
+                    <div className="order-1 flex flex-col gap-1 sm:order-2 sm:items-end">
+                      <Button
+                        type="button"
+                        disabled={!hasDiscoveryResults || state.isFinalizing}
+                        className="h-14 w-full rounded-[24px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_18px_40px_-24px_rgba(37,99,235,0.7)] hover:bg-primary/90 sm:w-auto sm:min-w-[220px]"
+                        onClick={onFinalize}
+                      >
+                        {state.isFinalizing ? 'Narrowing your picks...' : 'Show focused picks'}
+                        {state.isFinalizing ? (
+                          <LoaderCircle className="ml-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="ml-2 h-4 w-4" />
+                        )}
+                      </Button>
+                      <p className="px-1 text-xs text-slate-400">
+                        Best results — takes ~5 more seconds
+                      </p>
+                    </div>
                   </div>
                 </div>
               ) : null}
