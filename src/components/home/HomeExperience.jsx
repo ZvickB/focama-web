@@ -8,9 +8,10 @@ import { RESULT_CARD_SLOTS, useGuidedSearch } from '@/components/home/useGuidedS
 import { Button } from '@/components/ui/button.jsx'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
-import { useSearchProgress } from '@/contexts/SearchProgressContext.jsx'
+import { useSearchProgress } from '@/contexts/useSearchProgress.js'
 
 const HERO_SUBLINE = "Tell us what you need. We'll find your six."
+const MotionParagraph = motion.p
 
 function shouldShowTimingPanel() {
   if (import.meta.env.DEV) {
@@ -123,7 +124,7 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
       </div>
       <div className="space-y-3">
         <AnimatePresence mode="wait">
-          <motion.p
+          <MotionParagraph
             key={displayedCopy.titleEyebrow}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -133,11 +134,11 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
             style={{ fontFamily: '"Instrument Sans", sans-serif' }}
           >
             {displayedCopy.titleEyebrow}
-          </motion.p>
+          </MotionParagraph>
         </AnimatePresence>
         <AnimatePresence mode="wait">
           {displayedCopy.titleQuestion ? (
-            <motion.p
+            <MotionParagraph
               key={displayedCopy.titleQuestion}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
@@ -147,7 +148,7 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
               style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
             >
               {displayedCopy.titleQuestion}
-            </motion.p>
+            </MotionParagraph>
           ) : null}
         </AnimatePresence>
         <p className="max-w-2xl text-sm leading-7 text-slate-600">

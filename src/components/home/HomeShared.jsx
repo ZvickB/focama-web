@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { AnimatePresence, motion } from 'motion/react'
+import { motion } from 'motion/react'
 
 const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 import {
@@ -53,6 +53,8 @@ function SkeletonBlock({ className }) {
     </div>
   )
 }
+
+const MotionDiv = motion.div
 
 export function ResultSkeleton({ className = '' }) {
   return (
@@ -116,7 +118,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
   const userFacingDescription = getUserFacingDescription(item.description)
 
   return (
-    <motion.div
+    <MotionDiv
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -124,7 +126,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
       className="fixed inset-0 z-50 flex items-end bg-slate-950/45 lg:items-center lg:justify-center"
       onClick={onClose}
     >
-      <motion.div
+      <MotionDiv
         initial={{ opacity: 0, scale: 0.97, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 8 }}
@@ -289,8 +291,8 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
             </div>
           </div>
         </div>
-      </motion.div>
-    </motion.div>
+      </MotionDiv>
+    </MotionDiv>
   )
 }
 
@@ -447,7 +449,7 @@ export function ResultsSection({
                 }
 
                 return (
-                  <motion.div
+                  <MotionDiv
                     key={item.id}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -468,7 +470,7 @@ export function ResultsSection({
                         })
                       }
                     />
-                  </motion.div>
+                  </MotionDiv>
                 )
               })}
             </div>

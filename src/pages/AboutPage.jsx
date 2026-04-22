@@ -18,9 +18,9 @@ function AboutPage() {
         and returns a calmer shortlist before you head into a retailer.
       </p>
       <p>
-        The product is still early, but the direction is consistent: clearer tradeoffs, less noise,
-        and a more focused path from "I need something" to a small set of sensible options.
-        Any affiliate relationships will be disclosed clearly on the site.
+        The direction is consistent: clearer tradeoffs, less noise, and a more focused path from
+        "I need something" to a small set of sensible options. Any affiliate relationships will be
+        disclosed clearly on the site.
       </p>
     </PageShell>
   )

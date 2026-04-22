@@ -9,12 +9,10 @@
  */
 
 import { readFile, mkdir, writeFile } from 'node:fs/promises'
+import * as fs from 'node:fs'
 import { join } from 'node:path'
-import { createRequire } from 'node:module'
 
 // Load .env manually (no dotenv dependency required)
-const require = createRequire(import.meta.url)
-const fs = await import('node:fs')
 const envPath = join(process.cwd(), '.env')
 const envRaw = fs.readFileSync(envPath, 'utf8')
 const env = Object.fromEntries(

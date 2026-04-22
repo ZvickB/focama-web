@@ -1,6 +1,5 @@
-import { createContext, useContext, useState } from 'react'
-
-const SearchProgressContext = createContext(null)
+import { useState } from 'react'
+import { SearchProgressContext } from '@/contexts/searchProgressContext.js'
 
 export function SearchProgressProvider({ children }) {
   const [progress, setProgress] = useState({
@@ -14,11 +13,4 @@ export function SearchProgressProvider({ children }) {
       {children}
     </SearchProgressContext.Provider>
   )
-}
-
-const noop = () => {}
-const fallback = { progress: { hasStartedSearch: false, hasDiscoveryResults: false, hasFinalResults: false }, setProgress: noop }
-
-export function useSearchProgress() {
-  return useContext(SearchProgressContext) ?? fallback
 }

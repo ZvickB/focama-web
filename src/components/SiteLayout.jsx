@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import logo from '@/assets/logo_header_mark.svg'
-import { useSearchProgress } from '@/contexts/SearchProgressContext.jsx'
+import { useSearchProgress } from '@/contexts/useSearchProgress.js'
 
 const navItems = [
   { to: '/', label: 'Home', end: true },

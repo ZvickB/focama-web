@@ -28,49 +28,27 @@ const buttonVariants = cva(
   },
 )
 
-function setRef(ref, value) {
-  if (typeof ref === 'function') {
-    ref(value)
-    return
-  }
+function Button({ asChild = false, children, className, variant, size, ...props }) {
+  const buttonClassName = cn(buttonVariants({ variant, size, className }))
 
-  if (ref) {
-    ref.current = value
-  }
-}
+  if (asChild) {
+    const child = React.Children.only(children)
 
-function composeRefs(...refs) {
-  return (value) => {
-    refs.forEach((ref) => setRef(ref, value))
-  }
-}
-
-const Button = React.forwardRef(
-  ({ asChild = false, children, className, variant, size, ...props }, ref) => {
-    const buttonClassName = cn(buttonVariants({ variant, size, className }))
-
-    if (asChild) {
-      const child = React.Children.only(children)
-
-      if (!React.isValidElement(child)) {
-        return null
-      }
-
-      return React.cloneElement(child, {
-        ...props,
-        className: cn(buttonClassName, child.props.className),
-        ref: composeRefs(ref, child.props.ref),
-      })
+    if (!React.isValidElement(child)) {
+      return null
     }
 
-    return (
-      <button className={buttonClassName} ref={ref} {...props}>
-        {children}
-      </button>
-    )
-  },
-)
+    return React.cloneElement(child, {
+      ...props,
+      className: cn(buttonClassName, child.props.className),
+    })
+  }
 
-Button.displayName = 'Button'
+  return (
+    <button className={buttonClassName} {...props}>
+      {children}
+    </button>
+  )
+}
 
 export { Button }
