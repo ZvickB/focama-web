@@ -87,7 +87,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
-            discoveryToken: 'guided_discovery:stroller|',
+            discoveryToken: 'opaque-discovery-token',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -135,7 +135,7 @@ describe('HomePage', () => {
           headers: { get: () => '' },
           text: async () =>
             JSON.stringify({
-              discoveryToken: 'guided_discovery:stroller|',
+              discoveryToken: 'opaque-discovery-token',
               candidatePool: {
                 query: 'stroller',
                 details: '',
@@ -231,6 +231,43 @@ describe('HomePage', () => {
     expect(await screen.findByText('SerpApi request failed.')).toBeInTheDocument()
   })
 
+  it('shows a session-expired recovery message when discovery returns without a token', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            candidatePool: {
+              query: 'stroller',
+              details: '',
+              candidates: [],
+            },
+            previewResults: [createMockResult()],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            prompt: 'What should we optimize for with this stroller?',
+            helperText: 'Pick anything that matters.',
+            followUpPlaceholder: 'Anything else?',
+          }),
+      })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+
+    expect(await screen.findByText('Your search session expired. Start a new search.')).toBeInTheDocument()
+    expect(screen.queryByText(/restart the backend server/i)).not.toBeInTheDocument()
+  })
+
   it('finalizes results after the user adds refinement notes', async () => {
     const user = userEvent.setup()
     const fetchMock = vi
@@ -239,7 +276,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
-            discoveryToken: 'guided_discovery:stroller|',
+            discoveryToken: 'opaque-discovery-token',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -300,7 +337,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/your answer/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
 
     expect(await screen.findByText('Compact airport stroller')).toBeInTheDocument()
@@ -317,7 +354,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
-            discoveryToken: 'guided_discovery:stroller|',
+            discoveryToken: 'opaque-discovery-token',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -379,7 +416,7 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
 
-    const refinementTextarea = screen.getByLabelText(/your answer/i)
+    const refinementTextarea = screen.getByLabelText(/tell us more/i)
     await user.type(refinementTextarea, 'comfort matters most')
     await user.keyboard('{Enter}')
 
@@ -394,7 +431,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
-            discoveryToken: 'guided_discovery:stroller|',
+            discoveryToken: 'opaque-discovery-token',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -447,7 +484,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
-            discoveryToken: 'guided_discovery:stroller|',
+            discoveryToken: 'opaque-discovery-token',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -507,7 +544,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
-            discoveryToken: 'guided_discovery:stroller|',
+            discoveryToken: 'opaque-discovery-token',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -604,7 +641,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/your answer/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Compact airport stroller')
 
@@ -626,7 +663,7 @@ describe('HomePage', () => {
     )
     expect(JSON.parse(retryRequest[1].body)).toEqual({
       query: 'stroller',
-      discoveryToken: 'guided_discovery:stroller|',
+      discoveryToken: 'opaque-discovery-token',
       followUpNotes: 'comfort matters most',
       rejectionFeedback: 'Still too bulky for city travel.',
       excludedCandidateIds: ['result-1', 'result-2'],
@@ -645,7 +682,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
-            discoveryToken: 'guided_discovery:thermos|',
+            discoveryToken: 'opaque-discovery-token',
             candidatePool: {
               query: 'thermos',
               details: '',
@@ -711,7 +748,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
-            discoveryToken: 'guided_discovery:stroller|',
+            discoveryToken: 'opaque-discovery-token',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -783,7 +820,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/your answer/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
 
@@ -802,7 +839,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
-            discoveryToken: 'guided_discovery:stroller|',
+            discoveryToken: 'opaque-discovery-token',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -873,7 +910,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/your answer/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
 
@@ -898,7 +935,7 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
-            discoveryToken: 'guided_discovery:stroller|',
+            discoveryToken: 'opaque-discovery-token',
             candidatePool: {
               query: 'stroller',
               details: '',
@@ -963,7 +1000,7 @@ describe('HomePage', () => {
           headers: { get: () => '' },
           text: async () =>
             JSON.stringify({
-              discoveryToken: 'guided_discovery:stroller|',
+              discoveryToken: 'opaque-discovery-token',
               candidatePool: {
                 query: 'stroller',
                 details: '',
@@ -1051,7 +1088,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/your answer/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
 

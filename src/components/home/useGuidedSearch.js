@@ -59,8 +59,8 @@ function isBackgroundFramingDisabled() {
   return typeof window !== 'undefined' && window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__ === true
 }
 
-function hasUsableCandidatePool(candidatePool) {
-  return Array.isArray(candidatePool?.candidates) && candidatePool.candidates.length > 0
+function createExpiredSessionMessage() {
+  return 'Your search session expired. Start a new search.'
 }
 
 async function readJsonResponse(response, requestStartedAt) {
@@ -327,6 +327,18 @@ export function useGuidedSearch() {
     enrichmentPollRef.current.searchId = 0
   }
 
+  function expireSearchSession(message = createExpiredSessionMessage()) {
+    stopEnrichmentPolling()
+    finalizeMutation.reset()
+    setDiscoveryToken('')
+    setCandidatePool(null)
+    setResults([])
+    setPreviousResults([])
+    setSelectionState(null)
+    setIsEnrichmentReady(false)
+    setErrorMessage(message)
+  }
+
   function startEnrichmentPolling({ token, query, searchId }) {
     if (window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__) return
     stopEnrichmentPolling()
@@ -451,7 +463,14 @@ export function useGuidedSearch() {
   }
 
   function handleFinalizeError(error) {
-    setErrorMessage(error instanceof Error ? error.message : 'Unable to finalize the search.')
+    const message = error instanceof Error ? error.message : 'Unable to finalize the search.'
+
+    if (/session expired|start a new search/i.test(message)) {
+      expireSearchSession(message)
+      return
+    }
+
+    setErrorMessage(message)
   }
 
   function startFinalizeMutation(variables) {
@@ -616,9 +635,7 @@ export function useGuidedSearch() {
         if (!payload.discoveryToken) {
           setCandidatePool(null)
           setPreviewResults([])
-          setErrorMessage(
-            'Guided discovery is missing its session token. Restart the backend server and start the search again.',
-          )
+          setErrorMessage(createExpiredSessionMessage())
           return
         }
 
@@ -751,7 +768,7 @@ export function useGuidedSearch() {
     }
 
     if (!discoveryToken) {
-      setErrorMessage('Search session is missing. Please start the search again.')
+      expireSearchSession()
       return
     }
 
@@ -856,7 +873,7 @@ export function useGuidedSearch() {
     }
 
     if (!discoveryToken) {
-      setErrorMessage('Search session is missing. Please start the search again.')
+      expireSearchSession()
       return
     }
 

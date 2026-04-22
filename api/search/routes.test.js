@@ -110,7 +110,7 @@ describe('Vercel search route wrappers', () => {
       },
       body: JSON.stringify({
         query: 'stroller',
-        discoveryToken: 'guided_discovery:stroller|',
+        discoveryToken: 'opaque-discovery-token',
       }),
     })
 
@@ -130,7 +130,7 @@ describe('Vercel search route wrappers', () => {
     expect(await response.text()).toBe(
       JSON.stringify({
         query: 'stroller',
-        discoveryToken: 'guided_discovery:stroller|',
+        discoveryToken: 'opaque-discovery-token',
       }),
     )
   })

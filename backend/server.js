@@ -1,10 +1,10 @@
+import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import {
   DEFAULT_FINALIZE_MODEL,
   DEFAULT_REFINEMENT_MODEL,
   DEFAULT_CONTEXT_FINALIZE_MODEL,
-  createCandidateAwarePrior,
   selectAiResults,
   nanoLockWinnersAndBadges,
   miniEnrichSelectedCandidates,
@@ -21,7 +21,6 @@ import {
   recordSearchCacheEvent,
   writeSearchSnapshot,
 } from './lib/search-pipeline.js'
-import { fetchRainforestArtifacts } from './lib/rainforest-pipeline.js'
 import { fetchOxylabsArtifacts, fetchOxylabsProductDetailsByAsin } from './lib/oxylabs-pipeline.js'
 import {
   getSupabaseHealth,
@@ -29,7 +28,9 @@ import {
   recordAnalyticsResultClick,
   recordAnalyticsResultImpressions,
   recordAnalyticsSearchEvent,
+  readProductDetailsCacheEntries,
   upsertAnalyticsSearchRun,
+  writeProductDetailsCacheEntries,
 } from './lib/search-storage.js'
 import { buildCacheKey, getEnv, validateSearchInput } from './lib/search-data.js'
 
@@ -59,7 +60,6 @@ const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const RATE_LIMIT_WAIT_MESSAGE = 'Please wait about 10 seconds and try again.'
-const RAINFOREST_PRODUCT_DETAIL_TIMEOUT_MS = 6000
 function getRefinementModel() {
   return getEnv('OPENAI_REFINEMENT_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_REFINEMENT_MODEL
 }
@@ -125,14 +125,6 @@ function logSearchFlowEvent(eventName, details = {}) {
   console.info('[search-flow]', JSON.stringify(payload))
 }
 
-function safeJsonByteLength(value) {
-  try {
-    return Buffer.byteLength(JSON.stringify(value))
-  } catch {
-    return null
-  }
-}
-
 function buildDiscoveryPreviewSelection(results, extraSelection = {}) {
   return {
     mode: 'discovery_preview',
@@ -173,6 +165,7 @@ export function sendJson(response, statusCode, payload, headers = {}) {
     ...headers,
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    Vary: 'Origin',
   }
 
   delete responseHeaders.serverTiming
@@ -276,26 +269,13 @@ function sanitizeFinalizeDiscoveryContext(body) {
 
   if (!discoveryToken) {
     return {
-      error: 'A discovery token is required to finalize the search.',
+      error: 'Your search session expired. Start a new search.',
       isValid: false,
     }
   }
-
-  const expectedDiscoveryToken = buildCacheKey(normalizedQuery, '', CACHE_SCOPE_DISCOVERY)
-  const expectedRainforestToken = buildCacheKey(normalizedQuery, '', CACHE_SCOPE_RAINFOREST)
-
-  if (discoveryToken !== expectedDiscoveryToken && discoveryToken !== expectedRainforestToken) {
-    return {
-      error: 'The guided discovery token is invalid for this query. Please start the search again.',
-      isValid: false,
-    }
-  }
-
-  const discoveryScope = discoveryToken === expectedRainforestToken ? CACHE_SCOPE_RAINFOREST : CACHE_SCOPE_DISCOVERY
 
   return {
     discoveryToken,
-    discoveryScope,
     isValid: true,
     normalizedQuery,
     requestMode: truncateText(body?.requestMode, 80) || FINALIZE_REQUEST_MODE_DEFAULT,
@@ -463,13 +443,7 @@ function sanitizeFinalizeCandidatePool(candidatePool) {
   }
 }
 
-async function readFinalizeCandidatePoolFromDiscovery(normalizedQuery, scope = CACHE_SCOPE_DISCOVERY) {
-  const { cachedEntry } = await readCachedSearchSnapshot({
-    productQuery: normalizedQuery,
-    details: '',
-    scope,
-  })
-
+function resolveFinalizeCandidatePool(cachedEntry) {
   if (!cachedEntry?.candidatePool?.candidates?.length) {
     return {
       error: 'The guided search context expired. Please start the search again.',
@@ -498,6 +472,88 @@ async function readFinalizeCandidatePoolFromDiscovery(normalizedQuery, scope = C
   }
 }
 
+function createDiscoveryToken() {
+  return randomUUID()
+}
+
+async function resolveDiscoveryContext(normalizedQuery, discoveryToken) {
+  const truncatedToken = truncateText(discoveryToken, 300)
+
+  if (!truncatedToken) {
+    return {
+      error: 'Your search session expired. Start a new search.',
+      isValid: false,
+      statusCode: 409,
+    }
+  }
+
+  for (const scope of [CACHE_SCOPE_DISCOVERY, CACHE_SCOPE_RAINFOREST]) {
+    const { cachedEntry } = await readCachedSearchSnapshot({
+      productQuery: normalizedQuery,
+      details: '',
+      scope,
+    })
+
+    if (!cachedEntry) {
+      continue
+    }
+
+    if (truncateText(cachedEntry.discoveryToken, 300) !== truncatedToken) {
+      continue
+    }
+
+    return {
+      cachedEntry,
+      discoveryScope: scope,
+      isValid: true,
+    }
+  }
+
+  return {
+    error: 'Your search session expired. Start a new search.',
+    isValid: false,
+    statusCode: 409,
+  }
+}
+
+async function ensureDiscoverySnapshotToken({
+  normalizedQuery,
+  normalizedDetails = '',
+  cachedEntry,
+  scope,
+}) {
+  const storedToken = truncateText(cachedEntry?.discoveryToken, 300)
+
+  if (storedToken) {
+    return {
+      cachedEntry,
+      discoveryToken: storedToken,
+    }
+  }
+
+  const discoveryToken = createDiscoveryToken()
+  const updatedEntry = await writeSearchSnapshot({
+    productQuery: normalizedQuery,
+    details: normalizedDetails,
+    candidatePool: cachedEntry?.candidatePool ?? null,
+    discoveryToken,
+    results: Array.isArray(cachedEntry?.results) ? cachedEntry.results : [],
+    selection: cachedEntry?.selection ?? null,
+    source: cachedEntry?.source || 'guided_discovery',
+    scope,
+  })
+
+  return {
+    cachedEntry: {
+      ...cachedEntry,
+      discoveryToken,
+      cachedAt: updatedEntry?.cachedAt || cachedEntry?.cachedAt,
+      expiresAt: updatedEntry?.expiresAt || cachedEntry?.expiresAt,
+    },
+    discoveryToken,
+  }
+}
+
 function buildFinalizeFallbackResults(candidatePool) {
   return candidatePool.candidates
     .slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit)
@@ -523,81 +579,6 @@ function buildFinalizeFastResponseContract({
     strategy,
     generatedAt: new Date().toISOString(),
   })
-}
-
-function sanitizeFeatureBullets(value, { maxItems = 10, maxLength = 320 } = {}) {
-  if (!Array.isArray(value)) {
-    return []
-  }
-
-  return value
-    .map((entry) => truncateText(entry, maxLength))
-    .filter(Boolean)
-    .slice(0, maxItems)
-}
-
-function sanitizeProductDescription(value, maxLength = 3000) {
-  return truncateText(value, maxLength)
-}
-
-async function fetchRainforestProductDetailsByAsin({ asins = [], rainforestApiKey }) {
-  if (!rainforestApiKey) {
-    return new Map()
-  }
-
-  const uniqueAsins = Array.from(
-    new Set(
-      asins
-        .map((asin) => truncateText(asin, 200))
-        .filter(Boolean),
-    ),
-  )
-
-  if (uniqueAsins.length === 0) {
-    return new Map()
-  }
-
-  const settledResults = await Promise.allSettled(
-    uniqueAsins.map(async (asin) => {
-      const requestUrl = new URL('https://api.rainforestapi.com/request')
-      requestUrl.searchParams.set('api_key', rainforestApiKey)
-      requestUrl.searchParams.set('type', 'product')
-      requestUrl.searchParams.set('asin', asin)
-      requestUrl.searchParams.set('amazon_domain', 'amazon.com')
-
-      const apiResponse = await fetch(requestUrl, {
-        signal: AbortSignal.timeout(RAINFOREST_PRODUCT_DETAIL_TIMEOUT_MS),
-      })
-
-      if (!apiResponse.ok) {
-        throw new Error(`Rainforest product request failed with status ${apiResponse.status}.`)
-      }
-
-      const payload = await apiResponse.json()
-      const product = payload?.product || payload?.result?.product || payload?.result || null
-
-      return {
-        asin,
-        feature_bullets: sanitizeFeatureBullets(product?.feature_bullets),
-        productDescription: sanitizeProductDescription(product?.description),
-      }
-    }),
-  )
-
-  const detailsByAsin = new Map()
-
-  for (const settledResult of settledResults) {
-    if (settledResult.status !== 'fulfilled') {
-      continue
-    }
-
-    detailsByAsin.set(settledResult.value.asin, {
-      feature_bullets: settledResult.value.feature_bullets,
-      productDescription: settledResult.value.productDescription,
-    })
-  }
-
-  return detailsByAsin
 }
 
 function mergeProductDetailsIntoCandidatePool(candidatePool, productDetailsById) {
@@ -825,6 +806,12 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
 
   if (cachedEntry?.candidatePool && cachedEntry?.results?.length) {
+    const tokenizedDiscovery = await ensureDiscoverySnapshotToken({
+      normalizedQuery,
+      normalizedDetails,
+      cachedEntry,
+      scope: CACHE_SCOPE_DISCOVERY,
+    })
     const cachedCandidateAwarePrior = getStoredCandidateAwarePrior(cachedEntry.selection)
 
     await recordSearchCacheEvent({
@@ -854,11 +841,11 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
     })
 
     sendJson(response, 200, {
-      discoveryToken: discoveryCacheKey,
-      candidatePool: cachedEntry.candidatePool,
+      discoveryToken: tokenizedDiscovery.discoveryToken,
+      candidatePool: tokenizedDiscovery.cachedEntry.candidatePool,
       previewResults: normalizedCachedResults,
       source: 'cache',
-      cachedAt: cachedEntry.cachedAt,
+      cachedAt: tokenizedDiscovery.cachedEntry.cachedAt,
     }, {
       serverTiming: [
         { name: 'cache', duration: cacheLookupDuration },
@@ -869,6 +856,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   }
 
   try {
+    const discoveryToken = createDiscoveryToken()
     const serpApiStartedAt = nowMs()
     const { artifacts, error: artifactsError } = await fetchSearchArtifacts({
       filterConfig: LIVE_RESULT_FILTER_CONFIG,
@@ -892,6 +880,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
         productQuery: normalizedQuery,
         details: normalizedDetails,
         candidatePool: artifacts.candidatePool,
+        discoveryToken,
         results: artifacts.results,
         selection: buildDiscoveryPreviewSelection(artifacts.results),
         source: 'guided_discovery',
@@ -927,7 +916,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
     })
 
     sendJson(response, 200, {
-      discoveryToken: discoveryCacheKey,
+      discoveryToken,
       candidatePool: artifacts.candidatePool,
       previewResults: artifacts.results,
     }, {
@@ -993,6 +982,12 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
 
   if (cachedEntry?.candidatePool && cachedEntry?.results?.length) {
+    const tokenizedDiscovery = await ensureDiscoverySnapshotToken({
+      normalizedQuery,
+      normalizedDetails,
+      cachedEntry,
+      scope: CACHE_SCOPE_RAINFOREST,
+    })
     const cachedCandidateAwarePrior = getStoredCandidateAwarePrior(cachedEntry.selection)
 
     await recordSearchCacheEvent({
@@ -1021,11 +1016,11 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
     })
 
     sendJson(response, 200, {
-      discoveryToken: discoveryCacheKey,
-      candidatePool: cachedEntry.candidatePool,
+      discoveryToken: tokenizedDiscovery.discoveryToken,
+      candidatePool: tokenizedDiscovery.cachedEntry.candidatePool,
       previewResults: normalizedCachedResults,
       source: 'cache',
-      cachedAt: cachedEntry.cachedAt,
+      cachedAt: tokenizedDiscovery.cachedEntry.cachedAt,
     }, {
       serverTiming: [
         { name: 'cache', duration: cacheLookupDuration },
@@ -1036,6 +1031,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   }
 
   try {
+    const discoveryToken = createDiscoveryToken()
     const rainforestStartedAt = nowMs()
     const { artifacts, error: artifactsError } = await fetchOxylabsArtifacts({ // TODO: swap back to Rainforest before launch.
       filterConfig: LIVE_RESULT_FILTER_CONFIG,
@@ -1060,6 +1056,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
         productQuery: normalizedQuery,
         details: normalizedDetails,
         candidatePool: artifacts.candidatePool,
+        discoveryToken,
         results: artifacts.results,
         selection: buildDiscoveryPreviewSelection(artifacts.results),
         source: 'rainforest_discovery',
@@ -1094,7 +1091,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
     })
 
     sendJson(response, 200, {
-      discoveryToken: discoveryCacheKey,
+      discoveryToken,
       candidatePool: artifacts.candidatePool,
       previewResults: artifacts.results,
     }, {
@@ -1396,9 +1393,17 @@ export async function handleNanoMiniSplitFinalize(request, response) {
     return
   }
 
-  const resolvedCandidatePool = await readFinalizeCandidatePoolFromDiscovery(
+  const resolvedDiscoveryContext = await resolveDiscoveryContext(
     sanitizedDiscoveryContext.normalizedQuery,
+    sanitizedDiscoveryContext.discoveryToken,
   )
+
+  if (!resolvedDiscoveryContext.isValid) {
+    sendJson(response, resolvedDiscoveryContext.statusCode, { error: resolvedDiscoveryContext.error })
+    return
+  }
+
+  const resolvedCandidatePool = resolveFinalizeCandidatePool(resolvedDiscoveryContext.cachedEntry)
 
   if (!resolvedCandidatePool.isValid) {
     sendJson(response, resolvedCandidatePool.statusCode, { error: resolvedCandidatePool.error })
@@ -1497,6 +1502,7 @@ async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model,
     productQuery: normalizedQuery,
     details: '',
     candidatePool: cachedEntry.candidatePool,
+    discoveryToken: cachedEntry.discoveryToken || '',
     results: Array.isArray(cachedEntry.results) ? cachedEntry.results : [],
     selection: updatedSelection,
     source: 'enrichment_update',
@@ -1528,21 +1534,14 @@ export async function handleEnrichmentPoll(request, response) {
     return
   }
 
-  const expectedToken = buildCacheKey(normalizedQuery, '', CACHE_SCOPE_DISCOVERY)
-  const expectedRainforestToken = buildCacheKey(normalizedQuery, '', CACHE_SCOPE_RAINFOREST)
+  const resolvedDiscoveryContext = await resolveDiscoveryContext(normalizedQuery, token)
 
-  if (token !== expectedToken && token !== expectedRainforestToken) {
-    sendJson(response, 400, { error: 'The enrichment token is invalid for this query.' })
+  if (!resolvedDiscoveryContext.isValid) {
+    sendJson(response, resolvedDiscoveryContext.statusCode, { error: resolvedDiscoveryContext.error })
     return
   }
 
-  const enrichmentScope = token === expectedRainforestToken ? CACHE_SCOPE_RAINFOREST : CACHE_SCOPE_DISCOVERY
-
-  const { cachedEntry } = await readCachedSearchSnapshot({
-    productQuery: normalizedQuery,
-    details: '',
-    scope: enrichmentScope,
-  })
+  const { cachedEntry } = resolvedDiscoveryContext
 
   const enrichment = cachedEntry?.selection?.enrichment
 
@@ -1609,11 +1608,23 @@ export async function handleFinalizeSelection(request, response) {
   }
 
   const cacheLookupStartedAt = nowMs()
-  const resolvedCandidatePool = await readFinalizeCandidatePoolFromDiscovery(
+  const resolvedDiscoveryContext = await resolveDiscoveryContext(
     sanitizedDiscoveryContext.normalizedQuery,
-    sanitizedDiscoveryContext.discoveryScope,
+    sanitizedDiscoveryContext.discoveryToken,
   )
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
+
+  if (!resolvedDiscoveryContext.isValid) {
+    logSearchFlowEvent('guided_finalize_missing_discovery_context', {
+      route: '/api/search/finalize',
+      query: sanitizedDiscoveryContext.normalizedQuery,
+      error: resolvedDiscoveryContext.error,
+    })
+    sendJson(response, resolvedDiscoveryContext.statusCode, { error: resolvedDiscoveryContext.error })
+    return
+  }
+
+  const resolvedCandidatePool = resolveFinalizeCandidatePool(resolvedDiscoveryContext.cachedEntry)
 
   if (!resolvedCandidatePool.isValid) {
     logSearchFlowEvent('guided_finalize_missing_discovery_context', {
@@ -1743,6 +1754,8 @@ export async function handleFinalizeSelection(request, response) {
       asins: nanoResult.lockedIds,
       oxylabsUsername,
       oxylabsPassword,
+      readCache: readProductDetailsCacheEntries,
+      writeCache: writeProductDetailsCacheEntries,
     })
     const productDetailsDuration = nowMs() - productDetailsStartedAt
     const enrichedCandidatePool = mergeProductDetailsIntoCandidatePool(nextCandidatePool, productDetailsById)
@@ -1852,7 +1865,7 @@ export async function handleFinalizeSelection(request, response) {
         apiKey: openAiApiKey,
         model: miniModel,
         normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
-        discoveryScope: sanitizedDiscoveryContext.discoveryScope,
+        discoveryScope: resolvedDiscoveryContext.discoveryScope,
       }).catch((error) => {
         logSearchFlowEvent('mini_enrichment_failed', {
           query: sanitizedDiscoveryContext.normalizedQuery,
@@ -2026,6 +2039,7 @@ export function createApiServer() {
         'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
+        Vary: 'Origin',
       })
       response.end()
       return

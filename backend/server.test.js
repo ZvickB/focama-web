@@ -43,13 +43,16 @@ vi.mock('./lib/search-data.js', async () => {
 vi.mock('./lib/search-storage.js', () => ({
   getSupabaseHealth: vi.fn(),
   isSupabaseConfigured: vi.fn(() => false),
+  readProductDetailsCacheEntries: vi.fn().mockResolvedValue(new Map()),
   readStoredSearchCacheEntry: vi.fn(),
   recordSearchHistory: vi.fn(),
   takeSharedRateLimitToken: vi.fn().mockResolvedValue(null),
+  writeProductDetailsCacheEntries: vi.fn().mockResolvedValue(undefined),
   writeStoredSearchCacheEntry: vi.fn(),
 }))
 
 import {
+  createApiServer,
   handleCachedSearch,
   handleDiscoverySearch,
   handleEnrichmentPoll,
@@ -128,6 +131,7 @@ function createDiscoveryCacheEntry(
   query,
   candidates = [createFinalizeCandidate('one')],
   selection = { mode: 'discovery_preview' },
+  discoveryToken = 'opaque-discovery-token',
 ) {
   return {
     cachedAt: '2026-03-17T12:00:00.000Z',
@@ -143,6 +147,7 @@ function createDiscoveryCacheEntry(
       id: candidate.id,
       title: candidate.title,
     })),
+    discoveryToken,
     selection,
     source: 'guided_discovery',
   }
@@ -151,7 +156,7 @@ function createDiscoveryCacheEntry(
 function createFinalizeDiscoveryBody(overrides = {}) {
   return {
     query: 'stroller',
-    discoveryToken: 'guided_discovery:stroller|',
+    discoveryToken: 'opaque-discovery-token',
     ...overrides,
   }
 }
@@ -229,8 +234,17 @@ describe('server handlers', () => {
       details: '',
       scope: 'guided_discovery',
     })
-    expect(JSON.parse(response.body)).toEqual({
-      discoveryToken: 'guided_discovery:thermos|',
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productQuery: 'thermos',
+        details: '',
+        discoveryToken: expect.any(String),
+        scope: 'guided_discovery',
+      }),
+    )
+    const payload = JSON.parse(response.body)
+    expect(payload).toEqual({
+      discoveryToken: expect.any(String),
       candidatePool: {
         query: 'thermos',
         details: '',
@@ -249,6 +263,8 @@ describe('server handlers', () => {
       source: 'cache',
       cachedAt: '2026-03-17T12:00:00.000Z',
     })
+    expect(payload.discoveryToken).not.toBe('guided_discovery:thermos|')
+    expect(response.headers.Vary).toBe('Origin')
   })
 
   it('writes guided discovery results to cache after a miss', async () => {
@@ -289,6 +305,7 @@ describe('server handlers', () => {
         similarQueries: [],
         candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
       },
+      discoveryToken: expect.any(String),
       results: [{ id: 'live-1', title: 'Thermos bottle' }],
       selection: {
         mode: 'discovery_preview',
@@ -299,8 +316,9 @@ describe('server handlers', () => {
       source: 'guided_discovery',
       scope: 'guided_discovery',
     })
-    expect(JSON.parse(response.body)).toEqual({
-      discoveryToken: 'guided_discovery:thermos|',
+    const payload = JSON.parse(response.body)
+    expect(payload).toEqual({
+      discoveryToken: expect.any(String),
       candidatePool: {
         query: 'thermos',
         details: '',
@@ -311,6 +329,7 @@ describe('server handlers', () => {
       },
       previewResults: [{ id: 'live-1', title: 'Thermos bottle' }],
     })
+    expect(payload.discoveryToken).not.toBe('guided_discovery:thermos|')
   })
 
   it('returns a server error when the OpenAI API key is missing', async () => {
@@ -588,7 +607,14 @@ describe('server handlers', () => {
       details: '',
       scope: 'guided_discovery',
     })
-    expect(writeStoredSearchCacheEntry).not.toHaveBeenCalled()
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productQuery: 'thermos',
+        details: '',
+        discoveryToken: expect.any(String),
+        scope: 'guided_discovery',
+      }),
+    )
   })
 
   it('rejects obvious gibberish product queries before calling SerpApi', async () => {
@@ -1006,7 +1032,7 @@ describe('server handlers', () => {
 
     expect(response.statusCode).toBe(400)
     expect(JSON.parse(response.body)).toEqual({
-      error: 'A discovery token is required to finalize the search.',
+      error: 'Your search session expired. Start a new search.',
     })
   })
 
@@ -1042,16 +1068,16 @@ describe('server handlers', () => {
       createFinalizeRequest(
         JSON.stringify({
           query: 'stroller',
-          discoveryToken: 'guided_discovery:thermos|',
+          discoveryToken: 'wrong-opaque-token',
         }),
         { 'x-forwarded-for': '203.0.113.22' },
       ),
       response,
     )
 
-    expect(response.statusCode).toBe(400)
+    expect(response.statusCode).toBe(409)
     expect(JSON.parse(response.body)).toEqual({
-      error: 'The guided discovery token is invalid for this query. Please start the search again.',
+      error: 'Your search session expired. Start a new search.',
     })
   })
 
@@ -1073,7 +1099,7 @@ describe('server handlers', () => {
 
     expect(response.statusCode).toBe(409)
     expect(JSON.parse(response.body)).toEqual({
-      error: 'The guided search context expired. Please start the search again.',
+      error: 'Your search session expired. Start a new search.',
     })
     expect(nanoLockWinnersAndBadges).not.toHaveBeenCalled()
   })
@@ -1888,8 +1914,8 @@ describe('server handlers', () => {
     )
 
     const response = createResponseRecorder()
-    const url = new URL('http://localhost/api/search/enrichment?token=guided_discovery%3Astroller%7C&query=stroller')
-    url.searchParams.set('token', 'guided_discovery:stroller|')
+    const url = new URL('http://localhost/api/search/enrichment?token=opaque-discovery-token&query=stroller')
+    url.searchParams.set('token', 'opaque-discovery-token')
     url.searchParams.set('query', 'stroller')
 
     await handleEnrichmentPoll({ url: url.toString() }, response)
@@ -1915,7 +1941,7 @@ describe('server handlers', () => {
 
     const response = createResponseRecorder()
     const url = new URL('http://localhost/api/search/enrichment')
-    url.searchParams.set('token', 'guided_discovery:stroller|')
+    url.searchParams.set('token', 'opaque-discovery-token')
     url.searchParams.set('query', 'stroller')
 
     await handleEnrichmentPoll({ url: url.toString() }, response)
@@ -1935,6 +1961,25 @@ describe('server handlers', () => {
 
     expect(response.statusCode).toBe(400)
     expect(JSON.parse(response.body)).toEqual({ error: 'token and query are required.' })
+  })
+
+  it('rejects enrichment poll when the token does not match the stored discovery session', async () => {
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+    readStoredSearchCacheEntry.mockResolvedValueOnce(null)
+
+    const response = createResponseRecorder()
+    const url = new URL('http://localhost/api/search/enrichment')
+    url.searchParams.set('token', 'wrong-opaque-token')
+    url.searchParams.set('query', 'stroller')
+
+    await handleEnrichmentPoll({ url: url.toString() }, response)
+
+    expect(response.statusCode).toBe(409)
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'Your search session expired. Start a new search.',
+    })
   })
 
   it('stores mini enrichment in discovery cache after nano finalizes', async () => {
@@ -1983,5 +2028,24 @@ describe('server handlers', () => {
         }),
       }),
     )
+  })
+
+  it('includes Vary: Origin on OPTIONS preflight responses', async () => {
+    const server = createApiServer()
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    const port = typeof address === 'object' && address ? address.port : 0
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/search/discover`, {
+        method: 'OPTIONS',
+      })
+
+      expect(response.status).toBe(204)
+      expect(response.headers.get('vary')).toBe('Origin')
+      expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
+    } finally {
+      await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+    }
   })
 })

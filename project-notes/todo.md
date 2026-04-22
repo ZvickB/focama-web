@@ -25,8 +25,7 @@ AI maintains this file. Each item should be one plain sentence.
 ## UI Polish
 
 | Status | Item |
-| **IMPORTANT** | Fix onboarding copy and flow clarity — new users are not understanding what to do; full audit and all suggested changes are in `project-notes/onboarding-copy-audit.md` |
-|--------|------|
+| in progress | Fix onboarding copy and flow clarity — new users are not understanding what to do; full audit and all suggested changes are in `project-notes/onboarding-copy-audit.md` |
 | done | Add stagger rise entrance animation to result cards using Motion — y:12→0, duration 0.45s, stagger 0.13s, replaces CSS state machine |
 | done | Replace manual timer animation in `RefinementCopy` with Motion `AnimatePresence` — removed 3 state vars and 2 useEffects |
 | done | Add scale + fade entrance/exit to `ProductDetailModal` using Motion `AnimatePresence` |
@@ -67,11 +66,11 @@ AI maintains this file. Each item should be one plain sentence.
 
 | Status | Item |
 |--------|------|
-| pending | Add a controlled fallback for missing `discoveryToken` state — dev mode throws; production needs a cleaner failure path before broader sharing |
-| pending | Add a shared secret header check (`X-Api-Key`) on all API endpoints — currently any caller with curl can hit endpoints and burn Rainforest/OpenAI credits |
+| pending | Keep missing or expired `discoveryToken` state on a user-safe restart path — no dev-only messaging before broader sharing |
+| pending | Document real abuse protection for public APIs — current guardrails are rate limiting plus origin restriction; stronger protection would need auth, a trusted server-only layer, or signed requests, not a browser-exposed `X-Api-Key` |
 | done | Restrict CORS from wildcard to your own domain — locked to `focama.vercel.app` in prod, `localhost:5173` in dev via `ALLOWED_ORIGIN` env var |
 | done | Add a React Error Boundary so a JS crash doesn't white-screen the whole app |
-| pending | Make the discovery token a random ID instead of a predictable string — right now anyone who knows the query can guess it |
+| pending | Keep the discovery token opaque and random instead of query-derived so browser-visible session IDs are not guessable |
 | pending | Decide how strong rate limiting and abuse protection need to be before broader sharing |
 | pending | Add `Vary: Origin` header to API responses so CDN/proxy caches don't serve the wrong CORS headers to different origins |
 
