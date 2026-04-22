@@ -243,6 +243,51 @@ describe('result filter', () => {
     expect(artifacts.results.map((result) => result.title)).toContain('Apple Pencil')
   })
 
+  it('falls back to the first 20 deduped Serp-style results when too few items pass hard filters', () => {
+    const matchingResults = Array.from({ length: 14 }, (_, index) => (
+      createShoppingResult({
+        position: index + 1,
+        product_id: `prod-match-${index + 1}`,
+        title: `iPad Cover Match ${index + 1}`,
+        source: `Store ${index + 1}`,
+        reviews: 500 - index,
+      })
+    ))
+    const fallbackResult = createShoppingResult({
+      position: 15,
+      product_id: 'prod-fallback',
+      title: 'Apple Pencil',
+      source: 'Store 15',
+      snippet: 'Top rated stylus with excellent pressure sensitivity',
+      reviews: 12000,
+      rating: 4.8,
+      extracted_price: 89.99,
+      price: '$89.99',
+    })
+
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: [
+          ...matchingResults,
+          fallbackResult,
+        ],
+      },
+      {
+        productQuery: 'ipad cover',
+        details: '',
+        candidatePoolSize: 20,
+        finalResultLimit: 20,
+        hardFilterFallbackThreshold: 15,
+        hardFilterFallbackPoolSize: 20,
+        reasonFallback: 'Returned by the live SerpApi search route',
+      },
+    )
+
+    expect(artifacts.candidatePool.candidates).toHaveLength(15)
+    expect(artifacts.candidatePool.candidates.map((candidate) => candidate.title)).toContain('Apple Pencil')
+    expect(artifacts.results.map((result) => result.title)).toContain('Apple Pencil')
+  })
+
   it('exposes an AI-friendly candidate pool alongside the final UI results', () => {
     const artifacts = getFilteredSearchArtifacts(
       {

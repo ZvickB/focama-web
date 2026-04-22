@@ -7,6 +7,8 @@ export const DEFAULT_FILTER_CONFIG = {
   diversifyPoolMultiplier: 2,
   diversifyBySource: true,
   skipHardFilter: false,
+  hardFilterFallbackThreshold: 0,
+  hardFilterFallbackPoolSize: 20,
 }
 
 const STOP_WORDS = new Set([
@@ -394,6 +396,8 @@ export function getFilteredSearchArtifacts(
     diversifyPoolMultiplier = DEFAULT_FILTER_CONFIG.diversifyPoolMultiplier,
     diversifyBySource = DEFAULT_FILTER_CONFIG.diversifyBySource,
     skipHardFilter = DEFAULT_FILTER_CONFIG.skipHardFilter,
+    hardFilterFallbackThreshold = DEFAULT_FILTER_CONFIG.hardFilterFallbackThreshold,
+    hardFilterFallbackPoolSize = DEFAULT_FILTER_CONFIG.hardFilterFallbackPoolSize,
     reasonFallback,
   },
 ) {
@@ -412,16 +416,25 @@ export function getFilteredSearchArtifacts(
     }
   }
 
-  const candidates = skipHardFilter
-    ? [...dedupedByProductId.values()]
-    : [...dedupedByProductId.values()].filter((item) => passHardFilters(item, queryTokens))
+  const dedupedCandidates = [...dedupedByProductId.values()]
+  const hardFilteredCandidates = skipHardFilter
+    ? dedupedCandidates
+    : dedupedCandidates.filter((item) => passHardFilters(item, queryTokens))
+  const useHardFilterFallback = !skipHardFilter
+    && hardFilterFallbackThreshold > 0
+    && hardFilteredCandidates.length < hardFilterFallbackThreshold
+  const candidates = useHardFilterFallback
+    ? dedupedCandidates.slice(0, Math.max(hardFilterFallbackPoolSize, candidatePoolSize))
+    : hardFilteredCandidates
 
-  const scoredItems = candidates
+  const scoredEntries = candidates
     .map((item) => ({
       item,
       score: scoreResult(item, queryTokens, detailsTokens, searchState),
     }))
-    .filter((entry) => entry.score > minimumScore)
+  const scoredItems = (useHardFilterFallback ? scoredEntries : scoredEntries.filter(
+    (entry) => entry.score > minimumScore,
+  ))
     .sort((left, right) => right.score - left.score)
 
   const selectedItems = diversifyResults(

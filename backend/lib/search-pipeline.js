@@ -104,6 +104,8 @@ export async function fetchSearchArtifacts({
     finalResultLimit: filterConfig.finalResultLimit,
     minimumScore: filterConfig.minimumScore,
     diversifyPoolMultiplier: filterConfig.diversifyPoolMultiplier,
+    hardFilterFallbackThreshold: 15,
+    hardFilterFallbackPoolSize: 20,
     reasonFallback,
   })
 
