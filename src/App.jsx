@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import SiteLayout from '@/components/SiteLayout.jsx'
+import { SearchProgressProvider } from '@/contexts/SearchProgressContext.jsx'
 
 const HomePage = lazy(() => import('@/pages/HomePage.jsx'))
 const AboutPage = lazy(() => import('@/pages/AboutPage.jsx'))
@@ -59,9 +60,11 @@ function App() {
   }
 
   return (
-    <Suspense fallback={null}>
-      <AppRoutes onReady={handleRoutesReady} />
-    </Suspense>
+    <SearchProgressProvider>
+      <Suspense fallback={null}>
+        <AppRoutes onReady={handleRoutesReady} />
+      </Suspense>
+    </SearchProgressProvider>
   )
 }
 

@@ -8,6 +8,7 @@ import { RESULT_CARD_SLOTS, useGuidedSearch } from '@/components/home/useGuidedS
 import { Button } from '@/components/ui/button.jsx'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
+import { useSearchProgress } from '@/contexts/SearchProgressContext.jsx'
 
 const HERO_SUBLINE = "Tell us what you need. We'll find your six."
 
@@ -63,11 +64,11 @@ function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
   return {
     helper:
       prompt?.helperText ||
-      'Use this step for natural-language details like budget, size, comfort, style, or where you plan to use it.',
+      'Share your budget, size, comfort, style, or how you plan to use it — anything that matters to you.',
     placeholder:
       prompt?.followUpPlaceholder ||
       'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
-    titleEyebrow: isGeneratingPrompt ? 'You can add more detail right away' : 'One suggestion, such as:',
+    titleEyebrow: isGeneratingPrompt ? 'You can add more detail right away' : 'For example:',
     titleQuestion: isGeneratingPrompt ? '' : suggestedQuestion,
   }
 }
@@ -342,6 +343,11 @@ function OpenLayout(props) {
 
   const hasDiscoveryResults = Boolean(state.candidatePool)
   const showLoadingResults = isLoading && displayedResults.length === 0
+
+  const { setProgress } = useSearchProgress()
+  useEffect(() => {
+    setProgress({ hasStartedSearch, hasDiscoveryResults, hasFinalResults })
+  }, [hasStartedSearch, hasDiscoveryResults, hasFinalResults, setProgress])
   const refinementCopy = buildRefinementCopy({
     isGeneratingPrompt: state.isGeneratingPrompt,
     prompt,
@@ -465,7 +471,7 @@ function OpenLayout(props) {
 
                   <div className="space-y-2">
                     <Label htmlFor="open-follow-up-notes" className="text-slate-700">
-                      Your answer
+                      Tell us more
                     </Label>
                     <div
                       className={`rounded-[30px] border border-stone-200 bg-[#fffdf9] p-1 transition-all duration-300 ${

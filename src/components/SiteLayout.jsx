@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import logo from '@/assets/logo_header_mark.svg'
+import { useSearchProgress } from '@/contexts/SearchProgressContext.jsx'
 
 const navItems = [
   { to: '/', label: 'Home', end: true },
@@ -87,11 +88,36 @@ function SlidingNav({ items, className = '' }) {
   )
 }
 
+function SearchStepIndicator({ progress }) {
+  const { hasStartedSearch, hasDiscoveryResults, hasFinalResults } = progress
+  if (!hasStartedSearch) return null
+
+  return (
+    <div
+      className="text-[11px] font-semibold uppercase tracking-[0.14em] sm:text-[13px]"
+      style={{ fontFamily: '"Instrument Sans", sans-serif' }}
+    >
+      <span className={hasDiscoveryResults ? 'text-slate-400' : 'text-primary'}>Search</span>
+      <span className="px-1.5 text-slate-300">·</span>
+      <span
+        className={
+          hasDiscoveryResults && !hasFinalResults ? 'text-primary' : 'text-slate-400'
+        }
+      >
+        Refine
+      </span>
+      <span className="px-1.5 text-slate-300">·</span>
+      <span className={hasFinalResults ? 'text-primary' : 'text-slate-400'}>Get 6 picks</span>
+    </div>
+  )
+}
+
 function SiteLayout() {
   const [isCompact, setIsCompact] = useState(false)
   const [mobileMenuOpenPath, setMobileMenuOpenPath] = useState(null)
   const location = useLocation()
   const isMobileMenuOpen = mobileMenuOpenPath === location.pathname
+  const { progress } = useSearchProgress()
 
   useEffect(() => {
     function handleScroll() {
@@ -161,6 +187,9 @@ function SiteLayout() {
             >
               {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
+          </div>
+          <div className="hidden flex-1 items-center justify-center lg:flex">
+            <SearchStepIndicator progress={progress} />
           </div>
           <div className="hidden sm:block">
             <SlidingNav items={navItems} />
