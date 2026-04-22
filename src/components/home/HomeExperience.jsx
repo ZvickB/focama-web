@@ -356,7 +356,7 @@ function OpenLayout(props) {
   })
 
   return (
-    <main className="px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
+    <main className="px-3 py-6 sm:px-6 sm:py-8 lg:px-6 xl:px-8">
       <div className="mx-auto flex max-w-7xl flex-col items-center gap-8">
         <section className="w-full max-w-4xl space-y-6 text-center">
           <div className="space-y-4">
@@ -415,7 +415,7 @@ function OpenLayout(props) {
                   : 'border-white/70 bg-white/80'
               }`}
             >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center">
                 <div className="flex-1">
                   <Label htmlFor="open-variant-query" className="sr-only">
                     Product topic
