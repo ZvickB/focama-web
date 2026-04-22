@@ -5,6 +5,8 @@ export const DEFAULT_FILTER_CONFIG = {
   candidatePoolSize: 20,
   minimumScore: 0,
   diversifyPoolMultiplier: 2,
+  diversifyBySource: true,
+  skipHardFilter: false,
 }
 
 const STOP_WORDS = new Set([
@@ -226,7 +228,7 @@ function passHardFilters(item, queryTokens) {
   return true
 }
 
-function diversifyResults(scoredItems, limit) {
+function diversifyResults(scoredItems, limit, { diversifyBySource = true } = {}) {
   const selected = []
   const seenTitleKeys = new Set()
   const perSourceCount = new Map()
@@ -245,7 +247,7 @@ function diversifyResults(scoredItems, limit) {
     const sourceKey = (entry.item.source || '').toLowerCase()
     const sourceCount = perSourceCount.get(sourceKey) || 0
 
-    if (sourceKey && sourceCount >= 2) {
+    if (diversifyBySource && sourceKey && sourceCount >= 2) {
       continue
     }
 
@@ -390,6 +392,8 @@ export function getFilteredSearchArtifacts(
     candidatePoolSize = DEFAULT_FILTER_CONFIG.candidatePoolSize,
     minimumScore = DEFAULT_FILTER_CONFIG.minimumScore,
     diversifyPoolMultiplier = DEFAULT_FILTER_CONFIG.diversifyPoolMultiplier,
+    diversifyBySource = DEFAULT_FILTER_CONFIG.diversifyBySource,
+    skipHardFilter = DEFAULT_FILTER_CONFIG.skipHardFilter,
     reasonFallback,
   },
 ) {
@@ -408,7 +412,9 @@ export function getFilteredSearchArtifacts(
     }
   }
 
-  const candidates = [...dedupedByProductId.values()].filter((item) => passHardFilters(item, queryTokens))
+  const candidates = skipHardFilter
+    ? [...dedupedByProductId.values()]
+    : [...dedupedByProductId.values()].filter((item) => passHardFilters(item, queryTokens))
 
   const scoredItems = candidates
     .map((item) => ({
@@ -421,6 +427,7 @@ export function getFilteredSearchArtifacts(
   const selectedItems = diversifyResults(
     scoredItems,
     Math.max(candidatePoolSize * diversifyPoolMultiplier, candidatePoolSize),
+    { diversifyBySource },
   )
   const collapsedItems = collapseDuplicateFamilies(selectedItems)
   const aiCandidates = collapsedItems

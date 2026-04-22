@@ -75,6 +75,7 @@ Read this file first at the start of every chat.
   - `project-notes/session-handoff.md` if a fresh chat would otherwise be misled
 - After finishing a meaningful chunk of work, update `project-notes/handoff.md` if remaining work or priorities changed.
 - Update `project-notes/cleanup-backlog.md` only when a cleanup item is actually completed, split, or blocked.
+- When a provider path is intentionally deferred or temporarily not wired, record the exact re-entry points in active project notes so future chats know what must be switched later.
 - Keep note updates small and accurate. Do not rewrite history just to make notes look cleaner.
 - Prefer concise, de-duplicated active notes, but do not enforce a hard line-count limit.
 - Let canonical source-of-truth notes be as long as needed to preserve guardrails, current/planned clarity, and measurement conclusions.

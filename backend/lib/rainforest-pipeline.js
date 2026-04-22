@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { fetchProductDetailsWithCache } from './product-details-cache.js'
 import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './result-filter.js'
 import { buildQuery } from './search-data.js'
 
@@ -65,6 +66,52 @@ function normalizeRainforestItem(item) {
   }
 }
 
+function normalizeRainforestFeatureBullets(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+      .filter(Boolean)
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(/\r?\n/)
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+  }
+
+  return []
+}
+
+function normalizeRainforestDescription(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeRainforestProductDetailPayload(payload, fallbackAsin) {
+  const product = payload?.product && typeof payload.product === 'object'
+    ? payload.product
+    : payload?.product_results && typeof payload.product_results === 'object'
+      ? payload.product_results
+      : payload?.results?.[0]?.product && typeof payload.results[0].product === 'object'
+        ? payload.results[0].product
+        : payload
+
+  return {
+    asin: typeof product?.asin === 'string' && product.asin.trim() ? product.asin.trim() : fallbackAsin,
+    feature_bullets: normalizeRainforestFeatureBullets(
+      product?.feature_bullets ??
+      product?.bullet_points ??
+      product?.bullets ??
+      product?.highlights,
+    ),
+    productDescription: normalizeRainforestDescription(
+      product?.description ??
+      product?.product_description ??
+      product?.overview,
+    ),
+  }
+}
+
 export async function fetchRainforestArtifacts({
   filterConfig = DEFAULT_FILTER_CONFIG,
   productQuery,
@@ -109,6 +156,8 @@ export async function fetchRainforestArtifacts({
     finalResultLimit: filterConfig.finalResultLimit,
     minimumScore: filterConfig.minimumScore,
     diversifyPoolMultiplier: filterConfig.diversifyPoolMultiplier,
+    diversifyBySource: false,
+    skipHardFilter: true,
     reasonFallback,
   })
 
@@ -126,4 +175,69 @@ export async function fetchRainforestArtifacts({
     error: null,
     artifacts,
   }
+}
+
+export async function fetchRainforestProductDetailsByAsin({
+  asins = [],
+  rainforestApiKey,
+  countryCode = 'US',
+  readCache = async () => new Map(),
+  writeCache = async () => {},
+}) {
+  if (!rainforestApiKey) {
+    return new Map()
+  }
+
+  const amazonDomain = getAmazonDomain(countryCode)
+
+  return fetchProductDetailsWithCache({
+    asins,
+    source: 'rainforest',
+    readCache,
+    writeCache,
+    logLabel: 'rainforest-product-details',
+    fetchFreshDetails: async (requestedAsins) => {
+      const settledResults = await Promise.allSettled(
+        requestedAsins.map(async (asin) => {
+          const productUrl = new URL(RAINFOREST_ENDPOINT)
+          productUrl.searchParams.set('type', 'product')
+          productUrl.searchParams.set('asin', asin)
+          productUrl.searchParams.set('amazon_domain', amazonDomain)
+          productUrl.searchParams.set('api_key', rainforestApiKey)
+
+          const apiResponse = await fetch(productUrl, {
+            signal: AbortSignal.timeout(10000),
+          })
+
+          if (!apiResponse.ok) {
+            throw new Error(`Rainforest product request failed with status ${apiResponse.status}.`)
+          }
+
+          const payload = await apiResponse.json()
+          const normalized = normalizeRainforestProductDetailPayload(payload, asin)
+
+          return {
+            asin: normalized.asin,
+            feature_bullets: normalized.feature_bullets,
+            productDescription: normalized.productDescription,
+          }
+        }),
+      )
+
+      const detailsByAsin = new Map()
+
+      for (const settledResult of settledResults) {
+        if (settledResult.status !== 'fulfilled') {
+          continue
+        }
+
+        detailsByAsin.set(settledResult.value.asin, {
+          feature_bullets: settledResult.value.feature_bullets,
+          productDescription: settledResult.value.productDescription,
+        })
+      }
+
+      return detailsByAsin
+    },
+  })
 }

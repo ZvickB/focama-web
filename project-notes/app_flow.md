@@ -31,10 +31,10 @@
 
 ## Guided backend flow
 - `/api/search/discover` builds the candidate pool and preview set, returns `discoveryToken`, and writes guided discovery cache in the background after response artifacts are ready.
-- `/api/search/prewarm` backend route is being removed — see `project-notes/agent-tasks/remove-prewarm.md`.
+- `/api/search/prewarm` backend route fully removed (2026-04-17).
 - `/api/search/refine` returns one short user-facing follow-up question with static helper/placeholder copy.
 - `/api/search/framing-fields` returns background query-framing fields for timing/debug visibility only.
-- `/api/search/finalize` accepts lightweight context, reconstructs the rich candidate pool server-side from guided discovery cache, locks the shortlist via nano, fetches Rainforest product details for the locked winners, and returns shortlist cards with `feature_bullets` immediately. Mini enrichment still fires async after the response is sent and stores `fit_reason`/`caveat` in the discovery cache.
+- `/api/search/finalize` accepts lightweight context, reconstructs the rich candidate pool server-side from guided discovery cache, locks the shortlist via nano, fetches product details for the locked winners through the current Oxylabs helper, and returns shortlist cards with `feature_bullets` immediately. Mini enrichment still fires async after the response is sent and stores `fit_reason`/`caveat` in the discovery cache.
 - `/api/search/enrichment` GET — accepts `?token=&query=`, returns `{ ready: false }` or `{ ready: true, entries: [...] }` where each entry has `candidateId`, `fitReason`, `caveat`.
 - `/api/search/live` is the explicit manual/debug combined route.
 - `/api/search/debug` should describe guided flow as primary.
@@ -66,6 +66,11 @@
 - Product data comes from the live guided backend path, not a frontend mock catalog.
 - Search cache and operational search-history logging use the storage layer, with Supabase preferred and local fallback for development.
 - Guided discovery is the reusable persistent cache layer; `/api/search/live` and guided finalization stay request-specific.
+- Discovery filtering keeps source diversification for multi-merchant shopping paths such as SerpApi/Google Shopping.
+- Discovery filtering disables the per-source diversity cap for Amazon-style single-marketplace paths such as Rainforest, Oxylabs, and any later direct Amazon API path, so all-Amazon searches do not collapse to 2 items.
+- Finalize-time product details now also use a separate provider-agnostic per-ASIN cache (`product_details_cache` in Supabase, `temp-data/product-details-cache.json` locally).
+- The per-ASIN detail cache returns any stored row immediately, stores partial rows with `needs_updating`, and can kick off a detached refresh for future requests without slowing the current response.
+- Cached product details are not fed into the AI shortlist-selection prompt; they only support post-lock product facts for the chosen ASINs.
 - Guided discovery cache keys normalize lowercase/spacing and obvious plural product terms on the main query.
 - `search_history` is internal operational telemetry, not user-facing saved history.
 - Same-IP search rate limiting currently uses a 10-second rolling window with up to 15 requests.

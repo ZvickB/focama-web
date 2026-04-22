@@ -36,6 +36,40 @@ Why this table is needed:
 Plain-language summary:
 - `rate_limit_events` is infrastructure for shared abuse protection, not product data.
 
+### 4. `product_details_cache`
+Why this table is needed:
+- It stores one provider-agnostic product-details row per ASIN for finalize-time enrichment.
+- It lets Oxylabs and Rainforest write into the same cache instead of keeping provider-specific copies.
+- It avoids repeating expensive per-ASIN detail calls when the same shortlisted ASIN appears again.
+- It keeps partial rows available immediately while throttling background refresh attempts for future requests.
+
+Plain-language summary:
+- `product_details_cache` is reusable backend infrastructure for per-ASIN product details, not a user-facing saved-data feature.
+
+Table definition to add in Supabase when you are ready:
+
+```sql
+create table if not exists public.product_details_cache (
+  asin text primary key,
+  feature_bullets jsonb not null default '[]'::jsonb,
+  product_description text not null default '',
+  source text not null default '',
+  needs_updating boolean not null default false,
+  next_update_at timestamptz null,
+  cached_at timestamptz not null default now()
+);
+```
+
+Semantics:
+- One row per ASIN.
+- Latest writer wins.
+- Partial rows can be cached.
+- Fully empty provider results are skipped and should not be cached.
+- `needs_updating` marks partial rows that should be refreshed later.
+- `next_update_at` throttles background refresh attempts for partial rows.
+- There is no expiry-based deletion for this table.
+- No extra index is needed because reads are primary-key lookups by `asin`.
+
 ## What is available later, but not needed yet
 - `search_sessions`
 - `search_shortlists`
@@ -89,6 +123,7 @@ Plain-language summary:
 
 ## Current recommendation
 - Keep the database focused on cache plus operational history for now.
+- Add `product_details_cache` when you want provider-agnostic per-ASIN detail caching for finalize-time bullets/descriptions.
 - Only add product-memory tables later if the app needs to remember real search flows as product data.
 - If you want analytics next, add only the focused funnel tables above instead of a broad analytics schema.
 
@@ -114,6 +149,7 @@ Notes:
 - Cache keys are scoped by flow: guided discovery uses `guided_discovery:query`, Rainforest uses `rainforest_discovery:query`.
 - TTL-based invalidation only — expired rows are ignored but not actively deleted (future: add pg_cron cleanup).
 - Guided discovery is the only persistent cache path; finalize and live search are intentionally uncached.
+- Per-ASIN product detail caching is separate from guided discovery cache. It is keyed only by `asin`, shared across providers, and used to avoid repeating finalize-time detail fetches.
 
 ## Related notes
 - `project-notes/current-status.md`
@@ -124,6 +160,7 @@ Notes:
 - `public.search_cache`
 - `public.search_history`
 - `public.rate_limit_events`
+- `public.product_details_cache`
 
 ## SQL to run in Supabase
 Paste this into the Supabase SQL editor and run it.
@@ -176,6 +213,16 @@ create index if not exists rate_limit_events_request_key_created_at_idx
 
 create index if not exists rate_limit_events_expires_at_idx
   on public.rate_limit_events (expires_at);
+
+create table if not exists public.product_details_cache (
+  asin text primary key,
+  feature_bullets jsonb not null default '[]'::jsonb,
+  product_description text not null default '',
+  source text not null default '',
+  needs_updating boolean not null default false,
+  next_update_at timestamptz null,
+  cached_at timestamptz not null default now()
+);
 ```
 
 ## What to do in Supabase
@@ -189,17 +236,19 @@ create index if not exists rate_limit_events_expires_at_idx
 - Cache table: `search_cache`
 - Internal history table: `search_history`
 - Shared rate-limit table: `rate_limit_events`
+- Product details cache table: `product_details_cache`
 
 ## What to expect after running it
 - `search_cache` will store reusable guided discovery cache rows.
 - `search_history` will store internal search/debug log rows.
 - `rate_limit_events` will store short-lived shared rate-limit events.
+- `product_details_cache` will store one latest-writer-wins detail row per ASIN for finalize-time bullets/descriptions.
 - Your backend can keep using Supabase for cache/history with the current app structure.
 
 ## Simple decision summary
-- Create now: `search_cache`, `search_history`, `rate_limit_events`
+- Create now: `search_cache`, `search_history`, `rate_limit_events`, `product_details_cache`
 - Do not create yet: `search_sessions`, `search_shortlists`, `shortlist_items`
-- Reason: the current app uses the first three tables now, while the others would be future product-schema work
+- Reason: the current app uses the cache/history/rate-limit tables now, and `product_details_cache` is the new backend detail-cache table; the others would still be future product-schema work
 
 ## Optional analytics SQL
 If you want to add the focused funnel analytics schema next, use:

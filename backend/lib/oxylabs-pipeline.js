@@ -1,4 +1,5 @@
 import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './result-filter.js'
+import { fetchProductDetailsWithCache } from './product-details-cache.js'
 import { buildQuery } from './search-data.js'
 import { normalizeOxylabsProduct, normalizeOxylabsSearchResult } from './oxylabs-normalizer.js'
 
@@ -61,11 +62,11 @@ export async function fetchOxylabsArtifacts({
     const rawItems = data?.results?.[0]?.content?.results?.organic
     const normalizedItems = (Array.isArray(rawItems) ? rawItems : []).map(normalizeOxylabsSearchResult)
 
-    const normalizedPayload = {
-      shopping_results: normalizedItems,
-      search_information: { shopping_results_state: '' },
-      related_searches: [],
-    }
+  const normalizedPayload = {
+    shopping_results: normalizedItems,
+    search_information: { shopping_results_state: '' },
+    related_searches: [],
+  }
 
     const artifacts = getFilteredSearchArtifacts(normalizedPayload, {
       productQuery,
@@ -74,6 +75,8 @@ export async function fetchOxylabsArtifacts({
       finalResultLimit: filterConfig.finalResultLimit,
       minimumScore: filterConfig.minimumScore,
       diversifyPoolMultiplier: filterConfig.diversifyPoolMultiplier,
+      diversifyBySource: false,
+      skipHardFilter: true,
       reasonFallback,
     })
 
@@ -106,69 +109,69 @@ export async function fetchOxylabsProductDetailsByAsin({
   asins = [],
   oxylabsUsername,
   oxylabsPassword,
+  readCache = async () => new Map(),
+  writeCache = async () => {},
 }) {
   if (!oxylabsUsername || !oxylabsPassword) {
     return new Map()
   }
 
-  const uniqueAsins = Array.from(
-    new Set(
-      asins
-        .map((asin) => (typeof asin === 'string' ? asin.trim().slice(0, 200) : ''))
-        .filter(Boolean),
-    ),
-  )
-
-  if (uniqueAsins.length === 0) {
-    return new Map()
-  }
-
   const authorization = buildOxylabsAuthHeader(oxylabsUsername, oxylabsPassword)
-  const settledResults = await Promise.allSettled(
-    uniqueAsins.map(async (asin) => {
-      const apiResponse = await fetch(OXYLABS_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: authorization,
-        },
-        body: JSON.stringify({
-          source: 'amazon_product',
-          domain: 'com',
-          query: asin,
-          parse: true,
+
+  return fetchProductDetailsWithCache({
+    asins,
+    source: 'oxylabs',
+    readCache,
+    writeCache,
+    logLabel: 'oxylabs-product-details',
+    fetchFreshDetails: async (requestedAsins) => {
+      const settledResults = await Promise.allSettled(
+        requestedAsins.map(async (asin) => {
+          const apiResponse = await fetch(OXYLABS_ENDPOINT, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: authorization,
+            },
+            body: JSON.stringify({
+              source: 'amazon_product',
+              domain: 'com',
+              query: asin,
+              parse: true,
+            }),
+            signal: AbortSignal.timeout(10000),
+          })
+
+          if (!apiResponse.ok) {
+            throw new Error(`Oxylabs product request failed with status ${apiResponse.status}.`)
+          }
+
+          const data = await apiResponse.json()
+          const content = data?.results?.[0]?.content
+          const normalized = normalizeOxylabsProduct(content || {})
+
+          return {
+            asin,
+            feature_bullets: Array.isArray(normalized.feature_bullets) ? normalized.feature_bullets : [],
+            productDescription: typeof normalized.description === 'string' ? normalized.description : '',
+          }
         }),
-        signal: AbortSignal.timeout(10000),
-      })
+      )
 
-      if (!apiResponse.ok) {
-        throw new Error(`Oxylabs product request failed with status ${apiResponse.status}.`)
+      const detailsByAsin = new Map()
+
+      for (const settledResult of settledResults) {
+        if (settledResult.status !== 'fulfilled') {
+          continue
+        }
+
+        detailsByAsin.set(settledResult.value.asin, {
+          feature_bullets: settledResult.value.feature_bullets,
+          productDescription: settledResult.value.productDescription,
+        })
       }
 
-      const data = await apiResponse.json()
-      const content = data?.results?.[0]?.content
-      const normalized = normalizeOxylabsProduct(content || {})
-
-      return {
-        asin,
-        feature_bullets: Array.isArray(normalized.feature_bullets) ? normalized.feature_bullets : [],
-        productDescription: typeof normalized.description === 'string' ? normalized.description : '',
-      }
-    }),
-  )
-
-  const detailsByAsin = new Map()
-
-  for (const settledResult of settledResults) {
-    if (settledResult.status !== 'fulfilled') {
-      continue
-    }
-
-    detailsByAsin.set(settledResult.value.asin, {
-      feature_bullets: settledResult.value.feature_bullets,
-      productDescription: settledResult.value.productDescription,
-    })
-  }
-
-  return detailsByAsin
+      return detailsByAsin
+    },
+  })
 }

@@ -19,6 +19,7 @@
 - Supabase-backed cache, rate limiting, operational history, health tooling, and optional funnel analytics exist with local fallback for development.
 - Guided discovery is the only persistent cache path; guided finalize and live search are intentionally uncached.
 - Supabase-backed guided discovery cache is confirmed working in production on `focama.vercel.app`.
+- Provider-agnostic per-ASIN product-details caching now exists for finalize-time bullets/descriptions, with local file fallback when Supabase is not configured.
 - `search_history` is internal operational telemetry, not user-facing saved history.
 
 ## Canonical current notes
@@ -34,7 +35,7 @@ Canonical detail: `project-notes/active-experiment-override.md` and `project-not
 
 Summary:
 - Nano-lock + mini async-enrichment is wired into the real product flow.
-- Prewarm is disabled (not a latency win). Backend route being removed — see `agent-tasks/remove-prewarm.md`.
+- Prewarm is fully removed (2026-04-17). Not a latency win.
 - `gpt-5.4-nano` is the only viable fast model; mini is rejected for blocking/stream paths.
 - One-call stream experiment is measured and concluded; not yet productized.
 - Working conclusion: keep AI in the product, narrow its blocking critical-path role.
@@ -67,6 +68,7 @@ Summary:
 - Tighten privacy/compliance language if analytics stays enabled and affiliate behavior becomes real.
 - Keep user-facing saved history separate from operational `search_history` if it is ever added.
 - Watch rate limiting, cache TTL, and API costs as usage increases.
+- Rainforest detail-fetch helper is implemented but still not wired into finalize. Current reality: `backend/server.js` still imports and calls `fetchOxylabsProductDetailsByAsin`. Future wiring should switch that import/call to `fetchRainforestProductDetailsByAsin` from `backend/lib/rainforest-pipeline.js` while keeping `readProductDetailsCacheEntries` / `writeProductDetailsCacheEntries` unchanged in `backend/lib/search-storage.js`.
 - Continue trimming `backend/server.js` so request parsing, route orchestration, and flow logic do not all keep growing in one file.
 - Long term, extract runtime-agnostic backend services so Vercel routes stop adapting themselves into Node-style request objects.
 
@@ -76,6 +78,13 @@ Summary:
 - Continue polishing the default open homepage based on tester feedback.
 - Add a clearer empty/no-good-results state.
 - Add a tiny admin/debug view or lightweight internal tool for checking cache hit/miss behavior without one-off scripts.
+
+## Open questions — not yet designed
+
+**Using cached product details to improve AI picks (deferred)**
+The finalize-time detail step now fetches full product details (feature bullets, description) for the 6 finalized picks through the current Oxylabs helper, backed by a provider-agnostic per-ASIN cache. Partial rows can be stored and refreshed later; fully empty provider results are skipped. Rainforest detail-fetch support now exists too, but it is intentionally not wired into finalize yet.
+
+The harder question: as the ASIN detail cache grows, should the AI be fed cached details for candidates *before* it picks the final 6? The risk is selection bias — if only some candidates have cached details, the AI will naturally favor the better-documented ones regardless of actual fit. This is a real distortion, not a quality signal. It only works fairly if all candidates have details, or none do. Partial coverage actively skews decisions. Revisit once the cache is large enough that coverage is less sparse, and think carefully about how to handle the unevenness before wiring it into the AI prompt.
 
 ## Longer-term ideas after v1
 - Add accounts/login only when persistence or personalization has a clear product need.

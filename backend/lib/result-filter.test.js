@@ -146,6 +146,103 @@ describe('result filter', () => {
     expect(results).toHaveLength(2)
   })
 
+  it('keeps source diversification for mixed-merchant shopping results by default', () => {
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: [
+          createShoppingResult({ product_id: 'prod-1', title: 'iPad Cover A', source: 'Best Buy' }),
+          createShoppingResult({ position: 2, product_id: 'prod-2', title: 'iPad Cover B', source: 'Best Buy' }),
+          createShoppingResult({ position: 3, product_id: 'prod-3', title: 'iPad Cover C', source: 'Best Buy' }),
+          createShoppingResult({ position: 4, product_id: 'prod-4', title: 'iPad Cover D', source: 'Target' }),
+        ],
+      },
+      {
+        productQuery: 'ipad cover',
+        details: '',
+        candidatePoolSize: 20,
+        finalResultLimit: 4,
+        reasonFallback: 'Returned by the live SerpApi search route',
+      },
+    )
+
+    expect(artifacts.candidatePool.candidates.map((candidate) => candidate.title)).toEqual([
+      'iPad Cover A',
+      'iPad Cover B',
+      'iPad Cover D',
+    ])
+  })
+
+  it('can disable source diversification for single-marketplace Amazon result sets', () => {
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: [
+          createShoppingResult({ product_id: 'prod-1', title: 'Stylus Pen for iPad 6th Generation', source: 'Amazon' }),
+          createShoppingResult({ position: 2, product_id: 'prod-2', title: 'Metapen A8 iPad Pen', source: 'Amazon' }),
+          createShoppingResult({ position: 3, product_id: 'prod-3', title: 'Apple iPad Pen USB-C', source: 'Amazon' }),
+          createShoppingResult({ position: 4, product_id: 'prod-4', title: 'Apple iPad Pen Pro', source: 'Amazon' }),
+        ],
+      },
+      {
+        productQuery: 'ipad pen',
+        details: '',
+        candidatePoolSize: 20,
+        finalResultLimit: 4,
+        diversifyBySource: false,
+        reasonFallback: 'Returned by the Rainforest API search route',
+      },
+    )
+
+    expect(artifacts.candidatePool.candidates.map((candidate) => candidate.title)).toEqual([
+      'Stylus Pen for iPad 6th Generation',
+      'Metapen A8 iPad Pen',
+      'Apple iPad Pen USB-C',
+      'Apple iPad Pen Pro',
+    ])
+  })
+
+  it('keeps scored results with zero literal token overlap when skipHardFilter is enabled', () => {
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: [
+          createShoppingResult({
+            product_id: 'prod-pencil',
+            title: 'Apple Pencil',
+            source: 'Amazon',
+            snippet: 'Best stylus for drawing and note taking',
+            reviews: 12500,
+            rating: 4.8,
+            extracted_price: 89.99,
+            price: '$89.99',
+          }),
+          createShoppingResult({
+            position: 2,
+            product_id: 'prod-pen',
+            title: 'Generic iPad Pen',
+            source: 'Amazon',
+            snippet: 'Budget stylus pen for iPad',
+            reviews: 10,
+            rating: 3.9,
+            extracted_price: 19.99,
+            price: '$19.99',
+          }),
+        ],
+      },
+      {
+        productQuery: 'ipad pen',
+        details: '',
+        candidatePoolSize: 20,
+        finalResultLimit: 4,
+        minimumScore: -20,
+        diversifyBySource: false,
+        skipHardFilter: true,
+        reasonFallback: 'Returned by the Rainforest API search route',
+      },
+    )
+
+    expect(artifacts.candidatePool.candidates.map((candidate) => candidate.title)).toContain('Apple Pencil')
+    expect(artifacts.results.map((result) => result.title)).toContain('Apple Pencil')
+  })
+
   it('exposes an AI-friendly candidate pool alongside the final UI results', () => {
     const artifacts = getFilteredSearchArtifacts(
       {
