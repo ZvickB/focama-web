@@ -234,6 +234,12 @@ function SiteLayout() {
               focuses on guided product search, AI-assisted shortlist refinement, and clear trust
               pages while the broader product continues to evolve.
             </p>
+            <p className="text-xs text-slate-400">
+              As an Amazon Associate I earn from qualifying purchases.{' '}
+              <NavLink to="/affiliate-disclosure" className="underline underline-offset-2 hover:text-slate-600">
+                Affiliate disclosure
+              </NavLink>
+            </p>
           </div>
           <div className="space-y-3">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">

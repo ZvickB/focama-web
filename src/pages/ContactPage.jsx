@@ -14,10 +14,6 @@ function ContactPage() {
         This address is intended for general questions, feedback about site content, and
         correction requests if something on the site needs updating.
       </p>
-      <p>
-        If you plan to replace this with a real inbox later, that is completely fine. For now, the
-        important part is that the site has a visible and legitimate contact method.
-      </p>
     </PageShell>
   )
 }
