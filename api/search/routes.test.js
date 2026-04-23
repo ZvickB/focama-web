@@ -95,7 +95,13 @@ describe('Vercel search route wrappers', () => {
     const response = await getQueryFramingFields(request)
 
     expect(response.status).toBe(200)
-    expect(handleQueryFramingFields).toHaveBeenCalledWith(expect.any(URL), expect.any(Object))
+    expect(handleQueryFramingFields).toHaveBeenCalledWith(
+      expect.any(URL),
+      expect.any(Object),
+      expect.objectContaining({
+        headers: expect.any(Headers),
+      }),
+    )
     expect(await response.json()).toEqual({
       pathname: '/api/search/framing-fields',
     })

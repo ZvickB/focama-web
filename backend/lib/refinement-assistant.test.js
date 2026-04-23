@@ -31,7 +31,7 @@ describe('refinement assistant', () => {
 
     expect(result).toEqual({
       prompt: 'What matters most here: portability, comfort, or battery life?',
-      helperText: 'Answer in natural language so Focamai can understand what you really want.',
+      helperText: 'Or write whatever is important to you. Feel free to write in natural language',
       followUpPlaceholder: 'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
       usage: {
         inputTokens: 78,

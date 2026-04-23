@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import logo from '@/assets/logo_master_version.svg'
+import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
 
@@ -116,6 +117,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
   }
 
   const userFacingDescription = getUserFacingDescription(item.description)
+  const displayPrice = formatDisplayPrice(item.price)
 
   return (
     <MotionDiv
@@ -154,7 +156,13 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
         <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[1.05fr_0.95fr] lg:gap-8 lg:p-8">
           <div className="space-y-4">
             <div className="overflow-hidden rounded-[28px] bg-white shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)]">
-              <img src={item.image} alt={item.title} className="h-72 w-full object-cover sm:h-[420px]" />
+              <div className="flex h-72 items-center justify-center bg-stone-50 p-4 sm:h-[420px] sm:p-6">
+                <img
+                  src={item.image}
+                  alt={item.title}
+                  className="h-full w-full object-contain"
+                />
+              </div>
             </div>
             <Badge className="rounded-full bg-white px-3 py-1 text-slate-700 hover:bg-white">
               {item.subtitle}
@@ -172,7 +180,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
                     {item.badgeLabel}
                   </Badge>
                 ) : null}
-                <p className="text-2xl font-semibold text-primary">{item.price}</p>
+                <p className="text-2xl font-semibold text-primary">{displayPrice}</p>
                 <div className="flex items-center gap-1 text-sm text-amber-600">
                   {Array.from({ length: 5 }).map((_, index) => (
                     <Star

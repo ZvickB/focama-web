@@ -125,6 +125,22 @@ function logSearchFlowEvent(eventName, details = {}) {
   console.info('[search-flow]', JSON.stringify(payload))
 }
 
+function getRuntimeDebugDetails(request = null) {
+  return {
+    nodeEnv: process.env.NODE_ENV || null,
+    vercelEnv: process.env.VERCEL_ENV || null,
+    vercelRegion: process.env.VERCEL_REGION || null,
+    vercelUrl: process.env.VERCEL_URL || null,
+    vercelGitCommitRef: process.env.VERCEL_GIT_COMMIT_REF || null,
+    requestHost:
+      typeof request?.headers?.get === 'function' ? request.headers.get('host') || null : null,
+    requestOrigin:
+      typeof request?.headers?.get === 'function' ? request.headers.get('origin') || null : null,
+    userAgent:
+      typeof request?.headers?.get === 'function' ? request.headers.get('user-agent') || null : null,
+  }
+}
+
 function buildDiscoveryPreviewSelection(results, extraSelection = {}) {
   return {
     mode: 'discovery_preview',
@@ -1190,31 +1206,51 @@ export async function handleRefinementPrompt(requestUrl, response) {
   }
 }
 
-export async function handleQueryFramingFields(requestUrl, response) {
+export async function handleQueryFramingFields(requestUrl, response, request = null) {
   const requestStartedAt = nowMs()
+  const requestId = randomUUID()
   const openAiApiKey = getEnv('OPENAI_API_KEY')
   const { error, isValid, normalizedQuery } = getValidatedSearchRequest(requestUrl, {
     includeDetails: false,
   })
+  const runtimeDebug = getRuntimeDebugDetails(request)
+
+  logSearchFlowEvent('query_framing_fields_started', {
+    requestId,
+    route: '/api/search/framing-fields',
+    lane: 'framing_fields',
+    query: requestUrl.searchParams.get('query') || '',
+    openAiConfigured: Boolean(openAiApiKey),
+    model: getRefinementModel(),
+    ...runtimeDebug,
+  })
 
   if (!isValid) {
     logSearchFlowEvent('query_framing_fields_invalid', {
+      requestId,
       route: '/api/search/framing-fields',
       lane: 'framing_fields',
       query: requestUrl.searchParams.get('query') || '',
       error,
     })
-    sendJson(response, 400, { error })
+    sendJson(response, 400, { error, requestId }, { 'X-Request-Id': requestId })
     return
   }
 
   if (!openAiApiKey) {
     logSearchFlowEvent('query_framing_fields_missing_openai_key', {
+      requestId,
       route: '/api/search/framing-fields',
       lane: 'framing_fields',
       query: normalizedQuery,
+      ...runtimeDebug,
     })
-    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
+    sendJson(
+      response,
+      500,
+      { error: 'OPENAI_API_KEY is missing from the root .env file.', requestId },
+      { 'X-Request-Id': requestId },
+    )
     return
   }
 
@@ -1224,12 +1260,24 @@ export async function handleQueryFramingFields(requestUrl, response) {
       productQuery: normalizedQuery,
       apiKey: openAiApiKey,
       model: getRefinementModel(),
+      debugContext: {
+        onEvent(eventName, details) {
+          logSearchFlowEvent(eventName, {
+            requestId,
+            route: '/api/search/framing-fields',
+            lane: 'framing_fields',
+            query: normalizedQuery,
+            ...details,
+          })
+        },
+      },
     })
     const openAiDuration = nowMs() - openAiStartedAt
     const totalDuration = nowMs() - requestStartedAt
     const contract = framingFields.contract || null
 
     logSearchFlowEvent('query_framing_fields_completed', {
+      requestId,
       route: '/api/search/framing-fields',
       lane: 'framing_fields',
       query: normalizedQuery,
@@ -1247,7 +1295,9 @@ export async function handleQueryFramingFields(requestUrl, response) {
       queryFraming: contract,
       usage: framingFields.usage || null,
       queryFramingMode: 'framing_fields',
+      requestId,
     }, {
+      'X-Request-Id': requestId,
       serverTiming: [
         { name: 'openai', duration: openAiDuration },
         { name: 'total', duration: totalDuration },
@@ -1255,15 +1305,20 @@ export async function handleQueryFramingFields(requestUrl, response) {
     })
   } catch (error) {
     logSearchFlowEvent('query_framing_fields_failed', {
+      requestId,
       route: '/api/search/framing-fields',
       lane: 'framing_fields',
       query: normalizedQuery,
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
       error: error instanceof Error ? error.message : 'Unknown error',
+      ...runtimeDebug,
     })
     sendJson(response, 500, {
       error: 'Unable to generate query framing fields.',
       details: error instanceof Error ? error.message : 'Unknown error',
+      requestId,
+    }, {
+      'X-Request-Id': requestId,
     })
   }
 }

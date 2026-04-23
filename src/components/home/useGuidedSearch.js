@@ -67,18 +67,28 @@ async function readJsonResponse(response, requestStartedAt) {
   const responseReceivedAt = performance.now()
   const rawBody = await response.text()
   const responseParsedAt = performance.now()
+  const requestId = response.headers?.get?.('x-request-id') || ''
+  const contentType = response.headers?.get?.('content-type') || ''
   let payload = {}
 
   if (rawBody) {
     try {
       payload = JSON.parse(rawBody)
     } catch {
-      throw new Error('The server returned an invalid response. Check the local server or Vercel logs.')
+      const bodyPreview = rawBody.trim().slice(0, 120)
+      const receivedHtml = contentType.includes('text/html') || /^<!doctype html/i.test(bodyPreview)
+
+      throw new Error(
+        receivedHtml
+          ? 'The server returned HTML instead of JSON. This usually means the deployment route or rewrite handled the API request incorrectly.'
+          : 'The server returned an invalid response. Check the local server or Vercel logs.',
+      )
     }
   }
 
   if (!response.ok) {
-    throw new Error(payload.error || 'Request failed.')
+    const baseMessage = payload.error || 'Request failed.'
+    throw new Error(requestId ? `${baseMessage} (request ${requestId})` : baseMessage)
   }
 
   return {
