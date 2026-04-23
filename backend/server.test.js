@@ -2032,6 +2032,73 @@ describe('server handlers', () => {
     )
   })
 
+  it('can return inline enrichment during finalize when blocking mode is enabled', async () => {
+    getEnv.mockImplementation((name) => {
+      if (name === 'OPENAI_API_KEY') {
+        return 'openai-key'
+      }
+
+      if (name === 'FINALIZE_ENRICHMENT_MODE') {
+        return 'blocking'
+      }
+
+      return ''
+    })
+    nanoLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5.4-nano',
+      lockedIds: ['one'],
+      usage: null,
+    })
+    const { miniEnrichSelectedCandidates } = await import('./lib/ai-selector.js')
+    miniEnrichSelectedCandidates.mockResolvedValue({
+      model: 'gpt-5-mini',
+      enriched: [{ candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey' }],
+      enrichedIds: ['one'],
+      usage: null,
+      preservedOrder: true,
+    })
+    const cacheEntry = createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')])
+    readStoredSearchCacheEntry.mockResolvedValue(cacheEntry)
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({ ...createFinalizeDiscoveryBody(), followUpNotes: 'city use' }),
+        { 'x-forwarded-for': '203.0.113.41' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        results: [
+          expect.objectContaining({
+            id: 'one',
+            fit_reason: 'Good match',
+            caveat: 'A bit pricey',
+          }),
+        ],
+        selection: expect.objectContaining({
+          enrichmentMode: 'blocking',
+          miniEnrichmentStatus: 'completed_inline',
+        }),
+      }),
+    )
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productQuery: 'stroller',
+        scope: 'guided_discovery',
+        selection: expect.objectContaining({
+          enrichment: expect.objectContaining({
+            entries: [{ candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey' }],
+          }),
+        }),
+      }),
+    )
+  })
+
   it('includes Vary: Origin on OPTIONS preflight responses', async () => {
     const server = createApiServer()
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))

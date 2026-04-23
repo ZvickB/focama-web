@@ -90,6 +90,12 @@ function getFinalizeModel({ hasContextSignals = false } = {}) {
   return getEnv('OPENAI_FINALIZE_CONTEXT_MODEL') || DEFAULT_CONTEXT_FINALIZE_MODEL
 }
 
+function getFinalizeEnrichmentMode() {
+  return String(getEnv('FINALIZE_ENRICHMENT_MODE') || 'async').trim().toLowerCase() === 'blocking'
+    ? 'blocking'
+    : 'async'
+}
+
 function roundTimingDuration(value) {
   return Math.round(value * 10) / 10
 }
@@ -1570,6 +1576,39 @@ async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model,
     preservedOrder: miniResult.preservedOrder,
     model: miniResult.model,
   })
+
+  return miniResult
+}
+
+function mergeMiniEnrichmentIntoResults(results, enrichmentEntries) {
+  if (!Array.isArray(results) || !Array.isArray(enrichmentEntries) || enrichmentEntries.length === 0) {
+    return Array.isArray(results) ? results : []
+  }
+
+  const enrichmentById = new Map(
+    enrichmentEntries.map((entry) => [String(entry?.candidate_id || entry?.candidateId || ''), entry]),
+  )
+
+  return results.map((result) => {
+    const entry = enrichmentById.get(String(result?.id || ''))
+
+    if (!entry) {
+      return result
+    }
+
+    return {
+      ...result,
+      fit_reason: entry?.fit_reason || entry?.fitReason || '',
+      caveat: entry?.caveat || '',
+      feature_bullets: Array.isArray(entry?.feature_bullets)
+        ? entry.feature_bullets
+        : Array.isArray(entry?.featureBullets)
+          ? entry.featureBullets
+          : Array.isArray(result?.feature_bullets)
+            ? result.feature_bullets
+            : [],
+    }
+  })
 }
 
 export async function handleEnrichmentPoll(request, response) {
@@ -1791,6 +1830,7 @@ export async function handleFinalizeSelection(request, response) {
   }
 
   const nanoModel = getFinalizeModel({ hasContextSignals })
+  const enrichmentMode = getFinalizeEnrichmentMode()
 
   try {
     const openAiStartedAt = nowMs()
@@ -1826,11 +1866,40 @@ export async function handleFinalizeSelection(request, response) {
       .filter(Boolean)
 
     const fallbackResults = buildFinalizeFallbackResults(nextCandidatePool)
-    const results = nanoResults.length > 0 ? nanoResults : fallbackResults
+    let results = nanoResults.length > 0 ? nanoResults : fallbackResults
     const selectedCandidateIds =
       nanoResults.length > 0 ? nanoResult.lockedIds : fallbackResults.map((item) => item.id)
     const selectionStrategy = nanoResults.length > 0 ? 'nano_lock' : 'rules_fallback'
     const flowPath = nanoResults.length > 0 ? 'nano_lock' : 'nano_lock_fallback'
+    let miniEnrichmentStatus = 'skipped'
+
+    if (nanoResults.length > 0) {
+      const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
+
+      if (enrichmentMode === 'blocking') {
+        try {
+          const miniResult = await runMiniEnrichmentAsync({
+            lockedIds: nanoResult.lockedIds,
+            candidatePool: enrichedCandidatePool,
+            apiKey: openAiApiKey,
+            model: miniModel,
+            normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
+            discoveryScope: resolvedDiscoveryContext.discoveryScope,
+          })
+          results = mergeMiniEnrichmentIntoResults(results, miniResult?.enriched || [])
+          miniEnrichmentStatus = 'completed_inline'
+        } catch (error) {
+          miniEnrichmentStatus = 'failed_inline'
+          logSearchFlowEvent('mini_enrichment_failed', {
+            query: sanitizedDiscoveryContext.normalizedQuery,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            mode: 'blocking',
+          })
+        }
+      } else {
+        miniEnrichmentStatus = 'running_async'
+      }
+    }
 
     const finalizeFast = buildFinalizeFastResponseContract({
       query: sanitizedDiscoveryContext.normalizedQuery,
@@ -1870,6 +1939,8 @@ export async function handleFinalizeSelection(request, response) {
         finalizeModel: nanoModel,
         finalizeModelPath: hasContextSignals ? 'context_added' : 'baseline',
         requestMode,
+        enrichmentMode,
+        miniEnrichmentStatus,
         stageLatencyMs: {
           body: roundTimingDuration(body.bodyReadDuration || 0),
           cache: roundTimingDuration(cacheLookupDuration),
@@ -1882,7 +1953,7 @@ export async function handleFinalizeSelection(request, response) {
       finalizeFast,
       requestMode,
       retryCount,
-      results: finalizeFast.shortlist,
+      results,
       selection: {
         layer: finalizeFast.layer,
         mode: nanoResults.length > 0 ? 'ai' : 'rules_fallback',
@@ -1894,9 +1965,15 @@ export async function handleFinalizeSelection(request, response) {
         usage: nanoResults.length > 0 ? nanoResult.usage || null : null,
         selectedCandidateIds: finalizeFast.selectedCandidateIds,
         details: nanoResults.length > 0
-          ? 'Nano locked the shortlist. Mini enrichment is running async.'
+          ? enrichmentMode === 'blocking'
+            ? miniEnrichmentStatus === 'completed_inline'
+              ? 'Nano locked the shortlist. Mini enrichment completed inline.'
+              : 'Nano locked the shortlist. Inline mini enrichment did not complete, so shortlist-only results were returned.'
+            : 'Nano locked the shortlist. Mini enrichment is running async.'
           : 'Rules-based fallback was used.',
         flowPath,
+        enrichmentMode,
+        miniEnrichmentStatus,
       },
       usage: {
         openai: nanoResult.usage || null,
@@ -1912,7 +1989,7 @@ export async function handleFinalizeSelection(request, response) {
     })
 
     // Fire off mini enrichment async — does not block the response
-    if (nanoResults.length > 0) {
+    if (nanoResults.length > 0 && enrichmentMode !== 'blocking') {
       const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
       runMiniEnrichmentAsync({
         lockedIds: nanoResult.lockedIds,
@@ -1925,6 +2002,7 @@ export async function handleFinalizeSelection(request, response) {
         logSearchFlowEvent('mini_enrichment_failed', {
           query: sanitizedDiscoveryContext.normalizedQuery,
           error: error instanceof Error ? error.message : 'Unknown error',
+          mode: 'async',
         })
       })
     }

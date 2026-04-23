@@ -397,6 +397,9 @@ export function useGuidedSearch() {
     const finalizedResults = enrichFinalResultsForDisplay(
       mergeFinalizeResults(payload.results, variables.originalCandidatePool),
     )
+    const hasInlineEnrichment = finalizedResults.some(
+      (item) => Boolean(item?.fit_reason || item?.fitReason),
+    )
     const previousDisplayResults =
       variables.retryCount > 0 && Array.isArray(variables.previousResults)
         ? enrichFinalResultsForDisplay(variables.previousResults)
@@ -406,13 +409,13 @@ export function useGuidedSearch() {
     setPreviousResults(previousDisplayResults)
     setResults(finalizedResults)
     setRevealedBadgeResultsKey('')
-    setIsEnrichmentReady(false)
+    setIsEnrichmentReady(hasInlineEnrichment)
 
     const token = variables.discoveryToken
     const query = variables.query
     const pollSearchId = activeSearchIdRef.current
 
-    if (token && query && finalizedResults.length > 0) {
+    if (!hasInlineEnrichment && token && query && finalizedResults.length > 0) {
       startEnrichmentPolling({ token, query, searchId: pollSearchId })
     }
     setRequestTiming((current) => ({
