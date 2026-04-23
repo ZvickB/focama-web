@@ -11,6 +11,8 @@
     <title>Focamai</title>
     <style>
       :root {
+        --brand-primary: 191 64% 27%;
+        --brand-accent: 17 81% 56%;
         color: rgb(20 34 43);
         background:
           radial-gradient(circle at top left, rgba(29, 121, 126, 0.12), transparent 28%),
@@ -185,12 +187,29 @@
       }
 
       .boot-title {
-        margin: 0.75rem 0 0;
-        min-height: 2rem;
-        font-size: 1.5rem;
+        margin: 0.9rem 0 0;
+        min-height: 2.2rem;
+        font-size: 1.6rem;
         font-weight: 500;
-        line-height: 1.2;
-        letter-spacing: -0.02em;
+        line-height: 1.12;
+        letter-spacing: -0.03em;
+        color: hsl(var(--brand-primary));
+        opacity: 0;
+        animation: boot-title-fade-in 220ms ease forwards;
+      }
+
+      .boot-title-emphasis {
+        color: hsl(var(--brand-accent));
+      }
+
+      @keyframes boot-title-fade-in {
+        from {
+          opacity: 0;
+        }
+
+        to {
+          opacity: 1;
+        }
       }
 
       .boot-input-shell {
@@ -209,6 +228,64 @@
         border: 1px solid rgba(214, 211, 209, 1);
         border-radius: 28px;
         background: rgba(255, 255, 255, 0.9);
+      }
+
+      .boot-footer {
+        border-top: 1px solid rgba(255, 255, 255, 0.6);
+        background: rgba(252, 249, 243, 0.72);
+        padding: 2rem 1rem;
+      }
+
+      .boot-footer-inner {
+        margin: 0 auto;
+        display: grid;
+        width: 100%;
+        max-width: 80rem;
+        gap: 1.5rem;
+        color: rgb(71 85 105);
+      }
+
+      .boot-footer-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .boot-footer-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: rgb(15 23 42);
+      }
+
+      .boot-footer-text {
+        font-size: 0.875rem;
+        line-height: 1.6;
+      }
+
+      .boot-footer-links {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .boot-footer-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: rgb(100 116 139);
+      }
+
+      .boot-footer-link-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        font-size: 0.875rem;
+      }
+
+      .boot-footer-link {
+        color: rgb(71 85 105);
+        text-decoration: none;
       }
 
       @media (min-width: 640px) {
@@ -243,12 +320,17 @@
         }
 
         .boot-title {
-          min-height: 3rem;
-          font-size: 2.25rem;
+          min-height: 3.1rem;
+          font-size: 2.35rem;
         }
 
         .boot-input-shell {
           padding: 1.25rem;
+        }
+
+        .boot-footer {
+          padding-left: 1.5rem;
+          padding-right: 1.5rem;
         }
       }
 
@@ -268,6 +350,15 @@
         .boot-main {
           padding-left: 2rem;
           padding-right: 2rem;
+        }
+
+        .boot-footer {
+          padding-left: 2rem;
+          padding-right: 2rem;
+        }
+
+        .boot-footer-inner {
+          grid-template-columns: 1.2fr 0.8fr;
         }
 
         .boot-wordmark {
@@ -299,8 +390,6 @@
                 <span class="boot-nav-pill is-active">Home</span>
                 <span class="boot-nav-pill">About</span>
                 <span class="boot-nav-pill">Contact</span>
-                <span class="boot-nav-pill">Privacy</span>
-                <span class="boot-nav-pill">Disclosure</span>
               </div>
             </div>
           </div>
@@ -309,13 +398,35 @@
           <div class="boot-container">
             <section class="boot-hero">
               <img class="boot-wordmark" src="./src/assets/wordmark.PNG" alt="Focamai" />
-              <h1 class="boot-title">Focused shopping</h1>
+              <h1 class="boot-title">
+                <span>Less scrolling.</span>
+                <span class="boot-title-emphasis"> Better picks.</span>
+              </h1>
             </section>
             <div class="boot-input-shell">
               <div class="boot-input-placeholder"></div>
             </div>
           </div>
         </div>
+        <footer class="boot-footer" aria-hidden="true">
+          <div class="boot-footer-inner">
+            <div class="boot-footer-copy">
+              <div class="boot-footer-title">Focamai</div>
+              <div class="boot-footer-text">
+                Focamai offers calm buying guidance before you head to a marketplace.
+              </div>
+            </div>
+            <div class="boot-footer-links">
+              <div class="boot-footer-label">Site Links</div>
+              <div class="boot-footer-link-row">
+                <span class="boot-footer-link">About</span>
+                <span class="boot-footer-link">Contact</span>
+                <span class="boot-footer-link">Privacy</span>
+                <span class="boot-footer-link">Disclosure</span>
+              </div>
+            </div>
+          </div>
+        </footer>
       </main>
     </div>
     <div id="root"></div>

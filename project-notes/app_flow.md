@@ -31,10 +31,10 @@
 
 ## Guided backend flow
 - `/api/search/discover` builds the candidate pool and preview set, returns `discoveryToken`, and writes guided discovery cache in the background after response artifacts are ready.
-- `/api/search/prewarm` backend route exists but is disabled in the frontend as of 2026-04-14.
+- `/api/search/prewarm` backend route fully removed (2026-04-17).
 - `/api/search/refine` returns one short user-facing follow-up question with static helper/placeholder copy.
 - `/api/search/framing-fields` returns background query-framing fields for timing/debug visibility only.
-- `/api/search/finalize` accepts lightweight context, reconstructs the rich candidate pool server-side from guided discovery cache, locks the shortlist via nano (~2s), and returns metadata-only cards immediately. Mini enrichment fires async after the response is sent and stores `fit_reason`/`caveat` in the discovery cache.
+- `/api/search/finalize` accepts lightweight context, reconstructs the rich candidate pool server-side from guided discovery cache, locks the shortlist via nano, fetches product details for the locked winners through the current Oxylabs helper, and returns shortlist cards with `feature_bullets` immediately. Mini enrichment still fires async after the response is sent and stores `fit_reason`/`caveat` in the discovery cache.
 - `/api/search/enrichment` GET — accepts `?token=&query=`, returns `{ ready: false }` or `{ ready: true, entries: [...] }` where each entry has `candidateId`, `fitReason`, `caveat`.
 - `/api/search/live` is the explicit manual/debug combined route.
 - `/api/search/debug` should describe guided flow as primary.
@@ -55,8 +55,9 @@
 
 ## Final result behavior
 - Result lists display up to 6 normalized product cards.
-- Cards show metadata only: image, title, merchant/source, price, ratings, and a deterministic badge label. No AI copy on the card surface.
-- AI copy (`fit_reason`, `caveat`) lives in the modal only and arrives via enrichment polling.
+- Cards still stay clean on the grid surface: image, title, merchant/source, price, ratings, and a deterministic badge label. No AI copy on the card surface.
+- The modal now shows manufacturer/product `feature_bullets` immediately when available, before async AI copy arrives.
+- AI copy (`fit_reason`, `caveat`) still lives in the modal and arrives via enrichment polling.
 - AI no longer returns badge labels in the blocking finalize response. Frontend heuristics assign scan-friendly badges after the shortlist arrives with a slight delayed reveal.
 - Clicking a product opens a detail modal. If enrichment has arrived, the modal shows "Why this pick stands out" (`fit_reason`) and "Possible drawbacks" (`caveat`). If enrichment is still pending, those sections show a loading placeholder.
 - `enrichmentReady = Boolean(item?.fit_reason)` drives the modal loading state.
@@ -65,14 +66,19 @@
 - Product data comes from the live guided backend path, not a frontend mock catalog.
 - Search cache and operational search-history logging use the storage layer, with Supabase preferred and local fallback for development.
 - Guided discovery is the reusable persistent cache layer; `/api/search/live` and guided finalization stay request-specific.
+- Discovery filtering keeps source diversification for multi-merchant shopping paths such as SerpApi/Google Shopping.
+- Discovery filtering disables the per-source diversity cap for Amazon-style single-marketplace paths such as Rainforest, Oxylabs, and any later direct Amazon API path, so all-Amazon searches do not collapse to 2 items.
+- Finalize-time product details now also use a separate provider-agnostic per-ASIN cache (`product_details_cache` in Supabase, `temp-data/product-details-cache.json` locally).
+- The per-ASIN detail cache returns any stored row immediately, stores partial rows with `needs_updating`, and can kick off a detached refresh for future requests without slowing the current response.
+- Cached product details are not fed into the AI shortlist-selection prompt; they only support post-lock product facts for the chosen ASINs.
 - Guided discovery cache keys normalize lowercase/spacing and obvious plural product terms on the main query.
 - `search_history` is internal operational telemetry, not user-facing saved history.
 - Same-IP search rate limiting currently uses a 10-second rolling window with up to 15 requests.
 - Vercel route wrappers forward request headers so production rate limiting can use forwarded client IPs.
 - Guided search requests expose `Server-Timing`; timing UI appears in development or with `?timing=1`.
 - Guided AI routes surface OpenAI token usage metadata when calls run.
-- Structured `[search-flow]` logs cover discovery, refine, framing-fields, prewarm, and finalize.
-- Optional Supabase analytics can track guided-search steps, prewarm lifecycle events, result impressions, card opens, and retailer clicks.
+- Structured `[search-flow]` logs cover discovery, refine, framing-fields, finalize, and enrichment.
+- Optional Supabase analytics can track guided-search steps, result impressions, card opens, and retailer clicks.
 
 ## Backend guardrails
 - Guided finalize rejects request bodies larger than 32 KB.
@@ -85,9 +91,9 @@
 ## Marketplace direction
 - Focamai should help users narrow choices before going into a retailer marketplace.
 - Retailer integration should stay flexible and vendor-agnostic in product shape.
-- SerpApi is the current near-term search integration until the flow is proven and Amazon Creator API access is available.
+- Rainforest API is the primary discovery integration; SerpAPI is preserved as secondary fallback.
 - Amazon is the likely future free-tier affiliate priority; Walmart remains worth considering because it has an affiliate path.
-- The frontend should not be redesigned around SerpApi because it is an integration layer, not the product identity.
+- The frontend should not be redesigned around any specific data provider because it is an integration layer, not the product identity.
 
 ## UI principles
 - Keep the overall feeling calm, focused, premium, and lower-friction than typical marketplaces.

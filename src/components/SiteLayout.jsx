@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import logo from '@/assets/logo_header_mark.svg'
+import { useSearchProgress } from '@/contexts/useSearchProgress.js'
 
 const navItems = [
   { to: '/', label: 'Home', end: true },
@@ -87,11 +88,36 @@ function SlidingNav({ items, className = '' }) {
   )
 }
 
+function SearchStepIndicator({ progress }) {
+  const { hasStartedSearch, hasDiscoveryResults, hasFinalResults } = progress
+  if (!hasStartedSearch) return null
+
+  return (
+    <div
+      className="text-[11px] font-semibold uppercase tracking-[0.14em] sm:text-[13px]"
+      style={{ fontFamily: '"Instrument Sans", sans-serif' }}
+    >
+      <span className={hasDiscoveryResults ? 'text-slate-400' : 'text-primary'}>Search</span>
+      <span className="px-1.5 text-slate-300">·</span>
+      <span
+        className={
+          hasDiscoveryResults && !hasFinalResults ? 'text-primary' : 'text-slate-400'
+        }
+      >
+        Refine
+      </span>
+      <span className="px-1.5 text-slate-300">·</span>
+      <span className={hasFinalResults ? 'text-primary' : 'text-slate-400'}>Get 6 picks</span>
+    </div>
+  )
+}
+
 function SiteLayout() {
   const [isCompact, setIsCompact] = useState(false)
   const [mobileMenuOpenPath, setMobileMenuOpenPath] = useState(null)
   const location = useLocation()
   const isMobileMenuOpen = mobileMenuOpenPath === location.pathname
+  const { progress } = useSearchProgress()
 
   useEffect(() => {
     function handleScroll() {
@@ -134,7 +160,9 @@ function SiteLayout() {
                     isCompact ? 'h-12 w-12 sm:h-14 sm:w-14' : 'h-16 w-16 sm:h-20 sm:w-20'
                   }`}
                 />
-                <span className="text-lg font-semibold tracking-[0.08em] sm:text-xl">FOCAMAI</span>
+                <span className="text-lg font-semibold tracking-[0.08em] sm:text-xl">
+                  <span className="text-[#0F6175]">FOCAMA</span><span className="italic text-[#E59B26]">I</span>
+                </span>
               </NavLink>
               <p
                 className={`text-sm text-slate-500 transition-all duration-300 ease-out ${
@@ -159,6 +187,9 @@ function SiteLayout() {
             >
               {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
+          </div>
+          <div className="hidden flex-1 items-center justify-center lg:flex">
+            <SearchStepIndicator progress={progress} />
           </div>
           <div className="hidden sm:block">
             <SlidingNav items={navItems} />
@@ -202,6 +233,12 @@ function SiteLayout() {
               Focamai offers calm buying guidance before you head to a marketplace. The current app
               focuses on guided product search, AI-assisted shortlist refinement, and clear trust
               pages while the broader product continues to evolve.
+            </p>
+            <p className="text-xs text-slate-400">
+              As an Amazon Associate I earn from qualifying purchases.{' '}
+              <NavLink to="/affiliate-disclosure" className="underline underline-offset-2 hover:text-slate-600">
+                Affiliate disclosure
+              </NavLink>
             </p>
           </div>
           <div className="space-y-3">

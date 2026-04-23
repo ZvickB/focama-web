@@ -9,6 +9,7 @@ describe('resolveSelectedProductForDisplay', () => {
       title: 'Travel stroller',
       fit_reason: '',
       caveat: '',
+      feature_bullets: [],
       analyticsMeta: {
         position: 0,
         resultSet: 'final',
@@ -22,6 +23,7 @@ describe('resolveSelectedProductForDisplay', () => {
           title: 'Travel stroller',
           fit_reason: 'Fits travel days well because it folds down fast and stays easy to carry.',
           caveat: 'Storage is a bit tighter than on larger full-size strollers.',
+          feature_bullets: ['One-hand fold', 'Compact carry strap'],
         },
       ],
       selectedProduct,
@@ -31,6 +33,7 @@ describe('resolveSelectedProductForDisplay', () => {
       id: 'result-1',
       fit_reason: 'Fits travel days well because it folds down fast and stays easy to carry.',
       caveat: 'Storage is a bit tighter than on larger full-size strollers.',
+      feature_bullets: ['One-hand fold', 'Compact carry strap'],
       analyticsMeta: {
         position: 0,
         resultSet: 'final',

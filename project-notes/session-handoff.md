@@ -36,18 +36,20 @@
 
 ## Current guided flow
 - `/api/search/discover` builds the candidate pool and preview set.
-- `/api/search/prewarm` backend route still exists but is disabled in frontend.
+- `/api/search/prewarm` is fully removed (2026-04-17).
 - `/api/search/refine` returns one fast user-facing follow-up question.
 - `/api/search/framing-fields` returns slower background framing fields for timing/debug visibility.
-- `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache, locks the shortlist via nano (~2s), fires mini enrichment async, and returns `flowPath: 'nano_lock'` plus metadata-only cards.
+- `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache, locks the shortlist via nano, fetches product details for the locked winners through the current Oxylabs helper, then returns `flowPath: 'nano_lock'` plus shortlist cards that now include `feature_bullets` when available.
 - `/api/search/enrichment` GET — frontend polls with `?token=&query=` until `ready: true` then merges `fit_reason`/`caveat` into results.
-- Cards = metadata only: image, title, source, price, ratings, badge label. No AI copy.
-- AI copy (`fit_reason`, `caveat`) lives in the modal only, populated when enrichment arrives.
+- Grid cards still stay metadata-only on the surface: image, title, source, price, ratings, badge label. No AI copy.
+- Product detail modals can now show `feature_bullets` immediately from finalize, while AI copy (`fit_reason`, `caveat`) still arrives via enrichment polling.
 - Badge labels are frontend-owned and assigned deterministically after shortlist arrives.
+- Finalize-time detail fetches now use a provider-agnostic per-ASIN cache. Partial cached rows can be returned immediately and refreshed later in the background without blocking the response.
+- Discovery diversification rule is intentionally path-specific: keep the per-source cap for Serp/multi-merchant shopping, but disable it for Amazon-only paths (Rainforest, Oxylabs, later direct Amazon API) so those searches do not get stuck at 2 items.
 
 ## Current experiment status — CLOSED AND WIRED
 All latency experiments are concluded and wired into the real product flow. Decisions:
-- **Prewarm: off.** Disabled in frontend as of 2026-04-14. Backend route still exists.
+- **Prewarm: off and removed.** Fully deleted from codebase 2026-04-17.
 - **nano-lock + mini async-enrichment: live.** Nano locks winners at ~2s (cards appear), mini enriches async at ~8-12s (modal AI copy arrives via polling).
 - **One-call stream: measured but not wired.** nano is the only viable fast model.
 
@@ -56,11 +58,11 @@ All latency experiments are concluded and wired into the real product flow. Deci
 2. `/api/search/enrichment` GET endpoint — frontend polls this for enrichment readiness
 3. Mini enrichment schema uses `fit_reason` + `caveat` as separate fields
 4. Cards = metadata only (no AI copy). Modal shows `fit_reason` + `caveat` when enrichment arrives
-5. `HomeShared.jsx` modal shows placeholder until enrichment ready (`enrichmentReady = Boolean(item?.fit_reason)`)
+5. `HomeShared.jsx` modal shows `feature_bullets` immediately when present, and still shows a placeholder until AI enrichment is ready (`enrichmentReady = Boolean(item?.fit_reason)`)
 6. Enrichment stored in discovery cache `selection.enrichment` field — no new DB tables needed
 
 ## Current real-world timings (no prewarm, fresh cache miss)
-- Discover: ~6.5s (SerpApi ~5.3s cache miss; ~150ms on cache hit)
+- Discover: ~6.5s (Rainforest cache miss; ~150ms on cache hit)
 - Refine: ~1.7s
 - Framing fields: ~4.4s (background, doesn't block)
 - Finalize: ~4.3s (OpenAI ~3.7s)
@@ -73,9 +75,9 @@ All latency experiments are concluded and wired into the real product flow. Deci
 - Boot splash lives in `/index.html`, shows `Focused shopping`, and fades after app readiness plus minimum display time.
 
 ## Testing state
-- 102 tests passing as of 2026-04-14. All suites green.
-- Key coverage added this session: nano lock, enrichment poll endpoint, async enrichment storage, enrichment contract fields (`fit_reason`/`caveat`), cards without AI copy.
-- `window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__ = true` is set in all `HomePage.test.jsx` beforeEach calls to suppress background polling in tests (same pattern as prewarm disable flag).
+- 101 tests passing as of 2026-04-17. All suites green.
+- Prewarm tests removed; stale `personalising explanation` loading text assertion updated to match skeleton shimmer UI.
+- `window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__ = true` is set in all `HomePage.test.jsx` beforeEach calls to suppress background polling in tests.
 
 ## Recent user preferences
 - Minimal copy in the open layout.
@@ -86,11 +88,23 @@ All latency experiments are concluded and wired into the real product flow. Deci
 
 ## If continuing from here
 - For product behavior questions, read `app_flow.md`.
-- For measurement conclusions, read `active-experiment-override.md` plus `temp-data/layered-latency-measurement-summary.md` if resuming that exact line.
+- For measurement conclusions, read `active-experiment-override.md`.
 - For implementation planning, read `layered-latency-plan.md` and do one pending checklist step at a time.
-- For the stream experiment, the mini-vs-nano decision is closed: keep nano as the only plausible fast stream model, reject mini for one-call streamed finalize, and keep prewarm out of the latency argument.
-- For the next harness-only experiment, implement only the smallest nano-lock plus mini async-enrichment measurement path when asked; do not wire UI.
-- Keep measurement-only fields temporary:
-  - `measurementPreparedQueryFraming`
-  - `measurementSelectionMode: selection_only`
-  - `measurementSelectionMode: winner_lock_ids_only`
+- All latency experiments are concluded. Nano-lock + mini async-enrichment is the wired product path.
+- Pending cleanup: remove `measurementPreparedQueryFraming`, `measurementSelectionMode: selection_only/winner_lock_ids_only`, the local `/api/search/finalize-stream` route, and `stream-clean` harness mode — see `todo.md`.
+
+## Active exploration — Oxylabs as cheap Rainforest substitute (2026-04-19)
+- Goal: test whether Oxylabs can replace Rainforest `type=product` calls for the dual-endpoint enrichment flow during development, before paying Rainforest credits closer to launch.
+- Feasibility test completed — Oxylabs works. Bullets, brand, specs all present.
+- Current reality: finalize is still wired to `fetchOxylabsProductDetailsByAsin` in `backend/server.js`, but both Oxylabs and Rainforest detail helpers now read/write the same provider-agnostic ASIN cache via `backend/lib/search-storage.js`.
+- Planned future wiring: switch the finalize import/call site in `backend/server.js` from `fetchOxylabsProductDetailsByAsin` to `fetchRainforestProductDetailsByAsin` from `backend/lib/rainforest-pipeline.js`. Do not change the cache helper wiring when making that swap.
+- Full results and next steps: `project-notes/rainforest-strategy/oxylabs-feasibility.md`
+- Raw samples saved: `temp-data/oxylabs-samples/`
+- Test script: `backend/scripts/test-oxylabs.js`
+- Credentials: `OXYLABS_USERNAME` / `OXYLABS_PASSWORD` in `.env`
+- All 3 gaps resolved (reviews_count, category, link prefix) and normalizer functions written (`backend/lib/oxylabs-normalizer.js`).
+- Re-entry files/functions for the later provider swap:
+  - `backend/server.js` — import list and finalize route call site
+  - `backend/lib/rainforest-pipeline.js` — `fetchRainforestProductDetailsByAsin`
+  - `backend/lib/search-storage.js` — `readProductDetailsCacheEntries` / `writeProductDetailsCacheEntries`
+- Cached detail rows are not fed into the AI shortlist-selection prompt. They only support post-lock product facts for the already-selected ASINs.

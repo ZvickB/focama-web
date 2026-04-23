@@ -1,20 +1,25 @@
 import { createClient } from '@supabase/supabase-js'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
+import { resolve } from 'node:path'
 import {
   buildCacheKey,
   getEnv,
   readSearchCache,
   writeSearchCacheEntry as writeLocalSearchCacheEntry,
 } from './search-data.js'
+import { normalizeCachedProductDetailsEntry } from './product-details-cache.js'
 
 const SEARCH_CACHE_TABLE = 'search_cache'
 const SEARCH_HISTORY_TABLE = 'search_history'
 const RATE_LIMIT_EVENTS_TABLE = 'rate_limit_events'
+const PRODUCT_DETAILS_CACHE_TABLE = 'product_details_cache'
 const ANALYTICS_SEARCH_RUNS_TABLE = 'analytics_search_runs'
 const ANALYTICS_SEARCH_EVENTS_TABLE = 'analytics_search_events'
 const ANALYTICS_RESULT_IMPRESSIONS_TABLE = 'analytics_result_impressions'
 const ANALYTICS_RESULT_CLICKS_TABLE = 'analytics_result_clicks'
 const DEFAULT_CACHE_TTL_MINUTES = 1440
+const PRODUCT_DETAILS_CACHE_PATH = resolve(process.cwd(), 'temp-data', 'product-details-cache.json')
 
 let supabaseAdminClient = null
 
@@ -106,6 +111,13 @@ function mapSupabaseCacheRow(row) {
     cacheKey: row.cache_key,
     cachedAt: row.cached_at,
     candidatePool: row.candidate_pool,
+    discoveryToken:
+      row.selection &&
+      typeof row.selection === 'object' &&
+      !Array.isArray(row.selection) &&
+      typeof row.selection.discoveryToken === 'string'
+        ? row.selection.discoveryToken
+        : '',
     details: row.details,
     expiresAt: row.expires_at,
     productQuery: row.product_query,
@@ -127,6 +139,14 @@ function readLocalCacheEntry(cacheKey) {
     cacheKey,
     cachedAt: entry.cachedAt,
     candidatePool: entry.candidatePool ?? null,
+    discoveryToken:
+      entry.discoveryToken ??
+      (entry.selection &&
+      typeof entry.selection === 'object' &&
+      !Array.isArray(entry.selection) &&
+      typeof entry.selection.discoveryToken === 'string'
+        ? entry.selection.discoveryToken
+        : ''),
     details: entry.details ?? '',
     expiresAt: entry.expiresAt ?? null,
     productQuery: entry.productQuery ?? '',
@@ -134,6 +154,103 @@ function readLocalCacheEntry(cacheKey) {
     selection: entry.selection ?? null,
     source: entry.source || 'local_file_cache',
   }
+}
+
+function logStorageWarning(message, error) {
+  const errorMessage = error instanceof Error ? error.message : ''
+
+  if (errorMessage) {
+    console.warn(`[search-storage] ${message}: ${errorMessage}`)
+    return
+  }
+
+  console.warn(`[search-storage] ${message}`)
+}
+
+function readLocalProductDetailsCacheFile() {
+  if (!existsSync(PRODUCT_DETAILS_CACHE_PATH)) {
+    return { entries: {} }
+  }
+
+  try {
+    const fileContents = readFileSync(PRODUCT_DETAILS_CACHE_PATH, 'utf8')
+    const parsed = JSON.parse(fileContents)
+
+    if (!parsed || typeof parsed !== 'object' || !parsed.entries || typeof parsed.entries !== 'object') {
+      return { entries: {} }
+    }
+
+    return parsed
+  } catch {
+    return { entries: {} }
+  }
+}
+
+function mapSupabaseProductDetailsRow(row) {
+  const normalized = normalizeCachedProductDetailsEntry({
+    feature_bullets: row?.feature_bullets,
+    productDescription: row?.product_description,
+    source: row?.source,
+    needsUpdating: row?.needs_updating,
+    nextUpdateAt: row?.next_update_at,
+  })
+
+  if (!row?.asin || !normalized) {
+    return null
+  }
+
+  return normalized
+}
+
+function mapLocalProductDetailsEntry(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return null
+  }
+
+  const normalized = normalizeCachedProductDetailsEntry({
+    feature_bullets: entry?.feature_bullets,
+    productDescription: entry?.productDescription,
+    source: entry?.source,
+    needsUpdating: entry?.needsUpdating,
+    nextUpdateAt: entry?.nextUpdateAt,
+  })
+
+  if (!normalized) {
+    return null
+  }
+
+  return normalized
+}
+
+function writeLocalProductDetailsCacheEntries(entries) {
+  mkdirSync(resolve(process.cwd(), 'temp-data'), { recursive: true })
+
+  const existingCache = readLocalProductDetailsCacheFile()
+  const nextEntries = { ...(existingCache.entries || {}) }
+  const cachedAt = new Date().toISOString()
+
+  for (const entry of entries) {
+    const asin = typeof entry?.asin === 'string' ? entry.asin.trim() : ''
+    const normalized = normalizeCachedProductDetailsEntry(entry)
+
+    if (!asin || !normalized) {
+      continue
+    }
+
+    nextEntries[asin] = {
+      feature_bullets: normalized.feature_bullets,
+      productDescription: normalized.productDescription,
+      source: normalized.source,
+      needsUpdating: normalized.needsUpdating,
+      nextUpdateAt: normalized.nextUpdateAt,
+      cachedAt,
+    }
+  }
+
+  writeFileSync(
+    PRODUCT_DETAILS_CACHE_PATH,
+    JSON.stringify({ entries: nextEntries }, null, 2),
+  )
 }
 
 export async function readStoredSearchCacheEntry({ productQuery, details, scope = 'default' }) {
@@ -169,12 +286,20 @@ export async function writeStoredSearchCacheEntry({
   productQuery,
   details,
   candidatePool,
+  discoveryToken = '',
   results,
   selection,
   source = 'live_search',
   scope = 'default',
 }) {
   const cacheKey = buildCacheKey(productQuery, details, scope)
+  const storedSelection =
+    selection && typeof selection === 'object' && !Array.isArray(selection)
+      ? {
+          ...selection,
+          ...(discoveryToken ? { discoveryToken } : {}),
+        }
+      : selection
   const cachedAt = new Date()
   const expiresAt = new Date(cachedAt)
   expiresAt.setMinutes(expiresAt.getMinutes() + getCacheTtlMinutes())
@@ -183,11 +308,12 @@ export async function writeStoredSearchCacheEntry({
     cacheKey,
     cachedAt: cachedAt.toISOString(),
     candidatePool,
+    discoveryToken,
     details,
     expiresAt: expiresAt.toISOString(),
     productQuery,
     results,
-    selection,
+    selection: storedSelection,
     source,
   }
 
@@ -203,7 +329,7 @@ export async function writeStoredSearchCacheEntry({
           expires_at: entry.expiresAt,
           product_query: productQuery,
           results,
-          selection,
+          selection: storedSelection,
           source,
         },
         { onConflict: 'cache_key' },
@@ -222,8 +348,9 @@ export async function writeStoredSearchCacheEntry({
         productQuery,
         details,
         candidatePool,
+        discoveryToken,
         results,
-        selection,
+        selection: storedSelection,
         source,
         expiresAt: entry.expiresAt,
         scope,
@@ -240,8 +367,9 @@ export async function writeStoredSearchCacheEntry({
     productQuery,
     details,
     candidatePool,
+    discoveryToken,
     results,
-    selection,
+    selection: storedSelection,
     source,
     expiresAt: entry.expiresAt,
     scope,
@@ -250,6 +378,118 @@ export async function writeStoredSearchCacheEntry({
   return {
     ...entry,
     storage: 'local',
+  }
+}
+
+export async function readProductDetailsCacheEntries(asins = []) {
+  const uniqueAsins = Array.from(
+    new Set(
+      (Array.isArray(asins) ? asins : [])
+        .map((asin) => (typeof asin === 'string' ? asin.trim().slice(0, 200) : ''))
+        .filter(Boolean),
+    ),
+  )
+
+  if (uniqueAsins.length === 0) {
+    return new Map()
+  }
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient()
+      const { data, error } = await supabase
+        .from(PRODUCT_DETAILS_CACHE_TABLE)
+        .select('asin, feature_bullets, product_description, source, needs_updating, next_update_at')
+        .in('asin', uniqueAsins)
+
+      if (error) {
+        throw error
+      }
+
+      const rows = Array.isArray(data) ? data : []
+      return new Map(
+        rows
+          .map((row) => [row.asin, mapSupabaseProductDetailsRow(row)])
+          .filter(([, entry]) => Boolean(entry)),
+      )
+    } catch {
+      // Fall through to local cache file.
+    }
+  }
+
+  const localCache = readLocalProductDetailsCacheFile()
+
+  return new Map(
+    uniqueAsins
+      .map((asin) => [asin, mapLocalProductDetailsEntry(localCache.entries?.[asin])])
+      .filter(([, entry]) => Boolean(entry)),
+  )
+}
+
+export async function writeProductDetailsCacheEntries(entries = []) {
+  const normalizedEntries = (Array.isArray(entries) ? entries : [])
+    .map((entry) => {
+      const asin = typeof entry?.asin === 'string' ? entry.asin.trim().slice(0, 200) : ''
+      const normalized = normalizeCachedProductDetailsEntry(entry)
+
+      if (!asin || !normalized) {
+        return null
+      }
+
+      return {
+        asin,
+        feature_bullets: normalized.feature_bullets,
+        productDescription: normalized.productDescription,
+        source: normalized.source,
+        needsUpdating: normalized.needsUpdating,
+        nextUpdateAt: normalized.nextUpdateAt,
+      }
+    })
+    .filter(Boolean)
+
+  if (normalizedEntries.length === 0) {
+    return
+  }
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient()
+      const cachedAt = new Date().toISOString()
+      const { error } = await supabase.from(PRODUCT_DETAILS_CACHE_TABLE).upsert(
+        normalizedEntries.map((entry) => ({
+          asin: entry.asin,
+          feature_bullets: entry.feature_bullets,
+          product_description: entry.productDescription,
+          source: entry.source,
+          needs_updating: entry.needsUpdating,
+          next_update_at: entry.nextUpdateAt,
+          cached_at: cachedAt,
+        })),
+        { onConflict: 'asin' },
+      )
+
+      if (error) {
+        throw error
+      }
+
+      return
+    } catch (error) {
+      logStorageWarning('Product details cache write fell back to local storage', error)
+
+      try {
+        writeLocalProductDetailsCacheEntries(normalizedEntries)
+      } catch (localError) {
+        logStorageWarning('Product details local cache write failed', localError)
+      }
+
+      return
+    }
+  }
+
+  try {
+    writeLocalProductDetailsCacheEntries(normalizedEntries)
+  } catch (error) {
+    logStorageWarning('Product details local cache write failed', error)
   }
 }
 
@@ -468,6 +708,7 @@ export async function getSupabaseHealth() {
       checkSupabaseTable(supabase, SEARCH_CACHE_TABLE, 'cache_key'),
       checkSupabaseTable(supabase, SEARCH_HISTORY_TABLE, 'id'),
       checkSupabaseTable(supabase, RATE_LIMIT_EVENTS_TABLE, 'request_id'),
+      checkSupabaseTable(supabase, PRODUCT_DETAILS_CACHE_TABLE, 'asin'),
     ])
 
     return {

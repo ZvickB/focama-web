@@ -1,4 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import { motion } from 'motion/react'
+
+const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 import {
   ArrowUpRight,
   ChevronDown,
@@ -16,9 +19,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.j
 import logo from '@/assets/logo_master_version.svg'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
-
-const RESULT_CARD_FADE_DURATION_MS = 900
-const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 
 function handleRetryFeedbackKeyDown(event, { canSubmit, onSubmit }) {
   if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) {
@@ -53,6 +53,8 @@ function SkeletonBlock({ className }) {
     </div>
   )
 }
+
+const MotionDiv = motion.div
 
 export function ResultSkeleton({ className = '' }) {
   return (
@@ -89,6 +91,7 @@ export function ResultSkeleton({ className = '' }) {
 export function ProductDetailModal({ item, onClose, onRetailerClick }) {
   const fitReason = item?.fit_reason || item?.fitReason || ''
   const caveat = item?.caveat || ''
+  const featureBullets = Array.isArray(item?.feature_bullets) ? item.feature_bullets.slice(0, 5) : []
   const enrichmentReady = Boolean(fitReason)
 
   useEffect(() => {
@@ -115,11 +118,19 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
   const userFacingDescription = getUserFacingDescription(item.description)
 
   return (
-    <div
+    <MotionDiv
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
       className="fixed inset-0 z-50 flex items-end bg-slate-950/45 lg:items-center lg:justify-center"
       onClick={onClose}
     >
-      <div
+      <MotionDiv
+        initial={{ opacity: 0, scale: 0.97, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 8 }}
+        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
         className="max-h-[94vh] w-full overflow-y-auto rounded-t-[32px] bg-[#fcf8f1] shadow-2xl lg:max-h-[88vh] lg:max-w-4xl lg:rounded-[32px]"
         onClick={(event) => event.stopPropagation()}
       >
@@ -128,7 +139,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
               Product details
             </p>
-            <p className="text-sm text-slate-600">A closer look at this recommendation.</p>
+            <p className="text-sm text-slate-600">What works for you, and what to know.</p>
           </div>
           <Button
             type="button"
@@ -181,6 +192,13 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
               {userFacingDescription ? (
                 <p className="text-base leading-7 text-slate-600">{userFacingDescription}</p>
               ) : null}
+              {featureBullets.length > 0 ? (
+                <ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-slate-600">
+                  {featureBullets.map((bullet, index) => (
+                    <li key={`${item.id}-feature-bullet-${index}`}>{bullet}</li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
 
             {enrichmentReady ? (
@@ -198,10 +216,27 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
             ) : (
               <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-lg text-slate-900">Why this pick stands out</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-lg text-slate-900">Why this pick stands out</CardTitle>
+                    <span className="relative flex h-2 w-2 shrink-0">
+                      <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
+                      <span className="relative h-2 w-2 rounded-full bg-primary/60" />
+                    </span>
+                  </div>
                 </CardHeader>
-                <CardContent className="text-sm text-slate-400">
-                  Personalising explanation…
+                <CardContent className="space-y-2.5">
+                  <div className="relative overflow-hidden rounded-full bg-stone-200/80">
+                    <div className="h-3.5 w-full" />
+                    <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" />
+                  </div>
+                  <div className="relative overflow-hidden rounded-full bg-stone-200/80">
+                    <div className="h-3.5 w-5/6" />
+                    <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" style={{ animationDelay: '0.3s' }} />
+                  </div>
+                  <div className="relative overflow-hidden rounded-full bg-stone-200/80">
+                    <div className="h-3.5 w-3/4" />
+                    <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" style={{ animationDelay: '0.6s' }} />
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -228,7 +263,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
                     className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
                   >
                     <a href={item.link} target="_blank" rel="noreferrer" onClick={onRetailerClick}>
-                      View on retailer site
+                      {item.subtitle ? `View on ${item.subtitle}` : 'View on retailer site'}
                       <ArrowUpRight className="h-4 w-4" />
                     </a>
                   </Button>
@@ -256,8 +291,8 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </MotionDiv>
+    </MotionDiv>
   )
 }
 
@@ -287,26 +322,7 @@ export function ResultsSection({
   const hasExplicitBadges = shouldShowBadgeLabels && displayedResults.some((item) => item.badgeLabel)
   const hasDisplayedResults = orderedResults.length > 0
   const shouldShowResultsIntro = !hasDisplayedResults || hasFinalResults
-  const [visibleResultSetKey, setVisibleResultSetKey] = useState('')
-  const resultSetKey = `${hasFinalResults ? 'final' : showPreviewResults ? 'preview' : 'none'}:${displayedResults
-    .map((item) => String(item.id))
-    .join('|')}`
   const orderedPreviousResults = previousResults
-  const areCardsVisible = visibleResultSetKey === resultSetKey
-
-  useEffect(() => {
-    if (orderedResults.length === 0) {
-      return undefined
-    }
-
-    const frameId = window.requestAnimationFrame(() => {
-      setVisibleResultSetKey(resultSetKey)
-    })
-
-    return () => {
-      window.cancelAnimationFrame(frameId)
-    }
-  }, [orderedResults.length, resultSetKey])
 
   return (
     <section className="space-y-5">
@@ -324,7 +340,7 @@ export function ResultsSection({
           </h2>
           <p className="max-w-3xl text-base leading-7 text-slate-600">
             {hasFinalResults
-              ? 'These picks were finalized after your guided refinement. You now have six focused options.'
+              ? 'Six picks, chosen around what you told us.'
               : hasStartedSearch
                 ? 'The shortlist is being built below while the AI helps narrow what matters.'
                 : 'Search to see a calmer shortlist with clear tradeoffs instead of a noisy marketplace wall.'}
@@ -433,20 +449,11 @@ export function ResultsSection({
                 }
 
                 return (
-                  <div
+                  <MotionDiv
                     key={item.id}
-                    className={`transform-gpu transition-[opacity,transform] motion-reduce:transform-none motion-reduce:transition-none ${
-                      areCardsVisible
-                        ? 'translate-y-0 opacity-100'
-                        : 'translate-y-2 opacity-0 duration-0'
-                    }`}
-                    style={{
-                      transitionDuration: areCardsVisible ? `${RESULT_CARD_FADE_DURATION_MS}ms` : '0ms',
-                      transitionDelay: areCardsVisible
-                        ? `${RESULT_CARD_FADE_DELAYS_MS[index] ?? index * RESULT_CARD_FADE_DURATION_MS}ms`
-                        : '0ms',
-                      transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
-                    }}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.9, delay: (RESULT_CARD_FADE_DELAYS_MS[index] ?? index * 900) / 1000, ease: [0.22, 1, 0.36, 1] }}
                   >
                     <ProductCard
                       {...visibleItem}
@@ -463,7 +470,7 @@ export function ResultsSection({
                         })
                       }
                     />
-                  </div>
+                  </MotionDiv>
                 )
               })}
             </div>

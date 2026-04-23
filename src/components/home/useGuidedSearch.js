@@ -15,7 +15,6 @@ export const MAX_REFINEMENT_RETRIES = 2
 const FINAL_RESULT_BADGE_REVEAL_DELAY_MS = 240
 const ENRICHMENT_POLL_INTERVAL_MS = 1500
 const ENRICHMENT_POLL_TIMEOUT_MS = 30000
-const PREWARM_REQUEST_MODE_DEFAULT = 'guided_prerank_prewarm'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const FINALIZE_REQUEST_MODE_REFINED = 'guided_refined'
@@ -56,18 +55,12 @@ function createFallbackRefinementPrompt(productQuery) {
   }
 }
 
-function isGuidedPrewarmDisabled() {
-  // Prewarm is off by default — experiment concluded it is not a latency win.
-  // Re-enable explicitly with window.__FOCAMAI_ENABLE_PREWARM__ = true in the console.
-  return typeof window === 'undefined' || window.__FOCAMAI_ENABLE_PREWARM__ !== true
-}
-
 function isBackgroundFramingDisabled() {
   return typeof window !== 'undefined' && window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__ === true
 }
 
-function hasUsableCandidatePool(candidatePool) {
-  return Array.isArray(candidatePool?.candidates) && candidatePool.candidates.length > 0
+function createExpiredSessionMessage() {
+  return 'Your search session expired. Start a new search.'
 }
 
 async function readJsonResponse(response, requestStartedAt) {
@@ -104,7 +97,7 @@ async function readJsonResponse(response, requestStartedAt) {
 async function fetchDiscoveryResults(query) {
   const searchParams = new URLSearchParams({ query })
   const requestStartedAt = performance.now()
-  const response = await fetch(`/api/search/discover?${searchParams.toString()}`)
+  const response = await fetch(`/api/search/rainforest-discover?${searchParams.toString()}`)
   return readJsonResponse(response, requestStartedAt)
 }
 
@@ -119,30 +112,6 @@ async function fetchFramingFields(query) {
   const searchParams = new URLSearchParams({ query })
   const requestStartedAt = performance.now()
   const response = await fetch(`/api/search/framing-fields?${searchParams.toString()}`)
-  return readJsonResponse(response, requestStartedAt)
-}
-
-async function prewarmGuidedSearch({
-  query,
-  discoveryToken,
-  candidatePool,
-  signal,
-}) {
-  const requestStartedAt = performance.now()
-  const response = await fetch('/api/search/prewarm', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    signal,
-    body: JSON.stringify({
-      query,
-      discoveryToken,
-      candidatePool,
-      requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-    }),
-  })
-
   return readJsonResponse(response, requestStartedAt)
 }
 
@@ -207,6 +176,13 @@ function mergeEnrichmentIntoResults(results, enrichmentEntries) {
       ...result,
       fit_reason: entry?.fit_reason || entry?.fitReason || '',
       caveat: entry?.caveat || '',
+      feature_bullets: Array.isArray(entry?.feature_bullets)
+        ? entry.feature_bullets
+        : Array.isArray(entry?.featureBullets)
+          ? entry.featureBullets
+          : Array.isArray(result?.feature_bullets)
+            ? result.feature_bullets
+            : [],
     }
   })
 }
@@ -293,7 +269,6 @@ export function resolveSelectedProductForDisplay({
 }
 
 export function useGuidedSearch() {
-  const prewarmDisabled = isGuidedPrewarmDisabled()
   const backgroundFramingDisabled = isBackgroundFramingDisabled()
   const [productQuery, setProductQuery] = useState('')
   const [selectedProductState, setSelectedProductState] = useState(null)
@@ -314,7 +289,6 @@ export function useGuidedSearch() {
   const [requestTiming, setRequestTiming] = useState({
     discover: null,
     finalize: null,
-    prewarm: null,
     refine: null,
     framingFields: null,
   })
@@ -322,7 +296,6 @@ export function useGuidedSearch() {
   const [showPreviewResults, setShowPreviewResults] = useState(false)
   const [isDiscovering, setIsDiscovering] = useState(false)
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false)
-  const [isAwaitingPrewarmedFinalize, setIsAwaitingPrewarmedFinalize] = useState(false)
   const [isEnrichmentReady, setIsEnrichmentReady] = useState(false)
   const activeSearchIdRef = useRef(0)
   const enrichmentPollRef = useRef({ timerId: null, searchId: 0 })
@@ -330,17 +303,6 @@ export function useGuidedSearch() {
   const analyticsSessionIdRef = useRef('')
   const hasTrackedRefinementViewRef = useRef(false)
   const hasTrackedPreviewImpressionsRef = useRef(false)
-  const isAwaitingPrewarmedFinalizeRef = useRef(false)
-  const pendingFinalizeRequestRef = useRef(null)
-  const prewarmRef = useRef({
-    abortedReason: '',
-    activeSearchId: 0,
-    clickStartedAt: 0,
-    controller: null,
-    promise: null,
-    metadata: null,
-    status: 'idle',
-  })
 
   function trackSearchEvent(name, eventData = {}) {
     if (!analyticsSearchIdRef.current || !analyticsSessionIdRef.current) {
@@ -363,6 +325,18 @@ export function useGuidedSearch() {
     }
 
     enrichmentPollRef.current.searchId = 0
+  }
+
+  function expireSearchSession(message = createExpiredSessionMessage()) {
+    stopEnrichmentPolling()
+    finalizeMutation.reset()
+    setDiscoveryToken('')
+    setCandidatePool(null)
+    setResults([])
+    setPreviousResults([])
+    setSelectionState(null)
+    setIsEnrichmentReady(false)
+    setErrorMessage(message)
   }
 
   function startEnrichmentPolling({ token, query, searchId }) {
@@ -407,49 +381,6 @@ export function useGuidedSearch() {
     }
 
     schedulePoll()
-  }
-
-  function resetPrewarmState({ preserveTiming = false } = {}) {
-    if (prewarmRef.current.controller) {
-      prewarmRef.current.controller.abort()
-    }
-
-    prewarmRef.current = {
-      abortedReason: '',
-      activeSearchId: 0,
-      clickStartedAt: 0,
-      controller: null,
-      promise: null,
-      metadata: null,
-      status: 'idle',
-    }
-
-    isAwaitingPrewarmedFinalizeRef.current = false
-    pendingFinalizeRequestRef.current = null
-    setIsAwaitingPrewarmedFinalize(false)
-
-    if (!preserveTiming) {
-      setRequestTiming((current) => ({
-        ...current,
-        prewarm: null,
-      }))
-    }
-  }
-
-  function discardPrewarm(reason, extraEventData = {}) {
-    const prewarmState = prewarmRef.current
-
-    if (prewarmState.status === 'pending' && prewarmState.controller) {
-      prewarmState.abortedReason = reason
-      prewarmState.controller.abort()
-    } else if (prewarmState.status === 'ready' && prewarmState.metadata) {
-      trackSearchEvent('prerank_prewarm_unused', {
-        reason,
-        ...extraEventData,
-      })
-    }
-
-    resetPrewarmState({ preserveTiming: true })
   }
 
   function applyFinalizePayload(payload, variables) {
@@ -517,17 +448,6 @@ export function useGuidedSearch() {
         },
       })
 
-      if (payload.selection?.reusedCandidateAwarePrior || payload.selection?.reusedPreRankArtifact) {
-        trackSearchEvent('prerank_finalize_reused', {
-          priorFlowPath: payload.selection?.flowPath || '',
-          priorReuseReason: payload.selection?.fallbackReason || '',
-          artifactFlowPath: payload.selection?.flowPath || '',
-          artifactReuseReason: payload.selection?.fallbackReason || '',
-          requestMode: variables.requestMode || FINALIZE_REQUEST_MODE_DEFAULT,
-          usedIntentMatchRerank: Boolean(payload.selection?.usedIntentMatchRerank),
-        })
-      }
-
       const impressionItems = buildResultAnalyticsItems(finalizedResults)
 
       if (impressionItems.length > 0) {
@@ -543,131 +463,18 @@ export function useGuidedSearch() {
   }
 
   function handleFinalizeError(error) {
-    setErrorMessage(error instanceof Error ? error.message : 'Unable to finalize the search.')
+    const message = error instanceof Error ? error.message : 'Unable to finalize the search.'
+
+    if (/session expired|start a new search/i.test(message)) {
+      expireSearchSession(message)
+      return
+    }
+
+    setErrorMessage(message)
   }
 
   function startFinalizeMutation(variables) {
     finalizeMutation.mutate(variables)
-  }
-
-  function queueFinalizeUntilPrewarm(variables) {
-    pendingFinalizeRequestRef.current = variables
-    prewarmRef.current.clickStartedAt = performance.now()
-    setErrorMessage('')
-    isAwaitingPrewarmedFinalizeRef.current = true
-    setIsAwaitingPrewarmedFinalize(true)
-    trackSearchEvent('prerank_prewarm_waited_on', {
-      requestMode: variables.requestMode,
-    })
-  }
-
-  function startArtifactPrewarm({ discoveryToken: nextDiscoveryToken, originalCandidatePool, query, searchId }) {
-    if (prewarmDisabled || !nextDiscoveryToken || !query || !hasUsableCandidatePool(originalCandidatePool)) {
-      return
-    }
-
-    resetPrewarmState()
-
-    const controller = new AbortController()
-    const nextPrewarmState = {
-      abortedReason: '',
-      activeSearchId: searchId,
-      clickStartedAt: 0,
-      controller,
-      promise: null,
-      metadata: null,
-      status: 'pending',
-    }
-
-    prewarmRef.current = nextPrewarmState
-
-    trackSearchEvent('prerank_prewarm_started', {
-      candidateCount: Array.isArray(originalCandidatePool?.candidates)
-        ? originalCandidatePool.candidates.length
-        : 0,
-      requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-    })
-
-    const promise = prewarmGuidedSearch({
-      query,
-      discoveryToken: nextDiscoveryToken,
-      candidatePool: originalCandidatePool,
-      signal: controller.signal,
-    })
-
-    nextPrewarmState.promise = promise
-
-    promise
-      .then((payload) => {
-        if (prewarmRef.current !== nextPrewarmState || activeSearchIdRef.current !== searchId) {
-          return
-        }
-
-        prewarmRef.current = {
-          ...nextPrewarmState,
-          controller: null,
-          metadata: payload.prewarm || null,
-          status: 'ready',
-        }
-
-        setRequestTiming((current) => ({
-          ...current,
-          prewarm: payload.timing || null,
-        }))
-
-        trackSearchEvent('prerank_prewarm_ready', {
-          openaiMs: payload.timing?.server?.openai ?? null,
-          requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-          totalMs: payload.timing?.client?.totalMs ?? null,
-          totalTokens: payload.usage?.openai?.totalTokens ?? null,
-          priorCandidateCount:
-            payload.prewarm?.priorCandidateCount ?? payload.prewarm?.artifactCandidateCount ?? null,
-          priorByteLength: payload.prewarm?.priorByteLength ?? payload.prewarm?.artifactByteLength ?? null,
-          artifactCandidateCount: payload.prewarm?.artifactCandidateCount ?? null,
-          artifactByteLength: payload.prewarm?.artifactByteLength ?? null,
-        })
-
-        if (
-          isAwaitingPrewarmedFinalizeRef.current &&
-          prewarmRef.current.clickStartedAt > 0 &&
-          pendingFinalizeRequestRef.current
-        ) {
-          const queuedFinalize = pendingFinalizeRequestRef.current
-          isAwaitingPrewarmedFinalizeRef.current = false
-          pendingFinalizeRequestRef.current = null
-          setIsAwaitingPrewarmedFinalize(false)
-          trackSearchEvent('prerank_prewarm_consumed', {
-            clickToResultsMs: roundTiming(performance.now() - prewarmRef.current.clickStartedAt),
-            requestMode: queuedFinalize.requestMode,
-            totalPrewarmMs: payload.timing?.client?.totalMs ?? null,
-          })
-          startFinalizeMutation(queuedFinalize)
-        }
-      })
-      .catch((error) => {
-        if (error?.name === 'AbortError') {
-          trackSearchEvent('prerank_prewarm_aborted', {
-            reason: nextPrewarmState.abortedReason || 'aborted',
-          })
-          return
-        }
-
-        if (prewarmRef.current !== nextPrewarmState || activeSearchIdRef.current !== searchId) {
-          return
-        }
-
-        trackSearchEvent('prerank_prewarm_failed', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        })
-
-        const queuedFinalize = pendingFinalizeRequestRef.current
-        const shouldFallback = isAwaitingPrewarmedFinalizeRef.current && queuedFinalize
-        resetPrewarmState({ preserveTiming: true })
-
-        if (shouldFallback) {
-          startFinalizeMutation(queuedFinalize)
-        }
-      })
   }
 
   const finalizeMutation = useMutation({
@@ -697,11 +504,10 @@ export function useGuidedSearch() {
   }, [finalResultsKey, results.length])
 
   useEffect(() => () => {
-    resetPrewarmState()
     stopEnrichmentPolling()
   }, [])
 
-  const isFinalizing = finalizeMutation.isPending || isAwaitingPrewarmedFinalize
+  const isFinalizing = finalizeMutation.isPending
   const isLoading = isDiscovering || isGeneratingPrompt || isFinalizing
   const hasFinalResults = results.length > 0
   const displayedResults = hasFinalResults ? results : showPreviewResults ? previewResults : []
@@ -730,7 +536,6 @@ export function useGuidedSearch() {
     setRequestTiming({
       discover: null,
       finalize: null,
-      prewarm: null,
       refine: null,
       framingFields: null,
     })
@@ -746,7 +551,6 @@ export function useGuidedSearch() {
   function resetToNewSearch() {
     activeSearchIdRef.current += 1
     stopEnrichmentPolling()
-    discardPrewarm('new_search')
     finalizeMutation.reset()
     setProductQuery('')
     setSelectedProductState(null)
@@ -766,7 +570,6 @@ export function useGuidedSearch() {
     setRequestTiming({
       discover: null,
       finalize: null,
-      prewarm: null,
       refine: null,
       framingFields: null,
     })
@@ -832,9 +635,7 @@ export function useGuidedSearch() {
         if (!payload.discoveryToken) {
           setCandidatePool(null)
           setPreviewResults([])
-          setErrorMessage(
-            'Guided discovery is missing its session token. Restart the backend server and start the search again.',
-          )
+          setErrorMessage(createExpiredSessionMessage())
           return
         }
 
@@ -845,12 +646,6 @@ export function useGuidedSearch() {
           ...current,
           discover: payload.timing || null,
         }))
-        startArtifactPrewarm({
-          discoveryToken: payload.discoveryToken || '',
-          originalCandidatePool: payload.candidatePool || null,
-          query: normalizedQuery,
-          searchId: nextSearchId,
-        })
 
         trackAnalytics({
           eventType: 'search_event',
@@ -973,7 +768,7 @@ export function useGuidedSearch() {
     }
 
     if (!discoveryToken) {
-      setErrorMessage('Search session is missing. Please start the search again.')
+      expireSearchSession()
       return
     }
 
@@ -1009,11 +804,6 @@ export function useGuidedSearch() {
         requestMode: FINALIZE_REQUEST_MODE_REFINED,
       }
 
-      if (!prewarmDisabled && prewarmRef.current.status === 'pending') {
-        queueFinalizeUntilPrewarm(nextFinalizeRequest)
-        return
-      }
-
       startFinalizeMutation(nextFinalizeRequest)
       return
     }
@@ -1028,11 +818,6 @@ export function useGuidedSearch() {
       excludedCandidateIds: [],
       previousResults: [],
       requestMode: FINALIZE_REQUEST_MODE_EMPTY_NOTES,
-    }
-
-    if (!prewarmDisabled && prewarmRef.current.status === 'pending') {
-      queueFinalizeUntilPrewarm(nextFinalizeRequest)
-      return
     }
 
     startFinalizeMutation(nextFinalizeRequest)
@@ -1088,7 +873,7 @@ export function useGuidedSearch() {
     }
 
     if (!discoveryToken) {
-      setErrorMessage('Search session is missing. Please start the search again.')
+      expireSearchSession()
       return
     }
 
@@ -1109,11 +894,6 @@ export function useGuidedSearch() {
       excludedCandidateIds: results.map((result) => result.id),
       previousResults: results,
       requestMode: FINALIZE_REQUEST_MODE_RETRY,
-    }
-
-    if (!prewarmDisabled && prewarmRef.current.status === 'pending') {
-      queueFinalizeUntilPrewarm(nextFinalizeRequest)
-      return
     }
 
     startFinalizeMutation(nextFinalizeRequest)

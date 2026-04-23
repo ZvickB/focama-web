@@ -128,7 +128,7 @@
 - [x] `status: done` Add harness mode for nano-lock plus mini async-enrichment experiment (`--mode nano-mini-split`).
 - [x] `status: done` Measure nano winner/badge lock latency, mini enrichment latency, tokens, and order preservation on `context5`. Nano locks at ~2s, mini enriches at ~8.5–11.7s (longer with honest-caveat prompt). Order preserved 5/5. UX judgment: acceptable given cards show metadata-only and enrichment lives in modal only.
 - [x] `status: done` Validated async enrichment UX pattern: cards render with metadata + deterministic badge at ~2s; modal shows "Personalising explanation…" placeholder until enrichment arrives. Felt acceptable in local simulation at 8s delay.
-- [ ] `status: pending` Wire nano-lock + mini async-enrichment into the real product flow. When doing so: (1) split mini enrichment schema into separate `fit_reason` and `caveat` fields so the modal "Possible drawbacks" section populates correctly, (2) remove the `SIMULATE_ENRICHMENT_DELAY_MS` simulation block from `HomeShared.jsx`, (3) remove the fit reason from the blocking finalize card payload since it will arrive async.
+- [x] `status: done` Wire nano-lock + mini async-enrichment into the real product flow. Split mini enrichment schema into separate `fit_reason` and `caveat` fields. Cards are metadata-only. Modal shows fit_reason/caveat when enrichment arrives via polling. `/api/search/enrichment` GET endpoint live. Wired as of 2026-04-14.
 - [ ] `status: pending` Make the latest user follow-up or retry feedback the strongest later-stage decision signal in finalize-fast.
 - [ ] `status: pending` Remove any too-early recommendation-style reveal path so real cards appear only after shortlist certainty.
 - [ ] `status: pending` Update modal behavior so it opens immediately with core facts and lets explanation sections load progressively when enrichment is still in flight.
@@ -137,20 +137,13 @@
 
 ## Working note for future chats
 - Pick one pending checklist step per chat when possible.
-- The temporary `stream-clean` harness path measured the one-call stream idea; do not productize it or wire frontend from that branch without explicit approval.
-- The next measurement direction is separate and harness-only: nano locks winners/badges quickly, then mini writes nicer copy in a non-blocking second call.
 - When a step changes active direction or current repo reality, update the relevant project notes in the same pass.
-- Current orchestration reality after the latest step:
+- Current orchestration reality:
   - the frontend starts guided discovery, `/api/search/refine` question-fast, and `/api/search/framing-fields` background framing independently on search submit
-  - `/api/search/refine` remains the user-visible question lane and does not wait for framing fields
-  - `/api/search/framing-fields` returns the query-framing contract and telemetry as a background lane
-  - framing fields are currently captured client-side for timing/debug visibility, but they are not yet stored server-side or consumed by finalize-fast
-  - `/api/search/prewarm` starts from usable discovery candidates and stores a `candidate_aware_prewarm` prior
-  - the prewarm prior is not a final answer and guided finalize no longer materializes result cards directly from it
-  - `/api/search/finalize` now returns a `finalizeFast` contract plus `results` derived from that contract for the locked shortlist
-  - blocking finalize card data is shortlist-safe only: selected ids, core product facts, one concise fit reason, and no blocking drawback/caution copy
-  - temporary local-only measurement route `POST /api/search/finalize-stream` runs one OpenAI streaming call for ordered phase events and is not wired to the frontend or Vercel wrappers
-  - `backend/scripts/measure-guided-finalize.js --mode stream-clean` compares baseline finalize against the streamed one-call path in the same harness run
-  - full context5 `stream-clean-context5` measurement completed 5/5 cases: average `winners_locked` was about 2.24 s vs baseline shortlist lock about 4.29 s, later badge/enrichment phases preserved locked order in 5/5, full stream completion averaged about 6.92 s server-side and about 2534 tokens
-  - full context5 `stream-prewarm-compare-context5` measurement completed 5/5 cases: no-prewarm locked about 265 ms earlier but used about 387 more tokens and had lower winner overlap; prewarm is not justified as a latency feature
-  - full context5 mini stream comparison completed 5/5 cases: mini locked winners around 8.1-8.5 s and full stream took around 19 s, so mini is rejected for one-call streamed finalize
+  - `/api/search/refine` returns the fast user-visible follow-up question
+  - `/api/search/framing-fields` returns slower background framing fields for timing/debug visibility only; not stored server-side or consumed by finalize in normal product flow
+  - `/api/search/finalize` uses nano to lock the shortlist fast (~2s), fires mini enrichment async, and returns `flowPath: 'nano_lock'` plus metadata-only cards
+  - `/api/search/enrichment` GET endpoint — frontend polls until enrichment is ready, then merges `fit_reason`/`caveat` into results by candidateId
+  - cards are metadata only: image, title, source, price, ratings, badge label — no AI copy in blocking response
+  - prewarm is removed — see `agent-tasks/remove-prewarm.md`
+  - temporary local-only `POST /api/search/finalize-stream` and `stream-clean` harness mode still exist and should be cleaned up (see `todo.md`)

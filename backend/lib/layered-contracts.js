@@ -6,12 +6,6 @@ export const LAYERED_CONTRACTS = Object.freeze({
     status: 'planned',
     owner: 'query_only',
   }),
-  candidateAwarePrewarm: Object.freeze({
-    key: 'candidate_aware_prewarm',
-    version: LAYERED_CONTRACT_VERSION,
-    status: 'planned_with_current_overlap',
-    owner: 'discover_candidate_pool',
-  }),
   finalizeFast: Object.freeze({
     key: 'finalize_fast',
     version: LAYERED_CONTRACT_VERSION,
@@ -28,7 +22,6 @@ export const LAYERED_CONTRACTS = Object.freeze({
 
 const QUERY_FRAMING_AXIS_LIMIT = 4
 const QUERY_FRAMING_HINT_LIMIT = 4
-const PREWARM_ATTRIBUTE_LIMIT = 6
 const FINALIZE_REASON_LIMIT = 1
 
 function truncateText(value, maxLength) {
@@ -78,49 +71,6 @@ export function createQueryFramingContract({
   }
 }
 
-export function createCandidateAwarePrewarmContract({
-  query = '',
-  discoveryToken = '',
-  details = '',
-  candidateCount = 0,
-  generatedAt = null,
-  model = '',
-  rankedCandidates = [],
-} = {}) {
-  return {
-    version: LAYERED_CONTRACTS.candidateAwarePrewarm.version,
-    layer: LAYERED_CONTRACTS.candidateAwarePrewarm.key,
-    query: truncateText(query, 200),
-    discoveryToken: truncateText(discoveryToken, 300),
-    details: truncateText(details, 500),
-    candidateCount: Number.isFinite(Number(candidateCount)) ? Number(candidateCount) : 0,
-    generatedAt: generatedAt || null,
-    model: truncateText(model, 80),
-    rankedCandidates: Array.isArray(rankedCandidates)
-      ? rankedCandidates.map((entry, index) => ({
-          candidateId: truncateText(entry?.candidateId, 200),
-          prewarmRank: Number.isFinite(Number(entry?.prewarmRank))
-            ? Number(entry.prewarmRank)
-            : Number.isFinite(Number(entry?.rank))
-              ? Number(entry.rank)
-              : index + 1,
-          title: truncateText(entry?.title, 300),
-          source: truncateText(entry?.source, 160),
-          price: truncateText(entry?.price, 80),
-          rating: Number.isFinite(Number(entry?.rating)) ? Number(entry.rating) : null,
-          reviewCount: Number.isFinite(Number(entry?.reviewCount)) ? Number(entry.reviewCount) : null,
-          attributes: compactStringArray(entry?.attributes, {
-            maxItems: PREWARM_ATTRIBUTE_LIMIT,
-            maxLength: 60,
-          }),
-          trustScore: Number.isFinite(Number(entry?.trustScore)) ? Number(entry.trustScore) : null,
-          baselineFit: truncateText(entry?.baselineFit, 160),
-          baselineCaution: truncateText(entry?.baselineCaution, 160),
-        }))
-      : [],
-  }
-}
-
 export function toFinalizeFastCard(candidate) {
   return {
     id: truncateText(candidate?.id, 200),
@@ -130,6 +80,10 @@ export function toFinalizeFastCard(candidate) {
     rating: Number.isFinite(Number(candidate?.rating)) ? Number(candidate.rating) : null,
     reviewCount: Number.isFinite(Number(candidate?.reviewCount)) ? Number(candidate.reviewCount) : null,
     description: truncateText(candidate?.description, 1200),
+    feature_bullets: compactStringArray(candidate?.feature_bullets, {
+      maxItems: 10,
+      maxLength: 320,
+    }),
     image: truncateText(candidate?.image, 1000),
     link: truncateText(candidate?.link, 1000),
     badgeLabel: '',
@@ -186,6 +140,10 @@ export function createEnrichmentContract({
           candidateId: truncateText(entry?.candidateId, 200),
           fitReason: truncateText(entry?.fitReason, 400),
           caveat: truncateText(entry?.caveat, 400),
+          featureBullets: compactStringArray(entry?.featureBullets, {
+            maxItems: 10,
+            maxLength: 320,
+          }),
         }))
       : [],
   }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { LoaderCircle, Search, Sparkles } from 'lucide-react'
 
 import wordmark from '@/assets/wordmark.PNG'
@@ -7,8 +8,10 @@ import { RESULT_CARD_SLOTS, useGuidedSearch } from '@/components/home/useGuidedS
 import { Button } from '@/components/ui/button.jsx'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
+import { useSearchProgress } from '@/contexts/useSearchProgress.js'
 
-const HERO_SUBLINE = 'From too many choices to yours'
+const HERO_SUBLINE = "Tell us what you need. We'll find your six."
+const MotionParagraph = motion.p
 
 function shouldShowTimingPanel() {
   if (import.meta.env.DEV) {
@@ -62,11 +65,11 @@ function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
   return {
     helper:
       prompt?.helperText ||
-      'Use this step for natural-language details like budget, size, comfort, style, or where you plan to use it.',
+      'Share your budget, size, comfort, style, or how you plan to use it — anything that matters to you.',
     placeholder:
       prompt?.followUpPlaceholder ||
       'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
-    titleEyebrow: isGeneratingPrompt ? 'You can add more detail right away' : 'One suggestion, such as:',
+    titleEyebrow: isGeneratingPrompt ? 'You can add more detail right away' : 'For example:',
     titleQuestion: isGeneratingPrompt ? '' : suggestedQuestion,
   }
 }
@@ -76,37 +79,15 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     () => buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }),
     [isGeneratingPrompt, prompt, submittedQuery],
   )
-  const [displayedTitle, setDisplayedTitle] = useState(() => ({
-    titleEyebrow: displayedCopy.titleEyebrow,
-    titleQuestion: displayedCopy.titleQuestion,
-  }))
-  const [isTitleVisible, setIsTitleVisible] = useState(true)
-  const [visibleQuestionKey, setVisibleQuestionKey] = useState('')
   const [streamedHelper, setStreamedHelper] = useState('')
   const [streamedHelperTarget, setStreamedHelperTarget] = useState('')
   const helperTarget = `${isGeneratingPrompt ? 'generating' : 'idle'}:${displayedCopy.helper}`
-  const isQuestionVisible =
-    Boolean(displayedTitle.titleQuestion) && visibleQuestionKey === displayedTitle.titleQuestion
   const helperCopy =
     isGeneratingPrompt
       ? streamedHelperTarget === helperTarget
         ? streamedHelper
         : ''
       : displayedCopy.helper
-
-  useEffect(() => {
-    if (!displayedTitle.titleQuestion) {
-      return undefined
-    }
-
-    const questionTimer = window.setTimeout(() => {
-      setVisibleQuestionKey(displayedTitle.titleQuestion)
-    }, 220)
-
-    return () => {
-      window.clearTimeout(questionTimer)
-    }
-  }, [displayedTitle.titleQuestion])
 
   useEffect(() => {
     if (!isGeneratingPrompt) {
@@ -135,65 +116,41 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     }
   }, [displayedCopy.helper, helperTarget, isGeneratingPrompt])
 
-  useEffect(() => {
-    if (
-      displayedTitle.titleEyebrow === displayedCopy.titleEyebrow &&
-      displayedTitle.titleQuestion === displayedCopy.titleQuestion
-    ) {
-      return undefined
-    }
-
-    const hideTimer = window.setTimeout(() => {
-      setIsTitleVisible(false)
-    }, 0)
-
-    const swapTimer = window.setTimeout(() => {
-      setDisplayedTitle({
-        titleEyebrow: displayedCopy.titleEyebrow,
-        titleQuestion: displayedCopy.titleQuestion,
-      })
-      setIsTitleVisible(true)
-      setVisibleQuestionKey('')
-    }, 300)
-
-    return () => {
-      window.clearTimeout(hideTimer)
-      window.clearTimeout(swapTimer)
-    }
-  }, [
-    displayedCopy.titleEyebrow,
-    displayedCopy.titleQuestion,
-    displayedTitle.titleEyebrow,
-    displayedTitle.titleQuestion,
-  ])
-
   return (
     <div className="space-y-2">
       <div className="inline-flex items-center gap-2 rounded-full bg-primary/8 px-3 py-1 text-sm text-primary">
         <Sparkles className={`h-4 w-4 ${isGeneratingPrompt ? 'animate-pulse' : ''}`} />
-        A little more context
+        The more you share, the better the picks
       </div>
       <div className="space-y-3">
-        <p
-          className={`text-[13px] font-semibold uppercase tracking-[0.14em] text-primary/70 transition-opacity duration-300 sm:text-sm ${
-            isTitleVisible ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{ fontFamily: '"Instrument Sans", sans-serif' }}
-        >
-          {displayedTitle.titleEyebrow}
-        </p>
-        {displayedTitle.titleQuestion ? (
-          <p
-            className={`max-w-2xl text-xl font-medium leading-8 text-[#8f4e2f] transition-all duration-500 sm:text-[1.65rem] ${
-              isTitleVisible && isQuestionVisible
-                ? 'translate-y-0 opacity-100'
-                : 'translate-y-1 opacity-0'
-            }`}
-            style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+        <AnimatePresence mode="wait">
+          <MotionParagraph
+            key={displayedCopy.titleEyebrow}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="text-[13px] font-semibold uppercase tracking-[0.14em] text-primary/70 sm:text-sm"
+            style={{ fontFamily: '"Instrument Sans", sans-serif' }}
           >
-            {displayedTitle.titleQuestion}
-          </p>
-        ) : null}
+            {displayedCopy.titleEyebrow}
+          </MotionParagraph>
+        </AnimatePresence>
+        <AnimatePresence mode="wait">
+          {displayedCopy.titleQuestion ? (
+            <MotionParagraph
+              key={displayedCopy.titleQuestion}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="max-w-2xl text-xl font-medium leading-8 text-[#8f4e2f] sm:text-[1.65rem]"
+              style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+            >
+              {displayedCopy.titleQuestion}
+            </MotionParagraph>
+          ) : null}
+        </AnimatePresence>
         <p className="max-w-2xl text-sm leading-7 text-slate-600">
           {helperCopy}
           {isGeneratingPrompt ? (
@@ -210,7 +167,6 @@ function TimingPanel({ requestTiming }) {
     ['Discover', requestTiming?.discover],
     ['Refine', requestTiming?.refine],
     ['Framing fields', requestTiming?.framingFields],
-    ['Prewarm', requestTiming?.prewarm],
     ['Finalize', requestTiming?.finalize],
   ].filter(([, timing]) => timing)
 
@@ -388,6 +344,11 @@ function OpenLayout(props) {
 
   const hasDiscoveryResults = Boolean(state.candidatePool)
   const showLoadingResults = isLoading && displayedResults.length === 0
+
+  const { setProgress } = useSearchProgress()
+  useEffect(() => {
+    setProgress({ hasStartedSearch, hasDiscoveryResults, hasFinalResults })
+  }, [hasStartedSearch, hasDiscoveryResults, hasFinalResults, setProgress])
   const refinementCopy = buildRefinementCopy({
     isGeneratingPrompt: state.isGeneratingPrompt,
     prompt,
@@ -395,7 +356,7 @@ function OpenLayout(props) {
   })
 
   return (
-    <main className="px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
+    <main className="px-3 py-6 sm:px-6 sm:py-8 lg:px-6 xl:px-8">
       <div className="mx-auto flex max-w-7xl flex-col items-center gap-8">
         <section className="w-full max-w-4xl space-y-6 text-center">
           <div className="space-y-4">
@@ -408,7 +369,7 @@ function OpenLayout(props) {
             </div>
             <div className="space-y-3">
               <h2
-                className={`text-2xl font-medium tracking-tight text-slate-900 transition-opacity duration-300 sm:text-4xl ${
+                className={`text-2xl font-medium tracking-tight text-primary transition-opacity duration-300 sm:text-4xl ${
                   showHeroCopy ? 'opacity-100' : 'opacity-0'
                 }`}
               >
@@ -422,6 +383,26 @@ function OpenLayout(props) {
               >
                 {HERO_SUBLINE}
               </p>
+              <div
+                className="text-[13px] font-semibold uppercase tracking-[0.14em] sm:text-sm"
+                style={{ fontFamily: '"Instrument Sans", sans-serif' }}
+              >
+                <span className={hasDiscoveryResults ? 'text-slate-400' : 'text-primary'}>
+                  Search
+                </span>
+                <span className="px-2 text-slate-300">·</span>
+                <span
+                  className={
+                    hasDiscoveryResults && !state.hasFinalResults ? 'text-primary' : 'text-slate-400'
+                  }
+                >
+                  Refine
+                </span>
+                <span className="px-2 text-slate-300">·</span>
+                <span className={state.hasFinalResults ? 'text-primary' : 'text-slate-400'}>
+                  Get 6 picks
+                </span>
+              </div>
             </div>
           </div>
 
@@ -434,7 +415,7 @@ function OpenLayout(props) {
                   : 'border-white/70 bg-white/80'
               }`}
             >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center">
                 <div className="flex-1">
                   <Label htmlFor="open-variant-query" className="sr-only">
                     Product topic
@@ -477,8 +458,7 @@ function OpenLayout(props) {
               </div>
               {!hasStartedSearch ? (
                 <p className="mt-3 px-2 text-sm leading-6 text-slate-500">
-                  Start with the product search you&apos;d normally type into Google. Use the next
-                  step for budget, size, comfort, style, or other must-haves.
+                  Just the product for now — budget, size, and other details come next.
                 </p>
               ) : null}
 
@@ -492,7 +472,7 @@ function OpenLayout(props) {
 
                   <div className="space-y-2">
                     <Label htmlFor="open-follow-up-notes" className="text-slate-700">
-                      Add details to narrow the search
+                      Tell us more
                     </Label>
                     <div
                       className={`rounded-[30px] border border-stone-200 bg-[#fffdf9] p-1 transition-all duration-300 ${
@@ -538,33 +518,38 @@ function OpenLayout(props) {
                       <Button
                         type="button"
                         disabled={!hasDiscoveryResults || state.isFinalizing}
-                        variant="ghost"
-                        className={`h-10 w-full justify-start rounded-[20px] px-4 text-sm transition sm:w-auto ${
+                        variant="outline"
+                        className={`h-12 w-full rounded-[24px] border-stone-300 px-6 text-sm font-medium transition sm:w-auto ${
                           hasDiscoveryResults && !state.isFinalizing
-                            ? 'text-slate-600 hover:bg-stone-100 hover:text-slate-900'
+                            ? 'bg-white text-slate-700 hover:border-stone-400 hover:bg-stone-50 hover:text-slate-900'
                             : 'text-slate-400'
                         }`}
                         onClick={onShowProductsNow}
                       >
-                        Show products now
+                        Just show me results
                       </Button>
-                      <p className="px-4 text-xs text-slate-400">
-                        Skip refinement — faster but less focused.
+                      <p className="px-1 text-xs text-slate-400">
+                        No AI refinement — results based on your search only.
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      disabled={!hasDiscoveryResults || state.isFinalizing}
-                      className="order-1 h-14 w-full rounded-[24px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_18px_40px_-24px_rgba(37,99,235,0.7)] hover:bg-primary/90 sm:order-2 sm:w-auto sm:min-w-[220px]"
-                      onClick={onFinalize}
-                    >
-                      {state.isFinalizing ? 'Narrowing your picks...' : 'Show focused picks'}
-                      {state.isFinalizing ? (
-                        <LoaderCircle className="ml-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="ml-2 h-4 w-4" />
-                      )}
-                    </Button>
+                    <div className="order-1 flex flex-col gap-1 sm:order-2 sm:items-end">
+                      <Button
+                        type="button"
+                        disabled={!hasDiscoveryResults || state.isFinalizing}
+                        className="h-14 w-full rounded-[24px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_18px_40px_-24px_rgba(37,99,235,0.7)] hover:bg-primary/90 sm:w-auto sm:min-w-[220px]"
+                        onClick={onFinalize}
+                      >
+                        {state.isFinalizing ? 'Narrowing your picks...' : 'Show focused picks'}
+                        {state.isFinalizing ? (
+                          <LoaderCircle className="ml-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="ml-2 h-4 w-4" />
+                        )}
+                      </Button>
+                      <p className="px-1 text-xs text-slate-400">
+                        Best results — takes ~5 more seconds
+                      </p>
+                    </div>
                   </div>
                 </div>
               ) : null}
@@ -669,18 +654,20 @@ export function HomeExperience() {
   return (
     <>
       <OpenLayout {...layoutProps} />
-      {state.selectedProduct ? (
-        <ProductDetailModal
-          item={state.selectedProduct}
-          onRetailerClick={() =>
-            state.handleRetailerClick(state.selectedProduct, {
-              position: state.selectedProduct?.analyticsMeta?.position ?? 0,
-              resultSet: state.selectedProduct?.analyticsMeta?.resultSet || 'final',
-            })
-          }
-          onClose={() => state.setSelectedProduct(null)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {state.selectedProduct ? (
+          <ProductDetailModal
+            item={state.selectedProduct}
+            onRetailerClick={() =>
+              state.handleRetailerClick(state.selectedProduct, {
+                position: state.selectedProduct?.analyticsMeta?.position ?? 0,
+                resultSet: state.selectedProduct?.analyticsMeta?.resultSet || 'final',
+              })
+            }
+            onClose={() => state.setSelectedProduct(null)}
+          />
+        ) : null}
+      </AnimatePresence>
     </>
   )
 }

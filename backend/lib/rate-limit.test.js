@@ -4,8 +4,16 @@ vi.mock('./search-storage.js', () => ({
   takeSharedRateLimitToken: vi.fn(),
 }))
 
-import { resetRateLimitStore, takeRateLimitToken } from './rate-limit.js'
+import { getCountryCode, resetRateLimitStore, takeRateLimitToken } from './rate-limit.js'
 import { takeSharedRateLimitToken } from './search-storage.js'
+
+describe('getCountryCode', () => {
+  it('returns the country code from the Vercel header, defaulting to US when absent', () => {
+    expect(getCountryCode({ 'x-vercel-ip-country': 'GB' })).toBe('GB')
+    expect(getCountryCode({})).toBe('US')
+    expect(getCountryCode({ 'x-vercel-ip-country': 'not-valid' })).toBe('US')
+  })
+})
 
 describe('rate-limit helpers', () => {
   beforeEach(() => {

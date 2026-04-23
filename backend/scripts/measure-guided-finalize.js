@@ -141,22 +141,6 @@ async function measureCase(baseUrl, sampleCase, index) {
   refinementUrl.searchParams.set('query', sampleCase.query)
   const refine = await fetchJson(refinementUrl)
 
-  const prewarm = discovery.payload?.discoveryToken && Array.isArray(discovery.payload?.candidatePool?.candidates)
-    ? await fetchJson(new URL('/api/search/prewarm', baseUrl), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-forwarded-for': `192.0.2.${10 + index}`,
-        },
-        body: JSON.stringify({
-          query: sampleCase.query,
-          discoveryToken: discovery.payload.discoveryToken,
-          candidatePool: discovery.payload.candidatePool,
-          requestMode: 'guided_prerank_prewarm',
-        }),
-      })
-    : null
-
   const finalize = await fetchJson(new URL('/api/search/finalize', baseUrl), {
     method: 'POST',
     headers: {
@@ -195,16 +179,6 @@ async function measureCase(baseUrl, sampleCase, index) {
       serverTiming: refine.serverTiming,
       usage: refine.payload?.usage || null,
     },
-    prewarm: prewarm
-      ? {
-          roundTripMs: prewarm.roundTripMs,
-          responseReadMs: prewarm.responseReadMs,
-          clientTotalMs: prewarm.totalMs,
-          serverTiming: prewarm.serverTiming,
-          usage: prewarm.payload?.usage || null,
-          prewarm: prewarm.payload?.prewarm || null,
-        }
-      : null,
     finalize: {
       roundTripMs: finalize.roundTripMs,
       responseReadMs: finalize.responseReadMs,
@@ -242,10 +216,6 @@ function buildSummary(results) {
     refineAverageTotalTokens: average(
       results.map((result) => Number(result.refine.usage?.totalTokens)),
     ),
-    prewarmAverageLatencyMs: average(results.map((result) => Number(result.prewarm?.roundTripMs))),
-    prewarmAverageTotalTokens: average(
-      results.map((result) => Number(result.prewarm?.usage?.totalTokens)),
-    ),
     finalizeAverageLatencyMs: average(results.map((result) => result.finalize.roundTripMs)),
     finalizeAverageOpenAiMs: average(
       results.map((result) => Number(result.finalize.serverTiming?.openai)),
@@ -257,7 +227,6 @@ function buildSummary(results) {
       results.map(
         (result) =>
           Number(result.refine.usage?.totalTokens || 0) +
-          Number(result.prewarm?.usage?.totalTokens || 0) +
           Number(result.finalize.usage?.totalTokens || 0),
       ),
     ),
@@ -300,7 +269,6 @@ async function measureCaseNanoMiniSplit(baseUrl, sampleCase, index) {
       serverMs: payload?.nanoLockMs ?? null,
       serverTimingMs: splitFinalize.serverTiming?.['nano-lock'] ?? null,
       lockedIds: Array.isArray(payload?.lockedIds) ? payload.lockedIds : [],
-      lockedBadges: Array.isArray(payload?.lockedBadges) ? payload.lockedBadges : [],
       usage: payload?.nanoUsage || null,
       lockCount: Array.isArray(payload?.lockedIds) ? payload.lockedIds.length : 0,
     },
@@ -391,7 +359,6 @@ function buildConsoleSummary(output, outputPath) {
     `cases: ${output.caseCount}`,
     '',
     `refine avg: ${summary.refineAverageLatencyMs ?? 'n/a'} ms`,
-    `prewarm avg: ${summary.prewarmAverageLatencyMs ?? 'n/a'} ms`,
     `finalize avg: ${summary.finalizeAverageLatencyMs ?? 'n/a'} ms`,
     `finalize OpenAI avg: ${summary.finalizeAverageOpenAiMs ?? 'n/a'} ms`,
     `finalize tokens avg: ${summary.finalizeAverageTotalTokens ?? 'n/a'}`,

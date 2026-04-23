@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import {
   LAYERED_CONTRACTS,
-  createCandidateAwarePrewarmContract,
   createEnrichmentContract,
   createFinalizeFastContract,
   createQueryFramingContract,
@@ -44,44 +43,6 @@ describe('layered contracts', () => {
     expect(contract).not.toHaveProperty('candidates')
   })
 
-  it('defines a candidate-aware prewarm contract without locking a shortlist', () => {
-    const contract = createCandidateAwarePrewarmContract({
-      query: 'travel stroller',
-      discoveryToken: 'guided_discovery:travel stroller|',
-      candidateCount: 2,
-      model: 'gpt-5-mini',
-      rankedCandidates: [
-        {
-          candidateId: 'prod-2',
-          rank: 1,
-          title: 'Compact airport stroller',
-          baselineFit: 'Best baseline fit for flights.',
-          baselineCaution: 'Pricier than entry-level options.',
-          attributes: ['compact', 'lightweight'],
-          trustScore: 4,
-        },
-      ],
-    })
-
-    expect(contract.layer).toBe('candidate_aware_prewarm')
-    expect(contract.rankedCandidates).toEqual([
-      {
-        candidateId: 'prod-2',
-        prewarmRank: 1,
-        title: 'Compact airport stroller',
-        source: '',
-        price: '',
-        rating: null,
-        reviewCount: null,
-        attributes: ['compact', 'lightweight'],
-        trustScore: 4,
-        baselineFit: 'Best baseline fit for flights.',
-        baselineCaution: 'Pricier than entry-level options.',
-      },
-    ])
-    expect(contract).not.toHaveProperty('selectedCandidateIds')
-  })
-
   it('defines finalize-fast cards as shortlist-safe only', () => {
     const card = toFinalizeFastCard({
       id: 'prod-1',
@@ -91,6 +52,7 @@ describe('layered contracts', () => {
       rating: 4.7,
       reviewCount: 342,
       description: 'Lightweight stroller for flights',
+      feature_bullets: ['One-hand fold', 'Carry-on friendly'],
       reasons: ['Fallback reason'],
       drawbacks: ['Should not be forwarded'],
       image: 'https://example.com/stroller.jpg',
@@ -105,6 +67,7 @@ describe('layered contracts', () => {
       rating: 4.7,
       reviewCount: 342,
       description: 'Lightweight stroller for flights',
+      feature_bullets: ['One-hand fold', 'Carry-on friendly'],
       image: 'https://example.com/stroller.jpg',
       link: 'https://example.com/stroller',
       badgeLabel: '',
@@ -144,6 +107,7 @@ describe('layered contracts', () => {
           candidateId: 'prod-2',
           fitReason: 'Fits frequent travel because the fold is compact and easy to carry.',
           caveat: 'The price is a little higher than bulkier budget picks.',
+          featureBullets: ['One-hand fold', 'Compact enough for airport days'],
         },
       ],
     })
@@ -160,6 +124,7 @@ describe('layered contracts', () => {
           candidateId: 'prod-2',
           fitReason: 'Fits frequent travel because the fold is compact and easy to carry.',
           caveat: 'The price is a little higher than bulkier budget picks.',
+          featureBullets: ['One-hand fold', 'Compact enough for airport days'],
         },
       ],
     })

@@ -1,4 +1,4 @@
-import { createCandidateAwarePrewarmContract, toFinalizeFastCard } from './layered-contracts.js'
+import { toFinalizeFastCard } from './layered-contracts.js'
 
 export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses'
 export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini'
@@ -381,6 +381,7 @@ async function requestStructuredSelection(
 ) {
   const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
     method: 'POST',
+    signal: AbortSignal.timeout(30000),
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
@@ -474,7 +475,7 @@ function mapCandidateAwarePrior(rankedCandidates, candidatePool, model) {
 
     artifactCandidates.push({
       candidateId,
-      prewarmRank: artifactCandidates.length + 1,
+
       title: candidate.title,
       source: candidate.source,
       price: candidate.price,
@@ -502,7 +503,7 @@ function mapCandidateAwarePrior(rankedCandidates, candidatePool, model) {
 
     artifactCandidates.push({
       candidateId,
-      prewarmRank: artifactCandidates.length + 1,
+
       title: candidate.title,
       source: candidate.source,
       price: candidate.price,
@@ -520,7 +521,9 @@ function mapCandidateAwarePrior(rankedCandidates, candidatePool, model) {
     })
   }
 
-  return createCandidateAwarePrewarmContract({
+  return {
+    version: CANDIDATE_AWARE_PRIOR_VERSION,
+    layer: 'candidate_aware_prior',
     generatedAt: new Date().toISOString(),
     model,
     query: candidatePool.query,
@@ -528,7 +531,7 @@ function mapCandidateAwarePrior(rankedCandidates, candidatePool, model) {
     discoveryToken: candidatePool.discoveryToken || '',
     candidateCount: candidatePool.candidates.length,
     rankedCandidates: artifactCandidates,
-  })
+  }
 }
 
 function getReusablePriorEntries(candidateAwarePrior, candidates) {
@@ -563,18 +566,14 @@ function getReusablePriorEntries(candidateAwarePrior, candidates) {
       candidateId,
       baselineCaution: truncateText(entry?.baselineCaution || entry?.baseline_caution, 160),
       baselineFit: truncateText(entry?.baselineFit || entry?.baseline_fit, 160),
-      rank: Number.isFinite(Number(entry?.prewarmRank))
-        ? Number(entry.prewarmRank)
-        : Number.isFinite(Number(entry?.rank))
-          ? Number(entry.rank)
-          : reusableEntries.length + 1,
+      rank: Number.isFinite(Number(entry?.rank))
+        ? Number(entry.rank)
+        : reusableEntries.length + 1,
       reusableSummary: {
         candidate_id: candidateId,
-        prewarm_rank: Number.isFinite(Number(entry?.prewarmRank))
-          ? Number(entry.prewarmRank)
-          : Number.isFinite(Number(entry?.rank))
-            ? Number(entry.rank)
-            : reusableEntries.length + 1,
+        rank: Number.isFinite(Number(entry?.rank))
+          ? Number(entry.rank)
+          : reusableEntries.length + 1,
         title: candidate.title,
         source: candidate.source,
         price: candidate.price,
@@ -678,12 +677,12 @@ function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }) {
   const desiredCount = Math.min(finalResultLimit, candidatePool.candidates.length)
 
   return [
-    'Choose the best final products and assign one short badge label to each.',
+    'Choose the best final products.',
     '1. Fit to the extra context/details. This is the main decision signal.',
     '2. Relevance to the product query.',
     '3. Quality and trust using rating and review count.',
     '4. Prefer diversity across style, merchant, or use case when helpful.',
-    `Return exactly ${desiredCount} picks from the candidates below. For each, write one short badge label (under 4 words) that captures the strongest reason it belongs.`,
+    `Return exactly ${desiredCount} picks from the candidates below.`,
     'Only choose from the provided candidate ids.',
     '',
     `Product query: ${candidatePool.query}`,
@@ -704,9 +703,8 @@ function buildNanoLockAndBadgesSchema() {
           type: 'object',
           properties: {
             candidate_id: { type: 'string' },
-            badge_label: { type: 'string' },
           },
-          required: ['candidate_id', 'badge_label'],
+          required: ['candidate_id'],
           additionalProperties: false,
         },
       },
@@ -723,6 +721,8 @@ function buildMiniEnrichmentPrompt({ lockedCandidates, query, details }) {
     'For each product, write two separate fields:',
     '1. fit_reason: One or two sentences explaining why it was picked for this specific need. Be specific to the user context. Avoid superlatives, hype phrases, and generic positives.',
     '2. caveat: One honest drawback or caveat — practical (e.g. exceeds budget, heavier than alternatives) or contextual (e.g. better if X matters more than Y). Do not skip this even if the pick is strong.',
+    'Use feature bullets and any richer product description when they are provided. Prefer concrete product attributes over generic praise.',
+    'If richer product detail is missing, fall back to the basic title/price/rating context and do not invent attributes.',
     '',
     `Product query: ${query}`,
     `User context: ${details || 'None provided.'}`,
@@ -796,7 +796,7 @@ export async function createCandidateAwarePrior(
   if (candidates.length === 0) {
     const prior = {
       version: CANDIDATE_AWARE_PRIOR_VERSION,
-      layer: 'candidate_aware_prewarm',
+      layer: 'candidate_aware_prior',
       generatedAt: new Date().toISOString(),
       model,
       query: candidatePool?.query || '',
@@ -854,7 +854,7 @@ export async function nanoLockWinnersAndBadges(
   const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
 
   if (candidates.length === 0) {
-    return { model, lockedIds: [], lockedBadges: [], usage: null }
+    return { model, lockedIds: [], usage: null }
   }
 
   const { parsed, usage } = await requestStructuredSelection(
@@ -872,7 +872,6 @@ export async function nanoLockWinnersAndBadges(
   const candidateById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]))
   const seen = new Set()
   const lockedIds = []
-  const lockedBadges = []
 
   for (const pick of picks) {
     const candidateId = String(pick?.candidate_id || '')
@@ -882,7 +881,6 @@ export async function nanoLockWinnersAndBadges(
     }
 
     lockedIds.push(candidateId)
-    lockedBadges.push({ candidateId, badgeLabel: String(pick?.badge_label || '') })
     seen.add(candidateId)
 
     if (lockedIds.length >= finalResultLimit) {
@@ -890,7 +888,7 @@ export async function nanoLockWinnersAndBadges(
     }
   }
 
-  return { model, lockedIds, lockedBadges, usage }
+  return { model, lockedIds, usage }
 }
 
 export async function miniEnrichSelectedCandidates(
@@ -927,7 +925,12 @@ export async function miniEnrichSelectedCandidates(
       price: candidate.price,
       rating: candidate.rating,
       reviewCount: candidate.reviewCount,
+      feature_bullets: Array.isArray(candidate.feature_bullets) ? candidate.feature_bullets.slice(0, 10) : [],
+      product_description: truncateText(candidate.productDescription, 3000),
     }))
+  const lockedCandidateById = new Map(
+    lockedCandidates.map((candidate) => [String(candidate.candidate_id), candidate]),
+  )
 
   const { parsed, usage } = await requestStructuredSelection(
     {
@@ -945,11 +948,20 @@ export async function miniEnrichSelectedCandidates(
   )
 
   const rawEnriched = Array.isArray(parsed?.enriched) ? parsed.enriched : []
-  const enrichedIds = rawEnriched.map((entry) => String(entry?.candidate_id || ''))
+  const enriched = rawEnriched.map((entry) => {
+    const candidateId = String(entry?.candidate_id || '')
+    const lockedCandidate = lockedCandidateById.get(candidateId)
+
+    return {
+      ...entry,
+      feature_bullets: Array.isArray(lockedCandidate?.feature_bullets) ? lockedCandidate.feature_bullets : [],
+    }
+  })
+  const enrichedIds = enriched.map((entry) => String(entry?.candidate_id || ''))
   const enrichedLockedIds = enrichedIds.filter((id) => lockedIds.includes(id))
   const preservedOrder = lockedIds.join(',') === enrichedLockedIds.join(',')
 
-  return { model, enriched: rawEnriched, enrichedIds, usage, preservedOrder }
+  return { model, enriched, enrichedIds, usage, preservedOrder }
 }
 
 export async function selectAiResults(

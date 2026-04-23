@@ -45,8 +45,7 @@ npm run build        # Production build
 ### Guided Search Flow (main product path)
 1. `POST /api/search/discover` — fetch search results, build 20-candidate pool, return preview + `discoveryToken`
 2. `POST /api/search/refine` — generate one short AI follow-up question
-3. `POST /api/search/prewarm` — cache a candidate-aware AI prior for later reuse (background)
-4. `POST /api/search/finalize` — accept user's follow-up answer, pick 6 results with fit reasons
+3. `POST /api/search/finalize` — accept user's follow-up answer, pick 6 results with fit reasons
 
 Finalize **reconstructs** the candidate pool from cache — never trusts browser-posted candidate data.
 

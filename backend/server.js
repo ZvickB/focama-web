@@ -1,16 +1,16 @@
+import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import {
   DEFAULT_FINALIZE_MODEL,
   DEFAULT_REFINEMENT_MODEL,
   DEFAULT_CONTEXT_FINALIZE_MODEL,
-  createCandidateAwarePrior,
   selectAiResults,
   nanoLockWinnersAndBadges,
   miniEnrichSelectedCandidates,
 } from './lib/ai-selector.js'
 import { createFinalizeFastContract, toFinalizeFastCard } from './lib/layered-contracts.js'
-import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, takeRateLimitToken } from './lib/rate-limit.js'
+import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, getCountryCode, takeRateLimitToken } from './lib/rate-limit.js'
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
 import { generateFramingFields } from './lib/query-framing.js'
 import { DEFAULT_FILTER_CONFIG } from './lib/result-filter.js'
@@ -21,17 +21,21 @@ import {
   recordSearchCacheEvent,
   writeSearchSnapshot,
 } from './lib/search-pipeline.js'
+import { fetchOxylabsArtifacts, fetchOxylabsProductDetailsByAsin } from './lib/oxylabs-pipeline.js'
 import {
   getSupabaseHealth,
   isSupabaseConfigured,
   recordAnalyticsResultClick,
   recordAnalyticsResultImpressions,
   recordAnalyticsSearchEvent,
+  readProductDetailsCacheEntries,
   upsertAnalyticsSearchRun,
+  writeProductDetailsCacheEntries,
 } from './lib/search-storage.js'
 import { buildCacheKey, getEnv, validateSearchInput } from './lib/search-data.js'
 
 const PORT = Number(process.env.PORT || 8787)
+const ALLOWED_ORIGIN = getEnv('ALLOWED_ORIGIN') || (process.env.NODE_ENV === 'production' ? 'https://focama.vercel.app' : 'http://localhost:5173')
 const LIVE_RESULT_FILTER_CONFIG = {
   ...DEFAULT_FILTER_CONFIG,
   candidatePoolSize: 20,
@@ -40,13 +44,9 @@ const LIVE_RESULT_FILTER_CONFIG = {
 const LIVE_SEARCH_RATE_LIMIT = {
   ...DEFAULT_RATE_LIMIT_CONFIG,
 }
-const PREWARM_SELECTION_RATE_LIMIT = {
-  ...DEFAULT_RATE_LIMIT_CONFIG,
-}
 const FINALIZE_SELECTION_RATE_LIMIT = {
   ...DEFAULT_RATE_LIMIT_CONFIG,
 }
-const PREWARM_BODY_LIMIT_BYTES = 96 * 1024
 const FINALIZE_BODY_LIMIT_BYTES = 32 * 1024
 const FINALIZE_MAX_CANDIDATES = LIVE_RESULT_FILTER_CONFIG.candidatePoolSize
 const FINALIZE_MAX_NOTE_LENGTH = 500
@@ -55,12 +55,11 @@ const FINALIZE_MAX_PRIORITIES = 8
 const FINALIZE_MAX_PRIORITY_LENGTH = 80
 const FINALIZE_MAX_RETRY_COUNT = 2
 const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
+const CACHE_SCOPE_RAINFOREST = 'rainforest_discovery'
 const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
-const PREWARM_REQUEST_MODE_DEFAULT = 'guided_prerank_prewarm'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const RATE_LIMIT_WAIT_MESSAGE = 'Please wait about 10 seconds and try again.'
-
 function getRefinementModel() {
   return getEnv('OPENAI_REFINEMENT_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_REFINEMENT_MODEL
 }
@@ -126,14 +125,6 @@ function logSearchFlowEvent(eventName, details = {}) {
   console.info('[search-flow]', JSON.stringify(payload))
 }
 
-function safeJsonByteLength(value) {
-  try {
-    return Buffer.byteLength(JSON.stringify(value))
-  } catch {
-    return null
-  }
-}
-
 function buildDiscoveryPreviewSelection(results, extraSelection = {}) {
   return {
     mode: 'discovery_preview',
@@ -173,7 +164,8 @@ export function sendJson(response, statusCode, payload, headers = {}) {
   const responseHeaders = {
     ...headers,
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    Vary: 'Origin',
   }
 
   delete responseHeaders.serverTiming
@@ -277,16 +269,7 @@ function sanitizeFinalizeDiscoveryContext(body) {
 
   if (!discoveryToken) {
     return {
-      error: 'A discovery token is required to finalize the search.',
-      isValid: false,
-    }
-  }
-
-  const expectedDiscoveryToken = buildCacheKey(normalizedQuery, '', CACHE_SCOPE_DISCOVERY)
-
-  if (discoveryToken !== expectedDiscoveryToken) {
-    return {
-      error: 'The guided discovery token is invalid for this query. Please start the search again.',
+      error: 'Your search session expired. Start a new search.',
       isValid: false,
     }
   }
@@ -460,13 +443,7 @@ function sanitizeFinalizeCandidatePool(candidatePool) {
   }
 }
 
-async function readFinalizeCandidatePoolFromDiscovery(normalizedQuery) {
-  const { cachedEntry } = await readCachedSearchSnapshot({
-    productQuery: normalizedQuery,
-    details: '',
-    scope: CACHE_SCOPE_DISCOVERY,
-  })
-
+function resolveFinalizeCandidatePool(cachedEntry) {
   if (!cachedEntry?.candidatePool?.candidates?.length) {
     return {
       error: 'The guided search context expired. Please start the search again.',
@@ -495,6 +472,88 @@ async function readFinalizeCandidatePoolFromDiscovery(normalizedQuery) {
   }
 }
 
+function createDiscoveryToken() {
+  return randomUUID()
+}
+
+async function resolveDiscoveryContext(normalizedQuery, discoveryToken) {
+  const truncatedToken = truncateText(discoveryToken, 300)
+
+  if (!truncatedToken) {
+    return {
+      error: 'Your search session expired. Start a new search.',
+      isValid: false,
+      statusCode: 409,
+    }
+  }
+
+  for (const scope of [CACHE_SCOPE_DISCOVERY, CACHE_SCOPE_RAINFOREST]) {
+    const { cachedEntry } = await readCachedSearchSnapshot({
+      productQuery: normalizedQuery,
+      details: '',
+      scope,
+    })
+
+    if (!cachedEntry) {
+      continue
+    }
+
+    if (truncateText(cachedEntry.discoveryToken, 300) !== truncatedToken) {
+      continue
+    }
+
+    return {
+      cachedEntry,
+      discoveryScope: scope,
+      isValid: true,
+    }
+  }
+
+  return {
+    error: 'Your search session expired. Start a new search.',
+    isValid: false,
+    statusCode: 409,
+  }
+}
+
+async function ensureDiscoverySnapshotToken({
+  normalizedQuery,
+  normalizedDetails = '',
+  cachedEntry,
+  scope,
+}) {
+  const storedToken = truncateText(cachedEntry?.discoveryToken, 300)
+
+  if (storedToken) {
+    return {
+      cachedEntry,
+      discoveryToken: storedToken,
+    }
+  }
+
+  const discoveryToken = createDiscoveryToken()
+  const updatedEntry = await writeSearchSnapshot({
+    productQuery: normalizedQuery,
+    details: normalizedDetails,
+    candidatePool: cachedEntry?.candidatePool ?? null,
+    discoveryToken,
+    results: Array.isArray(cachedEntry?.results) ? cachedEntry.results : [],
+    selection: cachedEntry?.selection ?? null,
+    source: cachedEntry?.source || 'guided_discovery',
+    scope,
+  })
+
+  return {
+    cachedEntry: {
+      ...cachedEntry,
+      discoveryToken,
+      cachedAt: updatedEntry?.cachedAt || cachedEntry?.cachedAt,
+      expiresAt: updatedEntry?.expiresAt || cachedEntry?.expiresAt,
+    },
+    discoveryToken,
+  }
+}
+
 function buildFinalizeFallbackResults(candidatePool) {
   return candidatePool.candidates
     .slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit)
@@ -520,6 +579,29 @@ function buildFinalizeFastResponseContract({
     strategy,
     generatedAt: new Date().toISOString(),
   })
+}
+
+function mergeProductDetailsIntoCandidatePool(candidatePool, productDetailsById) {
+  if (!productDetailsById?.size) {
+    return candidatePool
+  }
+
+  return {
+    ...candidatePool,
+    candidates: candidatePool.candidates.map((candidate) => {
+      const productDetails = productDetailsById.get(String(candidate.id))
+
+      if (!productDetails) {
+        return candidate
+      }
+
+      return {
+        ...candidate,
+        feature_bullets: productDetails.feature_bullets,
+        productDescription: productDetails.productDescription,
+      }
+    }),
+  }
 }
 
 export async function handleCachedSearch(requestUrl, response) {
@@ -567,6 +649,7 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
   }
 
   const clientIpAddress = getClientIpAddress(request.headers || {})
+  const countryCode = getCountryCode(request.headers || {})
   const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
 
   if (!rateLimit.allowed) {
@@ -602,12 +685,12 @@ export async function handleLiveSearch(requestUrl, response, request = { headers
       details: normalizedDetails,
       reasonFallback: 'Returned by the live SerpApi search route',
       serpApiKey,
+      countryCode,
     })
 
     if (artifactsError) {
       sendJson(response, artifactsError.statusCode, {
         error: artifactsError.error,
-        ...(artifactsError.details ? { details: artifactsError.details } : {}),
       })
       return
     }
@@ -693,6 +776,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   }
 
   const clientIpAddress = getClientIpAddress(request.headers || {})
+  const countryCode = getCountryCode(request.headers || {})
   const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
 
   if (!rateLimit.allowed) {
@@ -722,6 +806,12 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
 
   if (cachedEntry?.candidatePool && cachedEntry?.results?.length) {
+    const tokenizedDiscovery = await ensureDiscoverySnapshotToken({
+      normalizedQuery,
+      normalizedDetails,
+      cachedEntry,
+      scope: CACHE_SCOPE_DISCOVERY,
+    })
     const cachedCandidateAwarePrior = getStoredCandidateAwarePrior(cachedEntry.selection)
 
     await recordSearchCacheEvent({
@@ -746,23 +836,16 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
         : normalizedCachedResults.length,
       previewCount: normalizedCachedResults.length,
       candidateAwarePriorReady: Boolean(cachedCandidateAwarePrior),
-      prewarmArtifactReady: Boolean(cachedCandidateAwarePrior),
       cacheMs: roundTimingDuration(cacheLookupDuration),
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
 
     sendJson(response, 200, {
-      discoveryToken: discoveryCacheKey,
-      candidatePool: cachedEntry.candidatePool,
+      discoveryToken: tokenizedDiscovery.discoveryToken,
+      candidatePool: tokenizedDiscovery.cachedEntry.candidatePool,
       previewResults: normalizedCachedResults,
-      prewarm: {
-        priorReady: Boolean(cachedCandidateAwarePrior),
-        priorGeneratedAt: cachedCandidateAwarePrior?.generatedAt || null,
-        artifactReady: Boolean(cachedCandidateAwarePrior),
-        artifactGeneratedAt: cachedCandidateAwarePrior?.generatedAt || null,
-      },
       source: 'cache',
-      cachedAt: cachedEntry.cachedAt,
+      cachedAt: tokenizedDiscovery.cachedEntry.cachedAt,
     }, {
       serverTiming: [
         { name: 'cache', duration: cacheLookupDuration },
@@ -773,6 +856,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
   }
 
   try {
+    const discoveryToken = createDiscoveryToken()
     const serpApiStartedAt = nowMs()
     const { artifacts, error: artifactsError } = await fetchSearchArtifacts({
       filterConfig: LIVE_RESULT_FILTER_CONFIG,
@@ -780,12 +864,12 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
       details: normalizedDetails,
       reasonFallback: 'Returned by the live SerpApi search route',
       serpApiKey,
+      countryCode,
     })
 
     if (artifactsError) {
       sendJson(response, artifactsError.statusCode, {
         error: artifactsError.error,
-        ...(artifactsError.details ? { details: artifactsError.details } : {}),
       })
       return
     }
@@ -796,6 +880,7 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
         productQuery: normalizedQuery,
         details: normalizedDetails,
         candidatePool: artifacts.candidatePool,
+        discoveryToken,
         results: artifacts.results,
         selection: buildDiscoveryPreviewSelection(artifacts.results),
         source: 'guided_discovery',
@@ -831,13 +916,9 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
     })
 
     sendJson(response, 200, {
-      discoveryToken: discoveryCacheKey,
+      discoveryToken,
       candidatePool: artifacts.candidatePool,
       previewResults: artifacts.results,
-      prewarm: {
-        artifactReady: false,
-        artifactGeneratedAt: null,
-      },
     }, {
       serverTiming: [
         { name: 'cache', duration: cacheLookupDuration },
@@ -855,6 +936,180 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
     })
     sendJson(response, 500, {
       error: 'Unable to reach SerpApi.',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    })
+  }
+}
+
+export async function handleRainforestDiscoverySearch(requestUrl, response, request = { headers: {} }) {
+  const requestStartedAt = nowMs()
+  const oxylabsUsername = getEnv('OXYLABS_USERNAME') // TODO: swap back to Rainforest before launch.
+  const oxylabsPassword = getEnv('OXYLABS_PASSWORD') // TODO: swap back to Rainforest before launch.
+
+  if (!oxylabsUsername || !oxylabsPassword) {
+    sendJson(response, 500, { error: 'OXYLABS_USERNAME and OXYLABS_PASSWORD are required in the root .env file.' })
+    return
+  }
+
+  const clientIpAddress = getClientIpAddress(request.headers || {})
+  const countryCode = getCountryCode(request.headers || {})
+  const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
+
+  if (!rateLimit.allowed) {
+    sendJson(response, 429, {
+      error: `Too many searches from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
+    })
+    return
+  }
+
+  const { error, isValid, normalizedQuery } = getValidatedSearchRequest(requestUrl, {
+    includeDetails: false,
+  })
+
+  if (!isValid) {
+    sendJson(response, 400, { error })
+    return
+  }
+
+  const normalizedDetails = ''
+  const discoveryCacheKey = buildCacheKey(normalizedQuery, normalizedDetails, CACHE_SCOPE_RAINFOREST)
+  const cacheLookupStartedAt = nowMs()
+  const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
+    productQuery: normalizedQuery,
+    details: normalizedDetails,
+    scope: CACHE_SCOPE_RAINFOREST,
+  })
+  const cacheLookupDuration = nowMs() - cacheLookupStartedAt
+
+  if (cachedEntry?.candidatePool && cachedEntry?.results?.length) {
+    const tokenizedDiscovery = await ensureDiscoverySnapshotToken({
+      normalizedQuery,
+      normalizedDetails,
+      cachedEntry,
+      scope: CACHE_SCOPE_RAINFOREST,
+    })
+    const cachedCandidateAwarePrior = getStoredCandidateAwarePrior(cachedEntry.selection)
+
+    await recordSearchCacheEvent({
+      cacheKey: discoveryCacheKey,
+      cacheStatus: 'hit',
+      candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
+        ? cachedEntry.candidatePool.candidates.length
+        : normalizedCachedResults.length,
+      details: normalizedDetails,
+      productQuery: normalizedQuery,
+      resultCount: normalizedCachedResults.length,
+      selectionMode: cachedEntry.selection?.mode || 'discovery_cache',
+      source: cachedEntry.source || 'cache',
+    })
+
+    logSearchFlowEvent('rainforest_discovery_cache_hit', {
+      route: '/api/search/rainforest-discover',
+      query: normalizedQuery,
+      candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
+        ? cachedEntry.candidatePool.candidates.length
+        : normalizedCachedResults.length,
+      previewCount: normalizedCachedResults.length,
+      candidateAwarePriorReady: Boolean(cachedCandidateAwarePrior),
+      cacheMs: roundTimingDuration(cacheLookupDuration),
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+    })
+
+    sendJson(response, 200, {
+      discoveryToken: tokenizedDiscovery.discoveryToken,
+      candidatePool: tokenizedDiscovery.cachedEntry.candidatePool,
+      previewResults: normalizedCachedResults,
+      source: 'cache',
+      cachedAt: tokenizedDiscovery.cachedEntry.cachedAt,
+    }, {
+      serverTiming: [
+        { name: 'cache', duration: cacheLookupDuration },
+        { name: 'total', duration: nowMs() - requestStartedAt },
+      ],
+    })
+    return
+  }
+
+  try {
+    const discoveryToken = createDiscoveryToken()
+    const rainforestStartedAt = nowMs()
+    const { artifacts, error: artifactsError } = await fetchOxylabsArtifacts({ // TODO: swap back to Rainforest before launch.
+      filterConfig: LIVE_RESULT_FILTER_CONFIG,
+      productQuery: normalizedQuery,
+      details: normalizedDetails,
+      reasonFallback: 'Returned by the Rainforest API search route',
+      oxylabsUsername,
+      oxylabsPassword,
+      countryCode,
+    })
+
+    if (artifactsError) {
+      sendJson(response, artifactsError.statusCode, {
+        error: artifactsError.error,
+      })
+      return
+    }
+    const rainforestDuration = nowMs() - rainforestStartedAt
+
+    runInBackground(
+      writeSearchSnapshot({
+        productQuery: normalizedQuery,
+        details: normalizedDetails,
+        candidatePool: artifacts.candidatePool,
+        discoveryToken,
+        results: artifacts.results,
+        selection: buildDiscoveryPreviewSelection(artifacts.results),
+        source: 'rainforest_discovery',
+        scope: CACHE_SCOPE_RAINFOREST,
+      }),
+    )
+
+    await recordSearchCacheEvent({
+      cacheKey: discoveryCacheKey,
+      cacheStatus: 'miss',
+      candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
+        ? artifacts.candidatePool.candidates.length
+        : 0,
+      details: normalizedDetails,
+      productQuery: normalizedQuery,
+      resultCount: artifacts.results.length,
+      selectionMode: 'discovery_preview',
+      source: 'rainforest_discovery',
+    })
+
+    logSearchFlowEvent('rainforest_discovery_completed', {
+      route: '/api/search/rainforest-discover',
+      query: normalizedQuery,
+      cacheStatus: 'miss',
+      candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
+        ? artifacts.candidatePool.candidates.length
+        : 0,
+      previewCount: artifacts.results.length,
+      cacheMs: roundTimingDuration(cacheLookupDuration),
+      rainforestMs: roundTimingDuration(rainforestDuration),
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+    })
+
+    sendJson(response, 200, {
+      discoveryToken,
+      candidatePool: artifacts.candidatePool,
+      previewResults: artifacts.results,
+    }, {
+      serverTiming: [
+        { name: 'cache', duration: cacheLookupDuration },
+        { name: 'rainforest', duration: rainforestDuration },
+        { name: 'total', duration: nowMs() - requestStartedAt },
+      ],
+    })
+  } catch (error) {
+    logSearchFlowEvent('rainforest_discovery_failed', {
+      route: '/api/search/rainforest-discover',
+      query: normalizedQuery,
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+    sendJson(response, 500, {
+      error: 'Unable to reach Rainforest API.',
       details: error instanceof Error ? error.message : 'Unknown error',
     })
   }
@@ -1013,276 +1268,6 @@ export async function handleQueryFramingFields(requestUrl, response) {
   }
 }
 
-export async function handlePrewarmSelection(request, response) {
-  const requestStartedAt = nowMs()
-  const openAiApiKey = getEnv('OPENAI_API_KEY')
-
-  if (!openAiApiKey) {
-    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
-    return
-  }
-
-  const clientIpAddress = getClientIpAddress(request.headers || {})
-  const rateLimit = await takeRateLimitToken(clientIpAddress, PREWARM_SELECTION_RATE_LIMIT)
-
-  if (!rateLimit.allowed) {
-    logSearchFlowEvent('guided_prewarm_rate_limited', {
-      route: '/api/search/prewarm',
-      clientIpAddress,
-    })
-    sendJson(response, 429, {
-      error: `Too many prewarm requests from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
-    })
-    return
-  }
-
-  let body
-
-  try {
-    const bodyReadStartedAt = nowMs()
-    body = await readJsonBody(request, { maxBytes: PREWARM_BODY_LIMIT_BYTES })
-    body.bodyReadDuration = nowMs() - bodyReadStartedAt
-  } catch (error) {
-    logSearchFlowEvent('guided_prewarm_invalid_body', {
-      route: '/api/search/prewarm',
-      error: error instanceof Error ? error.message : 'Invalid request body.',
-    })
-    sendJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid request body.' })
-    return
-  }
-
-  const sanitizedDiscoveryContext = sanitizeFinalizeDiscoveryContext({
-    ...body,
-    requestMode: truncateText(body?.requestMode, 80) || PREWARM_REQUEST_MODE_DEFAULT,
-  })
-
-  if (!sanitizedDiscoveryContext.isValid) {
-    logSearchFlowEvent('guided_prewarm_invalid', {
-      route: '/api/search/prewarm',
-      query: typeof body?.query === 'string' ? body.query : '',
-      error: sanitizedDiscoveryContext.error,
-    })
-    sendJson(response, 400, { error: sanitizedDiscoveryContext.error })
-    return
-  }
-
-  const cacheLookupStartedAt = nowMs()
-  const resolvedCandidatePool = await readFinalizeCandidatePoolFromDiscovery(
-    sanitizedDiscoveryContext.normalizedQuery,
-  )
-  const cacheLookupDuration = nowMs() - cacheLookupStartedAt
-  let candidatePool = resolvedCandidatePool.isValid ? resolvedCandidatePool.candidatePool : null
-  let cachedEntry = resolvedCandidatePool.isValid ? resolvedCandidatePool.cachedEntry : null
-  let candidateAwarePrior = resolvedCandidatePool.isValid ? resolvedCandidatePool.candidateAwarePrior : null
-  let candidatePoolSource = resolvedCandidatePool.isValid ? 'discovery_cache' : 'request_candidate_pool'
-  const prewarmPriorSummary =
-    cachedEntry?.selection &&
-    typeof cachedEntry.selection === 'object' &&
-    !Array.isArray(cachedEntry.selection) &&
-    cachedEntry.selection.prewarm &&
-    typeof cachedEntry.selection.prewarm === 'object' &&
-    !Array.isArray(cachedEntry.selection.prewarm)
-      ? cachedEntry.selection.prewarm
-      : null
-
-  if (!candidatePool) {
-    const requestCandidatePool = sanitizeFinalizeCandidatePool(body?.candidatePool)
-
-    if (requestCandidatePool.isValid) {
-      candidatePool = requestCandidatePool.candidatePool
-      cachedEntry = null
-      candidateAwarePrior = null
-    } else {
-      logSearchFlowEvent('guided_prewarm_missing_discovery_context', {
-        route: '/api/search/prewarm',
-        query: sanitizedDiscoveryContext.normalizedQuery,
-        error: resolvedCandidatePool.error,
-      })
-      sendJson(response, resolvedCandidatePool.statusCode || 409, {
-        error: resolvedCandidatePool.error || 'The guided search context expired. Please start the search again.',
-      })
-      return
-    }
-  }
-
-  if (candidateAwarePrior?.rankedCandidates?.length) {
-    const priorCandidateCount = Array.isArray(candidateAwarePrior.rankedCandidates)
-      ? candidateAwarePrior.rankedCandidates.length
-      : 0
-    const priorByteLength = safeJsonByteLength(candidateAwarePrior)
-    const priorSummary = {
-      priorByteLength,
-      priorCandidateCount,
-      priorGeneratedAt: candidateAwarePrior.generatedAt || null,
-      priorReady: true,
-      artifactByteLength: priorByteLength,
-      artifactCandidateCount: priorCandidateCount,
-      artifactGeneratedAt: candidateAwarePrior.generatedAt || null,
-      artifactReady: true,
-      candidatePoolSource,
-      model: candidateAwarePrior.model || null,
-      openaiMs: prewarmPriorSummary?.openaiMs ?? null,
-      requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-      reusedStoredPrior: true,
-      reusedStoredArtifact: true,
-      storageWriteCompleted: true,
-      strategy: prewarmPriorSummary?.strategy || 'candidate_aware_prior',
-      totalMs: prewarmPriorSummary?.totalMs ?? null,
-      usage: prewarmPriorSummary?.usage || null,
-    }
-
-    logSearchFlowEvent('guided_prewarm_reused', {
-      route: '/api/search/prewarm',
-      query: sanitizedDiscoveryContext.normalizedQuery,
-      candidateCount: candidatePool.candidates.length,
-      ...priorSummary,
-      cacheMs: roundTimingDuration(cacheLookupDuration),
-      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
-    })
-
-    sendJson(response, 200, {
-      requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-      prewarm: priorSummary,
-    }, {
-      serverTiming: [
-        { name: 'body', duration: body.bodyReadDuration || 0 },
-        { name: 'cache', duration: cacheLookupDuration },
-        { name: 'total', duration: nowMs() - requestStartedAt },
-      ],
-    })
-    return
-  }
-
-  logSearchFlowEvent('guided_prewarm_started', {
-    route: '/api/search/prewarm',
-    query: sanitizedDiscoveryContext.normalizedQuery,
-    candidateCount: candidatePool.candidates.length,
-    candidatePoolSource,
-    requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-  })
-
-  try {
-    const openAiStartedAt = nowMs()
-    const prewarmed = await createCandidateAwarePrior({
-      candidatePool,
-      apiKey: openAiApiKey,
-      model: getFinalizeModel(),
-    })
-    const openAiDuration = nowMs() - openAiStartedAt
-    const prior = prewarmed.prior || prewarmed.artifact
-    const priorByteLength = safeJsonByteLength(prior)
-    const priorCandidateCount = Array.isArray(prior?.rankedCandidates)
-      ? prior.rankedCandidates.length
-      : 0
-    const totalDuration = nowMs() - requestStartedAt
-
-    let storageWriteCompleted = false
-    const persistedPreviewResults = Array.isArray(cachedEntry?.results) && cachedEntry.results.length > 0
-      ? cachedEntry.results
-      : buildFinalizeFallbackResults(candidatePool)
-
-    try {
-      await writeSearchSnapshot({
-        productQuery: sanitizedDiscoveryContext.normalizedQuery,
-        details: '',
-        candidatePool,
-        results: persistedPreviewResults,
-        selection: buildDiscoveryPreviewSelection(
-          persistedPreviewResults,
-          {
-            candidateAwarePrior: prior,
-            preRankArtifact: prior,
-            prewarm: {
-              priorByteLength,
-              priorCandidateCount,
-              priorGeneratedAt: prior?.generatedAt || null,
-              artifactByteLength: priorByteLength,
-              artifactCandidateCount: priorCandidateCount,
-              artifactGeneratedAt: prior?.generatedAt || null,
-              model: prewarmed.model,
-              openaiMs: roundTimingDuration(openAiDuration),
-              strategy: prewarmed.strategy || 'candidate_aware_prior',
-              totalMs: roundTimingDuration(totalDuration),
-              usage: prewarmed.usage || null,
-            },
-          },
-        ),
-        source: 'guided_discovery',
-        scope: CACHE_SCOPE_DISCOVERY,
-      })
-      storageWriteCompleted = true
-    } catch {
-      storageWriteCompleted = false
-    }
-
-    logSearchFlowEvent('guided_prewarm_completed', {
-      route: '/api/search/prewarm',
-      query: sanitizedDiscoveryContext.normalizedQuery,
-      priorByteLength,
-      priorCandidateCount,
-      artifactByteLength: priorByteLength,
-      artifactCandidateCount: priorCandidateCount,
-      candidateCount: candidatePool.candidates.length,
-      candidatePoolSource,
-      cacheMs: roundTimingDuration(cacheLookupDuration),
-      openaiMs: roundTimingDuration(openAiDuration),
-      openaiUsage: prewarmed.usage || null,
-      requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-      storageWriteCompleted,
-      totalMs: roundTimingDuration(totalDuration),
-    })
-
-    sendJson(response, 200, {
-      requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-      prewarm: {
-        priorByteLength,
-        priorCandidateCount,
-        priorGeneratedAt: prior?.generatedAt || null,
-        priorReady: true,
-        artifactByteLength: priorByteLength,
-        artifactCandidateCount: priorCandidateCount,
-        artifactGeneratedAt: prior?.generatedAt || null,
-        artifactReady: true,
-        candidatePoolSource,
-        model: prewarmed.model,
-        openaiMs: roundTimingDuration(openAiDuration),
-        requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-        reusedStoredPrior: false,
-        reusedStoredArtifact: false,
-        storageWriteCompleted,
-        strategy: prewarmed.strategy || 'candidate_aware_prior',
-        totalMs: roundTimingDuration(totalDuration),
-        usage: prewarmed.usage || null,
-      },
-      usage: {
-        openai: prewarmed.usage || null,
-      },
-    }, {
-      serverTiming: [
-        { name: 'body', duration: body.bodyReadDuration || 0 },
-        { name: 'cache', duration: cacheLookupDuration },
-        { name: 'openai', duration: openAiDuration },
-        { name: 'total', duration: totalDuration },
-      ],
-    })
-  } catch (error) {
-    logSearchFlowEvent('guided_prewarm_failed', {
-      route: '/api/search/prewarm',
-      query: sanitizedDiscoveryContext.normalizedQuery,
-      candidateCount: candidatePool.candidates.length,
-      candidatePoolSource,
-      cacheMs: roundTimingDuration(cacheLookupDuration),
-      requestMode: PREWARM_REQUEST_MODE_DEFAULT,
-      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    })
-    sendJson(response, 500, {
-      error: 'Unable to generate the candidate-aware prior.',
-      details: error instanceof Error ? error.message : 'Unknown error',
-    })
-  }
-}
-
 export async function handleSupabaseHealth(response) {
   const health = await getSupabaseHealth()
 
@@ -1343,11 +1328,6 @@ export async function handleSearchDebug(requestUrl, response) {
         candidateAwarePriorCandidateCount: Array.isArray(guidedDiscoveryCandidateAwarePrior?.rankedCandidates)
           ? guidedDiscoveryCandidateAwarePrior.rankedCandidates.length
           : 0,
-        prewarmArtifactReady: Boolean(guidedDiscoveryCandidateAwarePrior),
-        prewarmArtifactGeneratedAt: guidedDiscoveryCandidateAwarePrior?.generatedAt || null,
-        prewarmArtifactCandidateCount: Array.isArray(guidedDiscoveryCandidateAwarePrior?.rankedCandidates)
-          ? guidedDiscoveryCandidateAwarePrior.rankedCandidates.length
-          : 0,
       },
     },
     environment: {
@@ -1358,7 +1338,6 @@ export async function handleSearchDebug(requestUrl, response) {
       architecture: {
         primaryProductFlow: [
           '/api/search/discover',
-          '/api/search/prewarm',
           '/api/search/refine',
           '/api/search/finalize',
         ],
@@ -1378,13 +1357,6 @@ export async function handleSearchDebug(requestUrl, response) {
           callsSerpApi: false,
           callsOpenAi: true,
         },
-      guidedPrewarm: {
-        usesCache: true,
-        callsSerpApi: false,
-        callsOpenAi: true,
-        priorReady: Boolean(guidedDiscoveryCandidateAwarePrior),
-        artifactReady: Boolean(guidedDiscoveryCandidateAwarePrior),
-      },
       liveSearch: {
         usesCache: false,
         callsSerpApi: true,
@@ -1421,9 +1393,17 @@ export async function handleNanoMiniSplitFinalize(request, response) {
     return
   }
 
-  const resolvedCandidatePool = await readFinalizeCandidatePoolFromDiscovery(
+  const resolvedDiscoveryContext = await resolveDiscoveryContext(
     sanitizedDiscoveryContext.normalizedQuery,
+    sanitizedDiscoveryContext.discoveryToken,
   )
+
+  if (!resolvedDiscoveryContext.isValid) {
+    sendJson(response, resolvedDiscoveryContext.statusCode, { error: resolvedDiscoveryContext.error })
+    return
+  }
+
+  const resolvedCandidatePool = resolveFinalizeCandidatePool(resolvedDiscoveryContext.cachedEntry)
 
   if (!resolvedCandidatePool.isValid) {
     sendJson(response, resolvedCandidatePool.statusCode, { error: resolvedCandidatePool.error })
@@ -1468,7 +1448,6 @@ export async function handleNanoMiniSplitFinalize(request, response) {
         miniEnrichMs: roundTimingDuration(miniDuration),
         totalMs: roundTimingDuration(nowMs() - requestStartedAt),
         lockedIds: nanoResult.lockedIds,
-        lockedBadges: nanoResult.lockedBadges,
         nanoUsage: nanoResult.usage,
         miniUsage: miniResult.usage,
         miniPreservedOrder: miniResult.preservedOrder,
@@ -1491,7 +1470,7 @@ export async function handleNanoMiniSplitFinalize(request, response) {
 }
 
 // Runs mini enrichment after nano has locked the shortlist, stores result in discovery cache.
-async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model, normalizedQuery }) {
+async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model, normalizedQuery, discoveryScope = CACHE_SCOPE_DISCOVERY }) {
   const miniResult = await miniEnrichSelectedCandidates({
     lockedIds,
     candidatePool,
@@ -1502,7 +1481,7 @@ async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model,
   const { cachedEntry } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: '',
-    scope: CACHE_SCOPE_DISCOVERY,
+    scope: discoveryScope,
   })
 
   if (!cachedEntry) {
@@ -1523,10 +1502,11 @@ async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model,
     productQuery: normalizedQuery,
     details: '',
     candidatePool: cachedEntry.candidatePool,
+    discoveryToken: cachedEntry.discoveryToken || '',
     results: Array.isArray(cachedEntry.results) ? cachedEntry.results : [],
     selection: updatedSelection,
     source: 'enrichment_update',
-    scope: CACHE_SCOPE_DISCOVERY,
+    scope: discoveryScope,
   })
 
   logSearchFlowEvent('mini_enrichment_stored', {
@@ -1554,18 +1534,14 @@ export async function handleEnrichmentPoll(request, response) {
     return
   }
 
-  const expectedToken = buildCacheKey(normalizedQuery, '', CACHE_SCOPE_DISCOVERY)
+  const resolvedDiscoveryContext = await resolveDiscoveryContext(normalizedQuery, token)
 
-  if (token !== expectedToken) {
-    sendJson(response, 400, { error: 'The enrichment token is invalid for this query.' })
+  if (!resolvedDiscoveryContext.isValid) {
+    sendJson(response, resolvedDiscoveryContext.statusCode, { error: resolvedDiscoveryContext.error })
     return
   }
 
-  const { cachedEntry } = await readCachedSearchSnapshot({
-    productQuery: normalizedQuery,
-    details: '',
-    scope: CACHE_SCOPE_DISCOVERY,
-  })
+  const { cachedEntry } = resolvedDiscoveryContext
 
   const enrichment = cachedEntry?.selection?.enrichment
 
@@ -1632,10 +1608,23 @@ export async function handleFinalizeSelection(request, response) {
   }
 
   const cacheLookupStartedAt = nowMs()
-  const resolvedCandidatePool = await readFinalizeCandidatePoolFromDiscovery(
+  const resolvedDiscoveryContext = await resolveDiscoveryContext(
     sanitizedDiscoveryContext.normalizedQuery,
+    sanitizedDiscoveryContext.discoveryToken,
   )
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
+
+  if (!resolvedDiscoveryContext.isValid) {
+    logSearchFlowEvent('guided_finalize_missing_discovery_context', {
+      route: '/api/search/finalize',
+      query: sanitizedDiscoveryContext.normalizedQuery,
+      error: resolvedDiscoveryContext.error,
+    })
+    sendJson(response, resolvedDiscoveryContext.statusCode, { error: resolvedDiscoveryContext.error })
+    return
+  }
+
+  const resolvedCandidatePool = resolveFinalizeCandidatePool(resolvedDiscoveryContext.cachedEntry)
 
   if (!resolvedCandidatePool.isValid) {
     logSearchFlowEvent('guided_finalize_missing_discovery_context', {
@@ -1758,9 +1747,21 @@ export async function handleFinalizeSelection(request, response) {
     })
     const openAiDuration = nowMs() - openAiStartedAt
     tokenUsageByStage.finalize = nanoResult.usage || null
+    const oxylabsUsername = getEnv('OXYLABS_USERNAME') // TODO: swap back to Rainforest before launch.
+    const oxylabsPassword = getEnv('OXYLABS_PASSWORD') // TODO: swap back to Rainforest before launch.
+    const productDetailsStartedAt = nowMs()
+    const productDetailsById = await fetchOxylabsProductDetailsByAsin({ // TODO: swap back to Rainforest before launch.
+      asins: nanoResult.lockedIds,
+      oxylabsUsername,
+      oxylabsPassword,
+      readCache: readProductDetailsCacheEntries,
+      writeCache: writeProductDetailsCacheEntries,
+    })
+    const productDetailsDuration = nowMs() - productDetailsStartedAt
+    const enrichedCandidatePool = mergeProductDetailsIntoCandidatePool(nextCandidatePool, productDetailsById)
 
     const candidateById = new Map(
-      nextCandidatePool.candidates.map((c) => [String(c.id), c]),
+      enrichedCandidatePool.candidates.map((c) => [String(c.id), c]),
     )
     const nanoResults = nanoResult.lockedIds
       .map((id) => {
@@ -1796,6 +1797,7 @@ export async function handleFinalizeSelection(request, response) {
       requestMode,
       cacheMs: roundTimingDuration(cacheLookupDuration),
       openaiMs: roundTimingDuration(openAiDuration),
+      productDetailsMs: roundTimingDuration(productDetailsDuration),
       totalMs: roundTimingDuration(totalDuration),
       openaiUsage: nanoResult.usage || null,
       rankingOwner: nanoResults.length > 0 ? 'nano_lock' : 'deterministic_fallback',
@@ -1817,6 +1819,7 @@ export async function handleFinalizeSelection(request, response) {
           body: roundTimingDuration(body.bodyReadDuration || 0),
           cache: roundTimingDuration(cacheLookupDuration),
           openai: roundTimingDuration(openAiDuration),
+          productDetails: roundTimingDuration(productDetailsDuration),
           total: roundTimingDuration(totalDuration),
         },
         tokenUsageByStage,
@@ -1848,6 +1851,7 @@ export async function handleFinalizeSelection(request, response) {
         { name: 'body', duration: body.bodyReadDuration || 0 },
         { name: 'cache', duration: cacheLookupDuration },
         { name: 'openai', duration: openAiDuration },
+        { name: 'product-details', duration: productDetailsDuration },
         { name: 'total', duration: totalDuration },
       ],
     })
@@ -1857,10 +1861,11 @@ export async function handleFinalizeSelection(request, response) {
       const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
       runMiniEnrichmentAsync({
         lockedIds: nanoResult.lockedIds,
-        candidatePool: nextCandidatePool,
+        candidatePool: enrichedCandidatePool,
         apiKey: openAiApiKey,
         model: miniModel,
         normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
+        discoveryScope: resolvedDiscoveryContext.discoveryScope,
       }).catch((error) => {
         logSearchFlowEvent('mini_enrichment_failed', {
           query: sanitizedDiscoveryContext.normalizedQuery,
@@ -2031,9 +2036,10 @@ export function createApiServer() {
 
     if (request.method === 'OPTIONS') {
       response.writeHead(204, {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
+        Vary: 'Origin',
       })
       response.end()
       return
@@ -2044,6 +2050,11 @@ export function createApiServer() {
       return
     }
 
+    if (request.method === 'GET' && requestUrl.pathname === '/api/search/rainforest-discover') {
+      await handleRainforestDiscoverySearch(requestUrl, response, request)
+      return
+    }
+
     if (request.method === 'GET' && requestUrl.pathname === '/api/search/refine') {
       await handleRefinementPrompt(requestUrl, response)
       return
@@ -2051,11 +2062,6 @@ export function createApiServer() {
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search/framing-fields') {
       await handleQueryFramingFields(requestUrl, response)
-      return
-    }
-
-    if (request.method === 'POST' && requestUrl.pathname === '/api/search/prewarm') {
-      await handlePrewarmSelection(request, response)
       return
     }
 

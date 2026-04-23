@@ -4,6 +4,7 @@ import {
   DEFAULT_OPENAI_MODEL,
   OPENAI_RESPONSES_ENDPOINT,
   createCandidateAwarePrior,
+  miniEnrichSelectedCandidates,
   selectAiResults,
 } from './ai-selector.js'
 
@@ -492,18 +493,16 @@ describe('ai selector', () => {
     expect(result.artifact.rankedCandidates).toEqual([
       expect.objectContaining({
         candidateId: 'prod-2',
-        prewarmRank: 1,
         baselineFit: 'Best baseline option for frequent flights.',
         baselineCaution: 'Costs more than entry-level picks.',
       }),
       expect.objectContaining({
         candidateId: 'prod-1',
-        prewarmRank: 2,
         baselineFit: 'Strong all-round fallback option.',
         baselineCaution: 'Fewer reviews than the top baseline pick.',
       }),
     ])
-    expect(result.artifact.layer).toBe('candidate_aware_prewarm')
+    expect(result.artifact.layer).toBe('candidate_aware_prior')
     expect(result.artifact).not.toHaveProperty('selectedCandidateIds')
   })
 
@@ -550,13 +549,13 @@ describe('ai selector', () => {
           rankedCandidates: [
             {
               candidateId: 'prod-2',
-              prewarmRank: 1,
+              rank: 1,
               baselineFit: 'Best baseline option for frequent flights.',
               baselineCaution: 'Costs more than entry-level picks.',
             },
             {
               candidateId: 'prod-1',
-              prewarmRank: 2,
+              rank: 2,
               baselineFit: 'Strong all-round fallback option.',
               baselineCaution: 'Fewer reviews than the top baseline pick.',
             },
@@ -583,6 +582,55 @@ describe('ai selector', () => {
       preRankArtifactReused: true,
       preRankReuseReason: 'candidate_aware_prior_rerank',
     })
+  })
+
+  it('passes feature bullets into mini enrichment and preserves them in the stored entries', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          enriched: [
+            {
+              candidate_id: 'prod-1',
+              fit_reason: 'Fits travel days because it folds quickly and stays easy to carry.',
+              caveat: 'Storage is tighter than on larger everyday strollers.',
+            },
+          ],
+        }),
+      }),
+    })
+
+    const result = await miniEnrichSelectedCandidates(
+      {
+        apiKey: 'test-key',
+        lockedIds: ['prod-1'],
+        candidatePool: {
+          query: 'stroller',
+          details: 'best for airport travel',
+          candidates: [
+            createCandidate({
+              feature_bullets: ['One-hand fold', 'Compact carry strap'],
+              productDescription: 'A compact stroller built for airport travel.',
+            }),
+          ],
+        },
+      },
+      fetchMock,
+    )
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
+    const prompt = requestBody.input[1].content
+
+    expect(prompt).toContain('"feature_bullets":["One-hand fold","Compact carry strap"]')
+    expect(prompt).toContain('"product_description":"A compact stroller built for airport travel."')
+    expect(result.enriched).toEqual([
+      {
+        candidate_id: 'prod-1',
+        fit_reason: 'Fits travel days because it folds quickly and stays easy to carry.',
+        caveat: 'Storage is tighter than on larger everyday strollers.',
+        feature_bullets: ['One-hand fold', 'Compact carry strap'],
+      },
+    ])
   })
 
 })

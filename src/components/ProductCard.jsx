@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { ChevronRight, Star } from 'lucide-react'
 import { Badge } from '@/components/ui/badge.jsx'
 import {
   Card,
   CardContent,
 } from '@/components/ui/card.jsx'
+import logo from '@/assets/logo_master_version.svg'
 
 function getUserFacingReasons(reasons = []) {
   return reasons.filter((reason) => {
@@ -68,12 +70,13 @@ function ProductCard({
   subtitle,
   title,
 }) {
+  const [imgError, setImgError] = useState(false)
   const primaryReason = getUserFacingReasons(reasons)[0] || ''
   const userFacingDescription = getUserFacingDescription(description)
 
   return (
     <Card
-      className="group h-full overflow-hidden rounded-[22px] border-stone-200/80 bg-white/90 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur transition hover:-translate-y-1"
+      className="group h-full overflow-hidden rounded-[22px] border-stone-200/80 bg-white/90 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur transition hover:-translate-y-1 hover:shadow-[0_32px_80px_-40px_rgba(15,23,42,0.6)]"
       role="button"
       tabIndex={0}
       onClick={onSelect}
@@ -86,13 +89,25 @@ function ProductCard({
     >
       <div className="relative overflow-hidden border-b border-stone-100 bg-stone-50">
         <ProductBadge label={badgeLabel} />
-        <img
-          className="aspect-square w-full object-contain bg-stone-50 p-4 transition duration-300 group-hover:scale-[1.02]"
-          src={image}
-          alt={title}
-          loading="lazy"
-          decoding="async"
-        />
+        {imgError ? (
+          <div className="flex aspect-square w-full items-center justify-center bg-stone-200/90">
+            <img
+              src={logo}
+              alt=""
+              aria-hidden="true"
+              className="h-20 w-20 object-contain opacity-[0.14] sm:h-24 sm:w-24"
+            />
+          </div>
+        ) : (
+          <img
+            className="aspect-square w-full object-contain bg-stone-50 p-4 transition duration-300 group-hover:scale-[1.02]"
+            src={image}
+            alt={title}
+            loading="lazy"
+            decoding="async"
+            onError={() => setImgError(true)}
+          />
+        )}
       </div>
       <CardContent className="space-y-3 p-4">
         <div className="space-y-2">
@@ -102,10 +117,10 @@ function ProductCard({
           >
             {subtitle}
           </Badge>
-          <p className="text-lg font-semibold text-primary">{price}</p>
           <p className="line-clamp-2 text-sm leading-5 text-slate-900 sm:text-[15px]">
             {title}
           </p>
+          <p className="text-lg font-semibold text-primary">{price}</p>
         </div>
         <div className="flex items-center gap-2 text-sm text-amber-600">
           <div className="flex items-center gap-1">
@@ -122,12 +137,12 @@ function ProductCard({
           <span className="text-slate-500">({reviewCount} reviews)</span>
         </div>
         {userFacingDescription ? (
-          <p className="hidden line-clamp-2 text-sm leading-5 text-slate-600 sm:block">
+          <p className="line-clamp-2 text-sm leading-5 text-slate-600">
             {userFacingDescription}
           </p>
         ) : null}
         {primaryReason ? (
-          <p className="hidden line-clamp-2 text-sm leading-5 text-slate-600 sm:block">
+          <p className="line-clamp-2 text-sm leading-5 text-slate-600">
             {primaryReason}
           </p>
         ) : null}
@@ -148,7 +163,7 @@ function ProductCard({
               onRetailerClick?.()
             }}
           >
-            View site
+            {subtitle ? `View on ${subtitle}` : 'View site'}
             <ChevronRight className="h-4 w-4 text-slate-400" />
           </a>
         ) : (

@@ -20,13 +20,22 @@ function PrivacyPage() {
         Supabase-backed storage or a local development fallback.
       </p>
       <p>
-        Focamai does not currently offer user accounts, and it does not ask users to submit payment
-        information through the site.
+        Focamai participates in the Amazon Associates affiliate program. When you follow a product
+        link to Amazon, Amazon may set cookies on your device to attribute any resulting purchase
+        for commission purposes. This is standard affiliate tracking and is covered by{' '}
+        <a
+          href="https://www.amazon.com/gp/help/customer/display.html?nodeId=468496"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary underline underline-offset-4"
+        >
+          Amazon's own privacy policy
+        </a>
+        .
       </p>
       <p>
-        Before broader launch, this policy should be reviewed and expanded to describe providers,
-        retention, and affiliate-related data handling more specifically if those parts of the
-        product become more user-facing.
+        Focamai does not currently offer user accounts, and it does not ask users to submit payment
+        information through the site.
       </p>
     </PageShell>
   )
