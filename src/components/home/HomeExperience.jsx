@@ -63,9 +63,9 @@ function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     prompt?.prompt || `What should we optimize for with this ${submittedQuery}?`
 
   return {
-    helper:
-      prompt?.helperText ||
-      'Share your budget, size, comfort, style, or how you plan to use it — anything that matters to you.',
+      helper:
+        prompt?.helperText ||
+        'Or write whatever is important to you. Feel free to write in natural language.',
     placeholder:
       prompt?.followUpPlaceholder ||
       'Example: I want something lightweight for daily travel, under $200, and easy to clean.',

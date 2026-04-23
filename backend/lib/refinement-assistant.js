@@ -1,7 +1,7 @@
 import { DEFAULT_REFINEMENT_MODEL } from './ai-selector.js'
 import { createQuestionOnlyQueryFramingContract, generateQuestionFast } from './query-framing.js'
 
-const DEFAULT_HELPER_TEXT = 'Answer in natural language so Focamai can understand what you really want.'
+const DEFAULT_HELPER_TEXT = 'Or write whatever is important to you. Feel free to write in natural language.'
 const DEFAULT_PLACEHOLDER = 'Example: I want something lightweight for daily travel, under $200, and easy to clean.'
 
 export async function generateRefinementPrompt(
