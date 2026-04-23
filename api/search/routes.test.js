@@ -12,6 +12,18 @@ const handleQueryFramingFields = vi.fn((requestUrl, response) => {
   response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
   response.end(JSON.stringify({ pathname: requestUrl.pathname }))
 })
+const handleEnrichmentPoll = vi.fn((incomingRequestUrl, response, request) => {
+  void incomingRequestUrl
+  const parsedRequestUrl = new URL(request.url)
+  response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+  response.end(
+    JSON.stringify({
+      pathname: parsedRequestUrl.pathname,
+      token: parsedRequestUrl.searchParams.get('token'),
+      query: parsedRequestUrl.searchParams.get('query'),
+    }),
+  )
+})
 const handleFinalizeSelection = vi.fn((request, response) => {
   let rawBody = ''
 
@@ -26,6 +38,7 @@ const handleFinalizeSelection = vi.fn((request, response) => {
 
 vi.mock('../../backend/server.js', () => ({
   handleDiscoverySearch,
+  handleEnrichmentPoll,
   handleQueryFramingFields,
   handleFinalizeSelection,
   handleLiveSearch,
@@ -33,6 +46,7 @@ vi.mock('../../backend/server.js', () => ({
 
 const { GET: getLiveSearch } = await import('./live.js')
 const { GET: getDiscoverySearch } = await import('./discover.js')
+const { GET: getEnrichmentPoll } = await import('./enrichment.js')
 const { GET: getQueryFramingFields } = await import('./framing-fields.js')
 const { POST: postFinalizeSelection } = await import('./finalize.js')
 
@@ -104,6 +118,34 @@ describe('Vercel search route wrappers', () => {
     )
     expect(await response.json()).toEqual({
       pathname: '/api/search/framing-fields',
+    })
+  })
+
+  it('forwards enrichment poll requests with the original request URL intact', async () => {
+    const request = new Request(
+      'https://example.com/api/search/enrichment?token=opaque-discovery-token&query=microphone',
+      {
+        headers: {
+          'x-forwarded-for': '203.0.113.33',
+        },
+      },
+    )
+
+    const response = await getEnrichmentPoll(request)
+
+    expect(response.status).toBe(200)
+    expect(handleEnrichmentPoll).toHaveBeenCalledWith(
+      expect.any(URL),
+      expect.any(Object),
+      expect.objectContaining({
+        url: 'https://example.com/api/search/enrichment?token=opaque-discovery-token&query=microphone',
+        headers: expect.any(Headers),
+      }),
+    )
+    expect(await response.json()).toEqual({
+      pathname: '/api/search/enrichment',
+      token: 'opaque-discovery-token',
+      query: 'microphone',
     })
   })
 
