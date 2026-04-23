@@ -30,12 +30,12 @@
 - After retry succeeds, earlier picks move into a collapsed `Previous picks` section.
 
 ## Guided backend flow
-- `/api/search/discover` builds the candidate pool and preview set, returns `discoveryToken`, and writes guided discovery cache in the background after response artifacts are ready.
+- The current homepage flow calls `/api/search/rainforest-discover` for primary guided discovery. `/api/search/discover` still exists as the older generic guided-discovery path and for some backend scripts/tests, but it is not the main homepage route now.
 - `/api/search/prewarm` backend route fully removed (2026-04-17).
 - `/api/search/refine` returns one short user-facing follow-up question with static helper/placeholder copy.
 - `/api/search/framing-fields` returns background query-framing fields for timing/debug visibility only.
 - `/api/search/finalize` accepts lightweight context, reconstructs the rich candidate pool server-side from guided discovery cache, locks the shortlist via nano, fetches product details for the locked winners through the current Oxylabs helper, and returns shortlist cards with `feature_bullets` immediately. Mini enrichment still fires async after the response is sent and stores `fit_reason`/`caveat` in the discovery cache.
-- `/api/search/enrichment` GET — accepts `?token=&query=`, returns `{ ready: false }` or `{ ready: true, entries: [...] }` where each entry has `candidateId`, `fitReason`, `caveat`.
+- `/api/search/enrichment` GET — accepts `?token=&query=`, returns `{ ready: false }` or `{ ready: true, entries: [...] }` where each entry has `candidateId`, `fitReason`, `caveat`. On Vercel this route must receive the original web `Request`, not just a parsed `URL`, because the handler reads `request.url`.
 - `/api/search/live` is the explicit manual/debug combined route.
 - `/api/search/debug` should describe guided flow as primary.
 - `/api/health/supabase` should treat local file fallback as a supported development/storage mode when Supabase is not configured.
@@ -78,6 +78,8 @@
 - Guided search requests expose `Server-Timing`; timing UI appears in development or with `?timing=1`.
 - Guided AI routes surface OpenAI token usage metadata when calls run.
 - Structured `[search-flow]` logs cover discovery, refine, framing-fields, finalize, and enrichment.
+- The Vercel `api/search/*` wrappers are part of the real production execution path, not a thin afterthought. If a handler depends on `request.url`, headers, or body shape, the wrapper test should assert that the original request is forwarded intact.
+- Localhost parity caveat: direct Node-server handlers can mask wrapper bugs. Production-only issues can appear when a handler works with the local server contract but the Vercel wrapper passes a different argument shape.
 - Optional Supabase analytics can track guided-search steps, result impressions, card opens, and retailer clicks.
 
 ## Backend guardrails
@@ -87,6 +89,7 @@
 - Priorities are sanitized and capped before final selection context.
 - Finalize reconstructs candidates from guided discovery cache instead of trusting browser-posted rich pools.
 - Discovery filtering removes a narrow slice of clearly redundant same-family same-variant listings before the cached candidate pool is written.
+- Handler contract guardrail to preserve: avoid mixing `(requestUrl, response)` and `(request, response)` expectations casually. Wrapper-backed routes need explicit passthrough tests whenever a handler depends on the original request object.
 
 ## Marketplace direction
 - Focamai should help users narrow choices before going into a retailer marketplace.

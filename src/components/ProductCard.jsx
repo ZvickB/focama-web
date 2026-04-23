@@ -6,6 +6,7 @@ import {
   CardContent,
 } from '@/components/ui/card.jsx'
 import logo from '@/assets/logo_master_version.svg'
+import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
 
 function getUserFacingReasons(reasons = []) {
   return reasons.filter((reason) => {
@@ -73,6 +74,7 @@ function ProductCard({
   const [imgError, setImgError] = useState(false)
   const primaryReason = getUserFacingReasons(reasons)[0] || ''
   const userFacingDescription = getUserFacingDescription(description)
+  const displayPrice = formatDisplayPrice(price)
 
   return (
     <Card
@@ -120,7 +122,7 @@ function ProductCard({
           <p className="line-clamp-2 text-sm leading-5 text-slate-900 sm:text-[15px]">
             {title}
           </p>
-          <p className="text-lg font-semibold text-primary">{price}</p>
+          <p className="text-lg font-semibold text-primary">{displayPrice}</p>
         </div>
         <div className="flex items-center gap-2 text-sm text-amber-600">
           <div className="flex items-center gap-1">

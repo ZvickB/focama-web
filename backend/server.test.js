@@ -523,6 +523,7 @@ describe('server handlers', () => {
 
     expect(response.statusCode).toBe(200)
     expect(response.headers['Server-Timing']).toContain('openai')
+    expect(response.headers['X-Request-Id']).toEqual(expect.any(String))
     expect(JSON.parse(response.body)).toEqual({
       queryFraming: expect.objectContaining({
         layer: 'query_framing',
@@ -537,6 +538,7 @@ describe('server handlers', () => {
         reasoningTokens: 3,
       },
       queryFramingMode: 'framing_fields',
+      requestId: expect.any(String),
     })
   })
 
