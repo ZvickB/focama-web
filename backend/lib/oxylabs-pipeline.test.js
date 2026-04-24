@@ -77,6 +77,7 @@ describe('oxylabs pipeline', () => {
       reasonFallback: 'Returned by the Rainforest API search route',
       oxylabsUsername: 'oxy-user',
       oxylabsPassword: 'oxy-pass',
+      amazonDomain: 'amazon.ca',
     })
 
     expect(fetch).toHaveBeenCalledTimes(1)
@@ -90,7 +91,7 @@ describe('oxylabs pipeline', () => {
         }),
         body: JSON.stringify({
           source: 'amazon_search',
-          domain: 'com',
+          domain: 'ca',
           query: 'office chair ergonomic lumbar support',
           parse: true,
           pages: 1,
@@ -114,6 +115,7 @@ describe('oxylabs pipeline', () => {
           expect.objectContaining({
             id: 'B001',
             title: 'Ergonomic Office Chair',
+            price: 'CA$199.99',
           }),
         ]),
       }),
@@ -150,6 +152,7 @@ describe('oxylabs pipeline', () => {
       asins: ['B001', 'B001'],
       oxylabsUsername: 'oxy-user',
       oxylabsPassword: 'oxy-pass',
+      amazonDomain: 'amazon.co.uk',
     })
 
     expect(fetch).toHaveBeenCalledTimes(1)
@@ -163,7 +166,7 @@ describe('oxylabs pipeline', () => {
         }),
         body: JSON.stringify({
           source: 'amazon_product',
-          domain: 'com',
+          domain: 'co.uk',
           query: 'B001',
           parse: true,
         }),

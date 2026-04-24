@@ -1,3 +1,10 @@
+import {
+  buildAmazonBaseUrl,
+  formatAmazonPrice,
+  getAmazonPricePrefix,
+  normalizeAmazonDomain,
+} from '../../shared/amazon-marketplaces.js'
+
 /**
  * Normalizes Oxylabs API responses to match the shapes expected by the pipeline.
  *
@@ -5,21 +12,22 @@
  * normalizeOxylabsProduct      — maps amazon_product detail response for future enrichment use
  */
 
-const AMAZON_BASE_URL = 'https://www.amazon.com'
-
 /**
  * Maps an Oxylabs amazon_search organic result to the shape produced by
  * normalizeRainforestItem in rainforest-pipeline.js.
  */
-export function normalizeOxylabsSearchResult(item) {
+export function normalizeOxylabsSearchResult(item, { amazonDomain = 'amazon.com' } = {}) {
+  const normalizedDomain = normalizeAmazonDomain(amazonDomain) || 'amazon.com'
   const rawLink = item.url || ''
-  const productLink = rawLink.startsWith('http') ? rawLink : `${AMAZON_BASE_URL}${rawLink}`
+  const productLink = rawLink.startsWith('http')
+    ? rawLink
+    : `${buildAmazonBaseUrl(normalizedDomain)}${rawLink}`
 
   return {
     product_id: item.asin || null,
     title: item.title || '',
     extracted_price: typeof item.price === 'number' ? item.price : null,
-    price: typeof item.price === 'number' ? `$${item.price}` : null,
+    price: typeof item.price === 'number' ? formatAmazonPrice(item.price, normalizedDomain) : null,
     rating: item.rating ?? null,
     reviews: item.reviews_count ?? null,
     thumbnail: item.url_image || null,
@@ -44,7 +52,7 @@ export function normalizeOxylabsSearchResult(item) {
  *   reviews_count              → ratings_total
  *   category[0].ladder         → categories (array of name strings)
  */
-export function normalizeOxylabsProduct(item) {
+export function normalizeOxylabsProduct(item, { amazonDomain = 'amazon.com' } = {}) {
   const featureBullets = typeof item.bullet_points === 'string'
     ? item.bullet_points.split('\n').filter(Boolean)
     : []
@@ -55,7 +63,11 @@ export function normalizeOxylabsProduct(item) {
 
   const priceValue = typeof item.price === 'number' ? item.price : null
   const price = priceValue !== null
-    ? { symbol: '$', value: priceValue, raw: `$${priceValue}` }
+    ? {
+        symbol: getAmazonPricePrefix(amazonDomain),
+        value: priceValue,
+        raw: formatAmazonPrice(priceValue, amazonDomain),
+      }
     : null
 
   const categoryLadder = Array.isArray(item.category) && item.category[0]?.ladder

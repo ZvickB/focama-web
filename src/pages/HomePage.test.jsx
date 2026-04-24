@@ -203,6 +203,89 @@ describe('HomePage', () => {
     )
   })
 
+  it('lets the user choose an Amazon marketplace and reuses it through finalize', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => '' },
+        text: async () =>
+          JSON.stringify({
+            amazonDomain: 'amazon.ca',
+            discoveryToken: 'opaque-discovery-token',
+            candidatePool: {
+              query: 'stroller',
+              details: '',
+              amazonDomain: 'amazon.ca',
+              candidates: [
+                {
+                  id: 'result-1',
+                  title: 'Travel stroller',
+                  source: 'Amazon',
+                  price: '$129.99',
+                  rating: 4.4,
+                  reviewCount: 87,
+                  description: 'Lightweight and easy to fold.',
+                  reasons: ['Available from Amazon'],
+                  image: 'https://example.com/stroller.jpg',
+                  link: 'https://www.amazon.ca/dp/B001',
+                },
+              ],
+            },
+            previewResults: [createMockResult({ subtitle: 'Amazon', link: 'https://www.amazon.ca/dp/B001' })],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => '' },
+        text: async () =>
+          JSON.stringify({
+            prompt: 'What should we optimize for with this stroller?',
+            helperText: 'Pick anything that matters.',
+            followUpPlaceholder: 'Anything else?',
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => '' },
+        text: async () =>
+          JSON.stringify({
+            candidatePool: {
+              query: 'stroller',
+              details: 'Notes: comfort matters most',
+              amazonDomain: 'amazon.ca',
+              candidates: [],
+            },
+            results: [createMockResult({ subtitle: 'Amazon', link: 'https://www.amazon.ca/dp/B001' })],
+            selection: {
+              mode: 'ai',
+            },
+          }),
+      })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    await user.selectOptions(screen.getByLabelText(/amazon marketplace/i), 'amazon.ca')
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+    await screen.findByText(/what should we optimize for with this stroller/i)
+    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
+    await user.click(screen.getByRole('button', { name: /show focused picks/i }))
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/search/rainforest-discover?query=stroller&amazonDomain=amazon.ca')
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual(
+      expect.objectContaining({
+        query: 'stroller',
+        amazonDomain: 'amazon.ca',
+        discoveryToken: 'opaque-discovery-token',
+        followUpNotes: 'comfort matters most',
+      }),
+    )
+  })
+
   it('shows the backend error message when discovery fails', async () => {
     const user = userEvent.setup()
     const fetchMock = vi
@@ -663,6 +746,7 @@ describe('HomePage', () => {
     )
     expect(JSON.parse(retryRequest[1].body)).toEqual({
       query: 'stroller',
+      amazonDomain: 'auto',
       discoveryToken: 'opaque-discovery-token',
       followUpNotes: 'comfort matters most',
       rejectionFeedback: 'Still too bulky for city travel.',

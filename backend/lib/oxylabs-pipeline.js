@@ -2,6 +2,7 @@ import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './result-filt
 import { fetchProductDetailsWithCache } from './product-details-cache.js'
 import { buildQuery } from './search-data.js'
 import { normalizeOxylabsProduct, normalizeOxylabsSearchResult } from './oxylabs-normalizer.js'
+import { getOxylabsDomainFromAmazonDomain } from '../../shared/amazon-marketplaces.js'
 
 export const OXYLABS_ENDPOINT = 'https://realtime.oxylabs.io/v1/queries'
 
@@ -16,10 +17,8 @@ export async function fetchOxylabsArtifacts({
   reasonFallback,
   oxylabsUsername,
   oxylabsPassword,
-  countryCode,
+  amazonDomain = 'amazon.com',
 }) {
-  void countryCode
-
   if (!oxylabsUsername || !oxylabsPassword) {
     return {
       error: {
@@ -32,6 +31,7 @@ export async function fetchOxylabsArtifacts({
 
   try {
     const searchTerm = buildQuery(productQuery, details)
+    const oxylabsDomain = getOxylabsDomainFromAmazonDomain(amazonDomain)
     const apiResponse = await fetch(OXYLABS_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -40,7 +40,7 @@ export async function fetchOxylabsArtifacts({
       },
       body: JSON.stringify({
         source: 'amazon_search',
-        domain: 'com',
+        domain: oxylabsDomain,
         query: searchTerm,
         parse: true,
         pages: 1,
@@ -60,7 +60,9 @@ export async function fetchOxylabsArtifacts({
 
     const data = await apiResponse.json()
     const rawItems = data?.results?.[0]?.content?.results?.organic
-    const normalizedItems = (Array.isArray(rawItems) ? rawItems : []).map(normalizeOxylabsSearchResult)
+    const normalizedItems = (Array.isArray(rawItems) ? rawItems : []).map((item) =>
+      normalizeOxylabsSearchResult(item, { amazonDomain }),
+    )
 
   const normalizedPayload = {
     shopping_results: normalizedItems,
@@ -109,6 +111,7 @@ export async function fetchOxylabsProductDetailsByAsin({
   asins = [],
   oxylabsUsername,
   oxylabsPassword,
+  amazonDomain = 'amazon.com',
   readCache = async () => new Map(),
   writeCache = async () => {},
 }) {
@@ -117,6 +120,7 @@ export async function fetchOxylabsProductDetailsByAsin({
   }
 
   const authorization = buildOxylabsAuthHeader(oxylabsUsername, oxylabsPassword)
+  const oxylabsDomain = getOxylabsDomainFromAmazonDomain(amazonDomain)
 
   return fetchProductDetailsWithCache({
     asins,
@@ -135,7 +139,7 @@ export async function fetchOxylabsProductDetailsByAsin({
             },
             body: JSON.stringify({
               source: 'amazon_product',
-              domain: 'com',
+              domain: oxylabsDomain,
               query: asin,
               parse: true,
             }),
@@ -148,7 +152,7 @@ export async function fetchOxylabsProductDetailsByAsin({
 
           const data = await apiResponse.json()
           const content = data?.results?.[0]?.content
-          const normalized = normalizeOxylabsProduct(content || {})
+          const normalized = normalizeOxylabsProduct(content || {}, { amazonDomain })
 
           return {
             asin,

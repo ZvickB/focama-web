@@ -3,6 +3,11 @@ import { join } from 'node:path'
 import { fetchProductDetailsWithCache } from './product-details-cache.js'
 import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './result-filter.js'
 import { buildQuery } from './search-data.js'
+import {
+  formatAmazonPrice,
+  getAmazonDomainFromCountryCode,
+  normalizeAmazonDomain,
+} from '../../shared/amazon-marketplaces.js'
 
 const SAMPLES_DIR = join(process.cwd(), 'temp-data', 'rainforest-samples')
 
@@ -17,40 +22,18 @@ function saveRainforestSample(query, payload) {
 
 export const RAINFOREST_ENDPOINT = 'https://api.rainforestapi.com/request'
 
-const COUNTRY_TO_AMAZON_DOMAIN = {
-  AT: 'amazon.de',
-  AE: 'amazon.ae',
-  AU: 'amazon.com.au',
-  BE: 'amazon.com.be',
-  BR: 'amazon.com.br',
-  CA: 'amazon.ca',
-  DE: 'amazon.de',
-  EG: 'amazon.eg',
-  ES: 'amazon.es',
-  FR: 'amazon.fr',
-  GB: 'amazon.co.uk',
-  IN: 'amazon.in',
-  IT: 'amazon.it',
-  JP: 'amazon.co.jp',
-  MX: 'amazon.com.mx',
-  NL: 'amazon.nl',
-  PL: 'amazon.pl',
-  SA: 'amazon.sa',
-  SE: 'amazon.se',
-  SG: 'amazon.sg',
-  TR: 'amazon.com.tr',
+export function getAmazonDomain({ countryCode = 'US', amazonDomain = '' } = {}) {
+  return normalizeAmazonDomain(amazonDomain) || getAmazonDomainFromCountryCode(countryCode)
 }
 
-export function getAmazonDomain(countryCode = 'US') {
-  return COUNTRY_TO_AMAZON_DOMAIN[countryCode] ?? 'amazon.com'
-}
+function normalizeRainforestItem(item, { amazonDomain = 'amazon.com' } = {}) {
+  const numericPrice = Number.isFinite(Number(item.price?.value)) ? Number(item.price.value) : null
 
-function normalizeRainforestItem(item) {
   return {
     product_id: item.asin || null,
     title: item.title || '',
-    extracted_price: item.price?.value ?? null,
-    price: item.price?.raw || (item.price?.value ? `$${item.price.value}` : null),
+    extracted_price: numericPrice,
+    price: item.price?.raw || (numericPrice !== null ? formatAmazonPrice(numericPrice, amazonDomain) : null),
     rating: item.rating ?? null,
     reviews: item.ratings_total ?? null,
     thumbnail: item.image || null,
@@ -119,12 +102,14 @@ export async function fetchRainforestArtifacts({
   reasonFallback,
   rainforestApiKey,
   countryCode = 'US',
+  amazonDomain = '',
 }) {
+  const resolvedAmazonDomain = getAmazonDomain({ countryCode, amazonDomain })
   const searchUrl = new URL(RAINFOREST_ENDPOINT)
   searchUrl.searchParams.set('api_key', rainforestApiKey)
   searchUrl.searchParams.set('type', 'search')
   searchUrl.searchParams.set('search_term', buildQuery(productQuery, details))
-  searchUrl.searchParams.set('amazon_domain', getAmazonDomain(countryCode))
+  searchUrl.searchParams.set('amazon_domain', resolvedAmazonDomain)
 
   const apiResponse = await fetch(searchUrl, { signal: AbortSignal.timeout(15000) })
 
@@ -141,7 +126,9 @@ export async function fetchRainforestArtifacts({
   const payload = await apiResponse.json()
   saveRainforestSample(buildQuery(productQuery, details), payload)
   const rawItems = Array.isArray(payload.search_results) ? payload.search_results : []
-  const normalizedItems = rawItems.map(normalizeRainforestItem)
+  const normalizedItems = rawItems.map((item) =>
+    normalizeRainforestItem(item, { amazonDomain: resolvedAmazonDomain }),
+  )
 
   const normalizedPayload = {
     shopping_results: normalizedItems,
@@ -181,6 +168,7 @@ export async function fetchRainforestProductDetailsByAsin({
   asins = [],
   rainforestApiKey,
   countryCode = 'US',
+  amazonDomain = '',
   readCache = async () => new Map(),
   writeCache = async () => {},
 }) {
@@ -188,7 +176,7 @@ export async function fetchRainforestProductDetailsByAsin({
     return new Map()
   }
 
-  const amazonDomain = getAmazonDomain(countryCode)
+  const resolvedAmazonDomain = getAmazonDomain({ countryCode, amazonDomain })
 
   return fetchProductDetailsWithCache({
     asins,
@@ -202,7 +190,7 @@ export async function fetchRainforestProductDetailsByAsin({
           const productUrl = new URL(RAINFOREST_ENDPOINT)
           productUrl.searchParams.set('type', 'product')
           productUrl.searchParams.set('asin', asin)
-          productUrl.searchParams.set('amazon_domain', amazonDomain)
+          productUrl.searchParams.set('amazon_domain', resolvedAmazonDomain)
           productUrl.searchParams.set('api_key', rainforestApiKey)
 
           const apiResponse = await fetch(productUrl, {

@@ -33,6 +33,7 @@ import {
   writeProductDetailsCacheEntries,
 } from './lib/search-storage.js'
 import { buildCacheKey, getEnv, validateSearchInput } from './lib/search-data.js'
+import { getAmazonDomainFromCountryCode, normalizeAmazonDomain } from '../shared/amazon-marketplaces.js'
 
 const PORT = Number(process.env.PORT || 8787)
 const ALLOWED_ORIGIN = getEnv('ALLOWED_ORIGIN') || (process.env.NODE_ENV === 'production' ? 'https://focama.vercel.app' : 'http://localhost:5173')
@@ -60,6 +61,23 @@ const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const RATE_LIMIT_WAIT_MESSAGE = 'Please wait about 10 seconds and try again.'
+
+function getRequestedAmazonDomain(value = '') {
+  return normalizeAmazonDomain(value)
+}
+
+function getAmazonMarketplaceScope(scope, amazonDomain = '') {
+  const normalizedAmazonDomain = getRequestedAmazonDomain(amazonDomain)
+  return normalizedAmazonDomain ? `${scope}:${normalizedAmazonDomain}` : scope
+}
+
+function resolveAmazonDomain({ requestUrl = null, body = null, countryCode = 'US' } = {}) {
+  const requestedAmazonDomain =
+    getRequestedAmazonDomain(body?.amazonDomain) ||
+    getRequestedAmazonDomain(requestUrl?.searchParams?.get('amazonDomain') || '')
+
+  return requestedAmazonDomain || getAmazonDomainFromCountryCode(countryCode)
+}
 function getRefinementModel() {
   return getEnv('OPENAI_REFINEMENT_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_REFINEMENT_MODEL
 }
@@ -280,6 +298,7 @@ function sanitizeExcludedCandidateIds(values) {
 function sanitizeFinalizeDiscoveryContext(body) {
   const query = typeof body?.query === 'string' ? body.query : ''
   const discoveryToken = truncateText(body?.discoveryToken, 300)
+  const amazonDomain = getRequestedAmazonDomain(body?.amazonDomain)
   const { error, isValid, normalizedQuery } = validateSearchInput(query, '')
 
   if (!isValid) {
@@ -297,6 +316,7 @@ function sanitizeFinalizeDiscoveryContext(body) {
   }
 
   return {
+    amazonDomain,
     discoveryToken,
     isValid: true,
     normalizedQuery,
@@ -498,7 +518,7 @@ function createDiscoveryToken() {
   return randomUUID()
 }
 
-async function resolveDiscoveryContext(normalizedQuery, discoveryToken) {
+async function resolveDiscoveryContext(normalizedQuery, discoveryToken, scopes = [CACHE_SCOPE_DISCOVERY, CACHE_SCOPE_RAINFOREST]) {
   const truncatedToken = truncateText(discoveryToken, 300)
 
   if (!truncatedToken) {
@@ -509,7 +529,7 @@ async function resolveDiscoveryContext(normalizedQuery, discoveryToken) {
     }
   }
 
-  for (const scope of [CACHE_SCOPE_DISCOVERY, CACHE_SCOPE_RAINFOREST]) {
+  for (const scope of scopes) {
     const { cachedEntry } = await readCachedSearchSnapshot({
       productQuery: normalizedQuery,
       details: '',
@@ -799,6 +819,8 @@ export async function handleDiscoverySearch(requestUrl, response, request = { he
 
   const clientIpAddress = getClientIpAddress(request.headers || {})
   const countryCode = getCountryCode(request.headers || {})
+  const amazonDomain = resolveAmazonDomain({ requestUrl, countryCode })
+  const rainforestScope = getAmazonMarketplaceScope(CACHE_SCOPE_RAINFOREST, amazonDomain)
   const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
 
   if (!rateLimit.allowed) {
@@ -994,12 +1016,12 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   }
 
   const normalizedDetails = ''
-  const discoveryCacheKey = buildCacheKey(normalizedQuery, normalizedDetails, CACHE_SCOPE_RAINFOREST)
+  const discoveryCacheKey = buildCacheKey(normalizedQuery, normalizedDetails, rainforestScope)
   const cacheLookupStartedAt = nowMs()
   const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
-    scope: CACHE_SCOPE_RAINFOREST,
+    scope: rainforestScope,
   })
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
 
@@ -1008,7 +1030,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       normalizedQuery,
       normalizedDetails,
       cachedEntry,
-      scope: CACHE_SCOPE_RAINFOREST,
+      scope: rainforestScope,
     })
     const cachedCandidateAwarePrior = getStoredCandidateAwarePrior(cachedEntry.selection)
 
@@ -1039,6 +1061,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
 
     sendJson(response, 200, {
       discoveryToken: tokenizedDiscovery.discoveryToken,
+      amazonDomain,
       candidatePool: tokenizedDiscovery.cachedEntry.candidatePool,
       previewResults: normalizedCachedResults,
       source: 'cache',
@@ -1062,7 +1085,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       reasonFallback: 'Returned by the Rainforest API search route',
       oxylabsUsername,
       oxylabsPassword,
-      countryCode,
+      amazonDomain,
     })
 
     if (artifactsError) {
@@ -1077,12 +1100,15 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       writeSearchSnapshot({
         productQuery: normalizedQuery,
         details: normalizedDetails,
-        candidatePool: artifacts.candidatePool,
+        candidatePool: {
+          ...artifacts.candidatePool,
+          amazonDomain,
+        },
         discoveryToken,
         results: artifacts.results,
         selection: buildDiscoveryPreviewSelection(artifacts.results),
         source: 'rainforest_discovery',
-        scope: CACHE_SCOPE_RAINFOREST,
+        scope: rainforestScope,
       }),
     )
 
@@ -1114,7 +1140,11 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
 
     sendJson(response, 200, {
       discoveryToken,
-      candidatePool: artifacts.candidatePool,
+      amazonDomain,
+      candidatePool: {
+        ...artifacts.candidatePool,
+        amazonDomain,
+      },
       previewResults: artifacts.results,
     }, {
       serverTiming: [
@@ -1615,6 +1645,7 @@ export async function handleEnrichmentPoll(request, response) {
   const requestUrl = new URL(request.url, 'http://localhost')
   const token = requestUrl.searchParams.get('token') || ''
   const query = requestUrl.searchParams.get('query') || ''
+  const amazonDomain = getRequestedAmazonDomain(requestUrl.searchParams.get('amazonDomain') || '')
 
   if (!token || !query) {
     sendJson(response, 400, { error: 'token and query are required.' })
@@ -1628,7 +1659,10 @@ export async function handleEnrichmentPoll(request, response) {
     return
   }
 
-  const resolvedDiscoveryContext = await resolveDiscoveryContext(normalizedQuery, token)
+  const enrichmentScopes = amazonDomain
+    ? [getAmazonMarketplaceScope(CACHE_SCOPE_RAINFOREST, amazonDomain)]
+    : [CACHE_SCOPE_DISCOVERY, CACHE_SCOPE_RAINFOREST]
+  const resolvedDiscoveryContext = await resolveDiscoveryContext(normalizedQuery, token, enrichmentScopes)
 
   if (!resolvedDiscoveryContext.isValid) {
     sendJson(response, resolvedDiscoveryContext.statusCode, { error: resolvedDiscoveryContext.error })
@@ -1702,9 +1736,13 @@ export async function handleFinalizeSelection(request, response) {
   }
 
   const cacheLookupStartedAt = nowMs()
+  const finalizeScopes = sanitizedDiscoveryContext.amazonDomain
+    ? [getAmazonMarketplaceScope(CACHE_SCOPE_RAINFOREST, sanitizedDiscoveryContext.amazonDomain)]
+    : [CACHE_SCOPE_DISCOVERY, CACHE_SCOPE_RAINFOREST]
   const resolvedDiscoveryContext = await resolveDiscoveryContext(
     sanitizedDiscoveryContext.normalizedQuery,
     sanitizedDiscoveryContext.discoveryToken,
+    finalizeScopes,
   )
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
 
@@ -1849,6 +1887,7 @@ export async function handleFinalizeSelection(request, response) {
       asins: nanoResult.lockedIds,
       oxylabsUsername,
       oxylabsPassword,
+      amazonDomain: sanitizedDiscoveryContext.amazonDomain,
       readCache: readProductDetailsCacheEntries,
       writeCache: writeProductDetailsCacheEntries,
     })

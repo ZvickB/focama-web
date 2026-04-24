@@ -4,11 +4,16 @@ import { LoaderCircle, Search, Sparkles } from 'lucide-react'
 
 import wordmark from '@/assets/wordmark.PNG'
 import { ProductDetailModal, ResultsSection, ResultSkeleton } from '@/components/home/HomeShared.jsx'
-import { RESULT_CARD_SLOTS, useGuidedSearch } from '@/components/home/useGuidedSearch.js'
+import {
+  AMAZON_MARKETPLACE_AUTO,
+  RESULT_CARD_SLOTS,
+  useGuidedSearch,
+} from '@/components/home/useGuidedSearch.js'
 import { Button } from '@/components/ui/button.jsx'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
 import { useSearchProgress } from '@/contexts/useSearchProgress.js'
+import { AMAZON_MARKETPLACES } from '../../../shared/amazon-marketplaces.js'
 
 const HERO_SUBLINE = "Tell us what you need. We'll find your six."
 const MotionParagraph = motion.p
@@ -230,7 +235,9 @@ function OpenLayout(props) {
     onShowProductsNow,
     prompt,
     resetToNewSearch,
+    selectedAmazonDomain,
     setFollowUpNotes,
+    setSelectedAmazonDomain,
     setProductQuery,
     showPreviewResults,
     showTimingPanel,
@@ -456,6 +463,31 @@ function OpenLayout(props) {
                   )}
                 </Button>
               </div>
+              <div className="mt-3 flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="amazon-marketplace" className="text-xs uppercase tracking-[0.14em] text-slate-500">
+                    Amazon marketplace
+                  </Label>
+                  <select
+                    id="amazon-marketplace"
+                    aria-label="Amazon marketplace"
+                    value={selectedAmazonDomain}
+                    onChange={(event) => setSelectedAmazonDomain(event.target.value)}
+                    disabled={isLoading || hasStartedSearch}
+                    className="h-11 min-w-[230px] rounded-[18px] border border-stone-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-primary/50 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-slate-400"
+                  >
+                    <option value={AMAZON_MARKETPLACE_AUTO}>Auto (based on your connection)</option>
+                    {AMAZON_MARKETPLACES.map((marketplace) => (
+                      <option key={marketplace.countryCode} value={marketplace.domain}>
+                        {marketplace.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-xs leading-5 text-slate-500">
+                  Pick one manually if a VPN or travel setup is sending you to the wrong Amazon store.
+                </p>
+              </div>
               {!hasStartedSearch ? (
                 <p className="mt-3 px-2 text-sm leading-6 text-slate-500">
                   Just the product for now — budget, size, and other details come next.
@@ -639,10 +671,12 @@ export function HomeExperience() {
     prompt: state.refinementPrompt,
     previousResults: state.previousResults,
     resetToNewSearch: state.resetToNewSearch,
+    selectedAmazonDomain: state.selectedAmazonDomain,
     selectionState: state.selectionState,
     retryCount: state.retryCount,
     retryFeedback: state.retryFeedback,
     setFollowUpNotes: state.setFollowUpNotes,
+    setSelectedAmazonDomain: state.setSelectedAmazonDomain,
     setProductQuery: state.setProductQuery,
     showFinalResultBadges: state.showFinalResultBadges,
     showTimingPanel,

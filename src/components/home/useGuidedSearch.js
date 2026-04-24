@@ -12,6 +12,7 @@ import { validateSearchInput } from '../../../shared/search-input.js'
 export const RESULT_CARD_COUNT = 6
 export const RESULT_CARD_SLOTS = Array.from({ length: RESULT_CARD_COUNT }, (_, index) => index)
 export const MAX_REFINEMENT_RETRIES = 2
+export const AMAZON_MARKETPLACE_AUTO = 'auto'
 const FINAL_RESULT_BADGE_REVEAL_DELAY_MS = 240
 const ENRICHMENT_POLL_INTERVAL_MS = 1500
 const ENRICHMENT_POLL_TIMEOUT_MS = 30000
@@ -63,6 +64,12 @@ function createExpiredSessionMessage() {
   return 'Your search session expired. Start a new search.'
 }
 
+function appendAmazonDomain(searchParams, amazonDomain) {
+  if (amazonDomain && amazonDomain !== AMAZON_MARKETPLACE_AUTO) {
+    searchParams.set('amazonDomain', amazonDomain)
+  }
+}
+
 async function readJsonResponse(response, requestStartedAt) {
   const responseReceivedAt = performance.now()
   const rawBody = await response.text()
@@ -104,8 +111,9 @@ async function readJsonResponse(response, requestStartedAt) {
   }
 }
 
-async function fetchDiscoveryResults(query) {
+async function fetchDiscoveryResults(query, amazonDomain = AMAZON_MARKETPLACE_AUTO) {
   const searchParams = new URLSearchParams({ query })
+  appendAmazonDomain(searchParams, amazonDomain)
   const requestStartedAt = performance.now()
   const response = await fetch(`/api/search/rainforest-discover?${searchParams.toString()}`)
   return readJsonResponse(response, requestStartedAt)
@@ -127,6 +135,7 @@ async function fetchFramingFields(query) {
 
 async function finalizeGuidedSearch({
   query,
+  amazonDomain,
   discoveryToken,
   followUpNotes,
   rejectionFeedback,
@@ -144,6 +153,7 @@ async function finalizeGuidedSearch({
     signal,
     body: JSON.stringify({
       query,
+      amazonDomain,
       discoveryToken,
       followUpNotes,
       rejectionFeedback,
@@ -156,8 +166,9 @@ async function finalizeGuidedSearch({
   return readJsonResponse(response, requestStartedAt)
 }
 
-async function fetchEnrichment({ token, query }) {
+async function fetchEnrichment({ token, query, amazonDomain }) {
   const searchParams = new URLSearchParams({ token, query })
+  appendAmazonDomain(searchParams, amazonDomain)
   const requestStartedAt = performance.now()
   const response = await fetch(`/api/search/enrichment?${searchParams.toString()}`)
   return readJsonResponse(response, requestStartedAt)
@@ -281,6 +292,8 @@ export function resolveSelectedProductForDisplay({
 export function useGuidedSearch() {
   const backgroundFramingDisabled = isBackgroundFramingDisabled()
   const [productQuery, setProductQuery] = useState('')
+  const [selectedAmazonDomain, setSelectedAmazonDomain] = useState(AMAZON_MARKETPLACE_AUTO)
+  const [submittedAmazonDomain, setSubmittedAmazonDomain] = useState('')
   const [selectedProductState, setSelectedProductState] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [hasStartedSearch, setHasStartedSearch] = useState(false)
@@ -349,7 +362,7 @@ export function useGuidedSearch() {
     setErrorMessage(message)
   }
 
-  function startEnrichmentPolling({ token, query, searchId }) {
+  function startEnrichmentPolling({ token, query, searchId, amazonDomain }) {
     if (window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__) return
     stopEnrichmentPolling()
     enrichmentPollRef.current.searchId = searchId
@@ -368,7 +381,7 @@ export function useGuidedSearch() {
         }
 
         try {
-          const payload = await fetchEnrichment({ token, query })
+          const payload = await fetchEnrichment({ token, query, amazonDomain })
 
           if (enrichmentPollRef.current.searchId !== searchId) {
             return
@@ -416,7 +429,12 @@ export function useGuidedSearch() {
     const pollSearchId = activeSearchIdRef.current
 
     if (!hasInlineEnrichment && token && query && finalizedResults.length > 0) {
-      startEnrichmentPolling({ token, query, searchId: pollSearchId })
+      startEnrichmentPolling({
+        token,
+        query,
+        searchId: pollSearchId,
+        amazonDomain: submittedAmazonDomain,
+      })
     }
     setRequestTiming((current) => ({
       ...current,
@@ -531,10 +549,11 @@ export function useGuidedSearch() {
     selectedProduct: selectedProductState,
   })
 
-  function resetGuidedState(nextSubmittedQuery) {
+  function resetGuidedState(nextSubmittedQuery, nextSubmittedAmazonDomain = '') {
     stopEnrichmentPolling()
     setHasStartedSearch(true)
     setSubmittedQuery(nextSubmittedQuery)
+    setSubmittedAmazonDomain(nextSubmittedAmazonDomain)
     setSelectedProductState(null)
     setErrorMessage('')
     setDiscoveryToken('')
@@ -570,6 +589,7 @@ export function useGuidedSearch() {
     setErrorMessage('')
     setHasStartedSearch(false)
     setSubmittedQuery('')
+    setSubmittedAmazonDomain('')
     setDiscoveryToken('')
     setCandidatePool(null)
     setPreviewResults([])
@@ -611,10 +631,11 @@ export function useGuidedSearch() {
     activeSearchIdRef.current = nextSearchId
     const analyticsSearchId = createAnalyticsSearchId()
     const analyticsSessionId = getOrCreateAnalyticsSessionId()
+    const nextAmazonDomain = selectedAmazonDomain
     analyticsSearchIdRef.current = analyticsSearchId
     analyticsSessionIdRef.current = analyticsSessionId
 
-    resetGuidedState(normalizedQuery)
+    resetGuidedState(normalizedQuery, nextAmazonDomain)
     setIsDiscovering(true)
     setIsGeneratingPrompt(true)
 
@@ -639,7 +660,7 @@ export function useGuidedSearch() {
       },
     })
 
-    fetchDiscoveryResults(normalizedQuery)
+    fetchDiscoveryResults(normalizedQuery, nextAmazonDomain)
       .then((payload) => {
         if (activeSearchIdRef.current !== nextSearchId) {
           return
@@ -653,6 +674,7 @@ export function useGuidedSearch() {
         }
 
         setDiscoveryToken(payload.discoveryToken || '')
+        setSubmittedAmazonDomain(payload.amazonDomain || nextAmazonDomain)
         setCandidatePool(payload.candidatePool || null)
         setPreviewResults(payload.previewResults || [])
         setRequestTiming((current) => ({
@@ -807,6 +829,7 @@ export function useGuidedSearch() {
     if (normalizedFollowUpNotes) {
       const nextFinalizeRequest = {
         query: submittedQuery,
+        amazonDomain: submittedAmazonDomain,
         discoveryToken,
         originalCandidatePool: candidatePool,
         followUpNotes,
@@ -823,6 +846,7 @@ export function useGuidedSearch() {
 
     const nextFinalizeRequest = {
       query: submittedQuery,
+      amazonDomain: submittedAmazonDomain,
       discoveryToken,
       originalCandidatePool: candidatePool,
       followUpNotes: '',
@@ -899,6 +923,7 @@ export function useGuidedSearch() {
 
     const nextFinalizeRequest = {
       query: submittedQuery,
+      amazonDomain: submittedAmazonDomain,
       discoveryToken,
       originalCandidatePool: candidatePool,
       followUpNotes,
@@ -983,6 +1008,7 @@ export function useGuidedSearch() {
     queryFramingFields,
     requestTiming,
     refinementPrompt,
+    selectedAmazonDomain,
     selectionState,
     retryCount,
     retryFeedback,
@@ -997,6 +1023,7 @@ export function useGuidedSearch() {
     resetToNewSearch,
     setRetryFeedback,
     setFollowUpNotes,
+    setSelectedAmazonDomain,
     setProductQuery,
     setSelectedProduct: setSelectedProductState,
   }
