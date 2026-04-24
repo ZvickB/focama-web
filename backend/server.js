@@ -997,6 +997,8 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
 
   const clientIpAddress = getClientIpAddress(request.headers || {})
   const countryCode = getCountryCode(request.headers || {})
+  const amazonDomain = resolveAmazonDomain({ requestUrl, countryCode })
+  const rainforestScope = getAmazonMarketplaceScope(CACHE_SCOPE_RAINFOREST, amazonDomain)
   const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
 
   if (!rateLimit.allowed) {

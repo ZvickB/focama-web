@@ -8,6 +8,10 @@ const handleDiscoverySearch = vi.fn((requestUrl, response) => {
   response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
   response.end(JSON.stringify({ pathname: requestUrl.pathname }))
 })
+const handleRainforestDiscoverySearch = vi.fn((requestUrl, response) => {
+  response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+  response.end(JSON.stringify({ pathname: requestUrl.pathname }))
+})
 const handleQueryFramingFields = vi.fn((requestUrl, response) => {
   response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
   response.end(JSON.stringify({ pathname: requestUrl.pathname }))
@@ -35,13 +39,13 @@ const handleFinalizeSelection = vi.fn((request, response) => {
     response.end(rawBody)
   })
 })
-
 vi.mock('../../backend/server.js', () => ({
   handleDiscoverySearch,
   handleEnrichmentPoll,
   handleQueryFramingFields,
   handleFinalizeSelection,
   handleLiveSearch,
+  handleRainforestDiscoverySearch,
 }))
 
 const { GET: getLiveSearch } = await import('./live.js')
@@ -49,6 +53,7 @@ const { GET: getDiscoverySearch } = await import('./discover.js')
 const { GET: getEnrichmentPoll } = await import('./enrichment.js')
 const { GET: getQueryFramingFields } = await import('./framing-fields.js')
 const { POST: postFinalizeSelection } = await import('./finalize.js')
+const { GET: getRainforestDiscoverySearch } = await import('./rainforest-discover.js')
 
 describe('Vercel search route wrappers', () => {
   afterEach(() => {
@@ -76,6 +81,33 @@ describe('Vercel search route wrappers', () => {
     const forwardedRequest = handleDiscoverySearch.mock.calls[0][2]
     expect(Object.fromEntries(forwardedRequest.headers.entries())).toMatchObject({
       'x-forwarded-for': '203.0.113.30',
+    })
+  })
+
+  it('forwards request headers into the rainforest discovery wrapper', async () => {
+    const request = new Request('https://example.com/api/search/rainforest-discover?query=stroller&amazonDomain=amazon.ca', {
+      headers: {
+        'x-forwarded-for': '203.0.113.34',
+      },
+    })
+
+    const response = await getRainforestDiscoverySearch(request)
+
+    expect(response.status).toBe(200)
+    expect(handleRainforestDiscoverySearch).toHaveBeenCalledWith(
+      expect.any(URL),
+      expect.any(Object),
+      expect.objectContaining({
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const forwardedRequest = handleRainforestDiscoverySearch.mock.calls[0][2]
+    expect(Object.fromEntries(forwardedRequest.headers.entries())).toMatchObject({
+      'x-forwarded-for': '203.0.113.34',
+    })
+    expect(await response.json()).toEqual({
+      pathname: '/api/search/rainforest-discover',
     })
   })
 
@@ -181,6 +213,22 @@ describe('Vercel search route wrappers', () => {
         discoveryToken: 'opaque-discovery-token',
       }),
     )
+  })
+
+  it('returns a JSON 500 response when a wrapped GET handler throws before writing a response', async () => {
+    handleRainforestDiscoverySearch.mockImplementationOnce(() => {
+      throw new Error('rainforest scope missing')
+    })
+
+    const request = new Request('https://example.com/api/search/rainforest-discover?query=stroller')
+
+    const response = await getRainforestDiscoverySearch(request)
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Internal server error.',
+      details: 'rainforest scope missing',
+    })
   })
 
 })
