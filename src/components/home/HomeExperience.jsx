@@ -1,11 +1,10 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { ChevronDown, LoaderCircle, Search, Sparkles } from 'lucide-react'
+import { LoaderCircle, Search, Sparkles } from 'lucide-react'
 
 import wordmark from '@/assets/wordmark.PNG'
 import { ProductDetailModal, ResultsSection, ResultSkeleton } from '@/components/home/HomeShared.jsx'
 import {
-  AMAZON_MARKETPLACE_AUTO,
   RESULT_CARD_SLOTS,
   useGuidedSearch,
 } from '@/components/home/useGuidedSearch.js'
@@ -13,7 +12,6 @@ import { Button } from '@/components/ui/button.jsx'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
 import { useSearchProgress } from '@/contexts/useSearchProgress.js'
-import { AMAZON_MARKETPLACES } from '../../../shared/amazon-marketplaces.js'
 
 const HERO_SUBLINE = "Tell us what you need. We'll find your six."
 const MotionParagraph = motion.p
@@ -215,155 +213,6 @@ function TimingPanel({ requestTiming }) {
   )
 }
 
-function countryCodeToFlag(code) {
-  return [...code.toUpperCase()]
-    .map((c) => String.fromCodePoint(127397 + c.charCodeAt(0)))
-    .join('')
-}
-
-function AmazonStorePill({ selectedAmazonDomain, setSelectedAmazonDomain, disabled }) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [detectedCountryCode, setDetectedCountryCode] = useState(null)
-  const containerRef = useRef(null)
-  const popoverId = useId()
-
-  useEffect(() => {
-    if (window.__FOCAMAI_DISABLE_GEO_FETCH__) return undefined
-    fetch('/api/geo')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.countryCode) setDetectedCountryCode(data.countryCode)
-      })
-      .catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    if (!isOpen) return undefined
-    function handleOutsideClick(event) {
-      if (containerRef.current && !containerRef.current.contains(event.target)) {
-        setIsOpen(false)
-      }
-    }
-    document.addEventListener('pointerdown', handleOutsideClick)
-    return () => document.removeEventListener('pointerdown', handleOutsideClick)
-  }, [isOpen])
-
-  const isAuto = selectedAmazonDomain === AMAZON_MARKETPLACE_AUTO
-  const selectedMarketplace = AMAZON_MARKETPLACES.find((m) => m.domain === selectedAmazonDomain)
-
-  let pillFlag, pillLabel
-  if (isAuto) {
-    pillFlag = detectedCountryCode ? countryCodeToFlag(detectedCountryCode) : '🌐'
-    pillLabel = detectedCountryCode ?? 'Auto'
-  } else {
-    pillFlag = selectedMarketplace ? countryCodeToFlag(selectedMarketplace.countryCode) : '🌐'
-    pillLabel = selectedMarketplace?.countryCode ?? 'Auto'
-  }
-
-  function handleSelect(domain) {
-    setSelectedAmazonDomain(domain)
-    setIsOpen(false)
-  }
-
-  function handleTriggerKeyDown(event) {
-    if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      setIsOpen(true)
-      return
-    }
-
-    if (event.key === 'Escape') {
-      setIsOpen(false)
-    }
-  }
-
-  function handlePopoverKeyDown(event) {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      setIsOpen(false)
-    }
-  }
-
-  return (
-    <div ref={containerRef} className="relative inline-block">
-      <button
-        type="button"
-        onClick={() => setIsOpen((o) => !o)}
-        onKeyDown={handleTriggerKeyDown}
-        disabled={disabled}
-        aria-label="Change Amazon store"
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
-        aria-controls={isOpen ? popoverId : undefined}
-        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3.5 py-2 text-sm text-slate-600 transition hover:border-stone-300 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <span aria-hidden="true">{pillFlag}</span>
-        <span>{pillLabel}</span>
-        <ChevronDown
-          className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
-        />
-      </button>
-
-      {isOpen ? (
-        <div
-          id={popoverId}
-          role="listbox"
-          aria-label="Amazon store options"
-          onKeyDown={handlePopoverKeyDown}
-          className="absolute left-0 top-full z-50 mt-1.5 w-64 max-w-[calc(100vw-2rem)] rounded-[20px] border border-stone-200 bg-white py-1.5 shadow-[0_8px_32px_-8px_rgba(15,23,42,0.18)]"
-        >
-          <div className="max-h-72 overflow-y-auto">
-            <button
-              type="button"
-              onClick={() => handleSelect(AMAZON_MARKETPLACE_AUTO)}
-              role="option"
-              aria-selected={isAuto}
-              className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-stone-50 ${
-                isAuto ? 'text-primary' : 'text-slate-700'
-              }`}
-            >
-              <span aria-hidden="true" className="text-base">
-                🌐
-              </span>
-              <span className="flex-1">
-                <span className="block font-medium">Auto</span>
-                <span className="block text-xs text-slate-400">
-                  {detectedCountryCode ? `Detected: ${detectedCountryCode}` : 'Based on your connection'}
-                </span>
-              </span>
-              {isAuto ? <span className="h-1.5 w-1.5 rounded-full bg-primary" /> : null}
-            </button>
-
-            <div className="my-1 border-t border-stone-100" />
-
-            {AMAZON_MARKETPLACES.map((marketplace) => {
-              const isSelected = !isAuto && selectedAmazonDomain === marketplace.domain
-              return (
-                <button
-                  key={marketplace.countryCode}
-                  type="button"
-                  onClick={() => handleSelect(marketplace.domain)}
-                  role="option"
-                  aria-selected={isSelected}
-                  className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-stone-50 ${
-                    isSelected ? 'text-primary' : 'text-slate-700'
-                  }`}
-                >
-                  <span aria-hidden="true" className="text-base">
-                    {countryCodeToFlag(marketplace.countryCode)}
-                  </span>
-                  <span className="flex-1">{marketplace.label}</span>
-                  {isSelected ? <span className="h-1.5 w-1.5 rounded-full bg-primary" /> : null}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
 function OpenLayout(props) {
   const refinementRef = useRef(null)
   const resultsViewportRef = useRef(null)
@@ -384,9 +233,7 @@ function OpenLayout(props) {
     onShowProductsNow,
     prompt,
     resetToNewSearch,
-    selectedAmazonDomain,
     setFollowUpNotes,
-    setSelectedAmazonDomain,
     setProductQuery,
     showPreviewResults,
     showTimingPanel,
@@ -527,15 +374,6 @@ function OpenLayout(props) {
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full border-b border-stone-200/60 bg-white/80 px-4 py-2.5 backdrop-blur sm:px-6">
-        <div className="mx-auto flex max-w-7xl justify-end">
-          <AmazonStorePill
-            selectedAmazonDomain={selectedAmazonDomain}
-            setSelectedAmazonDomain={setSelectedAmazonDomain}
-            disabled={isLoading}
-          />
-        </div>
-      </header>
       <main className="px-3 pt-4 pb-6 sm:px-6 sm:pt-5 sm:pb-8 lg:px-6 xl:px-8">
       <div className="mx-auto flex max-w-7xl flex-col items-center gap-8">
         <section className="w-full max-w-4xl space-y-6 text-center">
@@ -825,12 +663,10 @@ export function HomeExperience() {
     prompt: state.refinementPrompt,
     previousResults: state.previousResults,
     resetToNewSearch: state.resetToNewSearch,
-    selectedAmazonDomain: state.selectedAmazonDomain,
     selectionState: state.selectionState,
     retryCount: state.retryCount,
     retryFeedback: state.retryFeedback,
     setFollowUpNotes: state.setFollowUpNotes,
-    setSelectedAmazonDomain: state.setSelectedAmazonDomain,
     setProductQuery: state.setProductQuery,
     showFinalResultBadges: state.showFinalResultBadges,
     showTimingPanel,

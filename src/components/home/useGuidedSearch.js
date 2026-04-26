@@ -7,12 +7,13 @@ import {
   trackAnalytics,
 } from '@/lib/analytics.js'
 import { enrichFinalResultsForDisplay } from '@/components/home/resultPresentation.js'
+import { AMAZON_MARKETPLACE_AUTO, useAmazonStore } from '@/contexts/AmazonStoreContext.jsx'
 import { validateSearchInput } from '../../../shared/search-input.js'
 
+export { AMAZON_MARKETPLACE_AUTO }
 export const RESULT_CARD_COUNT = 6
 export const RESULT_CARD_SLOTS = Array.from({ length: RESULT_CARD_COUNT }, (_, index) => index)
 export const MAX_REFINEMENT_RETRIES = 2
-export const AMAZON_MARKETPLACE_AUTO = 'auto'
 const FINAL_RESULT_BADGE_REVEAL_DELAY_MS = 240
 const ENRICHMENT_POLL_INTERVAL_MS = 1500
 const ENRICHMENT_POLL_TIMEOUT_MS = 30000
@@ -314,7 +315,7 @@ export function resolveSelectedProductForDisplay({
 export function useGuidedSearch() {
   const backgroundFramingDisabled = isBackgroundFramingDisabled()
   const [productQuery, setProductQuery] = useState('')
-  const [selectedAmazonDomain, setSelectedAmazonDomain] = useState(AMAZON_MARKETPLACE_AUTO)
+  const { selectedAmazonDomain, setSelectedAmazonDomain } = useAmazonStore()
   const [submittedAmazonDomain, setSubmittedAmazonDomain] = useState('')
   const [selectedProductState, setSelectedProductState] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')

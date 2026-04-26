@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import logo from '@/assets/logo_header_mark.svg'
+import { AmazonStorePill } from '@/components/AmazonStorePill.jsx'
 import { useSearchProgress } from '@/contexts/useSearchProgress.js'
 
 const navItems = [
@@ -117,6 +118,7 @@ function SiteLayout() {
   const [mobileMenuOpenPath, setMobileMenuOpenPath] = useState(null)
   const location = useLocation()
   const isMobileMenuOpen = mobileMenuOpenPath === location.pathname
+  const isHomePage = location.pathname === '/'
   const { progress } = useSearchProgress()
 
   useEffect(() => {
@@ -191,7 +193,8 @@ function SiteLayout() {
           <div className="hidden flex-1 items-center justify-center lg:flex">
             <SearchStepIndicator progress={progress} />
           </div>
-          <div className="hidden sm:block">
+          <div className="hidden sm:flex sm:items-center sm:gap-3">
+            {isHomePage ? <AmazonStorePill variant="header" /> : null}
             <SlidingNav items={navItems} />
           </div>
         </div>
@@ -217,6 +220,12 @@ function SiteLayout() {
                 {item.label}
               </NavLink>
             ))}
+            {isHomePage ? (
+              <div className="flex items-center gap-2 px-1 pt-1 text-xs text-slate-400">
+                <span>Amazon store:</span>
+                <AmazonStorePill variant="header" />
+              </div>
+            ) : null}
           </div>
         </div>
       </header>

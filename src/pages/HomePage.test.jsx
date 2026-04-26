@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
+import SiteLayout from '@/components/SiteLayout.jsx'
+import { AmazonStoreProvider } from '@/contexts/AmazonStoreContext.jsx'
+import { SearchProgressProvider } from '@/contexts/SearchProgressContext.jsx'
 import HomePage from './HomePage.jsx'
 
 function createMockResult(overrides = {}) {
@@ -35,9 +39,19 @@ function renderHomePage() {
   })
 
   return render(
-    <QueryClientProvider client={queryClient}>
-      <HomePage />
-    </QueryClientProvider>,
+    <MemoryRouter initialEntries={['/']}>
+      <QueryClientProvider client={queryClient}>
+        <AmazonStoreProvider>
+          <SearchProgressProvider>
+            <Routes>
+              <Route element={<SiteLayout />}>
+                <Route path="/" element={<HomePage />} />
+              </Route>
+            </Routes>
+          </SearchProgressProvider>
+        </AmazonStoreProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
   )
 }
 
@@ -270,7 +284,7 @@ describe('HomePage', () => {
 
     renderHomePage()
 
-    await user.click(screen.getByRole('button', { name: /change amazon store/i }))
+    await user.click(screen.getAllByRole('button', { name: /change amazon store/i })[0])
     await user.click(screen.getByText('Canada'))
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
