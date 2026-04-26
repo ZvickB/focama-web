@@ -18,7 +18,7 @@
 - The current frontend uses the PNG wordmark and Instrument Sans.
 - A true HTML boot splash starts in `index.html`, shows the PNG wordmark plus `Focused shopping`, includes a static header shell, and fades after React is ready and the splash has been visible for about 1 second.
 - Search/refine copy now tells users to start with a normal product search and use the refine step for natural-language narrowing such as budget, size, comfort, style, or use case.
-- The homepage supports preview results, final focused picks, a `Start a new search` reset path, and up to 2 feedback-based retry passes that exclude rejected shortlist items.
+- The homepage supports preview results, final focused picks, a `Start a new search` reset path, and up to 2 same-pool retry passes that exclude rejected shortlist items. Retries now go through an AI advice step first (`/api/search/retry-advice`), which suggests a new search query before the user decides whether to retry or start fresh.
 
 ## Prewarm status
 - Prewarm is fully removed from the codebase (completed 2026-04-17).
@@ -26,11 +26,12 @@
 
 ## Current backend state
 - The primary product flow is guided search:
-  - `/api/search/discover`
+  - `/api/search/rainforest-discover` (primary homepage discovery; `/api/search/discover` is the legacy SerpApi path, preserved for scripts/tests)
   - `/api/search/refine`
   - `/api/search/framing-fields`
   - `/api/search/finalize`
   - `/api/search/enrichment` (async polling)
+  - `/api/search/retry-advice` (POST; AI-powered advice before retry — returns `recommendation`, `suggestedQuery`, `rationale`)
 - `/api/search/live` is the explicit manual/debug combined route, not the primary product path.
 - Guided discovery is the persistent search-cache boundary; guided finalize and live search remain intentionally uncached.
 - `/api/search/discover` returns a preview set plus `discoveryToken`; finalize reconstructs the rich candidate pool from guided discovery cache instead of trusting a browser-posted pool.
@@ -87,15 +88,15 @@ Key outcomes:
 - One-call stream experiment measured and concluded; nano-lock + mini async-enrichment is the wired path.
 
 ## Environment notes
-- Required for live search/AI: `SERPAPI_API_KEY`, `OPENAI_API_KEY`.
+- Required for live search/AI: `SERPAPI_API_KEY`, `OPENAI_API_KEY`, `OXYLABS_USERNAME`, `OXYLABS_PASSWORD` (Oxylabs powers the primary Rainforest-named discovery and finalize product-detail fetch).
 - Optional model overrides: `OPENAI_MODEL`, `OPENAI_REFINEMENT_MODEL`, `OPENAI_FINALIZE_MODEL`, `OPENAI_FINALIZE_CONTEXT_MODEL`, `OPENAI_FINALIZE_EMPTY_MODEL`.
 - Optional Supabase config: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`; legacy `SUPABASE_SERVICE_ROLE_KEY` is also accepted.
 - `SEARCH_CACHE_TTL_MINUTES` defaults to `1440`.
 - Work happens in PowerShell on Windows. Never print raw `.env` secret values.
 
 ## Recommended next task
-- Nano-lock + mini async-enrichment is wired and tests pass. Next logical steps:
-  - Verify the golden path in the browser: do cards appear fast, does the modal populate when enrichment arrives?
-  - Review product voice in mini's honest-caveat copy against the office chair reference example in CLAUDE.md.
-  - When ready to switch providers, replace the current finalize import/call in `backend/server.js` so it uses `fetchRainforestProductDetailsByAsin` instead of `fetchOxylabsProductDetailsByAsin`.
+- Retry redesign is partially landed (`/api/search/retry-advice` wired, UI advice card implemented, new copy in place). Remaining:
+  - Wire same-pool retry as a secondary option — `handleRetryWithFeedback` exists in the hook but is not exported or connected to the UI.
+  - Confirm the "Search this instead" suggested-query flow works end-to-end in the browser.
   - Decide whether to keep the `selectAiResults` path in `ai-selector.js` or clean it up since finalize no longer calls it directly.
+  - When ready to switch providers, replace the current finalize import/call in `backend/server.js` so it uses `fetchRainforestProductDetailsByAsin` instead of `fetchOxylabsProductDetailsByAsin`.

@@ -29,7 +29,7 @@ AI maintains this file. Each item should be one plain sentence.
 | done | Add stagger rise entrance animation to result cards using Motion — y:12→0, duration 0.45s, stagger 0.13s, replaces CSS state machine |
 | done | Replace manual timer animation in `RefinementCopy` with Motion `AnimatePresence` — removed 3 state vars and 2 useEffects |
 | done | Add scale + fade entrance/exit to `ProductDetailModal` using Motion `AnimatePresence` |
-| pending | When Amazon bullet point descriptions are available, surface them on product cards or in the modal so users can read them before AI personalization loads |
+| done | When Amazon bullet point descriptions are available, surface them on product cards or in the modal so users can read them before AI personalization loads |
 | done | Add a shimmer or skeleton animation to the AI personalization area while it is still generating, so users can see it is actively loading |
 | done | Make the "Show products now" button more visually prominent — it should be obvious and inviting, not easy to miss |
 | done | Widen the results container on desktop — currently too narrow and leaves dead space on wide monitors |
@@ -40,7 +40,7 @@ AI maintains this file. Each item should be one plain sentence.
 | done | Add an empty / no-good-results screen so the page isn't just blank when nothing comes back |
 | pending | Improve low-confidence search handling — weak or ambiguous searches should get a clearer fallback message instead of showing poor results silently |
 | pending | Pool mismatch nudge — when the discovery pool doesn't match the user's follow-up context (e.g. searched "lego", context was "for a 9-year-old" but pool was adult sets), show closest results and suggest a better search query derived from their own context |
-| pending | "Nothing here for me" escape hatch — if results don't match what the user wanted, offer an AI-generated improved search query (based on their original query + follow-up context) that triggers a fresh search, rather than relying on re-picking from the same candidate pool |
+| done | "Nothing here for me" escape hatch — `/api/search/retry-advice` generates a `suggestedQuery` shown in an editable card with "Search this instead"; clicking it resets to a fresh full search |
 | done | Recheck mobile product-detail sheet behavior and CTA placement |
 | pending | Replace the About page with a "Why Focamai" page explaining the product |
 | pending | Update header/nav links to point to Why Focamai once the page exists |
@@ -56,7 +56,7 @@ AI maintains this file. Each item should be one plain sentence.
 |--------|------|
 | done | Add timeouts to SerpApi and OpenAI calls — right now a slow or hung response silently stalls the whole request |
 | done | Pass user location to both Rainforest API and SerpApi so results default to localized pricing, availability, and listings |
-| pending | Trim `server.js` — route logic, request parsing, and business logic are all mixed in one 1300+ line file |
+| pending | Trim `server.js` — route logic, request parsing, and business logic are all mixed in one 2400+ line file |
 | done | Strip internal error details from API error responses before public launch |
 | done | Add unit tests for getCountryCode, getAmazonDomain, and ErrorBoundary |
 
@@ -72,7 +72,7 @@ AI maintains this file. Each item should be one plain sentence.
 | done | Add a React Error Boundary so a JS crash doesn't white-screen the whole app |
 | pending | Keep the discovery token opaque and random instead of query-derived so browser-visible session IDs are not guessable |
 | pending | Decide how strong rate limiting and abuse protection need to be before broader sharing |
-| pending | Add `Vary: Origin` header to API responses so CDN/proxy caches don't serve the wrong CORS headers to different origins |
+| done | Add `Vary: Origin` header to API responses so CDN/proxy caches don't serve the wrong CORS headers to different origins |
 
 ---
 
@@ -82,7 +82,7 @@ AI maintains this file. Each item should be one plain sentence.
 |--------|------|
 | pending | Add a Supabase cleanup job to delete expired cache and rate-limit rows — they accumulate forever right now |
 | pending | Fix the rate limit race condition in Supabase — concurrent requests can slip through the counter |
-| pending | Create the four funnel analytics tables in Supabase — SQL is ready in `project-notes/analytics-funnel-schema.sql`, just needs to be run |
+| done | Create the four funnel analytics tables in Supabase — SQL is ready in `project-notes/analytics-funnel-schema.sql`, just needs to be run |
 
 ---
 
@@ -90,8 +90,8 @@ AI maintains this file. Each item should be one plain sentence.
 
 | Status | Item |
 |--------|------|
-| next | Wire the backend to write to the four analytics tables so funnel data starts collecting from first real users |
-| next | Wire frontend click and impression events so card views and retailer clicks are recorded |
+| done | Wire the backend to write to the four analytics tables so funnel data starts collecting from first real users |
+| done | Wire frontend click and impression events so card views and retailer clicks are recorded |
 | pending | Write basic Supabase queries to read the funnel analytics tables — search-to-finalize rate, click rate by position, retry rate |
 | pending | Add per-layer timing logging so each search step (discover, refine, finalize, enrichment) can be measured and compared independently |
 

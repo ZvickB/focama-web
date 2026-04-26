@@ -7,8 +7,9 @@
 
 ## Current reality
 - The app is live on Vercel.
-- The homepage uses the `open` layout and the guided `/api/search/discover -> /api/search/refine -> /api/search/finalize -> /api/search/enrichment` product path.
-- `/api/search/framing-fields` runs as a background lane; prewarm is being removed.
+- The homepage uses the `open` layout and the guided `/api/search/rainforest-discover -> /api/search/refine -> /api/search/finalize -> /api/search/enrichment` product path. `/api/search/discover` is the legacy SerpApi path, preserved for scripts and tests.
+- `/api/search/framing-fields` runs as a background lane; prewarm is fully removed (2026-04-17).
+- `/api/search/retry-advice` is a live POST route — generates AI-powered suggested queries when users reject results, powering the "Search this instead" retry path.
 - `/api/search/live` remains an explicit manual/debug combined route.
 - Product shortlists are 6 results.
 - Rainforest API is the primary discovery endpoint; SerpAPI is preserved as secondary fallback.
@@ -58,7 +59,7 @@ Summary:
 - After products load, add a concise explanation prompt such as `We think the best choice is X. Click to find out why.` Use tap-oriented wording on small screens.
 - Improve low-confidence search handling so weak or ambiguous searches get a clearer fallback.
 - Decide whether to add post-search quality checks in addition to current pre-search validation.
-- **Pool mismatch detection + query nudge (not yet designed):** when finalize returns fewer than 6 strong picks and the follow-up context looks like it would have made a better first query (e.g. user searched "lego", context was "for a 9 year old" but the pool was all adult collector sets), the app should: (1) still show the closest available results so the screen isn't empty, and (2) offer an honest nudge like "These are the closest matches we found, but for better results try starting a new search with 'lego sets for kids'". The suggested query should be derived from the user's own follow-up context, not invented. Trigger only when the pool-to-context mismatch is clear — don't fire on strong shortlists. This directly addresses the case where the bare discovery query was too generic for the user's real intent.
+- **Pool mismatch detection + query nudge (escape hatch done; proactive detection not yet built):** the reactive half is wired — `/api/search/retry-advice` analyzes rejection feedback and suggests an editable new search query ("Search this instead") when the user signals the pool was wrong. The proactive half — detecting a pool-to-context mismatch *before* the user complains (e.g. searched "lego", context was "for a 9 year old" but pool was adult collector sets) and surfacing a nudge without waiting for explicit rejection — is still not designed or built.
 - Keep rule-based filtering focused on removing junk, duplicates, and weak candidates rather than making the final shortlist by itself.
 - Keep the textarea context/details as the main AI final-selection signal.
 - Keep ratings and review counts as important supporting quality signals.
@@ -74,9 +75,7 @@ Summary:
 
 ## Nice-to-have polish
 - Do another small pass on result-card readability and image overlays.
-- Recheck mobile product-detail sheet behavior and CTA placement.
 - Continue polishing the default open homepage based on tester feedback.
-- Add a clearer empty/no-good-results state.
 - Add a tiny admin/debug view or lightweight internal tool for checking cache hit/miss behavior without one-off scripts.
 
 ## Open questions — not yet designed
@@ -95,7 +94,7 @@ The harder question: as the ASIN detail cache grows, should the AI be fed cached
 - Use AI for preference learning only where it materially helps, such as interpreting free-text feedback.
 
 ## Filtering direction
-- Rule-based filtering should clean the raw SerpApi pool first:
+- Rule-based filtering should clean the raw candidate pool first (Oxylabs/Rainforest for the primary path, SerpApi for the secondary fallback):
   - remove garbage
   - remove duplicates or near-duplicates
   - down-rank weak listings

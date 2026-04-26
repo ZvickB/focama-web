@@ -6,7 +6,7 @@
 
 ## What the app needs right now
 
-These are the Supabase tables the current app uses today when Supabase-backed storage and shared rate limiting are enabled.
+These are the Supabase tables the current app uses today when Supabase-backed storage and shared rate limiting are enabled. This includes the analytics tables — they are already wired in the backend and frontend, not future work.
 
 ### 1. `search_cache`
 Why this table is needed:
@@ -70,6 +70,44 @@ Semantics:
 - There is no expiry-based deletion for this table.
 - No extra index is needed because reads are primary-key lookups by `asin`.
 
+### 5. `analytics_search_runs`
+Why this table is needed:
+- It gives each search flow a stable `search_id` that ties all events and clicks together.
+- It records whether the user entered the AI refinement step, chose `Show products now`, completed finalize, or retried.
+- It is written by `/api/analytics/track` via `upsertAnalyticsSearchRun` in `backend/lib/search-storage.js`.
+
+Plain-language summary:
+- `analytics_search_runs` is the anchor row for everything the user does in one search session.
+
+### 6. `analytics_search_events`
+Why this table is needed:
+- It records the flow steps (e.g. `search_started`, `refine_viewed`, `ai_followup_submitted`, `final_results_shown`, `retry_started`) without forcing every event into fixed columns.
+- It lets you identify where users drop off in the funnel.
+- It is written by `/api/analytics/track` via `recordAnalyticsSearchEvent`.
+
+Plain-language summary:
+- `analytics_search_events` is the step-by-step event log for each search run.
+
+### 7. `analytics_result_impressions`
+Why this table is needed:
+- It records which products were shown in each shortlist (preview, final, or retry).
+- It stores rank position, provider, and badge information.
+- It lets you measure whether position and badges affect later clicks.
+- It is written by `/api/analytics/track` via `recordAnalyticsResultImpressions`.
+
+Plain-language summary:
+- `analytics_result_impressions` records what was shown, not what was clicked.
+
+### 8. `analytics_result_clicks`
+Why this table is needed:
+- It records which product the user actually opened (card click) or clicked through to (retailer click).
+- It distinguishes `click_target: 'card'` from `click_target: 'retailer'`.
+- It lets you measure whether the top-ranked or best-badged item is what users actually select.
+- It is written by `/api/analytics/track` via `recordAnalyticsResultClick`.
+
+Plain-language summary:
+- `analytics_result_clicks` is the outcome signal — what the user actually chose.
+
 ## What is available later, but not needed yet
 - `search_sessions`
 - `search_shortlists`
@@ -85,47 +123,10 @@ Why not yet:
 - The current notes treat `search_history` as operational telemetry, not as user-facing history.
 - Adding more tables now would increase complexity before the app actually writes to them.
 
-## Optional next schema if you want funnel analytics now
-
-If the next goal is learning whether users choose the AI path, hit `Show products now`, respond to `best` badges, and actually click through to retailer sites, the next useful tables are:
-
-### 1. `analytics_search_runs`
-Why this table is useful:
-- It gives each search flow a stable `search_id`.
-- It lets you mark whether the user entered the AI refinement step.
-- It lets you record whether the user chose `Show products now`.
-- It lets you tie the final shown shortlist and later clicks back to one search run.
-
-### 2. `analytics_search_events`
-Why this table is useful:
-- It records the flow steps without forcing every possible event into fixed columns.
-- It can capture things like `search_started`, `refine_viewed`, `show_products_now_clicked`, `ai_followup_submitted`, and `final_results_shown`.
-- It helps identify where users drop off in the funnel.
-
-### 3. `analytics_result_impressions`
-Why this table is useful:
-- It records which products were actually shown in a shortlist.
-- It can distinguish preview results from finalized results.
-- It stores rank position, provider, and badge information such as `best`.
-- It lets you measure whether position and badges affect later clicks.
-
-### 4. `analytics_result_clicks`
-Why this table is useful:
-- It records which product the user actually clicked.
-- It can distinguish preview clicks from finalized-result clicks.
-- It distinguishes between clicking a card/details surface and clicking through to the retailer.
-- It lets you measure whether the top-ranked or `best`-badged item is the one users really select.
-
-Plain-language summary:
-- These four analytics tables are the smallest useful schema for measuring the current funnel.
-- They should live beside `search_history`, not replace it.
-- `search_history` should stay operational/debug telemetry.
-
 ## Current recommendation
-- Keep the database focused on cache plus operational history for now.
-- Add `product_details_cache` when you want provider-agnostic per-ASIN detail caching for finalize-time bullets/descriptions.
-- Only add product-memory tables later if the app needs to remember real search flows as product data.
-- If you want analytics next, add only the focused funnel tables above instead of a broad analytics schema.
+- All eight tables listed above are in use now and should be created.
+- Only add product-memory tables (`search_sessions`, `search_shortlists`, etc.) later if the app needs to remember real search flows as product data.
+- Do not add broad analytics warehouse tables — the focused funnel tables already cover what the app tracks.
 
 ## Environment variables
 Add these to the root `.env`:
@@ -133,6 +134,8 @@ Add these to the root `.env`:
 ```env
 SERPAPI_API_KEY=your-serpapi-key
 OPENAI_API_KEY=your-openai-key
+OXYLABS_USERNAME=your-oxylabs-username
+OXYLABS_PASSWORD=your-oxylabs-password
 OPENAI_MODEL=gpt-5-mini
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SECRET_KEY=your-supabase-secret-key
@@ -161,6 +164,10 @@ Notes:
 - `public.search_history`
 - `public.rate_limit_events`
 - `public.product_details_cache`
+- `public.analytics_search_runs`
+- `public.analytics_search_events`
+- `public.analytics_result_impressions`
+- `public.analytics_result_clicks`
 
 ## SQL to run in Supabase
 Paste this into the Supabase SQL editor and run it.
@@ -243,25 +250,26 @@ create table if not exists public.product_details_cache (
 - `search_history` will store internal search/debug log rows.
 - `rate_limit_events` will store short-lived shared rate-limit events.
 - `product_details_cache` will store one latest-writer-wins detail row per ASIN for finalize-time bullets/descriptions.
-- Your backend can keep using Supabase for cache/history with the current app structure.
+- `analytics_search_runs` / `analytics_search_events` / `analytics_result_impressions` / `analytics_result_clicks` will receive live data from the frontend analytics calls routed through `/api/analytics/track`.
+- Your backend can keep using Supabase for all cache, history, and analytics with the current app structure.
 
 ## Simple decision summary
-- Create now: `search_cache`, `search_history`, `rate_limit_events`, `product_details_cache`
+- Create now: `search_cache`, `search_history`, `rate_limit_events`, `product_details_cache`, `analytics_search_runs`, `analytics_search_events`, `analytics_result_impressions`, `analytics_result_clicks`
 - Do not create yet: `search_sessions`, `search_shortlists`, `shortlist_items`
-- Reason: the current app uses the cache/history/rate-limit tables now, and `product_details_cache` is the new backend detail-cache table; the others would still be future product-schema work
+- Reason: all eight current tables are actively written to by the backend; the others are future product-schema work
 
-## Optional analytics SQL
-If you want to add the focused funnel analytics schema next, use:
+## Analytics SQL
+The analytics tables are already wired in the backend. Run the SQL in:
 
 - `project-notes/analytics-funnel-schema.sql`
 
-This file creates:
+This creates:
 - `analytics_search_runs`
 - `analytics_search_events`
 - `analytics_result_impressions`
 - `analytics_result_clicks`
 
-These are aimed specifically at answering:
+These tables answer:
 - whether users entered the AI refinement path
 - whether users chose `Show products now`
 - whether ranking and `best` badges influenced behavior

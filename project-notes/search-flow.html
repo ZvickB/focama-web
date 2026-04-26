@@ -466,7 +466,7 @@
           <div>
             <h3>Refinement Question Appears</h3>
             <div class="tag-row">
-              <span class="tag api">POST /api/search/refine</span>
+              <span class="tag api">GET /api/search/refine</span>
               <span class="tag blocking">Blocking for question</span>
             </div>
             <p>
@@ -492,7 +492,7 @@
           <div>
             <h3>Discovery Finishes — Preview Set Available</h3>
             <div class="tag-row">
-              <span class="tag api">POST /api/search/discover</span>
+              <span class="tag api">GET /api/search/rainforest-discover</span>
               <span class="tag blocking">Blocking for token</span>
             </div>
             <p>
@@ -661,25 +661,39 @@
         <article class="step">
           <div class="step-id"><span>9</span></div>
           <div>
-            <h3>Optional: User Gives Feedback And Retries</h3>
+            <h3>Optional: User Gives Feedback — Retry Advice First</h3>
             <div class="tag-row">
-              <span class="tag ui">Retry loop</span>
-              <span class="tag blocking">Re-runs finalize</span>
+              <span class="tag ui">Retry section</span>
+              <span class="tag api">POST /api/search/retry-advice</span>
+              <span class="tag blocking">Advice before retry</span>
             </div>
             <p>
-              After results appear, the user can say "Didn't find anything you like? Tell us why."
-              Retry requires written feedback, excludes the rejected shortlist IDs from candidate
-              selection, reuses the same guided discovery context, and is capped at 2 passes.
-              Previous picks collapse into a "Previous picks" section.
+              After results appear, the section "What would make these better?" invites feedback.
+              The user types what felt off and clicks <strong>Try again</strong>. This calls
+              <code>/api/search/retry-advice</code> — a lightweight AI call that reads the original
+              query, follow-up notes, shortlist titles, and rejection feedback, then returns a
+              <code>recommendation</code> (<em>new_search</em> or <em>same_pool</em>) and a
+              <code>suggestedQuery</code>. An advice card appears: "A more specific search might
+              help" with an editable query field and a <strong>Search this instead</strong> button.
+              Clicking it resets the page, pre-fills the search bar, and starts the full flow fresh
+              — no memory of the previous session.
             </p>
             <div class="detail-grid">
               <div class="detail">
-                <strong>What changes</strong>
-                <p>Excluded IDs are passed to finalize. The candidate pool is the same 20 from discovery cache — not re-fetched.</p>
+                <strong>Retry-advice inputs</strong>
+                <p>Original query, follow-up notes (truncated to 500 chars), rejection feedback (truncated to 300 chars), shortlist titles. Body limit: 16 KB.</p>
+              </div>
+              <div class="detail">
+                <strong>Same-pool retry</strong>
+                <p>The same-pool retry path (re-run finalize, exclude rejected IDs, cap at 2 passes) is implemented in the hook but not currently wired to the UI. Previous picks collapse into an accordion when a same-pool retry completes.</p>
               </div>
               <div class="detail amber">
-                <strong>Guardrail</strong>
-                <p>Hard exclusion of rejected IDs. If the pool is small this can be strict — broadening discovery rather than reusing rejects is the preferred path if it becomes a problem.</p>
+                <strong>Candidate pool</strong>
+                <p>Same-pool retries reuse the cached 20-candidate pool — not re-fetched. Excluded IDs are passed to finalize and filtered before AI selection.</p>
+              </div>
+              <div class="detail">
+                <strong>Copy</strong>
+                <p>Section: "What would make these better?" — Placeholder: "Too expensive, wrong style, not what I had in mind..." — Button: "Try again" / "Finding a better search…"</p>
               </div>
             </div>
           </div>
