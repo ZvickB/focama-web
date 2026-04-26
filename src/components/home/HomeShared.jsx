@@ -6,13 +6,14 @@ import {
   ArrowUpRight,
   ChevronDown,
   Clock3,
+  Search,
   Sparkles,
   Star,
   X,
 } from 'lucide-react'
 
 import ProductCard from '@/components/ProductCard.jsx'
-import { MAX_REFINEMENT_RETRIES, RESULT_CARD_SLOTS } from '@/components/home/useGuidedSearch.js'
+import { RESULT_CARD_SLOTS } from '@/components/home/useGuidedSearch.js'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
@@ -313,16 +314,20 @@ export function ResultsSection({
   isLoading,
   isRetryReady,
   isRetrying,
+  isGeneratingRetryAdvice,
   onRetailerClick,
   onSelectProduct,
+  onRetryAdviceRequest,
   onRetryFeedbackChange,
-  onRetryWithFeedback,
+  onSearchSuggestedQuery,
+  onSuggestedRetryQueryChange,
   previousResults = [],
+  retryAdvice,
   selectionState,
-  retryCount,
   retryFeedback,
   showFinalResultBadges,
   showPreviewResults,
+  suggestedRetryQuery,
   submittedQuery,
 }) {
   const shouldShowBadgeLabels = !hasFinalResults || showFinalResultBadges
@@ -527,10 +532,9 @@ export function ResultsSection({
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
               <Clock3 className="h-4 w-4 text-slate-500" />
             </div>
-            <p className="text-lg font-medium text-slate-900">No new picks were left after that feedback.</p>
+            <p className="text-lg font-medium text-slate-900">Nothing new came up from that feedback.</p>
             <p className="text-sm leading-6 text-slate-600 sm:text-base">
-              The earlier shortlist is still available above, or you can start a new search with a
-              different direction.
+              Try a different search direction.
             </p>
           </div>
         </div>
@@ -540,11 +544,10 @@ export function ResultsSection({
         <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
           <CardHeader className="space-y-2 pb-3">
             <CardTitle className="text-lg text-slate-900">
-              Didn&apos;t find anything you like? Tell us why.
+              What would make these better?
             </CardTitle>
             <p className="text-sm leading-6 text-slate-600">
-              We&apos;ll use your feedback for a more deliberate second pass instead of showing endless
-              extra results.
+              Tell us what felt off, and we&apos;ll suggest a sharper search direction.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -558,30 +561,59 @@ export function ResultsSection({
                 onChange={(event) => onRetryFeedbackChange(event.target.value)}
                 onKeyDown={(event) =>
                   handleRetryFeedbackKeyDown(event, {
-                    canSubmit: isRetryReady && !isRetrying && Boolean(retryFeedback.trim()),
-                    onSubmit: onRetryWithFeedback,
+                    canSubmit:
+                      isRetryReady &&
+                      !isRetrying &&
+                      !isGeneratingRetryAdvice &&
+                      Boolean(retryFeedback.trim()),
+                    onSubmit: onRetryAdviceRequest,
                   })
                 }
-                disabled={!isRetryReady || isRetrying}
+                disabled={!isRetryReady || isRetrying || isGeneratingRetryAdvice}
                 className="min-h-28 resize-none rounded-[24px] border-stone-200 bg-[#fffdf9] px-4 py-3 text-sm leading-6 placeholder:text-slate-400"
-                placeholder="Examples: too expensive, too bulky, wrong style, not for the right use case, or not premium enough."
+                placeholder="Too expensive, wrong style, not what I had in mind..."
               />
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs leading-5 text-slate-500">
-                {retryCount >= MAX_REFINEMENT_RETRIES
-                  ? 'You can start a new search if this needs a different direction.'
-                  : `Retry ${retryCount + 1} of ${MAX_REFINEMENT_RETRIES}. Each retry needs a reason, so this stays focused.`}
-              </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
               <Button
                 type="button"
-                disabled={!isRetryReady || isRetrying || !retryFeedback.trim()}
+                disabled={!isRetryReady || isRetrying || isGeneratingRetryAdvice || !retryFeedback.trim()}
                 className="h-11 rounded-2xl bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90"
-                onClick={onRetryWithFeedback}
+                onClick={onRetryAdviceRequest}
               >
-                {isRetrying ? 'Refreshing your picks...' : 'Try again with this feedback'}
+                {isGeneratingRetryAdvice ? 'Finding a better search...' : 'Try again'}
               </Button>
             </div>
+            {retryAdvice ? (
+              <div className="rounded-[24px] border border-primary/15 bg-primary/5 p-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-slate-900">A more specific search might help</p>
+                  {retryAdvice.rationale ? (
+                    <p className="text-sm leading-6 text-slate-600">{retryAdvice.rationale}</p>
+                  ) : null}
+                </div>
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                  <Label htmlFor="retry-suggested-query" className="sr-only">
+                    Suggested search query
+                  </Label>
+                  <input
+                    id="retry-suggested-query"
+                    value={suggestedRetryQuery}
+                    onChange={(event) => onSuggestedRetryQueryChange(event.target.value)}
+                    className="h-12 min-w-0 flex-1 rounded-2xl border border-stone-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-primary/50"
+                  />
+                  <Button
+                    type="button"
+                    disabled={!suggestedRetryQuery.trim()}
+                    className="h-12 rounded-2xl bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90"
+                    onClick={() => onSearchSuggestedQuery(suggestedRetryQuery)}
+                  >
+                    Search this instead
+                    <Search className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}

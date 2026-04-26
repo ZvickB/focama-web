@@ -19,7 +19,6 @@ const ENRICHMENT_POLL_TIMEOUT_MS = 30000
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const FINALIZE_REQUEST_MODE_REFINED = 'guided_refined'
-const FINALIZE_REQUEST_MODE_RETRY = 'guided_retry'
 
 function roundTiming(value) {
   return Math.round(value * 10) / 10
@@ -130,6 +129,29 @@ async function fetchFramingFields(query) {
   const searchParams = new URLSearchParams({ query })
   const requestStartedAt = performance.now()
   const response = await fetch(`/api/search/framing-fields?${searchParams.toString()}`)
+  return readJsonResponse(response, requestStartedAt)
+}
+
+async function fetchRetryAdvice({
+  query,
+  followUpNotes,
+  rejectionFeedback,
+  shortlist,
+}) {
+  const requestStartedAt = performance.now()
+  const response = await fetch('/api/search/retry-advice', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query,
+      followUpNotes,
+      rejectionFeedback,
+      shortlist,
+    }),
+  })
+
   return readJsonResponse(response, requestStartedAt)
 }
 
@@ -307,6 +329,8 @@ export function useGuidedSearch() {
   const [queryFramingFields, setQueryFramingFields] = useState(null)
   const [followUpNotes, setFollowUpNotes] = useState('')
   const [retryFeedback, setRetryFeedback] = useState('')
+  const [retryAdvice, setRetryAdvice] = useState(null)
+  const [suggestedRetryQuery, setSuggestedRetryQuery] = useState('')
   const [retryCount, setRetryCount] = useState(0)
   const [selectionState, setSelectionState] = useState(null)
   const [requestTiming, setRequestTiming] = useState({
@@ -324,6 +348,7 @@ export function useGuidedSearch() {
   const enrichmentPollRef = useRef({ timerId: null, searchId: 0 })
   const analyticsSearchIdRef = useRef('')
   const analyticsSessionIdRef = useRef('')
+  const retryAdviceRequestIdRef = useRef(0)
   const hasTrackedRefinementViewRef = useRef(false)
   const hasTrackedPreviewImpressionsRef = useRef(false)
 
@@ -440,7 +465,10 @@ export function useGuidedSearch() {
       ...current,
       finalize: payload.timing || null,
     }))
+    invalidateRetryAdviceRequests()
     setRetryFeedback('')
+    setRetryAdvice(null)
+    setSuggestedRetryQuery('')
     setRetryCount(payload.retryCount ?? variables.retryCount ?? 0)
     setSelectionState(payload.selection || null)
 
@@ -516,6 +544,52 @@ export function useGuidedSearch() {
     onSuccess: applyFinalizePayload,
     onError: handleFinalizeError,
   })
+  const retryAdviceMutation = useMutation({
+    mutationFn: fetchRetryAdvice,
+    onMutate: () => {
+      setErrorMessage('')
+    },
+    onSuccess: (payload, variables) => {
+      const snapshot = variables?.snapshot
+
+      if (
+        !snapshot ||
+        retryAdviceRequestIdRef.current !== snapshot.requestId ||
+        activeSearchIdRef.current !== snapshot.searchId ||
+        submittedQuery !== snapshot.query ||
+        followUpNotes !== snapshot.followUpNotes ||
+        retryFeedback.trim() !== snapshot.rejectionFeedback ||
+        finalResultsKey !== snapshot.resultsKey
+      ) {
+        return
+      }
+
+      setRetryAdvice(payload)
+      setSuggestedRetryQuery(payload.suggestedQuery || '')
+      trackSearchEvent('retry_advice_shown', {
+        adviceRecommendationInternal: payload.recommendation || '',
+        userFacingAction: 'new_search',
+        suggestedQueryLength: String(payload.suggestedQuery || '').length,
+      })
+    },
+    onError: (error, variables) => {
+      const snapshot = variables?.snapshot
+
+      if (
+        !snapshot ||
+        retryAdviceRequestIdRef.current !== snapshot.requestId ||
+        activeSearchIdRef.current !== snapshot.searchId ||
+        submittedQuery !== snapshot.query ||
+        followUpNotes !== snapshot.followUpNotes ||
+        retryFeedback.trim() !== snapshot.rejectionFeedback ||
+        finalResultsKey !== snapshot.resultsKey
+      ) {
+        return
+      }
+
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to suggest a better search direction.')
+    },
+  })
 
   const finalResultsKey = results.map((item) => String(item.id)).join('|')
   const showFinalResultBadges = results.length > 0 && revealedBadgeResultsKey === finalResultsKey
@@ -551,6 +625,7 @@ export function useGuidedSearch() {
 
   function resetGuidedState(nextSubmittedQuery, nextSubmittedAmazonDomain = '') {
     stopEnrichmentPolling()
+    invalidateRetryAdviceRequests()
     setHasStartedSearch(true)
     setSubmittedQuery(nextSubmittedQuery)
     setSubmittedAmazonDomain(nextSubmittedAmazonDomain)
@@ -563,6 +638,8 @@ export function useGuidedSearch() {
     setPreviousResults([])
     setFollowUpNotes('')
     setRetryFeedback('')
+    setRetryAdvice(null)
+    setSuggestedRetryQuery('')
     setRetryCount(0)
     setSelectionState(null)
     setRequestTiming({
@@ -582,8 +659,10 @@ export function useGuidedSearch() {
 
   function resetToNewSearch() {
     activeSearchIdRef.current += 1
+    invalidateRetryAdviceRequests()
     stopEnrichmentPolling()
     finalizeMutation.reset()
+    retryAdviceMutation.reset()
     setProductQuery('')
     setSelectedProductState(null)
     setErrorMessage('')
@@ -598,6 +677,8 @@ export function useGuidedSearch() {
     setQueryFramingFields(null)
     setFollowUpNotes('')
     setRetryFeedback('')
+    setRetryAdvice(null)
+    setSuggestedRetryQuery('')
     setRetryCount(0)
     setSelectionState(null)
     setRequestTiming({
@@ -904,37 +985,47 @@ export function useGuidedSearch() {
     }
   }
 
-  function handleRetryWithFeedback() {
-    if (!candidatePool || !submittedQuery || !retryFeedback.trim() || retryCount >= MAX_REFINEMENT_RETRIES) {
+  function invalidateRetryAdviceRequests() {
+    retryAdviceRequestIdRef.current += 1
+  }
+
+  function handleRetryAdviceRequest() {
+    if (!submittedQuery || !retryFeedback.trim() || !hasFinalResults || retryAdviceMutation.isPending) {
       return
     }
 
-    if (!discoveryToken) {
-      expireSearchSession()
-      return
-    }
+    const normalizedFeedback = retryFeedback.trim()
+    const requestId = retryAdviceRequestIdRef.current + 1
+    retryAdviceRequestIdRef.current = requestId
 
-    if (analyticsSearchIdRef.current && analyticsSessionIdRef.current) {
-      trackSearchEvent('retry_started', {
-        retryRound: retryCount + 1,
-        feedbackLength: retryFeedback.trim().length,
-      })
-    }
+    trackSearchEvent('retry_advice_started', {
+      feedbackLength: normalizedFeedback.length,
+      resultCount: results.length,
+    })
 
-    const nextFinalizeRequest = {
+    retryAdviceMutation.mutate({
       query: submittedQuery,
-      amazonDomain: submittedAmazonDomain,
-      discoveryToken,
-      originalCandidatePool: candidatePool,
       followUpNotes,
-      rejectionFeedback: retryFeedback.trim(),
-      retryCount: retryCount + 1,
-      excludedCandidateIds: results.map((result) => result.id),
-      previousResults: results,
-      requestMode: FINALIZE_REQUEST_MODE_RETRY,
-    }
+      rejectionFeedback: normalizedFeedback,
+      shortlist: results.map((result) => ({
+        title: result.title || '',
+      })),
+      snapshot: {
+        requestId,
+        searchId: activeSearchIdRef.current,
+        query: submittedQuery,
+        followUpNotes,
+        rejectionFeedback: normalizedFeedback,
+        resultsKey: finalResultsKey,
+      },
+    })
+  }
 
-    startFinalizeMutation(nextFinalizeRequest)
+  function updateRetryFeedback(nextValue) {
+    invalidateRetryAdviceRequests()
+    setRetryFeedback(nextValue)
+    setRetryAdvice(null)
+    setSuggestedRetryQuery('')
   }
 
   function handleSelectProduct(item, { position = 0, resultSet = 'final' } = {}) {
@@ -1001,6 +1092,7 @@ export function useGuidedSearch() {
     isDiscovering,
     isEnrichmentReady,
     isFinalizing,
+    isGeneratingRetryAdvice: retryAdviceMutation.isPending,
     isGeneratingPrompt,
     isLoading,
     previousResults,
@@ -1008,23 +1100,26 @@ export function useGuidedSearch() {
     queryFramingFields,
     requestTiming,
     refinementPrompt,
+    retryAdvice,
     selectedAmazonDomain,
     selectionState,
     retryCount,
     retryFeedback,
+    suggestedRetryQuery,
     selectedProduct: selectedProductForDisplay,
     showFinalResultBadges,
     showPreviewResults,
     submittedQuery,
     beginGuidedSearch,
     handleFinalizeRefinement,
-    handleRetryWithFeedback,
+    handleRetryAdviceRequest,
     handleShowProductsNow,
     resetToNewSearch,
-    setRetryFeedback,
+    setRetryFeedback: updateRetryFeedback,
     setFollowUpNotes,
     setSelectedAmazonDomain,
     setProductQuery,
+    setSuggestedRetryQuery,
     setSelectedProduct: setSelectedProductState,
   }
 }

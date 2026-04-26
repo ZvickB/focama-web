@@ -13,6 +13,7 @@ import { createFinalizeFastContract, toFinalizeFastCard } from './lib/layered-co
 import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, getCountryCode, takeRateLimitToken } from './lib/rate-limit.js'
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
 import { generateFramingFields } from './lib/query-framing.js'
+import { generateRetryAdvice } from './lib/retry-advice.js'
 import { DEFAULT_FILTER_CONFIG } from './lib/result-filter.js'
 import {
   fetchSearchArtifacts,
@@ -48,10 +49,16 @@ const LIVE_SEARCH_RATE_LIMIT = {
 const FINALIZE_SELECTION_RATE_LIMIT = {
   ...DEFAULT_RATE_LIMIT_CONFIG,
 }
+const RETRY_ADVICE_RATE_LIMIT = {
+  ...DEFAULT_RATE_LIMIT_CONFIG,
+}
 const FINALIZE_BODY_LIMIT_BYTES = 32 * 1024
+const RETRY_ADVICE_BODY_LIMIT_BYTES = 16 * 1024
 const FINALIZE_MAX_CANDIDATES = LIVE_RESULT_FILTER_CONFIG.candidatePoolSize
 const FINALIZE_MAX_NOTE_LENGTH = 500
 const FINALIZE_MAX_REJECTION_FEEDBACK_LENGTH = 300
+const RETRY_ADVICE_MAX_SHORTLIST_ITEMS = 6
+const RETRY_ADVICE_MAX_TITLE_LENGTH = 160
 const FINALIZE_MAX_PRIORITIES = 8
 const FINALIZE_MAX_PRIORITY_LENGTH = 80
 const FINALIZE_MAX_RETRY_COUNT = 2
@@ -293,6 +300,19 @@ function sanitizeExcludedCandidateIds(values) {
     maxItems: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
     maxItemLength: 200,
   })
+}
+
+function sanitizeRetryAdviceShortlist(values) {
+  if (!Array.isArray(values)) {
+    return []
+  }
+
+  return values
+    .map((item) => ({
+      title: truncateText(item?.title, RETRY_ADVICE_MAX_TITLE_LENGTH),
+    }))
+    .filter((item) => item.title)
+    .slice(0, RETRY_ADVICE_MAX_SHORTLIST_ITEMS)
 }
 
 function sanitizeFinalizeDiscoveryContext(body) {
@@ -1361,6 +1381,109 @@ export async function handleQueryFramingFields(requestUrl, response, request = n
   }
 }
 
+export async function handleRetryAdvice(request, response) {
+  const requestStartedAt = nowMs()
+  const openAiApiKey = getEnv('OPENAI_API_KEY')
+
+  if (!openAiApiKey) {
+    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
+    return
+  }
+
+  let body
+
+  try {
+    body = await readJsonBody(request, { maxBytes: RETRY_ADVICE_BODY_LIMIT_BYTES })
+    body.bodyReadDuration = nowMs() - requestStartedAt
+  } catch (error) {
+    sendJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid request body.' })
+    return
+  }
+
+  const clientIpAddress = getClientIpAddress(request.headers || {})
+  const rateLimit = await takeRateLimitToken(clientIpAddress, RETRY_ADVICE_RATE_LIMIT)
+
+  if (!rateLimit.allowed) {
+    logSearchFlowEvent('retry_advice_rate_limited', {
+      route: '/api/search/retry-advice',
+      clientIpAddress,
+    })
+    sendJson(response, 429, {
+      error: `Too many retry advice requests from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
+    })
+    return
+  }
+
+  const query = typeof body?.query === 'string' ? body.query : ''
+  const { error, isValid, normalizedQuery } = validateSearchInput(query, '')
+
+  if (!isValid) {
+    logSearchFlowEvent('retry_advice_invalid', {
+      route: '/api/search/retry-advice',
+      error,
+    })
+    sendJson(response, 400, { error })
+    return
+  }
+
+  const rejectionFeedback = truncateText(
+    body?.rejectionFeedback,
+    FINALIZE_MAX_REJECTION_FEEDBACK_LENGTH,
+  )
+
+  if (!rejectionFeedback) {
+    sendJson(response, 400, { error: 'Tell us what felt off before trying again.' })
+    return
+  }
+
+  try {
+    const openAiStartedAt = nowMs()
+    const advice = await generateRetryAdvice({
+      productQuery: normalizedQuery,
+      followUpNotes: truncateText(body?.followUpNotes, FINALIZE_MAX_NOTE_LENGTH),
+      rejectionFeedback,
+      shortlist: sanitizeRetryAdviceShortlist(body?.shortlist),
+      apiKey: openAiApiKey,
+      model: getRefinementModel(),
+    })
+    const openAiDuration = nowMs() - openAiStartedAt
+    const totalDuration = nowMs() - requestStartedAt
+
+    logSearchFlowEvent('retry_advice_completed', {
+      route: '/api/search/retry-advice',
+      query: normalizedQuery,
+      recommendation: advice.recommendation,
+      suggestedQueryLength: advice.suggestedQuery.length,
+      feedbackLength: rejectionFeedback.length,
+      openaiMs: roundTimingDuration(openAiDuration),
+      openaiUsage: advice.usage || null,
+      totalMs: roundTimingDuration(totalDuration),
+    })
+
+    sendJson(response, 200, {
+      ...advice,
+      query: normalizedQuery,
+    }, {
+      serverTiming: [
+        { name: 'body', duration: body.bodyReadDuration || 0 },
+        { name: 'openai', duration: openAiDuration },
+        { name: 'total', duration: totalDuration },
+      ],
+    })
+  } catch (error) {
+    logSearchFlowEvent('retry_advice_failed', {
+      route: '/api/search/retry-advice',
+      query: normalizedQuery,
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+    sendJson(response, 500, {
+      error: 'Unable to suggest a better search direction.',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    })
+  }
+}
+
 export async function handleSupabaseHealth(response) {
   const health = await getSupabaseHealth()
 
@@ -2236,6 +2359,11 @@ export function createApiServer() {
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search/framing-fields') {
       await handleQueryFramingFields(requestUrl, response)
+      return
+    }
+
+    if (request.method === 'POST' && requestUrl.pathname === '/api/search/retry-advice') {
+      await handleRetryAdvice(request, response)
       return
     }
 

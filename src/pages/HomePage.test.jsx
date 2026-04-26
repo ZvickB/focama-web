@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import HomePage from './HomePage.jsx'
@@ -621,7 +621,7 @@ describe('HomePage', () => {
   })
 
   it(
-    'lets the user retry a weak shortlist with feedback for a second pass',
+    'suggests an editable new search when the user rejects a weak shortlist',
     async () => {
     const user = userEvent.setup()
     const fetchMock = vi
@@ -700,23 +700,9 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
-            candidatePool: {
-              query: 'stroller',
-              details:
-                'Notes: comfort matters most. Retry feedback: Still too bulky for city travel.',
-              candidates: [],
-            },
-            retryCount: 1,
-            results: [
-              createMockResult({
-                id: 'result-3',
-                title: 'Slim city stroller',
-                price: '$159.99',
-              }),
-            ],
-            selection: {
-              mode: 'ai',
-            },
+            recommendation: 'new_search',
+            suggestedQuery: 'compact city stroller under 18 pounds',
+            rationale: 'The rejected picks sounded too bulky, so a narrower city stroller search should help.',
           }),
       })
 
@@ -735,31 +721,349 @@ describe('HomePage', () => {
       screen.getByLabelText(/what felt off about these picks/i),
       'Still too bulky for city travel.',
     )
-    await user.click(screen.getByRole('button', { name: /try again with this feedback/i }))
+    await user.click(screen.getByRole('button', { name: /^try again$/i }))
 
-    expect(await screen.findByText('Slim city stroller')).toBeInTheDocument()
-    expect(screen.getByText(/retry 2 of 2\./i)).toBeInTheDocument()
-    expect(screen.getByText(/previous picks/i)).toBeInTheDocument()
-    const retryRequest = fetchMock.mock.calls[3]
-    expect(retryRequest[0]).toBe('/api/search/finalize')
-    expect(retryRequest[1]).toEqual(
+    expect(await screen.findByText(/a more specific search might help/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/the rejected picks sounded too bulky/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/retry 2 of 2\./i)).not.toBeInTheDocument()
+    const retryAdviceRequest = fetchMock.mock.calls[3]
+    expect(retryAdviceRequest[0]).toBe('/api/search/retry-advice')
+    expect(retryAdviceRequest[1]).toEqual(
       expect.objectContaining({
         method: 'POST',
       }),
     )
-    expect(JSON.parse(retryRequest[1].body)).toEqual({
+    expect(JSON.parse(retryAdviceRequest[1].body)).toEqual({
       query: 'stroller',
-      amazonDomain: 'auto',
-      discoveryToken: 'opaque-discovery-token',
       followUpNotes: 'comfort matters most',
       rejectionFeedback: 'Still too bulky for city travel.',
-      excludedCandidateIds: ['result-1', 'result-2'],
-      retryCount: 1,
-      requestMode: 'guided_retry',
+      shortlist: [
+        { title: 'Travel stroller' },
+        { title: 'Compact airport stroller' },
+      ],
     })
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/search/finalize'))).toHaveLength(1)
+
+    const suggestedQueryInput = screen.getByLabelText(/suggested search query/i)
+    expect(suggestedQueryInput).toHaveValue('compact city stroller under 18 pounds')
+    await user.clear(suggestedQueryInput)
+    await user.type(suggestedQueryInput, 'lightweight umbrella stroller for city travel')
+    await user.click(screen.getByRole('button', { name: /search this instead/i }))
+
+    expect(screen.getByLabelText(/product topic/i)).toHaveValue(
+      'lightweight umbrella stroller for city travel',
+    )
+    expect(screen.getByRole('button', { name: /start search/i })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(4)
     },
     10000,
   )
+
+  it('ignores stale retry advice after reset clears the retry state', async () => {
+    let resolveRetryAdvice
+    const retryAdvicePromise = new Promise((resolve) => {
+      resolveRetryAdvice = resolve
+    })
+    const user = userEvent.setup()
+    const fetchMock = vi.fn((input) => {
+      const url = String(input)
+
+      if (url.includes('/api/search/rainforest-discover')) {
+        return Promise.resolve({
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              discoveryToken: 'opaque-discovery-token',
+              candidatePool: {
+                query: 'stroller',
+                details: '',
+                candidates: [
+                  {
+                    id: 'result-1',
+                    title: 'Travel stroller',
+                    source: 'Target',
+                    price: '$129.99',
+                    rating: 4.4,
+                    reviewCount: 87,
+                    description: 'Lightweight and easy to fold.',
+                    reasons: ['Available from Target'],
+                    image: 'https://example.com/stroller.jpg',
+                    link: 'https://example.com/stroller',
+                  },
+                ],
+              },
+              previewResults: [createMockResult()],
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/refine')) {
+        return Promise.resolve({
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              prompt: 'What should we optimize for with this stroller?',
+              helperText: 'Pick anything that matters.',
+              followUpPlaceholder: 'Anything else?',
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/finalize')) {
+        return Promise.resolve({
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              candidatePool: {
+                query: 'stroller',
+                details: 'Notes: comfort matters most',
+                candidates: [],
+              },
+              retryCount: 0,
+              results: [createMockResult()],
+              selection: {
+                mode: 'ai',
+              },
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/retry-advice')) {
+        return retryAdvicePromise
+      }
+
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+    await screen.findByText(/what should we optimize for with this stroller/i)
+    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
+    await user.click(screen.getByRole('button', { name: /show focused picks/i }))
+    await screen.findByText('Travel stroller')
+
+    const retryTextarea = screen.getByLabelText(/what felt off about these picks/i)
+    await user.type(retryTextarea, 'Too bulky')
+    await user.click(screen.getByRole('button', { name: /^try again$/i }))
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/search/retry-advice'))).toBe(true)
+    })
+    await user.click(screen.getByRole('button', { name: /new search/i }))
+
+    await act(async () => {
+      resolveRetryAdvice({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            recommendation: 'new_search',
+            suggestedQuery: 'compact city stroller',
+            rationale: 'A narrower search should help.',
+          }),
+      })
+      await retryAdvicePromise
+    })
+
+    expect(screen.queryByText(/a more specific search might help/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/suggested search query/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/product topic/i)).toHaveValue('')
+  }, 10000)
+
+  it('ignores stale retry advice errors after reset clears the retry state', async () => {
+    let rejectRetryAdvice
+    const retryAdvicePromise = new Promise((resolve, reject) => {
+      rejectRetryAdvice = reject
+    })
+    const user = userEvent.setup()
+    const fetchMock = vi.fn((input) => {
+      const url = String(input)
+
+      if (url.includes('/api/search/rainforest-discover')) {
+        return Promise.resolve({
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              discoveryToken: 'opaque-discovery-token',
+              candidatePool: {
+                query: 'stroller',
+                details: '',
+                candidates: [
+                  {
+                    id: 'result-1',
+                    title: 'Travel stroller',
+                    source: 'Target',
+                    price: '$129.99',
+                    rating: 4.4,
+                    reviewCount: 87,
+                    description: 'Lightweight and easy to fold.',
+                    reasons: ['Available from Target'],
+                    image: 'https://example.com/stroller.jpg',
+                    link: 'https://example.com/stroller',
+                  },
+                ],
+              },
+              previewResults: [createMockResult()],
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/refine')) {
+        return Promise.resolve({
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              prompt: 'What should we optimize for with this stroller?',
+              helperText: 'Pick anything that matters.',
+              followUpPlaceholder: 'Anything else?',
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/finalize')) {
+        return Promise.resolve({
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              candidatePool: {
+                query: 'stroller',
+                details: 'Notes: comfort matters most',
+                candidates: [],
+              },
+              retryCount: 0,
+              results: [createMockResult()],
+              selection: {
+                mode: 'ai',
+              },
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/retry-advice')) {
+        return retryAdvicePromise
+      }
+
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+    await screen.findByText(/what should we optimize for with this stroller/i)
+    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
+    await user.click(screen.getByRole('button', { name: /show focused picks/i }))
+    await screen.findByText('Travel stroller')
+
+    await user.type(screen.getByLabelText(/what felt off about these picks/i), 'Too bulky')
+    await user.click(screen.getByRole('button', { name: /^try again$/i }))
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/search/retry-advice'))).toBe(true)
+    })
+    await user.click(screen.getByRole('button', { name: /new search/i }))
+
+    await act(async () => {
+      rejectRetryAdvice(new Error('Unable to suggest a better search direction.'))
+
+      try {
+        await retryAdvicePromise
+      } catch {
+        // Expected rejection for this stale request.
+      }
+    })
+
+    expect(screen.queryByText(/unable to suggest a better search direction/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/product topic/i)).toHaveValue('')
+  }, 10000)
+
+  it('disables suggested retry search when the advice returns an empty query', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            discoveryToken: 'opaque-discovery-token',
+            candidatePool: {
+              query: 'stroller',
+              details: '',
+              candidates: [
+                {
+                  id: 'result-1',
+                  title: 'Travel stroller',
+                  source: 'Target',
+                  price: '$129.99',
+                  rating: 4.4,
+                  reviewCount: 87,
+                  description: 'Lightweight and easy to fold.',
+                  reasons: ['Available from Target'],
+                  image: 'https://example.com/stroller.jpg',
+                  link: 'https://example.com/stroller',
+                },
+              ],
+            },
+            previewResults: [createMockResult()],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            prompt: 'What should we optimize for with this stroller?',
+            helperText: 'Pick anything that matters.',
+            followUpPlaceholder: 'Anything else?',
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            candidatePool: {
+              query: 'stroller',
+              details: 'Notes: comfort matters most',
+              candidates: [],
+            },
+            retryCount: 0,
+            results: [createMockResult()],
+            selection: {
+              mode: 'ai',
+            },
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            recommendation: 'new_search',
+            suggestedQuery: '',
+            rationale: 'A narrower search should help.',
+          }),
+      })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+    await screen.findByText(/what should we optimize for with this stroller/i)
+    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
+    await user.click(screen.getByRole('button', { name: /show focused picks/i }))
+    await screen.findByText('Travel stroller')
+    await user.type(screen.getByLabelText(/what felt off about these picks/i), 'Too bulky')
+    await user.click(screen.getByRole('button', { name: /^try again$/i }))
+
+    expect(await screen.findByText(/a more specific search might help/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/suggested search query/i)).toHaveValue('')
+    expect(screen.getByRole('button', { name: /search this instead/i })).toBeDisabled()
+  }, 10000)
 
   it('filters raw live-route reason copy out of the result cards', async () => {
     const user = userEvent.setup()
@@ -827,7 +1131,7 @@ describe('HomePage', () => {
     expect(screen.getByText(/excellent heat retention for long commutes\./i)).toBeInTheDocument()
   })
 
-  it('shows an explicit message when no new retry picks remain after exclusions', async () => {
+  it('shows the simplified retry advice prompt without a visible retry counter', async () => {
     const user = userEvent.setup()
     const fetchMock = vi
       .fn()
@@ -882,23 +1186,6 @@ describe('HomePage', () => {
             },
           }),
       })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            candidatePool: {
-              query: 'stroller',
-              details: 'Retry feedback: Too bulky. Excluded previous picks: result-1',
-              candidates: [],
-            },
-            retryCount: 1,
-            results: [],
-            selection: {
-              mode: 'retry_exhausted',
-              details: 'No new candidates remained after excluding the previously rejected picks.',
-            },
-          }),
-      })
 
     vi.stubGlobal('fetch', fetchMock)
 
@@ -911,11 +1198,10 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
 
-    await user.type(screen.getByLabelText(/what felt off about these picks/i), 'Too bulky')
-    await user.click(screen.getByRole('button', { name: /try again with this feedback/i }))
-
-    expect(await screen.findByText(/no new picks were left after that feedback\./i)).toBeInTheDocument()
-    expect(screen.getByText(/previous picks/i)).toBeInTheDocument()
+    expect(screen.getByText(/what would make these better\?/i)).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/too expensive, wrong style/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^try again$/i })).toBeDisabled()
+    expect(screen.queryByText(/retry 1 of 2/i)).not.toBeInTheDocument()
   })
 
   it('submits retry feedback on enter and keeps shift-enter for a new line', async () => {
@@ -977,16 +1263,9 @@ describe('HomePage', () => {
         ok: true,
         text: async () =>
           JSON.stringify({
-            candidatePool: {
-              query: 'stroller',
-              details: 'Notes: comfort matters most. Retry feedback: Too bulky',
-              candidates: [],
-            },
-            retryCount: 1,
-            results: [createMockResult({ id: 'result-2', title: 'Slim stroller' })],
-            selection: {
-              mode: 'ai',
-            },
+            recommendation: 'new_search',
+            suggestedQuery: 'slim city stroller',
+            rationale: 'A narrower city stroller search should better match that feedback.',
           }),
       })
 
@@ -1011,7 +1290,8 @@ describe('HomePage', () => {
     await user.type(retryTextarea, 'Too bulky')
     await user.keyboard('{Enter}')
 
-    expect(await screen.findByText('Slim stroller')).toBeInTheDocument()
+    expect(await screen.findByText(/a more specific search might help/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/suggested search query/i)).toHaveValue('slim city stroller')
   })
 
   it('keeps tradeoffs out of the result grid and shows them only in the modal', async () => {
@@ -1073,7 +1353,6 @@ describe('HomePage', () => {
 
   it('hydrates the modal explanation from async enrichment polling when the payload uses camelCase fields', async () => {
     delete window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__
-    delete window.__FOCAMAI_DISABLE_GEO_FETCH__
     const user = userEvent.setup()
     const finalizedResult = createMockResult({
       fit_reason: '',

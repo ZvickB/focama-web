@@ -39,6 +39,17 @@ const handleFinalizeSelection = vi.fn((request, response) => {
     response.end(rawBody)
   })
 })
+const handleRetryAdvice = vi.fn((request, response) => {
+  let rawBody = ''
+
+  request.on('data', (chunk) => {
+    rawBody += chunk
+  })
+  request.on('end', () => {
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+    response.end(rawBody)
+  })
+})
 vi.mock('../../backend/server.js', () => ({
   handleDiscoverySearch,
   handleEnrichmentPoll,
@@ -46,6 +57,7 @@ vi.mock('../../backend/server.js', () => ({
   handleFinalizeSelection,
   handleLiveSearch,
   handleRainforestDiscoverySearch,
+  handleRetryAdvice,
 }))
 
 const { GET: getLiveSearch } = await import('./live.js')
@@ -54,6 +66,7 @@ const { GET: getEnrichmentPoll } = await import('./enrichment.js')
 const { GET: getQueryFramingFields } = await import('./framing-fields.js')
 const { POST: postFinalizeSelection } = await import('./finalize.js')
 const { GET: getRainforestDiscoverySearch } = await import('./rainforest-discover.js')
+const { POST: postRetryAdvice } = await import('./retry-advice.js')
 
 describe('Vercel search route wrappers', () => {
   afterEach(() => {
@@ -211,6 +224,40 @@ describe('Vercel search route wrappers', () => {
       JSON.stringify({
         query: 'stroller',
         discoveryToken: 'opaque-discovery-token',
+      }),
+    )
+  })
+
+  it('keeps forwarded headers and raw body when wrapping retry advice requests', async () => {
+    const request = new Request('https://example.com/api/search/retry-advice', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-forwarded-for': '203.0.113.35',
+      },
+      body: JSON.stringify({
+        query: 'stroller',
+        rejectionFeedback: 'Too bulky',
+      }),
+    })
+
+    const response = await postRetryAdvice(request)
+
+    expect(response.status).toBe(200)
+    expect(handleRetryAdvice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'content-type': 'application/json',
+          'x-forwarded-for': '203.0.113.35',
+        }),
+        on: expect.any(Function),
+      }),
+      expect.any(Object),
+    )
+    expect(await response.text()).toBe(
+      JSON.stringify({
+        query: 'stroller',
+        rejectionFeedback: 'Too bulky',
       }),
     )
   })

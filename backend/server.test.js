@@ -26,6 +26,15 @@ vi.mock('./lib/result-filter.js', async () => {
   }
 })
 
+vi.mock('./lib/retry-advice.js', async () => {
+  const actual = await vi.importActual('./lib/retry-advice.js')
+
+  return {
+    ...actual,
+    generateRetryAdvice: vi.fn(),
+  }
+})
+
 vi.mock('./lib/search-data.js', async () => {
   const actual = await vi.importActual('./lib/search-data.js')
 
@@ -59,12 +68,14 @@ import {
   handleFinalizeSelection,
   handleLiveSearch,
   handleQueryFramingFields,
+  handleRetryAdvice,
   handleSearchDebug,
   handleSupabaseHealth,
 } from './server.js'
 import { resetRateLimitStore } from './lib/rate-limit.js'
 import { miniEnrichSelectedCandidates, nanoLockWinnersAndBadges, selectAiResults } from './lib/ai-selector.js'
 import { getFilteredSearchArtifacts } from './lib/result-filter.js'
+import { generateRetryAdvice } from './lib/retry-advice.js'
 import { getSupabaseHealth, readStoredSearchCacheEntry, writeStoredSearchCacheEntry } from './lib/search-storage.js'
 import {
   getEnv,
@@ -342,6 +353,229 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(500)
     expect(JSON.parse(response.body)).toEqual({
       error: 'OPENAI_API_KEY is missing from the root .env file.',
+    })
+  })
+
+  it('returns retry advice for rejected final picks', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    generateRetryAdvice.mockResolvedValue({
+      recommendation: 'new_search',
+      suggestedQuery: 'compact city stroller under 18 pounds',
+      rationale: 'The rejected picks were too bulky, so a narrower search should help.',
+      usage: {
+        totalTokens: 100,
+      },
+      generatedAt: '2026-04-24T12:00:00.000Z',
+    })
+
+    const response = createResponseRecorder()
+
+    await handleRetryAdvice(
+      createFinalizeRequest(
+        JSON.stringify({
+          query: 'stroller',
+          followUpNotes: 'comfort matters most',
+          rejectionFeedback: 'Still too bulky for city travel.',
+          shortlist: [
+            { title: 'Full-size stroller' },
+            { title: 'Travel stroller' },
+          ],
+        }),
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(generateRetryAdvice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productQuery: 'stroller',
+        followUpNotes: 'comfort matters most',
+        rejectionFeedback: 'Still too bulky for city travel.',
+        shortlist: [
+          { title: 'Full-size stroller' },
+          { title: 'Travel stroller' },
+        ],
+        apiKey: 'openai-key',
+      }),
+    )
+    expect(JSON.parse(response.body)).toEqual({
+      query: 'stroller',
+      recommendation: 'new_search',
+      suggestedQuery: 'compact city stroller under 18 pounds',
+      rationale: 'The rejected picks were too bulky, so a narrower search should help.',
+      usage: {
+        totalTokens: 100,
+      },
+      generatedAt: '2026-04-24T12:00:00.000Z',
+    })
+  })
+
+  it('rejects retry advice with empty feedback', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    const response = createResponseRecorder()
+
+    await handleRetryAdvice(
+      createFinalizeRequest(
+        JSON.stringify({
+          query: 'stroller',
+          rejectionFeedback: '   ',
+        }),
+        { 'x-forwarded-for': '203.0.113.50' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(400)
+    expect(generateRetryAdvice).not.toHaveBeenCalled()
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'Tell us what felt off before trying again.',
+    })
+  })
+
+  it('rejects retry advice with malformed JSON', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    const response = createResponseRecorder()
+
+    await handleRetryAdvice(
+      createFinalizeRequest('{ "query": "stroller",'),
+      response,
+    )
+
+    expect(response.statusCode).toBe(400)
+    expect(generateRetryAdvice).not.toHaveBeenCalled()
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'Request body must be valid JSON.',
+    })
+  })
+
+  it('rejects oversized retry advice bodies', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    const response = createResponseRecorder()
+
+    await handleRetryAdvice(
+      createFinalizeRequest(
+        JSON.stringify({
+          query: 'stroller',
+          rejectionFeedback: 'Too bulky',
+          extra: 'x'.repeat(17 * 1024),
+        }),
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(400)
+    expect(generateRetryAdvice).not.toHaveBeenCalled()
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'Request body is too large.',
+    })
+  })
+
+  it('returns a retry advice server error when OpenAI fails', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    generateRetryAdvice.mockRejectedValue(new Error('OpenAI retry_advice failed: bad gateway'))
+    const response = createResponseRecorder()
+
+    await handleRetryAdvice(
+      createFinalizeRequest(
+        JSON.stringify({
+          query: 'stroller',
+          rejectionFeedback: 'Too bulky',
+        }),
+        { 'x-forwarded-for': '203.0.113.51' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(500)
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'Unable to suggest a better search direction.',
+      details: 'OpenAI retry_advice failed: bad gateway',
+    })
+  })
+
+  it('truncates and sanitizes retry advice shortlist titles', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    generateRetryAdvice.mockResolvedValue({
+      recommendation: 'new_search',
+      suggestedQuery: 'compact stroller',
+      rationale: 'A narrower search should help.',
+      usage: null,
+      generatedAt: '2026-04-24T12:00:00.000Z',
+    })
+    const longTitle = ` ${'A'.repeat(200)} `
+    const response = createResponseRecorder()
+
+    await handleRetryAdvice(
+      createFinalizeRequest(
+        JSON.stringify({
+          query: 'stroller',
+          rejectionFeedback: 'Too bulky',
+          shortlist: [
+            { title: longTitle },
+            { title: '' },
+            { title: 'Travel stroller' },
+            { title: 'Compact stroller' },
+            { title: 'Umbrella stroller' },
+            { title: 'Jogging stroller' },
+            { title: 'Double stroller' },
+            { title: 'Should be dropped' },
+          ],
+        }),
+        { 'x-forwarded-for': '203.0.113.52' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(generateRetryAdvice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shortlist: [
+          { title: 'A'.repeat(160) },
+          { title: 'Travel stroller' },
+          { title: 'Compact stroller' },
+          { title: 'Umbrella stroller' },
+          { title: 'Jogging stroller' },
+          { title: 'Double stroller' },
+        ],
+      }),
+    )
+  })
+
+  it('rate limits repeated retry advice requests from the same ip address', async () => {
+    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
+    generateRetryAdvice.mockResolvedValue({
+      recommendation: 'new_search',
+      suggestedQuery: 'compact stroller',
+      rationale: 'A narrower search should help.',
+      usage: null,
+      generatedAt: '2026-04-24T12:00:00.000Z',
+    })
+    const requestBody = JSON.stringify({
+      query: 'stroller',
+      rejectionFeedback: 'Too bulky',
+    })
+
+    for (let index = 0; index < 15; index += 1) {
+      const response = createResponseRecorder()
+
+      await handleRetryAdvice(
+        createFinalizeRequest(requestBody, { 'x-forwarded-for': '203.0.113.53' }),
+        response,
+      )
+
+      expect(response.statusCode).toBe(200)
+    }
+
+    const limitedResponse = createResponseRecorder()
+
+    await handleRetryAdvice(
+      createFinalizeRequest(requestBody, { 'x-forwarded-for': '203.0.113.53' }),
+      limitedResponse,
+    )
+
+    expect(limitedResponse.statusCode).toBe(429)
+    expect(JSON.parse(limitedResponse.body)).toEqual({
+      error: 'Too many retry advice requests from this connection. Please wait about 10 seconds and try again.',
     })
   })
 

@@ -501,6 +501,20 @@ function OpenLayout(props) {
   const hasDiscoveryResults = Boolean(state.candidatePool)
   const showLoadingResults = isLoading && displayedResults.length === 0
 
+  function handleSearchSuggestedQuery(query) {
+    const normalizedQuery = String(query || '').trim()
+
+    if (!normalizedQuery) {
+      return
+    }
+
+    resetToNewSearch()
+    setProductQuery(normalizedQuery)
+    window.setTimeout(() => {
+      smoothScrollIntoView(refinementRef.current)
+    }, 0)
+  }
+
   const { setProgress } = useSearchProgress()
   useEffect(() => {
     setProgress({ hasStartedSearch, hasDiscoveryResults, hasFinalResults })
@@ -761,18 +775,23 @@ function OpenLayout(props) {
                 hasStartedSearch={hasStartedSearch}
                 isFinalizing={state.isFinalizing}
                 isLoading={isLoading}
-                isRetryReady={state.retryCount < 2}
+                isRetryReady
                 isRetrying={state.isFinalizing}
+                isGeneratingRetryAdvice={state.isGeneratingRetryAdvice}
                 onRetailerClick={onRetailerClick}
                 onSelectProduct={onSelectProduct}
+                onRetryAdviceRequest={state.handleRetryAdviceRequest}
                 onRetryFeedbackChange={state.setRetryFeedback}
-                onRetryWithFeedback={state.handleRetryWithFeedback}
+                onSearchSuggestedQuery={handleSearchSuggestedQuery}
+                onSuggestedRetryQueryChange={state.setSuggestedRetryQuery}
                 previousResults={state.previousResults}
+                retryAdvice={state.retryAdvice}
                 selectionState={state.selectionState}
                 retryCount={state.retryCount}
                 retryFeedback={state.retryFeedback}
                 showFinalResultBadges={state.showFinalResultBadges}
                 showPreviewResults={showPreviewResults}
+                suggestedRetryQuery={state.suggestedRetryQuery}
                 submittedQuery={submittedQuery}
               />
             </div>
