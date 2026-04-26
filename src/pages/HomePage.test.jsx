@@ -46,11 +46,13 @@ describe('HomePage', () => {
     vi.restoreAllMocks()
     window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__ = true
     window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__ = true
+    window.__FOCAMAI_DISABLE_GEO_FETCH__ = true
   })
 
   afterEach(() => {
     delete window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__
     delete window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__
+    delete window.__FOCAMAI_DISABLE_GEO_FETCH__
     vi.useRealTimers()
     cleanup()
   })
@@ -268,7 +270,8 @@ describe('HomePage', () => {
 
     renderHomePage()
 
-    await user.selectOptions(screen.getByLabelText(/amazon marketplace/i), 'amazon.ca')
+    await user.click(screen.getByRole('button', { name: /change amazon store/i }))
+    await user.click(screen.getByText('Canada'))
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
@@ -1070,6 +1073,7 @@ describe('HomePage', () => {
 
   it('hydrates the modal explanation from async enrichment polling when the payload uses camelCase fields', async () => {
     delete window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__
+    delete window.__FOCAMAI_DISABLE_GEO_FETCH__
     const user = userEvent.setup()
     const finalizedResult = createMockResult({
       fit_reason: '',
