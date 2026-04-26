@@ -526,7 +526,17 @@ function OpenLayout(props) {
   })
 
   return (
-    <main className="px-3 py-6 sm:px-6 sm:py-8 lg:px-6 xl:px-8">
+    <>
+      <header className="sticky top-0 z-40 w-full border-b border-stone-200/60 bg-white/80 px-4 py-2.5 backdrop-blur sm:px-6">
+        <div className="mx-auto flex max-w-7xl justify-end">
+          <AmazonStorePill
+            selectedAmazonDomain={selectedAmazonDomain}
+            setSelectedAmazonDomain={setSelectedAmazonDomain}
+            disabled={isLoading}
+          />
+        </div>
+      </header>
+      <main className="px-3 pt-4 pb-6 sm:px-6 sm:pt-5 sm:pb-8 lg:px-6 xl:px-8">
       <div className="mx-auto flex max-w-7xl flex-col items-center gap-8">
         <section className="w-full max-w-4xl space-y-6 text-center">
           <div className="space-y-4">
@@ -625,13 +635,6 @@ function OpenLayout(props) {
                     <Search className="ml-2 h-4 w-4" />
                   )}
                 </Button>
-              </div>
-              <div className="mt-3 px-1">
-                <AmazonStorePill
-                  selectedAmazonDomain={selectedAmazonDomain}
-                  setSelectedAmazonDomain={setSelectedAmazonDomain}
-                  disabled={isLoading || hasStartedSearch}
-                />
               </div>
               {!hasStartedSearch ? (
                 <p className="mt-3 px-2 text-sm leading-6 text-slate-500">
@@ -800,7 +803,8 @@ function OpenLayout(props) {
 
         {showTimingPanel ? <TimingPanel requestTiming={state.requestTiming} /> : null}
       </div>
-    </main>
+      </main>
+    </>
   )
 }
 
