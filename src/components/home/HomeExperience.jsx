@@ -213,9 +213,15 @@ function TimingPanel({ requestTiming }) {
   )
 }
 
+function prewarmBackend() {
+  const base = import.meta.env.VITE_BACKEND_URL || ''
+  fetch(`${base}/api/ping`).catch(() => {})
+}
+
 function OpenLayout(props) {
   const refinementRef = useRef(null)
   const resultsViewportRef = useRef(null)
+  const hasPrewarmedRef = useRef(false)
   const lastRefinementScrollQueryRef = useRef('')
   const lastResultsScrollQueryRef = useRef('')
   const lastPreviewScrollQueryRef = useRef('')
@@ -443,6 +449,11 @@ function OpenLayout(props) {
                     aria-label="Product topic"
                     value={state.productQuery}
                     onChange={(event) => setProductQuery(event.target.value)}
+                    onFocus={() => {
+                      if (hasPrewarmedRef.current) return
+                      hasPrewarmedRef.current = true
+                      prewarmBackend()
+                    }}
                     placeholder='Try "travel stroller for airplane", "ergonomic office chair", or "lego botanical set"'
                     className="h-16 w-full rounded-[28px] border border-stone-200 bg-white px-5 text-lg text-slate-900 outline-none transition placeholder:text-[15px] placeholder:text-slate-400 sm:placeholder:text-base focus:border-primary/50"
                     disabled={isLoading}

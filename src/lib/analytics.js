@@ -1,4 +1,5 @@
 const SESSION_STORAGE_KEY = 'focamai_analytics_session_id'
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
 
 function isAnalyticsEnabled() {
   if (typeof window === 'undefined') {
@@ -59,7 +60,7 @@ export function trackAnalytics(event) {
     return
   }
 
-  const request = fetch('/api/analytics/track', {
+  const request = fetch(`${BACKEND_URL}/api/analytics/track`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

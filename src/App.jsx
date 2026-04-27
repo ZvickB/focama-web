@@ -12,7 +12,7 @@ const NotFoundPage = lazy(() => import('@/pages/NotFoundPage.jsx'))
 const PrivacyPage = lazy(() => import('@/pages/PrivacyPage.jsx'))
 
 const SPLASH_MIN_DURATION_MS = 800
-const SPLASH_HIDE_DURATION_MS = 340
+const SPLASH_HIDE_DURATION_MS = 440
 
 function AppRoutes({ onReady }) {
   useEffect(() => {
@@ -48,6 +48,8 @@ function App() {
     const hideTimer = window.setTimeout(() => {
       splashElement.classList.add('is-hidden')
       splashElement.setAttribute('aria-hidden', 'true')
+      const rootElement = document.getElementById('root')
+      if (rootElement) rootElement.classList.add('is-visible')
     }, remainingDelay)
 
     const removeTimer = window.setTimeout(() => {

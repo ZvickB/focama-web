@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
 
 const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
@@ -330,6 +330,14 @@ export function ResultsSection({
   suggestedRetryQuery,
   submittedQuery,
 }) {
+  const [showRetryView, setShowRetryView] = useState(false)
+
+  useEffect(() => {
+    if (!hasFinalResults) {
+      setShowRetryView(false)
+    }
+  }, [hasFinalResults])
+
   const shouldShowBadgeLabels = !hasFinalResults || showFinalResultBadges
   const orderedResults = displayedResults
   const hasExplicitBadges = shouldShowBadgeLabels && displayedResults.some((item) => item.badgeLabel)
@@ -540,21 +548,43 @@ export function ResultsSection({
         </div>
       ) : null}
 
-      {hasFinalResults ? (
-        <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
-          <CardHeader className="space-y-2 pb-3">
-            <CardTitle className="text-lg text-slate-900">
-              What would make these better?
-            </CardTitle>
-            <p className="text-sm leading-6 text-slate-600">
-              Tell us what felt off, and we&apos;ll suggest a sharper search direction.
+      {hasFinalResults && !showRetryView ? (
+        <div className="flex justify-center pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 rounded-full border-stone-300 bg-white px-6 text-sm text-slate-600 hover:border-stone-400 hover:bg-stone-50 hover:text-slate-900"
+            onClick={() => setShowRetryView(true)}
+          >
+            Not quite what you needed?
+          </Button>
+        </div>
+      ) : null}
+
+      {hasFinalResults && showRetryView ? (
+        <div className="rounded-[36px] border border-stone-200/80 bg-white/80 p-5 shadow-[0_28px_120px_-72px_rgba(15,23,42,0.45)]">
+          <button
+            type="button"
+            className="mb-5 flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
+            onClick={() => setShowRetryView(false)}
+          >
+            <span aria-hidden="true">←</span> Back to results
+          </button>
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary/8 px-3 py-1 text-sm text-primary">
+              <Sparkles className="h-4 w-4" />
+              Let&apos;s find a better direction
+            </div>
+            <p className="text-xl font-medium text-slate-900">
+              What felt off about these picks?
             </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="results-retry-feedback" className="text-slate-700">
-                What felt off about these picks?
-              </Label>
+            <p className="text-sm leading-6 text-slate-600">
+              Too expensive, wrong style, not the right category — anything helps.
+            </p>
+          </div>
+
+          <div className="mt-5 space-y-4">
+            <div className="rounded-[30px] border border-stone-200 bg-[#fffdf9] p-1">
               <Textarea
                 id="results-retry-feedback"
                 value={retryFeedback}
@@ -570,52 +600,53 @@ export function ResultsSection({
                   })
                 }
                 disabled={!isRetryReady || isRetrying || isGeneratingRetryAdvice}
-                className="min-h-28 resize-none rounded-[24px] border-stone-200 bg-[#fffdf9] px-4 py-3 text-sm leading-6 placeholder:text-slate-400"
-                placeholder="Too expensive, wrong style, not what I had in mind..."
+                className="min-h-32 resize-none rounded-[28px] border-0 bg-transparent px-5 py-4 text-base leading-7 shadow-none placeholder:text-slate-400 focus-visible:ring-0"
+                placeholder="e.g. too expensive, wrong color, I wanted something more minimalist..."
               />
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+
+            <div className="flex justify-end">
               <Button
                 type="button"
                 disabled={!isRetryReady || isRetrying || isGeneratingRetryAdvice || !retryFeedback.trim()}
-                className="h-11 rounded-2xl bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90"
+                className="h-12 rounded-[24px] bg-primary px-6 text-sm text-primary-foreground shadow-[0_18px_40px_-24px_rgba(37,99,235,0.7)] hover:bg-primary/90"
                 onClick={onRetryAdviceRequest}
               >
-                {isGeneratingRetryAdvice ? 'Finding a better search...' : 'Try again'}
+                {isGeneratingRetryAdvice ? 'Finding a better search...' : 'Get a suggestion'}
               </Button>
             </div>
+
             {retryAdvice ? (
-              <div className="rounded-[24px] border border-primary/15 bg-primary/5 p-4">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-slate-900">A more specific search might help</p>
-                  {retryAdvice.rationale ? (
-                    <p className="text-sm leading-6 text-slate-600">{retryAdvice.rationale}</p>
-                  ) : null}
-                </div>
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                  <Label htmlFor="retry-suggested-query" className="sr-only">
-                    Suggested search query
+              <div className="space-y-3 rounded-[24px] border border-primary/15 bg-primary/5 p-4">
+                {retryAdvice.rationale ? (
+                  <p className="text-sm leading-6 text-slate-700">{retryAdvice.rationale}</p>
+                ) : null}
+                <div className="space-y-2">
+                  <Label htmlFor="retry-suggested-query" className="text-xs font-medium text-slate-500">
+                    Try this search — edit if needed:
                   </Label>
-                  <input
-                    id="retry-suggested-query"
-                    value={suggestedRetryQuery}
-                    onChange={(event) => onSuggestedRetryQueryChange(event.target.value)}
-                    className="h-12 min-w-0 flex-1 rounded-2xl border border-stone-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-primary/50"
-                  />
-                  <Button
-                    type="button"
-                    disabled={!suggestedRetryQuery.trim()}
-                    className="h-12 rounded-2xl bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90"
-                    onClick={() => onSearchSuggestedQuery(suggestedRetryQuery)}
-                  >
-                    Search this instead
-                    <Search className="ml-2 h-4 w-4" />
-                  </Button>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      id="retry-suggested-query"
+                      value={suggestedRetryQuery}
+                      onChange={(event) => onSuggestedRetryQueryChange(event.target.value)}
+                      className="h-11 min-w-0 flex-1 rounded-2xl border border-stone-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-primary/50"
+                    />
+                    <Button
+                      type="button"
+                      disabled={!suggestedRetryQuery.trim()}
+                      className="h-11 shrink-0 rounded-2xl bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90"
+                      onClick={() => onSearchSuggestedQuery(suggestedRetryQuery)}
+                    >
+                      Search this instead
+                      <Search className="ml-2 h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : null}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       ) : null}
 
       {!hasStartedSearch && !errorMessage ? (

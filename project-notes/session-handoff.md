@@ -93,6 +93,17 @@ All latency experiments are concluded and wired into the real product flow. Deci
 - All latency experiments are concluded. Nano-lock + mini async-enrichment is the wired product path.
 - Pending cleanup: remove `measurementPreparedQueryFraming`, `measurementSelectionMode: selection_only/winner_lock_ids_only`, the local `/api/search/finalize-stream` route, and `stream-clean` harness mode — see `todo.md`.
 
+## Render migration — completed 2026-04-27
+- Backend moved from Vercel serverless to Render Express server (`backend/express-server.js`)
+- All frontend fetch calls in `useGuidedSearch.js` and `analytics.js` now use `VITE_BACKEND_URL` prefix
+- `VITE_BACKEND_URL=https://focama-web.onrender.com` set in Vercel env vars
+- `ALLOWED_ORIGIN=https://www.focamai.com` set in Render env vars
+- Prewarm ping added: `GET /api/ping` on Render, fires on first search input focus
+- Vercel `api/` serverless wrappers kept intact — untouched, still work if needed
+- `/api/geo` (AmazonStorePill) intentionally left as relative path — reads Vercel-specific header
+- Branch `render-backend` is live on both Vercel and Render — not yet merged to main
+- Two-step finalize (cards first, copy via polling) was already built — no new work needed there
+
 ## Active exploration — Oxylabs as cheap Rainforest substitute (2026-04-19)
 - Goal: test whether Oxylabs can replace Rainforest `type=product` calls for the dual-endpoint enrichment flow during development, before paying Rainforest credits closer to launch.
 - Feasibility test completed — Oxylabs works. Bullets, brand, specs all present.
