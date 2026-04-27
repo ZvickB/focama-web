@@ -45,6 +45,12 @@ function getRequestUrl(req) {
   return new URL(req.url, `${proto}://${host}`)
 }
 
+// Prewarm ping — wakes the Render dyno before the first real request
+app.get('/api/ping', (req, res) => {
+  res.set('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
+  res.json({ ok: true })
+})
+
 // Search routes
 app.get('/api/search/discover', async (req, res) => {
   await handleDiscoverySearch(getRequestUrl(req), res, req)
