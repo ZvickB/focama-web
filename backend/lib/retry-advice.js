@@ -1,6 +1,6 @@
 import { DEFAULT_REFINEMENT_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
 
-const MAX_QUERY_LENGTH = 140
+const MAX_QUERY_LENGTH = 80
 const MAX_RATIONALE_LENGTH = 180
 const MAX_FEEDBACK_LENGTH = 300
 const MAX_NOTES_LENGTH = 500
@@ -103,6 +103,7 @@ function buildRetryAdviceInput({
   return [
     'A shopper rejected a product shortlist. Decide whether their feedback points to a wrong search pool or just imperfect picks.',
     'Always provide a concise suggested_query that can be pasted into a normal shopping search box.',
+    'The suggested_query must be 80 characters or fewer — write a tight, complete phrase.',
     'If the pool seems wrong, rewrite the search more specifically around the feedback.',
     'If the same pool could work, still produce a better fresh-search query that preserves the original intent and adds the feedback.',
     'Do not include retailer names unless the user explicitly requested one.',
