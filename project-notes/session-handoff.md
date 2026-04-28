@@ -38,7 +38,7 @@
 - `/api/search/discover` builds the candidate pool and preview set.
 - `/api/search/prewarm` is fully removed (2026-04-17).
 - `/api/search/refine` returns one fast user-facing follow-up question.
-- `/api/search/framing-fields` returns slower background framing fields for timing/debug visibility.
+- Query framing now runs only through `/api/search/refine`; the old `/api/search/framing-fields` background lane is removed.
 - `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache, locks the shortlist via nano, fetches product details for the locked winners through the current Oxylabs helper, then returns `flowPath: 'nano_lock'` plus shortlist cards that now include `feature_bullets` when available.
 - `/api/search/enrichment` GET — frontend polls with `?token=&query=` until `ready: true` then merges `fit_reason`/`caveat` into results.
 - Grid cards still stay metadata-only on the surface: image, title, source, price, ratings, badge label. No AI copy.
@@ -93,16 +93,12 @@ All latency experiments are concluded and wired into the real product flow. Deci
 - All latency experiments are concluded. Nano-lock + mini async-enrichment is the wired product path.
 - Pending cleanup: remove `measurementPreparedQueryFraming`, `measurementSelectionMode: selection_only/winner_lock_ids_only`, the local `/api/search/finalize-stream` route, and `stream-clean` harness mode — see `todo.md`.
 
-## Render migration — completed 2026-04-27
-- Backend moved from Vercel serverless to Render Express server (`backend/express-server.js`)
-- All frontend fetch calls in `useGuidedSearch.js` and `analytics.js` now use `VITE_BACKEND_URL` prefix
-- `VITE_BACKEND_URL=https://focama-web.onrender.com` set in Vercel env vars
-- `ALLOWED_ORIGIN=https://www.focamai.com` set in Render env vars
-- Prewarm ping added: `GET /api/ping` on Render, fires on first search input focus
-- Vercel `api/` serverless wrappers kept intact — untouched, still work if needed
-- `/api/geo` (AmazonStorePill) intentionally left as relative path — reads Vercel-specific header
-- Branch `render-backend` is live on both Vercel and Render — not yet merged to main
-- Two-step finalize (cards first, copy via polling) was already built — no new work needed there
+## Deployment note
+- Current backend deployment is Vercel.
+- `VITE_BACKEND_URL` is still the frontend base-URL switch for API calls and can point at the same Vercel deployment or another backend when explicitly needed.
+- `GET /api/ping` is still used for the first-focus warmup probe.
+- `/api/geo` intentionally remains a relative path because it reads Vercel geolocation headers.
+- Historical Render migration notes are superseded by the current Vercel deployment state.
 
 ## Active exploration — Oxylabs as cheap Rainforest substitute (2026-04-19)
 - Goal: test whether Oxylabs can replace Rainforest `type=product` calls for the dual-endpoint enrichment flow during development, before paying Rainforest credits closer to launch.

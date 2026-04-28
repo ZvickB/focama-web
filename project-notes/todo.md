@@ -130,7 +130,7 @@ AI maintains this file. Each item should be one plain sentence.
 | done | Rainforest API added as primary discovery endpoint, SerpAPI preserved as secondary |
 | done | Supabase-backed discovery cache confirmed working in production |
 | done | Badge scope reduction — cached finalize crossed the under-8s milestone |
-| done | Query framing split into question-fast and background framing-fields lanes |
+| done | Historical experiment: query framing was temporarily split into question-fast and background framing-fields lanes; current runtime is refine-only |
 | done | Rate limiting, caching, and search history wired with Supabase + local dev fallback |
 | done | Input validation blocks low-signal queries before hitting the AI |
 | done | Retry loop with feedback — 2-pass cap, excludes rejected picks, collapses previous picks |

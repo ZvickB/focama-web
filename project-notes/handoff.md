@@ -8,7 +8,7 @@
 ## Current reality
 - The app is live on Vercel.
 - The homepage uses the `open` layout and the guided `/api/search/rainforest-discover -> /api/search/refine -> /api/search/finalize -> /api/search/enrichment` product path. `/api/search/discover` is the legacy SerpApi path, preserved for scripts and tests.
-- `/api/search/framing-fields` runs as a background lane; prewarm is fully removed (2026-04-17).
+- Query framing is now question-fast only through `/api/search/refine`; the old `/api/search/framing-fields` lane is removed. Prewarm is fully removed (2026-04-17).
 - `/api/search/retry-advice` is a live POST route — generates AI-powered suggested queries when users reject results, powering the "Search this instead" retry path.
 - `/api/search/live` remains an explicit manual/debug combined route.
 - Product shortlists are 6 results.
@@ -71,7 +71,7 @@ Summary:
 - Watch rate limiting, cache TTL, and API costs as usage increases.
 - Rainforest detail-fetch helper is implemented but still not wired into finalize. Current reality: `backend/server.js` still imports and calls `fetchOxylabsProductDetailsByAsin`. Future wiring should switch that import/call to `fetchRainforestProductDetailsByAsin` from `backend/lib/rainforest-pipeline.js` while keeping `readProductDetailsCacheEntries` / `writeProductDetailsCacheEntries` unchanged in `backend/lib/search-storage.js`.
 - Continue trimming `backend/server.js` so request parsing, route orchestration, and flow logic do not all keep growing in one file.
-- Long term, extract runtime-agnostic backend services so Vercel routes stop adapting themselves into Node-style request objects.
+- Long term, keep extracting runtime-agnostic backend services so the Vercel route layer can stay thin.
 
 ## Nice-to-have polish
 - Do another small pass on result-card readability and image overlays.

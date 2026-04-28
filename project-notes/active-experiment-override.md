@@ -16,7 +16,7 @@
 - Future chats should usually be medium-reasoning implementation passes against that plan, not fresh architecture redesign passes.
 - Use the repo's current architecture as the starting point, but do not let older guardrails force this experiment back into a narrower shape than the user approved.
 - Architecture changes are approved for this experiment.
-- Multiple preparatory AI lanes are approved before finalize, such as question-fast, framing-fields, and candidate-aware prewarm.
+- Multiple preparatory AI lanes were approved during this experiment, including question-fast, framing-fields, and candidate-aware prewarm. The framing-fields lane was later removed from the runtime flow.
 - The one-call streamed finalize experiment has a measured model decision now: `gpt-5.4-nano` remains the only plausible fast stream model from current measurements, while `gpt-5-mini` is rejected for the one-call stream path.
 - The next approved experiment is separate from the one-call stream experiment: let nano lock winners/badges fast, then let mini write nicer copy in a non-blocking second call.
 - Keep that next step harness-only until explicitly approved for product work: do not wire frontend, do not add a Vercel wrapper, and do not redesign the broader architecture.
@@ -55,11 +55,12 @@
 - The older direct-artifact/prerank branch improved empty-notes finalize substantially.
 - Refined/retry paths still paid for fresh heavy OpenAI rerank work and did not materially solve the main context-added latency goal.
 - Treat current prewarm as useful groundwork plus a partial experiment result, not the final validated solution.
-- Query framing is now split into question-fast and background framing-fields lanes.
+- Query framing measurements below include an older split question-fast/background framing-fields experiment. Current runtime query framing is question-fast only through `/api/search/refine`.
 - Finalize now returns a `finalizeFast` contract plus compatible `results`.
 - Enrichment remains planned, not implemented as a separate product layer.
 
 ## Measurement conclusions
+- Notes in this section about `framing-fields` are historical measurements from the removed background lane, kept only for experiment context.
 - Reset baseline on 2026-03-30:
   - refine averaged about 3.4 s and 318 tokens
   - finalize averaged about 16.1 s and 5485 tokens

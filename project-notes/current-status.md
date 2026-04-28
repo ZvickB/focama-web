@@ -28,7 +28,6 @@
 - The primary product flow is guided search:
   - `/api/search/rainforest-discover` (primary homepage discovery; `/api/search/discover` is the legacy SerpApi path, preserved for scripts/tests)
   - `/api/search/refine`
-  - `/api/search/framing-fields`
   - `/api/search/finalize`
   - `/api/search/enrichment` (async polling)
   - `/api/search/retry-advice` (POST; AI-powered advice before retry — returns `recommendation`, `suggestedQuery`, `rationale`)
@@ -56,10 +55,7 @@
 - Badge labels are frontend-owned deterministic heuristics assigned after the shortlist arrives.
 - Finalize response shape: `flowPath: 'nano_lock'`, `strategy: 'nano_lock'`, no `reusedCandidateAwarePrior`.
 - Normal guided finalize responses do not echo the rich candidate pool back to the browser.
-- Query framing is split:
-  - `/api/search/refine` returns the fast user-visible question
-  - `/api/search/framing-fields` returns slower background framing fields for timing/debug only
-  - framing fields are not stored server-side or consumed by finalize in normal product flow
+- Query framing is question-fast only through `/api/search/refine`; the old `/api/search/framing-fields` background lane is removed and no longer part of runtime flow.
 - Rainforest detail-fetch support now exists in `backend/lib/rainforest-pipeline.js` as `fetchRainforestProductDetailsByAsin`, but it is not wired into `/api/search/finalize` yet.
 - Planned future re-entry point for the provider swap: the finalize route call site in `backend/server.js` that currently calls `fetchOxylabsProductDetailsByAsin`, plus the import at the top of that file.
 - Cached detail rows are not fed into the AI pick-selection prompt. They only support post-lock product facts for the already-chosen shortlist.

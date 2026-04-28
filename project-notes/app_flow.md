@@ -33,7 +33,6 @@
 - The current homepage flow calls `/api/search/rainforest-discover` for primary guided discovery. `/api/search/discover` still exists as the older generic guided-discovery path and for some backend scripts/tests, but it is not the main homepage route now.
 - `/api/search/prewarm` backend route fully removed (2026-04-17).
 - `/api/search/refine` returns one short user-facing follow-up question with static helper/placeholder copy.
-- `/api/search/framing-fields` returns background query-framing fields for timing/debug visibility only.
 - `/api/search/finalize` accepts lightweight context, reconstructs the rich candidate pool server-side from guided discovery cache, locks the shortlist via nano, fetches product details for the locked winners through the current Oxylabs helper, and returns shortlist cards with `feature_bullets` immediately. Mini enrichment still fires async after the response is sent and stores `fit_reason`/`caveat` in the discovery cache.
 - `/api/search/enrichment` GET — accepts `?token=&query=`, returns `{ ready: false }` or `{ ready: true, entries: [...] }` where each entry has `candidateId`, `fitReason`, `caveat`. On Vercel this route must receive the original web `Request`, not just a parsed `URL`, because the handler reads `request.url`.
 - `/api/search/live` is the explicit manual/debug combined route.
@@ -42,11 +41,8 @@
 
 ## Current AI and latency shape
 - Guided refine uses minimal reasoning effort and only asks AI for one short question.
-- Query framing is split in `backend/lib/query-framing.js`:
-  - `question_fast` powers `/api/search/refine`
-  - `framing_fields` powers `/api/search/framing-fields`
-- On search submit, the frontend starts guided discovery, question-fast refine, and background framing-fields independently.
-- Background framing fields are held client-side for timing/debug visibility; they are not stored server-side or consumed by normal finalize.
+- Query framing is question-fast only now. `/api/search/refine` owns the runtime follow-up question path.
+- The old `framing_fields` background lane and `/api/search/framing-fields` route are removed and no longer called by the frontend.
 - Finalize uses nano (~2s) to lock winners, then fires mini enrichment async after responding.
 - Mini enrichment writes `fit_reason` + `caveat` per pick and stores in the discovery cache `selection.enrichment` field.
 - Frontend polls `/api/search/enrichment` every 1.5s (30s timeout) and merges enrichment into results by `candidateId`.
@@ -77,7 +73,7 @@
 - Vercel route wrappers forward request headers so production rate limiting can use forwarded client IPs.
 - Guided search requests expose `Server-Timing`; timing UI appears in development or with `?timing=1`.
 - Guided AI routes surface OpenAI token usage metadata when calls run.
-- Structured `[search-flow]` logs cover discovery, refine, framing-fields, finalize, and enrichment.
+- Structured `[search-flow]` logs cover discovery, refine, finalize, and enrichment.
 - The Vercel `api/search/*` wrappers are part of the real production execution path, not a thin afterthought. If a handler depends on `request.url`, headers, or body shape, the wrapper test should assert that the original request is forwarded intact.
 - Localhost parity caveat: direct Node-server handlers can mask wrapper bugs. Production-only issues can appear when a handler works with the local server contract but the Vercel wrapper passes a different argument shape.
 - Optional Supabase analytics can track guided-search steps, result impressions, card opens, and retailer clicks.

@@ -4,6 +4,7 @@
 - This is the current planning note for the preferred layered AI latency strategy.
 - This file is planning only. It does not mean the architecture is already implemented.
 - Use it to guide future medium-reasoning implementation chats one step at a time.
+- Historical note: the split `question-fast` plus `framing-fields` query-framing plan documented here is superseded in the current runtime. Query framing now runs only through `/api/search/refine`.
 
 ## Core decision
 - Important correction: for finalize, the active desired experiment is one streamed AI session with ordered phase events, not separate post-lock AI calls.
@@ -139,9 +140,9 @@
 - Pick one pending checklist step per chat when possible.
 - When a step changes active direction or current repo reality, update the relevant project notes in the same pass.
 - Current orchestration reality:
-  - the frontend starts guided discovery, `/api/search/refine` question-fast, and `/api/search/framing-fields` background framing independently on search submit
+  - the frontend starts guided discovery and `/api/search/refine` independently on search submit
   - `/api/search/refine` returns the fast user-visible follow-up question
-  - `/api/search/framing-fields` returns slower background framing fields for timing/debug visibility only; not stored server-side or consumed by finalize in normal product flow
+  - the old `/api/search/framing-fields` background lane is removed and no longer participates in runtime flow
   - `/api/search/finalize` uses nano to lock the shortlist fast (~2s), fires mini enrichment async, and returns `flowPath: 'nano_lock'` plus metadata-only cards
   - `/api/search/enrichment` GET endpoint — frontend polls until enrichment is ready, then merges `fit_reason`/`caveat` into results by candidateId
   - cards are metadata only: image, title, source, price, ratings, badge label — no AI copy in blocking response
