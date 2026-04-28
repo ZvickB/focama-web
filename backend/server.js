@@ -1461,7 +1461,9 @@ export async function handleRetryAdvice(request, response) {
     })
 
     sendJson(response, 200, {
-      ...advice,
+      recommendation: advice.recommendation,
+      suggestedQuery: advice.suggestedQuery,
+      rationale: advice.rationale,
       query: normalizedQuery,
     }, {
       serverTiming: [

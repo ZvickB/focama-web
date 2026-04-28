@@ -2,19 +2,17 @@ import { DEFAULT_REFINEMENT_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-select
 
 const MAX_QUERY_LENGTH = 80
 const MAX_RATIONALE_LENGTH = 180
-const MAX_FEEDBACK_LENGTH = 300
-const MAX_NOTES_LENGTH = 500
 const MAX_SHORTLIST_ITEMS = 6
 const MAX_TITLE_LENGTH = 160
 
+function normalizeText(value) {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
+}
+
 function clampText(value, maxLength) {
-  const normalizedValue = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
-
-  if (!normalizedValue) {
-    return ''
-  }
-
-  return normalizedValue.slice(0, maxLength).trim()
+  const normalized = normalizeText(value)
+  if (!normalized) return ''
+  return normalized.slice(0, maxLength).trim()
 }
 
 function normalizeOpenAiUsage(payload) {
@@ -107,10 +105,10 @@ function buildRetryAdviceInput({
     'If the pool seems wrong, rewrite the search more specifically around the feedback.',
     'If the same pool could work, still produce a better fresh-search query that preserves the original intent and adds the feedback.',
     'Do not include retailer names unless the user explicitly requested one.',
-    `Original search: ${clampText(productQuery, MAX_QUERY_LENGTH)}`,
-    `Follow-up notes: ${clampText(followUpNotes, MAX_NOTES_LENGTH) || 'None'}`,
+    `Original search: ${normalizeText(productQuery)}`,
+    `Follow-up notes: ${normalizeText(followUpNotes) || 'None'}`,
     `Rejected shortlist:\n${titleLines}`,
-    `User feedback: ${clampText(rejectionFeedback, MAX_FEEDBACK_LENGTH)}`,
+    `User feedback: ${normalizeText(rejectionFeedback)}`,
   ].join('\n')
 }
 
@@ -182,11 +180,11 @@ export async function generateRetryAdvice(
   }
 
   const parsed = JSON.parse(responseText)
-  const suggestedQuery = clampText(parsed.suggested_query, MAX_QUERY_LENGTH)
+  const suggestedQuery = normalizeText(parsed.suggested_query)
 
   return {
     recommendation: parsed.recommendation === 'same_pool' ? 'same_pool' : 'new_search',
-    suggestedQuery: suggestedQuery || clampText(productQuery, MAX_QUERY_LENGTH),
+    suggestedQuery: suggestedQuery || normalizeText(productQuery),
     rationale: clampText(parsed.rationale, MAX_RATIONALE_LENGTH),
     usage: normalizeOpenAiUsage(payload),
     generatedAt: new Date().toISOString(),
