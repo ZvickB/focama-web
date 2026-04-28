@@ -16,7 +16,6 @@ import ProductCard from '@/components/ProductCard.jsx'
 import { RESULT_CARD_SLOTS } from '@/components/home/useGuidedSearch.js'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Button } from '@/components/ui/button.jsx'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import logo from '@/assets/logo_master_version.svg'
 import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
 import { Label } from '@/components/ui/label.jsx'
@@ -137,56 +136,49 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
         className="max-h-[94vh] w-full overflow-y-auto rounded-t-[32px] bg-[#fcf8f1] shadow-2xl lg:max-h-[88vh] lg:max-w-4xl lg:rounded-[32px]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-stone-200/80 bg-[#fcf8f1]/95 px-4 py-4 backdrop-blur sm:px-6">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Product details
-            </p>
-            <p className="text-sm text-slate-600">What works for you, and what to know.</p>
-          </div>
+        {/* Minimal close bar — just the X, no title text */}
+        <div className="sticky top-0 z-10 flex justify-end bg-[#fcf8f1]/80 px-4 py-3 backdrop-blur sm:px-5">
           <Button
             type="button"
             variant="ghost"
-            className="h-10 w-10 rounded-full p-0 text-slate-600 hover:bg-stone-100"
+            className="h-9 w-9 rounded-full p-0 text-slate-500 hover:bg-stone-100 hover:text-slate-700"
             onClick={onClose}
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </Button>
         </div>
 
-        <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[1.05fr_0.95fr] lg:gap-8 lg:p-8">
-          <div className="space-y-4">
-            <div className="overflow-hidden rounded-[28px] bg-white shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)]">
-              <div className="flex h-72 items-center justify-center bg-stone-50 p-4 sm:h-[420px] sm:p-6">
-                <img
-                  src={item.image}
-                  alt={item.title}
-                  className="h-full w-full object-contain"
-                />
-              </div>
+        <div className="grid gap-6 px-4 pb-4 sm:gap-8 sm:px-6 sm:pb-6 lg:grid-cols-[1fr_1.1fr] lg:gap-8 lg:px-8 lg:pb-8">
+          {/* Left — image only */}
+          <div className="overflow-hidden rounded-[24px] bg-white shadow-[0_16px_60px_-30px_rgba(15,23,42,0.35)]">
+            <div className="flex h-60 items-center justify-center bg-stone-50 p-4 sm:h-[300px] sm:p-6">
+              <img
+                src={item.image}
+                alt={item.title}
+                className="h-full w-full object-contain"
+              />
             </div>
-            <Badge className="rounded-full bg-white px-3 py-1 text-slate-700 hover:bg-white">
-              {item.subtitle}
-            </Badge>
           </div>
 
-          <div className="space-y-5">
-            <div className="space-y-3">
-              <h2 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+          {/* Right — info */}
+          <div className="flex flex-col gap-4">
+            {/* Title block */}
+            <div className="space-y-1.5">
+              {item.subtitle ? (
+                <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-400">
+                  {item.subtitle}
+                </p>
+              ) : null}
+              <h2 className="text-xl font-semibold leading-snug tracking-tight text-slate-900 sm:text-2xl">
                 {item.title}
               </h2>
-              <div className="flex flex-wrap items-center gap-3">
-                {item.badgeLabel ? (
-                  <Badge className="rounded-full bg-primary px-3 py-1 text-primary-foreground hover:bg-primary">
-                    {item.badgeLabel}
-                  </Badge>
-                ) : null}
-                <p className="text-2xl font-semibold text-primary">{displayPrice}</p>
-                <div className="flex items-center gap-1 text-sm text-amber-600">
+              <p className="text-2xl font-semibold text-primary">{displayPrice}</p>
+              <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
+                <div className="flex items-center gap-0.5">
                   {Array.from({ length: 5 }).map((_, index) => (
                     <Star
                       key={index}
-                      className={`h-4 w-4 ${
+                      className={`h-3.5 w-3.5 ${
                         index < Math.round(item.rating)
                           ? 'fill-current text-amber-500'
                           : 'text-stone-300'
@@ -195,108 +187,96 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
                   ))}
                 </div>
                 <span className="text-sm text-slate-500">
-                  {item.rating.toFixed(1)} ({item.reviewCount} reviews)
+                  {item.rating.toFixed(1)} · {item.reviewCount} reviews
                 </span>
+                {item.badgeLabel ? (
+                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                    {item.badgeLabel}
+                  </span>
+                ) : null}
               </div>
-              {userFacingDescription ? (
-                <p className="text-base leading-7 text-slate-600">{userFacingDescription}</p>
-              ) : null}
-              {featureBullets.length > 0 ? (
-                <ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-slate-600">
-                  {featureBullets.map((bullet, index) => (
-                    <li key={`${item.id}-feature-bullet-${index}`}>{bullet}</li>
-                  ))}
-                </ul>
-              ) : null}
             </div>
 
-            {enrichmentReady ? (
-              <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg text-slate-900">Why this pick stands out</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
-                  <div className="flex items-start gap-3">
-                    <Star className="mt-1 h-4 w-4 text-amber-500" />
-                    <span>{fitReason}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-lg text-slate-900">Why this pick stands out</CardTitle>
-                    <span className="relative flex h-2 w-2 shrink-0">
-                      <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
-                      <span className="relative h-2 w-2 rounded-full bg-primary/60" />
-                    </span>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2.5">
-                  <div className="relative overflow-hidden rounded-full bg-stone-200/80">
-                    <div className="h-3.5 w-full" />
-                    <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" />
-                  </div>
-                  <div className="relative overflow-hidden rounded-full bg-stone-200/80">
-                    <div className="h-3.5 w-5/6" />
-                    <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" style={{ animationDelay: '0.3s' }} />
-                  </div>
-                  <div className="relative overflow-hidden rounded-full bg-stone-200/80">
-                    <div className="h-3.5 w-3/4" />
-                    <div className="absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/75 to-transparent animate-shimmer" style={{ animationDelay: '0.6s' }} />
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {enrichmentReady && caveat ? (
-              <Card className="rounded-[28px] border-stone-200/80 bg-white/80 shadow-none">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg text-slate-900">Possible drawbacks</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm leading-6 text-slate-600">
-                  <div className="flex items-start gap-3">
-                    <span className="mt-1 h-2.5 w-2.5 rounded-full bg-stone-400" />
-                    <span>{caveat}</span>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Feature bullets — always visible immediately while AI loads */}
+            {featureBullets.length > 0 ? (
+              <ul className="space-y-1.5">
+                {featureBullets.map((bullet, index) => (
+                  <li
+                    key={`${item.id}-feature-bullet-${index}`}
+                    className="flex items-start gap-2 text-sm leading-6 text-slate-600"
+                  >
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-stone-400" />
+                    <span>{bullet}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : userFacingDescription ? (
+              <p className="text-sm leading-6 text-slate-600">{userFacingDescription}</p>
             ) : null}
 
-            <div className="sticky bottom-0 flex flex-col gap-3 border-t border-stone-200/80 bg-[#fcf8f1]/95 py-4 backdrop-blur sm:flex-row">
-              <div className="flex-1 space-y-2">
-                {item.link ? (
-                  <Button
-                    asChild
-                    className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
-                  >
-                    <a href={item.link} target="_blank" rel="noreferrer" onClick={onRetailerClick}>
-                      {item.subtitle ? `View on ${item.subtitle}` : 'View on retailer site'}
-                      <ArrowUpRight className="h-4 w-4" />
-                    </a>
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    disabled
-                    className="h-12 w-full gap-2 rounded-2xl bg-stone-200 text-slate-500 hover:bg-stone-200"
-                  >
-                    Retailer link unavailable
-                  </Button>
-                )}
-                <p className="text-xs leading-5 text-slate-500">
-                  Prices and availability can change after you leave Focamai.
+            {/* AI analysis — small ambient indicator while loading, prominent section when ready */}
+            {enrichmentReady ? (
+              <MotionDiv
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="space-y-2.5 border-l-2 border-primary/40 pl-4"
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-primary/70">
+                  Why we picked it
                 </p>
+                <p className="text-sm leading-6 text-slate-700">{fitReason}</p>
+                {caveat ? (
+                  <p className="border-t border-stone-200/80 pt-2.5 text-sm leading-6 text-slate-500">
+                    <span className="font-medium text-slate-600">Worth knowing: </span>
+                    {caveat}
+                  </p>
+                ) : null}
+              </MotionDiv>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-slate-400">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
+                  <span className="relative h-2 w-2 rounded-full bg-primary/60" />
+                </span>
+                <span className="relative inline-block overflow-hidden rounded-full px-0.5 text-slate-500">
+                  <span className="relative z-10">Analyzing your pick…</span>
+                  <span className="pointer-events-none absolute inset-y-0 left-[-40%] w-[40%] skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/80 to-transparent animate-shimmer" />
+                </span>
               </div>
-              <Button
+            )}
+
+            {/* CTA */}
+            <div className="sticky bottom-0 space-y-2 border-t border-stone-200/80 bg-[#fcf8f1]/95 py-4 backdrop-blur">
+              {item.link ? (
+                <Button
+                  asChild
+                  className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
+                >
+                  <a href={item.link} target="_blank" rel="noreferrer" onClick={onRetailerClick}>
+                    {item.subtitle ? `View on ${item.subtitle}` : 'View on retailer site'}
+                    <ArrowUpRight className="h-4 w-4" />
+                  </a>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  disabled
+                  className="h-12 w-full gap-2 rounded-2xl bg-stone-200 text-slate-500"
+                >
+                  Retailer link unavailable
+                </Button>
+              )}
+              <p className="text-center text-xs leading-5 text-slate-400">
+                Prices and availability can change after you leave Focamai.
+              </p>
+              <button
                 type="button"
-                variant="outline"
-                className="h-12 rounded-2xl border-stone-300 bg-white text-slate-700"
+                className="w-full py-1.5 text-sm text-slate-500 transition-colors hover:text-slate-700"
                 onClick={onClose}
               >
                 Back to results
-              </Button>
+              </button>
             </div>
           </div>
         </div>

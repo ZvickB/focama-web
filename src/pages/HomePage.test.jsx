@@ -58,13 +58,13 @@ function renderHomePage() {
 describe('HomePage', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
-    window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__ = true
+    window.__FOCAMAI_DISABLE_BACKEND_PREWARM__ = true
     window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__ = true
     window.__FOCAMAI_DISABLE_GEO_FETCH__ = true
   })
 
   afterEach(() => {
-    delete window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__
+    delete window.__FOCAMAI_DISABLE_BACKEND_PREWARM__
     delete window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__
     delete window.__FOCAMAI_DISABLE_GEO_FETCH__
     vi.useRealTimers()
@@ -139,8 +139,7 @@ describe('HomePage', () => {
     ).toBeInTheDocument()
   })
 
-  it('starts discovery, question-fast, and background framing fields as separate requests', async () => {
-    window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__ = false
+  it('starts discovery and question-fast as separate requests', async () => {
     const user = userEvent.setup()
     const fetchMock = vi.fn((input) => {
       const url = String(input)
@@ -175,27 +174,6 @@ describe('HomePage', () => {
         })
       }
 
-      if (url.includes('/api/search/framing-fields')) {
-        return Promise.resolve({
-          ok: true,
-          headers: { get: () => 'openai;dur=12,total;dur=15' },
-          text: async () =>
-            JSON.stringify({
-              queryFraming: {
-                layer: 'query_framing',
-                query: 'stroller',
-                categoryHint: 'stroller',
-                tradeoffAxes: ['weight'],
-                refinementHints: ['Ask about travel use.'],
-              },
-              usage: {
-                totalTokens: 99,
-              },
-              queryFramingMode: 'framing_fields',
-            }),
-        })
-      }
-
       throw new Error(`Unexpected fetch call: ${url}`)
     })
 
@@ -214,7 +192,6 @@ describe('HomePage', () => {
       expect.arrayContaining([
         expect.stringContaining('/api/search/rainforest-discover'),
         expect.stringContaining('/api/search/refine'),
-        expect.stringContaining('/api/search/framing-fields'),
       ]),
     )
   })
@@ -730,14 +707,18 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Compact airport stroller')
+    await user.click(screen.getByRole('button', { name: /not quite what you needed\?/i }))
+    await screen.findByText(/what felt off about these picks\?/i)
 
     await user.type(
-      screen.getByLabelText(/what felt off about these picks/i),
+      document.getElementById('results-retry-feedback'),
       'Still too bulky for city travel.',
     )
-    await user.click(screen.getByRole('button', { name: /^try again$/i }))
+    await user.click(screen.getByRole('button', { name: /get a suggestion/i }))
 
-    expect(await screen.findByText(/a more specific search might help/i)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/the rejected picks sounded too bulky/i),
+    ).toBeInTheDocument()
     expect(
       screen.getByText(/the rejected picks sounded too bulky/i),
     ).toBeInTheDocument()
@@ -760,7 +741,7 @@ describe('HomePage', () => {
     })
     expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/search/finalize'))).toHaveLength(1)
 
-    const suggestedQueryInput = screen.getByLabelText(/suggested search query/i)
+    const suggestedQueryInput = screen.getByLabelText(/try this search/i)
     expect(suggestedQueryInput).toHaveValue('compact city stroller under 18 pounds')
     await user.clear(suggestedQueryInput)
     await user.type(suggestedQueryInput, 'lightweight umbrella stroller for city travel')
@@ -861,10 +842,12 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
+    await user.click(screen.getByRole('button', { name: /not quite what you needed\?/i }))
+    await screen.findByText(/what felt off about these picks\?/i)
 
-    const retryTextarea = screen.getByLabelText(/what felt off about these picks/i)
+    const retryTextarea = document.getElementById('results-retry-feedback')
     await user.type(retryTextarea, 'Too bulky')
-    await user.click(screen.getByRole('button', { name: /^try again$/i }))
+    await user.click(screen.getByRole('button', { name: /get a suggestion/i }))
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/search/retry-advice'))).toBe(true)
     })
@@ -883,8 +866,8 @@ describe('HomePage', () => {
       await retryAdvicePromise
     })
 
-    expect(screen.queryByText(/a more specific search might help/i)).not.toBeInTheDocument()
-    expect(screen.queryByLabelText(/suggested search query/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/a narrower search should help/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/try this search/i)).not.toBeInTheDocument()
     expect(screen.getByLabelText(/product topic/i)).toHaveValue('')
   }, 10000)
 
@@ -974,9 +957,11 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
+    await user.click(screen.getByRole('button', { name: /not quite what you needed\?/i }))
+    await screen.findByText(/what felt off about these picks\?/i)
 
-    await user.type(screen.getByLabelText(/what felt off about these picks/i), 'Too bulky')
-    await user.click(screen.getByRole('button', { name: /^try again$/i }))
+    await user.type(document.getElementById('results-retry-feedback'), 'Too bulky')
+    await user.click(screen.getByRole('button', { name: /get a suggestion/i }))
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/search/retry-advice'))).toBe(true)
     })
@@ -1071,11 +1056,13 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
-    await user.type(screen.getByLabelText(/what felt off about these picks/i), 'Too bulky')
-    await user.click(screen.getByRole('button', { name: /^try again$/i }))
+    await user.click(screen.getByRole('button', { name: /not quite what you needed\?/i }))
+    await screen.findByText(/what felt off about these picks\?/i)
+    await user.type(document.getElementById('results-retry-feedback'), 'Too bulky')
+    await user.click(screen.getByRole('button', { name: /get a suggestion/i }))
 
-    expect(await screen.findByText(/a more specific search might help/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/suggested search query/i)).toHaveValue('')
+    expect(await screen.findByText(/a narrower search should help/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/try this search/i)).toHaveValue('')
     expect(screen.getByRole('button', { name: /search this instead/i })).toBeDisabled()
   }, 10000)
 
@@ -1211,10 +1198,12 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
+    await user.click(screen.getByRole('button', { name: /not quite what you needed\?/i }))
+    await screen.findByText(/what felt off about these picks\?/i)
 
-    expect(screen.getByText(/what would make these better\?/i)).toBeInTheDocument()
-    expect(screen.getByPlaceholderText(/too expensive, wrong style/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^try again$/i })).toBeDisabled()
+    expect(screen.getByText(/what felt off about these picks\?/i)).toBeInTheDocument()
+    expect(document.getElementById('results-retry-feedback')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /get a suggestion/i })).toBeDisabled()
     expect(screen.queryByText(/retry 1 of 2/i)).not.toBeInTheDocument()
   })
 
@@ -1293,8 +1282,10 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
+    await user.click(screen.getByRole('button', { name: /not quite what you needed\?/i }))
+    await screen.findByText(/what felt off about these picks\?/i)
 
-    const retryTextarea = screen.getByLabelText(/what felt off about these picks/i)
+    const retryTextarea = document.getElementById('results-retry-feedback')
     await user.type(retryTextarea, 'Line one')
     await user.keyboard('{Shift>}{Enter}{/Shift}')
 
@@ -1304,8 +1295,10 @@ describe('HomePage', () => {
     await user.type(retryTextarea, 'Too bulky')
     await user.keyboard('{Enter}')
 
-    expect(await screen.findByText(/a more specific search might help/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/suggested search query/i)).toHaveValue('slim city stroller')
+    expect(
+      await screen.findByText(/a narrower city stroller search should better match that feedback/i),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText(/try this search/i)).toHaveValue('slim city stroller')
   })
 
   it('keeps tradeoffs out of the result grid and shows them only in the modal', async () => {
@@ -1361,7 +1354,7 @@ describe('HomePage', () => {
 
     await user.click(screen.getByText('Travel stroller'))
 
-    expect(await screen.findByText(/possible drawbacks/i)).toBeInTheDocument()
+    expect(await screen.findByText(/worth knowing/i)).toBeInTheDocument()
     expect(screen.getByText(/pricier than the smallest umbrella stroller options\./i)).toBeInTheDocument()
   })
 

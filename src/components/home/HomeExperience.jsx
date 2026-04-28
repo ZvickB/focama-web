@@ -169,7 +169,6 @@ function TimingPanel({ requestTiming }) {
   const entries = [
     ['Discover', requestTiming?.discover],
     ['Refine', requestTiming?.refine],
-    ['Framing fields', requestTiming?.framingFields],
     ['Finalize', requestTiming?.finalize],
   ].filter(([, timing]) => timing)
 
@@ -214,6 +213,13 @@ function TimingPanel({ requestTiming }) {
 }
 
 function prewarmBackend() {
+  if (
+    typeof window !== 'undefined' &&
+    window.__FOCAMAI_DISABLE_BACKEND_PREWARM__ === true
+  ) {
+    return
+  }
+
   const base = import.meta.env.VITE_BACKEND_URL || ''
   fetch(`${base}/api/ping`).catch(() => {})
 }
