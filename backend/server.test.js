@@ -67,7 +67,6 @@ import {
   handleEnrichmentPoll,
   handleFinalizeSelection,
   handleLiveSearch,
-  handleQueryFramingFields,
   handleRetryAdvice,
   handleSearchDebug,
   handleSupabaseHealth,
@@ -403,10 +402,6 @@ describe('server handlers', () => {
       recommendation: 'new_search',
       suggestedQuery: 'compact city stroller under 18 pounds',
       rationale: 'The rejected picks were too bulky, so a narrower search should help.',
-      usage: {
-        totalTokens: 100,
-      },
-      generatedAt: '2026-04-24T12:00:00.000Z',
     })
   })
 
@@ -714,65 +709,6 @@ describe('server handlers', () => {
       ],
       storageMode: 'supabase',
       status: 'ok',
-    })
-  })
-
-  it('returns background query-framing fields without blocking the refine question lane', async () => {
-    getEnv.mockImplementation((name) => {
-      if (name === 'OPENAI_API_KEY') {
-        return 'openai-key'
-      }
-
-      return ''
-    })
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          usage: {
-            input_tokens: 24,
-            output_tokens: 12,
-            total_tokens: 36,
-            output_tokens_details: {
-              reasoning_tokens: 3,
-            },
-          },
-          output_text: JSON.stringify({
-            category_hint: 'travel stroller',
-            framing_summary: 'Portability is likely the main tradeoff.',
-            tradeoff_axes: ['fold size', 'weight'],
-            refinement_hints: ['Ask about airline carry-on fit.'],
-          }),
-        }),
-      }),
-    )
-
-    const response = createResponseRecorder()
-
-    await handleQueryFramingFields(
-      new URL('http://localhost/api/search/framing-fields?query=travel%20stroller'),
-      response,
-    )
-
-    expect(response.statusCode).toBe(200)
-    expect(response.headers['Server-Timing']).toContain('openai')
-    expect(response.headers['X-Request-Id']).toEqual(expect.any(String))
-    expect(JSON.parse(response.body)).toEqual({
-      queryFraming: expect.objectContaining({
-        layer: 'query_framing',
-        query: 'travel stroller',
-        categoryHint: 'travel stroller',
-        tradeoffAxes: ['fold size', 'weight'],
-      }),
-      usage: {
-        inputTokens: 24,
-        outputTokens: 12,
-        totalTokens: 36,
-        reasoningTokens: 3,
-      },
-      queryFramingMode: 'framing_fields',
-      requestId: expect.any(String),
     })
   })
 

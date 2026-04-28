@@ -8,7 +8,6 @@ import {
   handleFinalizeSelection,
   handleLiveSearch,
   handleNanoMiniSplitFinalize,
-  handleQueryFramingFields,
   handleRainforestDiscoverySearch,
   handleRefinementPrompt,
   handleRetryAdvice,
@@ -64,9 +63,6 @@ app.get('/api/search/refine', async (req, res) => {
   await handleRefinementPrompt(getRequestUrl(req), res)
 })
 
-app.get('/api/search/framing-fields', async (req, res) => {
-  await handleQueryFramingFields(getRequestUrl(req), res, req)
-})
 
 app.get('/api/search/debug', async (req, res) => {
   await handleSearchDebug(getRequestUrl(req), res)

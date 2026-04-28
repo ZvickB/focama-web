@@ -50,7 +50,6 @@ describe('refinement assistant', () => {
         generatedAt: expect.any(String),
       },
       queryFramingMode: 'question_fast',
-      framingFields: null,
     })
 
     expect(fetchMock).toHaveBeenCalledWith(

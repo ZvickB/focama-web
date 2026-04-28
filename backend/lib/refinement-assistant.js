@@ -27,6 +27,5 @@ export async function generateRefinementPrompt(
       generatedAt: questionFast.generatedAt,
     }),
     queryFramingMode: 'question_fast',
-    framingFields: null,
   }
 }

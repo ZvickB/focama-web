@@ -12,7 +12,6 @@ import {
 import { createFinalizeFastContract, toFinalizeFastCard } from './lib/layered-contracts.js'
 import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, getCountryCode, takeRateLimitToken } from './lib/rate-limit.js'
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
-import { generateFramingFields } from './lib/query-framing.js'
 import { generateRetryAdvice } from './lib/retry-advice.js'
 import { DEFAULT_FILTER_CONFIG } from './lib/result-filter.js'
 import {
@@ -1240,7 +1239,6 @@ export async function handleRefinementPrompt(requestUrl, response) {
       totalMs: roundTimingDuration(totalDuration),
       openaiUsage: refinementPrompt.usage || null,
       queryFramingMode: refinementPrompt.queryFramingMode || 'legacy_query_framing',
-      framingFieldsReturned: Boolean(refinementPrompt.framingFields),
       rankingOwner: 'openai_question_fast',
     })
 
@@ -1264,122 +1262,6 @@ export async function handleRefinementPrompt(requestUrl, response) {
   }
 }
 
-export async function handleQueryFramingFields(requestUrl, response, request = null) {
-  const requestStartedAt = nowMs()
-  const requestId = randomUUID()
-  const openAiApiKey = getEnv('OPENAI_API_KEY')
-  const { error, isValid, normalizedQuery } = getValidatedSearchRequest(requestUrl, {
-    includeDetails: false,
-  })
-  const runtimeDebug = getRuntimeDebugDetails(request)
-
-  logSearchFlowEvent('query_framing_fields_started', {
-    requestId,
-    route: '/api/search/framing-fields',
-    lane: 'framing_fields',
-    query: requestUrl.searchParams.get('query') || '',
-    openAiConfigured: Boolean(openAiApiKey),
-    model: getRefinementModel(),
-    ...runtimeDebug,
-  })
-
-  if (!isValid) {
-    logSearchFlowEvent('query_framing_fields_invalid', {
-      requestId,
-      route: '/api/search/framing-fields',
-      lane: 'framing_fields',
-      query: requestUrl.searchParams.get('query') || '',
-      error,
-    })
-    sendJson(response, 400, { error, requestId }, { 'X-Request-Id': requestId })
-    return
-  }
-
-  if (!openAiApiKey) {
-    logSearchFlowEvent('query_framing_fields_missing_openai_key', {
-      requestId,
-      route: '/api/search/framing-fields',
-      lane: 'framing_fields',
-      query: normalizedQuery,
-      ...runtimeDebug,
-    })
-    sendJson(
-      response,
-      500,
-      { error: 'OPENAI_API_KEY is missing from the root .env file.', requestId },
-      { 'X-Request-Id': requestId },
-    )
-    return
-  }
-
-  try {
-    const openAiStartedAt = nowMs()
-    const framingFields = await generateFramingFields({
-      productQuery: normalizedQuery,
-      apiKey: openAiApiKey,
-      model: getRefinementModel(),
-      debugContext: {
-        onEvent(eventName, details) {
-          logSearchFlowEvent(eventName, {
-            requestId,
-            route: '/api/search/framing-fields',
-            lane: 'framing_fields',
-            query: normalizedQuery,
-            ...details,
-          })
-        },
-      },
-    })
-    const openAiDuration = nowMs() - openAiStartedAt
-    const totalDuration = nowMs() - requestStartedAt
-    const contract = framingFields.contract || null
-
-    logSearchFlowEvent('query_framing_fields_completed', {
-      requestId,
-      route: '/api/search/framing-fields',
-      lane: 'framing_fields',
-      query: normalizedQuery,
-      categoryHint: contract?.categoryHint || '',
-      tradeoffAxisCount: Array.isArray(contract?.tradeoffAxes) ? contract.tradeoffAxes.length : 0,
-      refinementHintCount: Array.isArray(contract?.refinementHints) ? contract.refinementHints.length : 0,
-      openaiMs: roundTimingDuration(openAiDuration),
-      totalMs: roundTimingDuration(totalDuration),
-      openaiUsage: framingFields.usage || null,
-      queryFramingMode: 'framing_fields',
-      rankingOwner: 'query_framing_background',
-    })
-
-    sendJson(response, 200, {
-      queryFraming: contract,
-      usage: framingFields.usage || null,
-      queryFramingMode: 'framing_fields',
-      requestId,
-    }, {
-      'X-Request-Id': requestId,
-      serverTiming: [
-        { name: 'openai', duration: openAiDuration },
-        { name: 'total', duration: totalDuration },
-      ],
-    })
-  } catch (error) {
-    logSearchFlowEvent('query_framing_fields_failed', {
-      requestId,
-      route: '/api/search/framing-fields',
-      lane: 'framing_fields',
-      query: normalizedQuery,
-      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
-      error: error instanceof Error ? error.message : 'Unknown error',
-      ...runtimeDebug,
-    })
-    sendJson(response, 500, {
-      error: 'Unable to generate query framing fields.',
-      details: error instanceof Error ? error.message : 'Unknown error',
-      requestId,
-    }, {
-      'X-Request-Id': requestId,
-    })
-  }
-}
 
 export async function handleRetryAdvice(request, response) {
   const requestStartedAt = nowMs()
@@ -1849,6 +1731,17 @@ export async function handleFinalizeSelection(request, response) {
     sendJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid request body.' })
     return
   }
+
+  logSearchFlowEvent('guided_finalize_request_received', {
+    route: '/api/search/finalize',
+    bodyKeys: Object.keys(body || {}),
+    hasQuery: typeof body?.query === 'string',
+    hasDiscoveryToken: typeof body?.discoveryToken === 'string',
+    queryLength: typeof body?.query === 'string' ? body.query.length : 0,
+    tokenLength: typeof body?.discoveryToken === 'string' ? body.discoveryToken.length : 0,
+    requestMode: typeof body?.requestMode === 'string' ? body.requestMode : null,
+    bodyReadDuration: body?.bodyReadDuration,
+  })
 
   const sanitizedDiscoveryContext = sanitizeFinalizeDiscoveryContext(body)
 
@@ -2356,11 +2249,6 @@ export function createApiServer() {
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search/refine') {
       await handleRefinementPrompt(requestUrl, response)
-      return
-    }
-
-    if (request.method === 'GET' && requestUrl.pathname === '/api/search/framing-fields') {
-      await handleQueryFramingFields(requestUrl, response)
       return
     }
 

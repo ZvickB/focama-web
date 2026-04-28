@@ -12,10 +12,6 @@ const handleRainforestDiscoverySearch = vi.fn((requestUrl, response) => {
   response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
   response.end(JSON.stringify({ pathname: requestUrl.pathname }))
 })
-const handleQueryFramingFields = vi.fn((requestUrl, response) => {
-  response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-  response.end(JSON.stringify({ pathname: requestUrl.pathname }))
-})
 const handleEnrichmentPoll = vi.fn((incomingRequestUrl, response, request) => {
   void incomingRequestUrl
   const parsedRequestUrl = new URL(request.url)
@@ -53,7 +49,6 @@ const handleRetryAdvice = vi.fn((request, response) => {
 vi.mock('../../backend/server.js', () => ({
   handleDiscoverySearch,
   handleEnrichmentPoll,
-  handleQueryFramingFields,
   handleFinalizeSelection,
   handleLiveSearch,
   handleRainforestDiscoverySearch,
@@ -63,7 +58,6 @@ vi.mock('../../backend/server.js', () => ({
 const { GET: getLiveSearch } = await import('./live.js')
 const { GET: getDiscoverySearch } = await import('./discover.js')
 const { GET: getEnrichmentPoll } = await import('./enrichment.js')
-const { GET: getQueryFramingFields } = await import('./framing-fields.js')
 const { POST: postFinalizeSelection } = await import('./finalize.js')
 const { GET: getRainforestDiscoverySearch } = await import('./rainforest-discover.js')
 const { POST: postRetryAdvice } = await import('./retry-advice.js')
@@ -145,24 +139,6 @@ describe('Vercel search route wrappers', () => {
     const forwardedRequest = handleLiveSearch.mock.calls[0][2]
     expect(Object.fromEntries(forwardedRequest.headers.entries())).toMatchObject({
       'x-forwarded-for': '203.0.113.31',
-    })
-  })
-
-  it('forwards query-framing fields requests into the background framing wrapper', async () => {
-    const request = new Request('https://example.com/api/search/framing-fields?query=stroller')
-
-    const response = await getQueryFramingFields(request)
-
-    expect(response.status).toBe(200)
-    expect(handleQueryFramingFields).toHaveBeenCalledWith(
-      expect.any(URL),
-      expect.any(Object),
-      expect.objectContaining({
-        headers: expect.any(Headers),
-      }),
-    )
-    expect(await response.json()).toEqual({
-      pathname: '/api/search/framing-fields',
     })
   })
 

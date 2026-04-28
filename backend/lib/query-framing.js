@@ -2,10 +2,6 @@ import { createQueryFramingContract } from './layered-contracts.js'
 import { DEFAULT_REFINEMENT_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
 
 const MAX_PROMPT_LENGTH = 140
-const MAX_CATEGORY_HINT_LENGTH = 80
-const MAX_FRAMING_SUMMARY_LENGTH = 160
-const MAX_TRADEOFF_AXES = 4
-const MAX_REFINEMENT_HINTS = 4
 
 function clampText(value, maxLength) {
   const normalizedValue = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
@@ -15,17 +11,6 @@ function clampText(value, maxLength) {
   }
 
   return normalizedValue.slice(0, maxLength).trim()
-}
-
-function normalizeStringArray(values, { maxItems, maxLength }) {
-  if (!Array.isArray(values)) {
-    return []
-  }
-
-  return values
-    .map((value) => clampText(value, maxLength))
-    .filter(Boolean)
-    .slice(0, maxItems)
 }
 
 function normalizeOpenAiUsage(payload) {
@@ -81,39 +66,6 @@ function buildQuestionFastSchema() {
   }
 }
 
-function buildFramingFieldsSchema() {
-  return {
-    type: 'object',
-    properties: {
-      category_hint: {
-        type: 'string',
-        maxLength: MAX_CATEGORY_HINT_LENGTH,
-      },
-      framing_summary: {
-        type: 'string',
-        maxLength: MAX_FRAMING_SUMMARY_LENGTH,
-      },
-      tradeoff_axes: {
-        type: 'array',
-        maxItems: MAX_TRADEOFF_AXES,
-        items: {
-          type: 'string',
-          maxLength: 80,
-        },
-      },
-      refinement_hints: {
-        type: 'array',
-        maxItems: MAX_REFINEMENT_HINTS,
-        items: {
-          type: 'string',
-          maxLength: 120,
-        },
-      },
-    },
-    required: ['category_hint', 'framing_summary', 'tradeoff_axes', 'refinement_hints'],
-    additionalProperties: false,
-  }
-}
 
 function buildQuestionFastInput(productQuery) {
   return [
@@ -127,15 +79,6 @@ function buildQuestionFastInput(productQuery) {
   ].join('\n')
 }
 
-function buildFramingFieldsInput(productQuery) {
-  return [
-    'Create background query-framing fields for a shopping search before any product results exist.',
-    'Stay query-only. Do not assume specific products, brands, or merchants.',
-    'Infer the likely shopping category and the tradeoff dimensions most likely to change ranking.',
-    'Return only background fields. Do not write the user-facing follow-up question.',
-    `Product request: ${productQuery}`,
-  ].join('\n')
-}
 
 function emitDebugEvent(debugContext, eventName, details = {}) {
   if (typeof debugContext?.onEvent !== 'function') {
@@ -272,60 +215,6 @@ export async function generateQuestionFast(
   }
 }
 
-export async function generateFramingFields(
-  { productQuery, apiKey, model = DEFAULT_REFINEMENT_MODEL, debugContext = null },
-  fetchImpl = fetch,
-) {
-  const { parsed, usage } = await callStructuredQueryFraming(
-    {
-      productQuery,
-      apiKey,
-      model,
-      input: buildFramingFieldsInput(productQuery),
-      schemaName: 'framing_fields',
-      schema: buildFramingFieldsSchema(),
-      debugContext,
-    },
-    fetchImpl,
-  )
-
-  const generatedAt = new Date().toISOString()
-
-  return {
-    usage,
-    contract: createQueryFramingContract({
-      query: productQuery,
-      categoryHint: clampText(parsed.category_hint, MAX_CATEGORY_HINT_LENGTH),
-      framingSummary: clampText(parsed.framing_summary, MAX_FRAMING_SUMMARY_LENGTH),
-      tradeoffAxes: normalizeStringArray(parsed.tradeoff_axes, {
-        maxItems: MAX_TRADEOFF_AXES,
-        maxLength: 80,
-      }),
-      refinementHints: normalizeStringArray(parsed.refinement_hints, {
-        maxItems: MAX_REFINEMENT_HINTS,
-        maxLength: 120,
-      }),
-      generatedAt,
-    }),
-  }
-}
-
-export async function generateQueryFraming(
-  { productQuery, apiKey, model = DEFAULT_REFINEMENT_MODEL },
-  fetchImpl = fetch,
-) {
-  const [questionFast, framingFields] = await Promise.all([
-    generateQuestionFast({ productQuery, apiKey, model }, fetchImpl),
-    generateFramingFields({ productQuery, apiKey, model }, fetchImpl),
-  ])
-
-  return {
-    prompt: questionFast.prompt,
-    usage: questionFast.usage,
-    framingFieldsUsage: framingFields.usage,
-    contract: framingFields.contract,
-  }
-}
 
 export function createQuestionOnlyQueryFramingContract({ productQuery, generatedAt = null } = {}) {
   return createQueryFramingContract({

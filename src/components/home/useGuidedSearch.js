@@ -57,10 +57,6 @@ function createFallbackRefinementPrompt(productQuery) {
   }
 }
 
-function isBackgroundFramingDisabled() {
-  return typeof window !== 'undefined' && window.__FOCAMAI_DISABLE_BACKGROUND_FRAMING__ === true
-}
-
 function createExpiredSessionMessage() {
   return 'Your search session expired. Start a new search.'
 }
@@ -124,13 +120,6 @@ async function fetchRefinementPrompt(query) {
   const searchParams = new URLSearchParams({ query })
   const requestStartedAt = performance.now()
   const response = await fetch(`${BACKEND_URL}/api/search/refine?${searchParams.toString()}`)
-  return readJsonResponse(response, requestStartedAt)
-}
-
-async function fetchFramingFields(query) {
-  const searchParams = new URLSearchParams({ query })
-  const requestStartedAt = performance.now()
-  const response = await fetch(`${BACKEND_URL}/api/search/framing-fields?${searchParams.toString()}`)
   return readJsonResponse(response, requestStartedAt)
 }
 
@@ -314,7 +303,6 @@ export function resolveSelectedProductForDisplay({
 }
 
 export function useGuidedSearch() {
-  const backgroundFramingDisabled = isBackgroundFramingDisabled()
   const [productQuery, setProductQuery] = useState('')
   const { selectedAmazonDomain, setSelectedAmazonDomain } = useAmazonStore()
   const [submittedAmazonDomain, setSubmittedAmazonDomain] = useState('')
@@ -328,7 +316,6 @@ export function useGuidedSearch() {
   const [results, setResults] = useState([])
   const [previousResults, setPreviousResults] = useState([])
   const [refinementPrompt, setRefinementPrompt] = useState(null)
-  const [queryFramingFields, setQueryFramingFields] = useState(null)
   const [followUpNotes, setFollowUpNotes] = useState('')
   const [retryFeedback, setRetryFeedback] = useState('')
   const [retryAdvice, setRetryAdvice] = useState(null)
@@ -339,7 +326,6 @@ export function useGuidedSearch() {
     discover: null,
     finalize: null,
     refine: null,
-    framingFields: null,
   })
   const [revealedBadgeResultsKey, setRevealedBadgeResultsKey] = useState('')
   const [showPreviewResults, setShowPreviewResults] = useState(false)
@@ -648,12 +634,10 @@ export function useGuidedSearch() {
       discover: null,
       finalize: null,
       refine: null,
-      framingFields: null,
     })
     setRevealedBadgeResultsKey('')
     setShowPreviewResults(false)
     setRefinementPrompt(null)
-    setQueryFramingFields(null)
     setIsEnrichmentReady(false)
     hasTrackedRefinementViewRef.current = false
     hasTrackedPreviewImpressionsRef.current = false
@@ -676,7 +660,6 @@ export function useGuidedSearch() {
     setPreviewResults([])
     setResults([])
     setRefinementPrompt(null)
-    setQueryFramingFields(null)
     setFollowUpNotes('')
     setRetryFeedback('')
     setRetryAdvice(null)
@@ -687,7 +670,6 @@ export function useGuidedSearch() {
       discover: null,
       finalize: null,
       refine: null,
-      framingFields: null,
     })
     setRevealedBadgeResultsKey('')
     setPreviousResults([])
@@ -841,43 +823,6 @@ export function useGuidedSearch() {
         }
       })
 
-    if (!backgroundFramingDisabled) {
-      trackSearchEvent('query_framing_fields_started', {
-        lane: 'framing_fields',
-      })
-
-      fetchFramingFields(normalizedQuery)
-        .then((payload) => {
-          if (activeSearchIdRef.current !== nextSearchId) {
-            return
-          }
-
-          setQueryFramingFields(payload.queryFraming || null)
-          setRequestTiming((current) => ({
-            ...current,
-            framingFields: payload.timing || null,
-          }))
-          trackSearchEvent('query_framing_fields_ready', {
-            lane: 'framing_fields',
-            openaiMs: payload.timing?.server?.openai ?? null,
-            totalMs: payload.timing?.client?.totalMs ?? null,
-            totalTokens: payload.usage?.totalTokens ?? null,
-            tradeoffAxisCount: Array.isArray(payload.queryFraming?.tradeoffAxes)
-              ? payload.queryFraming.tradeoffAxes.length
-              : 0,
-          })
-        })
-        .catch((error) => {
-          if (activeSearchIdRef.current !== nextSearchId) {
-            return
-          }
-
-          trackSearchEvent('query_framing_fields_failed', {
-            lane: 'framing_fields',
-            error: error instanceof Error ? error.message : 'Unknown error',
-          })
-        })
-    }
   }
 
   function handleFinalizeRefinement() {
@@ -1099,7 +1044,6 @@ export function useGuidedSearch() {
     isLoading,
     previousResults,
     productQuery,
-    queryFramingFields,
     requestTiming,
     refinementPrompt,
     retryAdvice,
