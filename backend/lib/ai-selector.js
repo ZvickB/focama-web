@@ -228,7 +228,7 @@ function buildSelectionPrompt({ candidatePool, finalResultLimit }) {
 
   return [
     'Choose the best final products for this shopping request.',
-    '1. Fit to the extra context/details. This is the main decision signal.',
+    '1. The user\'s follow-up context is the dominant selection signal — weight it above all other factors. If a candidate violates a hard constraint stated in the context (e.g. exceeds a stated budget), exclude it unless no better option exists. When no candidate fully satisfies the constraint, prefer the closest match — for a budget constraint, prefer the cheapest available option over a more expensive one, even if the cheaper option has lower ratings.',
     '2. Relevance to the product query.',
     '3. Quality and trust using rating and review count.',
     '4. Prefer diversity across style, merchant, or use case when helpful, and avoid near-duplicates unless they are meaningfully different.',
@@ -324,7 +324,7 @@ function buildPriorRerankPrompt({
 
   return [
     'Choose the best final products with help from this reusable candidate-aware prior.',
-    '1. Intent match to the extra context/details is the strongest signal and should outweigh the baseline prerank when they disagree.',
+    '1. The user\'s follow-up context is the dominant selection signal — weight it above all other factors. If a candidate violates a hard constraint stated in the context (e.g. exceeds a stated budget), exclude it unless no better option exists. When no candidate fully satisfies the constraint, prefer the closest match — for a budget constraint, prefer the cheapest available option over a more expensive one, even if the cheaper option has lower ratings.',
     '2. Retry feedback and exclusions are high-priority intent signals.',
     '3. Use the baseline ranking and notes as helpful prior context, not as a hard rule.',
     '4. Preserve diversity only when it still fits the stated intent well.',
@@ -678,7 +678,7 @@ function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }) {
 
   return [
     'Choose the best final products.',
-    '1. Fit to the extra context/details. This is the main decision signal.',
+    '1. The user\'s follow-up context is the dominant selection signal — weight it above all other factors. If a candidate violates a hard constraint stated in the context (e.g. exceeds a stated budget), exclude it unless no better option exists. When no candidate fully satisfies the constraint, prefer the closest match — for a budget constraint, prefer the cheapest available option over a more expensive one, even if the cheaper option has lower ratings.',
     '2. Relevance to the product query.',
     '3. Quality and trust using rating and review count.',
     '4. Prefer diversity across style, merchant, or use case when helpful.',
@@ -964,101 +964,3 @@ export async function miniEnrichSelectedCandidates(
   return { model, enriched, enrichedIds, usage, preservedOrder }
 }
 
-export async function selectAiResults(
-  {
-    candidatePool,
-    finalResultLimit,
-    apiKey,
-    model = DEFAULT_OPENAI_MODEL,
-    candidateAwarePrior = null,
-    preRankArtifact = null,
-  },
-  fetchImpl = fetch,
-) {
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is missing from the root .env file.')
-  }
-
-  const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
-
-  if (candidates.length === 0) {
-    return {
-      model,
-      selectedCandidateIds: [],
-      results: [],
-      usage: null,
-      debug: {
-        artifactCandidateCount: 0,
-        intentMatchRerankUsed: false,
-        candidateAwarePriorReused: false,
-        candidateAwarePriorReuseReason: 'no_candidates',
-        preRankArtifactReused: false,
-        preRankReuseReason: 'no_candidates',
-      },
-    }
-  }
-
-  const reusablePrior = candidateAwarePrior || preRankArtifact
-  const reusableEntries = getReusablePriorEntries(reusablePrior, candidates)
-
-  if (reusableEntries.length > 0) {
-    const priorCandidates = reusableEntries
-      .slice(0, Math.max(finalResultLimit, Math.min(reusableEntries.length, ARTIFACT_RERANK_CANDIDATE_LIMIT)))
-      .map((entry) => entry.reusableSummary)
-
-    const { parsed, usage } = await requestStructuredSelection(
-      {
-        prompt: buildPriorRerankPrompt({
-          priorCandidates,
-          candidatePool,
-          finalResultLimit,
-        }),
-        schema: buildPriorRerankSchema(),
-        responseName: 'candidate_aware_prior_rerank',
-        apiKey,
-        model,
-      },
-      fetchImpl,
-    )
-    const picks = Array.isArray(parsed?.picks) ? parsed.picks : []
-    const mapped = mapPriorRerankPicksToResults(picks, reusableEntries, finalResultLimit)
-
-    if (mapped.results.length > 0) {
-      return {
-        model,
-        selectedCandidateIds: mapped.selectedCandidateIds,
-        results: mapped.results,
-        usage,
-        strategy: 'candidate_aware_prior_rerank',
-        debug: {
-          artifactCandidateCount: reusableEntries.length,
-          priorCandidateCount: reusableEntries.length,
-          intentMatchRerankUsed: true,
-          candidateAwarePriorReused: true,
-          candidateAwarePriorReuseReason: 'candidate_aware_prior_rerank',
-          preRankArtifactReused: true,
-          preRankReuseReason: 'candidate_aware_prior_rerank',
-        },
-      }
-    }
-  }
-
-  const selection = await runOneShotSelection({ candidatePool, finalResultLimit, apiKey, model }, fetchImpl)
-
-  return {
-    model,
-    selectedCandidateIds: selection.selectedCandidateIds,
-    results: selection.results,
-    usage: selection.usage,
-    strategy: selection.strategy,
-    debug: {
-      artifactCandidateCount: reusableEntries.length,
-      priorCandidateCount: reusableEntries.length,
-      intentMatchRerankUsed: false,
-      candidateAwarePriorReused: false,
-      candidateAwarePriorReuseReason: reusableEntries.length > 0 ? 'prior_rerank_empty_fallback' : 'prior_missing_or_invalid',
-      preRankArtifactReused: false,
-      preRankReuseReason: reusableEntries.length > 0 ? 'artifact_rerank_empty_fallback' : 'artifact_missing_or_invalid',
-    },
-  }
-}

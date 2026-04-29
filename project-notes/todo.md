@@ -14,9 +14,9 @@ AI maintains this file. Each item should be one plain sentence.
 | done | Remove leftover prewarm code |
 | done | Remove temporary measurement fields (`measurementPreparedQueryFraming`, `measurementSelectionMode`, `winner_lock_ids_only`) from finalize |
 | done | Remove local-only `/api/search/finalize-stream` route and `stream-clean` harness mode |
-| pending | Make the user's follow-up answer the dominant signal in final product selection (currently sharing weight with other factors) |
+| done | Make the user's follow-up answer the dominant signal in final product selection (currently sharing weight with other factors) |
 | done | Remove `SIMULATE_ENRICHMENT_DELAY_MS` simulation block from `HomeShared.jsx` — was used for testing, not needed in production |
-| pending | Decide whether to keep or remove `selectAiResults` path in `ai-selector.js` — finalize no longer calls it directly |
+| done | Remove `selectAiResults` path in `ai-selector.js` — also removed dead `handleLiveSearch` and `handleDiscoverySearch` handlers and their Vercel wrappers |
 | pending | Re-measure the full layered flow on the same sample queries after any finalize/latency change |
 | pending | Explore OpenAI embeddings for semantic dedup and concept-diversity in the 70→20 candidate selection in `result-filter.js` — validate via analytics that candidate quality is the bottleneck first |
 
@@ -56,7 +56,7 @@ AI maintains this file. Each item should be one plain sentence.
 |--------|------|
 | done | Add timeouts to SerpApi and OpenAI calls — right now a slow or hung response silently stalls the whole request |
 | done | Pass user location to both Rainforest API and SerpApi so results default to localized pricing, availability, and listings |
-| pending | Trim `server.js` — route logic, request parsing, and business logic are all mixed in one 2400+ line file |
+| pending | Trim `backend/server.js` incrementally — keep `finalize` untouched for now, extract non-finalize request helpers and safe handlers first, and optimize for deploy portability (Render now, Cloud Run later) instead of Vercel-specific structure |
 | done | Strip internal error details from API error responses before public launch |
 | done | Add unit tests for getCountryCode, getAmazonDomain, and ErrorBoundary |
 
