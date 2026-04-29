@@ -232,7 +232,7 @@ function buildSelectionPrompt({ candidatePool, finalResultLimit }) {
     '2. Relevance to the product query.',
     '3. Quality and trust using rating and review count.',
     '4. Prefer diversity across style, merchant, or use case when helpful, and avoid near-duplicates unless they are meaningfully different.',
-    '5. For each pick, write one short fit reason that explains why it belongs in this shortlist.',
+    '5. For each pick, write one short fit reason (1-2 sentences) directed at the user explaining why this product fits their need. Write for the user, not as internal analysis. Do not comment on the search pool, data quality, or missing options.',
     `Return up to ${desiredCount} picks. If there are at least ${desiredCount} strong candidates, return exactly ${desiredCount}.`,
     'Only choose from the provided candidate ids.',
     '',
@@ -328,7 +328,7 @@ function buildPriorRerankPrompt({
     '2. Retry feedback and exclusions are high-priority intent signals.',
     '3. Use the baseline ranking and notes as helpful prior context, not as a hard rule.',
     '4. Preserve diversity only when it still fits the stated intent well.',
-    '5. Return only the selected candidate ids plus one short intent-fit reason for each pick.',
+    '5. Return only the selected candidate ids plus one short intent-fit reason (1-2 sentences) for each pick, directed at the user. Do not comment on the search pool, data quality, or missing options.',
     `Return up to ${desiredCount} picks. If there are at least ${desiredCount} strong candidates, return exactly ${desiredCount}.`,
     '',
     `Product query: ${candidatePool.query}`,
@@ -657,7 +657,7 @@ function mapPriorRerankPicksToResults(picks, reusableEntries, finalResultLimit) 
 
     selected.push({
       candidateId,
-      rationale: truncateText(pick?.rationale, 160) || entry.baselineFit,
+      rationale: truncateText(pick?.rationale, 300) || entry.baselineFit,
       entry,
     })
     seen.add(candidateId)
