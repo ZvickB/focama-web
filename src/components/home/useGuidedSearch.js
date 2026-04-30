@@ -334,7 +334,7 @@ export function useGuidedSearch() {
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false)
   const [isEnrichmentReady, setIsEnrichmentReady] = useState(false)
   const activeSearchIdRef = useRef(0)
-  const enrichmentPollRef = useRef({ timerId: null, searchId: 0 })
+  const enrichmentPollRef = useRef({ source: null, timerId: null, searchId: 0 })
   const analyticsSearchIdRef = useRef('')
   const analyticsSessionIdRef = useRef('')
   const retryAdviceRequestIdRef = useRef(0)
@@ -356,6 +356,11 @@ export function useGuidedSearch() {
   }
 
   function stopEnrichmentPolling() {
+    if (enrichmentPollRef.current.source) {
+      enrichmentPollRef.current.source.close()
+      enrichmentPollRef.current.source = null
+    }
+
     if (enrichmentPollRef.current.timerId !== null) {
       window.clearTimeout(enrichmentPollRef.current.timerId)
       enrichmentPollRef.current.timerId = null
@@ -376,48 +381,78 @@ export function useGuidedSearch() {
     setErrorMessage(message)
   }
 
-  function startEnrichmentPolling({ token, query, searchId, amazonDomain }) {
+  function startEnrichmentStream({ token, query, searchId, amazonDomain }) {
     if (window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__) return
     stopEnrichmentPolling()
     enrichmentPollRef.current.searchId = searchId
 
-    const startedAt = performance.now()
+    if (typeof EventSource !== 'function') {
+      const startedAt = performance.now()
 
-    function schedulePoll() {
-      enrichmentPollRef.current.timerId = window.setTimeout(async () => {
-        if (enrichmentPollRef.current.searchId !== searchId) {
-          return
-        }
-
-        if (performance.now() - startedAt > ENRICHMENT_POLL_TIMEOUT_MS) {
-          stopEnrichmentPolling()
-          return
-        }
-
-        try {
-          const payload = await fetchEnrichment({ token, query, amazonDomain })
-
+      function schedulePoll() {
+        enrichmentPollRef.current.timerId = window.setTimeout(async () => {
           if (enrichmentPollRef.current.searchId !== searchId) {
             return
           }
 
-          if (payload.ready && Array.isArray(payload.entries) && payload.entries.length > 0) {
+          if (performance.now() - startedAt > ENRICHMENT_POLL_TIMEOUT_MS) {
             stopEnrichmentPolling()
-            setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
-            setIsEnrichmentReady(true)
             return
           }
-        } catch {
-          // Poll silently — enrichment is best-effort
-        }
 
-        if (enrichmentPollRef.current.searchId === searchId) {
-          schedulePoll()
-        }
-      }, ENRICHMENT_POLL_INTERVAL_MS)
+          try {
+            const payload = await fetchEnrichment({ token, query, amazonDomain })
+
+            if (enrichmentPollRef.current.searchId !== searchId) {
+              return
+            }
+
+            if (payload.ready && Array.isArray(payload.entries) && payload.entries.length > 0) {
+              stopEnrichmentPolling()
+              setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
+              setIsEnrichmentReady(true)
+              return
+            }
+          } catch {
+            // Poll silently — enrichment is best-effort
+          }
+
+          if (enrichmentPollRef.current.searchId === searchId) {
+            schedulePoll()
+          }
+        }, ENRICHMENT_POLL_INTERVAL_MS)
+      }
+
+      schedulePoll()
+      return
     }
 
-    schedulePoll()
+    const searchParams = new URLSearchParams({ token, query })
+    appendAmazonDomain(searchParams, amazonDomain)
+    const source = new EventSource(`${BACKEND_URL}/api/search/enrichment-stream?${searchParams.toString()}`)
+    enrichmentPollRef.current.source = source
+
+    source.onmessage = (event) => {
+      if (enrichmentPollRef.current.searchId !== searchId) {
+        return
+      }
+
+      try {
+        const payload = JSON.parse(event.data)
+
+        if (payload.ready && Array.isArray(payload.entries) && payload.entries.length > 0) {
+          stopEnrichmentPolling()
+          setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
+          setIsEnrichmentReady(true)
+        }
+      } catch {
+        stopEnrichmentPolling()
+      }
+    }
+
+    source.onerror = () => {
+      stopEnrichmentPolling()
+    }
   }
 
   function applyFinalizePayload(payload, variables) {
@@ -443,7 +478,7 @@ export function useGuidedSearch() {
     const pollSearchId = activeSearchIdRef.current
 
     if (!hasInlineEnrichment && token && query && finalizedResults.length > 0) {
-      startEnrichmentPolling({
+      startEnrichmentStream({
         token,
         query,
         searchId: pollSearchId,

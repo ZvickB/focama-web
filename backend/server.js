@@ -10,6 +10,7 @@ import {
 import { createFinalizeFastContract, toFinalizeFastCard } from './lib/layered-contracts.js'
 import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, getCountryCode, takeRateLimitToken } from './lib/rate-limit.js'
 import { ALLOWED_ORIGIN, sendJson, readJsonBody } from './lib/http.js'
+import { emitEnrichmentReady, enrichmentBus } from './lib/enrichment-bus.js'
 import {
   sanitizeAnalyticsEventData,
   sanitizeAnalyticsItems,
@@ -64,6 +65,7 @@ const RETRY_ADVICE_MAX_TITLE_LENGTH = 160
 const FINALIZE_MAX_PRIORITIES = 8
 const FINALIZE_MAX_PRIORITY_LENGTH = 80
 const FINALIZE_MAX_RETRY_COUNT = 2
+const ENRICHMENT_STREAM_TIMEOUT_MS = 30000
 const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
 const CACHE_SCOPE_RAINFOREST = 'rainforest_discovery'
 const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
@@ -947,6 +949,12 @@ async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model,
     scope: discoveryScope,
   })
 
+  emitEnrichmentReady(
+    cachedEntry.discoveryToken || '',
+    miniResult.enriched,
+    miniResult.model,
+  )
+
   logSearchFlowEvent('mini_enrichment_stored', {
     query: normalizedQuery,
     entryCount: miniResult.enriched.length,
@@ -998,6 +1006,97 @@ export async function handleEnrichmentPoll(request, response) {
     ready: true,
     entries: enrichment.entries,
     model: enrichment.model || '',
+  })
+}
+
+export async function handleEnrichmentStream(request, response) {
+  const requestUrl = new URL(request.url, 'http://localhost')
+  const token = requestUrl.searchParams.get('token') || ''
+  const query = requestUrl.searchParams.get('query') || ''
+  const amazonDomain = getRequestedAmazonDomain(requestUrl.searchParams.get('amazonDomain') || '')
+
+  if (!token || !query) {
+    sendJson(response, 400, { error: 'token and query are required.' })
+    return
+  }
+
+  const { isValid, normalizedQuery } = validateSearchInput(query, '')
+
+  if (!isValid) {
+    sendJson(response, 400, { error: 'Invalid query.' })
+    return
+  }
+
+  const enrichmentScopes = amazonDomain
+    ? [getAmazonMarketplaceScope(CACHE_SCOPE_RAINFOREST, amazonDomain)]
+    : [CACHE_SCOPE_DISCOVERY, CACHE_SCOPE_RAINFOREST]
+  const resolvedDiscoveryContext = await resolveDiscoveryContext(normalizedQuery, token, enrichmentScopes)
+
+  if (!resolvedDiscoveryContext.isValid) {
+    sendJson(response, resolvedDiscoveryContext.statusCode, { error: resolvedDiscoveryContext.error })
+    return
+  }
+
+  const { cachedEntry } = resolvedDiscoveryContext
+  const enrichment = cachedEntry?.selection?.enrichment
+
+  response.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  })
+  response.flushHeaders()
+
+  if (enrichment?.entries?.length) {
+    response.write(`data: ${JSON.stringify({
+      ready: true,
+      entries: enrichment.entries,
+      model: enrichment.model || '',
+    })}\n\n`)
+    response.end()
+    return
+  }
+
+  const eventName = `enrichment:${token}`
+  let completed = false
+
+  function cleanup() {
+    enrichmentBus.off(eventName, handleReady)
+    clearTimeout(timeoutId)
+  }
+
+  function finish(payload) {
+    if (completed) {
+      return
+    }
+
+    completed = true
+    cleanup()
+    response.write(`data: ${JSON.stringify(payload)}\n\n`)
+    response.end()
+  }
+
+  function handleReady(payload) {
+    finish({
+      ready: true,
+      entries: payload?.entries,
+      model: payload?.model,
+    })
+  }
+
+  const timeoutId = setTimeout(() => {
+    finish({ ready: false })
+  }, ENRICHMENT_STREAM_TIMEOUT_MS)
+
+  enrichmentBus.on(eventName, handleReady)
+
+  request.on('close', () => {
+    if (completed) {
+      return
+    }
+
+    completed = true
+    cleanup()
   })
 }
 
@@ -1505,6 +1604,11 @@ export function createApiServer() {
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search/enrichment') {
       await handleEnrichmentPoll(request, response)
+      return
+    }
+
+    if (request.method === 'GET' && requestUrl.pathname === '/api/search/enrichment-stream') {
+      await handleEnrichmentStream(request, response)
       return
     }
 

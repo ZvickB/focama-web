@@ -1,11 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-vi.mock('./search-storage.js', () => ({
-  takeSharedRateLimitToken: vi.fn(),
-}))
-
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getCountryCode, resetRateLimitStore, takeRateLimitToken } from './rate-limit.js'
-import { takeSharedRateLimitToken } from './search-storage.js'
 
 describe('getCountryCode', () => {
   it('returns the country code from the Vercel header, defaulting to US when absent', () => {
@@ -17,30 +11,16 @@ describe('getCountryCode', () => {
 
 describe('rate-limit helpers', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
     resetRateLimitStore()
-    takeSharedRateLimitToken.mockResolvedValue(null)
   })
 
-  it('uses the shared limiter result when Supabase-backed storage returns one', async () => {
-    takeSharedRateLimitToken.mockResolvedValue({
-      allowed: false,
-      remaining: 0,
-      resetAt: 12345,
-      storage: 'supabase',
-    })
-
-    await expect(takeRateLimitToken('203.0.113.55')).resolves.toEqual({
-      allowed: false,
-      remaining: 0,
-      resetAt: 12345,
-      storage: 'supabase',
-    })
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
-  it('falls back to the local in-memory limiter when no shared limiter result is available', async () => {
+  it('uses the in-memory limiter for repeated requests from the same key', async () => {
     await expect(
-      takeRateLimitToken('203.0.113.56', {
+      takeRateLimitToken('203.0.113.55', {
         limit: 2,
         windowMs: 60_000,
       }),
@@ -52,7 +32,7 @@ describe('rate-limit helpers', () => {
     )
 
     await expect(
-      takeRateLimitToken('203.0.113.56', {
+      takeRateLimitToken('203.0.113.55', {
         limit: 2,
         windowMs: 60_000,
       }),
@@ -64,7 +44,7 @@ describe('rate-limit helpers', () => {
     )
 
     await expect(
-      takeRateLimitToken('203.0.113.56', {
+      takeRateLimitToken('203.0.113.55', {
         limit: 2,
         windowMs: 60_000,
       }),
@@ -117,7 +97,5 @@ describe('rate-limit helpers', () => {
         remaining: 0,
       }),
     )
-
-    vi.useRealTimers()
   })
 })

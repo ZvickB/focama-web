@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import {
   buildCacheKey,
@@ -9,10 +8,10 @@ import {
   writeSearchCacheEntry as writeLocalSearchCacheEntry,
 } from './search-data.js'
 import { normalizeCachedProductDetailsEntry } from './product-details-cache.js'
+import { memoryGet, memorySet } from './memory-cache.js'
 
 const SEARCH_CACHE_TABLE = 'search_cache'
 const SEARCH_HISTORY_TABLE = 'search_history'
-const RATE_LIMIT_EVENTS_TABLE = 'rate_limit_events'
 const PRODUCT_DETAILS_CACHE_TABLE = 'product_details_cache'
 const ANALYTICS_SEARCH_RUNS_TABLE = 'analytics_search_runs'
 const ANALYTICS_SEARCH_EVENTS_TABLE = 'analytics_search_events'
@@ -100,6 +99,22 @@ function isExpiredCacheEntry(entry) {
   }
 
   return expiration.getTime() <= Date.now()
+}
+
+function getCacheEntryTtlMs(entry) {
+  const explicitExpirationMs = new Date(entry?.expiresAt || '').getTime()
+
+  if (Number.isFinite(explicitExpirationMs)) {
+    return explicitExpirationMs - Date.now()
+  }
+
+  const cachedAtMs = new Date(entry?.cachedAt || '').getTime()
+
+  if (!Number.isFinite(cachedAtMs)) {
+    return 0
+  }
+
+  return cachedAtMs + getCacheTtlMinutes() * 60 * 1000 - Date.now()
 }
 
 function mapSupabaseCacheRow(row) {
@@ -255,6 +270,11 @@ function writeLocalProductDetailsCacheEntries(entries) {
 
 export async function readStoredSearchCacheEntry({ productQuery, details, scope = 'default' }) {
   const cacheKey = buildCacheKey(productQuery, details, scope)
+  const memoryEntry = memoryGet(cacheKey)
+
+  if (memoryEntry) {
+    return memoryEntry
+  }
 
   if (isSupabaseConfigured()) {
     try {
@@ -272,14 +292,27 @@ export async function readStoredSearchCacheEntry({ productQuery, details, scope 
       const entry = mapSupabaseCacheRow(data)
 
       if (entry && !isExpiredCacheEntry(entry)) {
+        memorySet(cacheKey, entry, getCacheEntryTtlMs(entry))
         return entry
       }
     } catch {
-      return readLocalCacheEntry(cacheKey)
+      const localEntry = readLocalCacheEntry(cacheKey)
+
+      if (localEntry) {
+        memorySet(cacheKey, localEntry, getCacheEntryTtlMs(localEntry))
+      }
+
+      return localEntry
     }
   }
 
-  return readLocalCacheEntry(cacheKey)
+  const localEntry = readLocalCacheEntry(cacheKey)
+
+  if (localEntry) {
+    memorySet(cacheKey, localEntry, getCacheEntryTtlMs(localEntry))
+  }
+
+  return localEntry
 }
 
 export async function writeStoredSearchCacheEntry({
@@ -316,6 +349,7 @@ export async function writeStoredSearchCacheEntry({
     selection: storedSelection,
     source,
   }
+  const ttlMs = getCacheEntryTtlMs(entry)
 
   if (isSupabaseConfigured()) {
     try {
@@ -339,6 +373,8 @@ export async function writeStoredSearchCacheEntry({
         throw error
       }
 
+      memorySet(cacheKey, entry, ttlMs)
+
       return {
         ...entry,
         storage: 'supabase',
@@ -355,6 +391,8 @@ export async function writeStoredSearchCacheEntry({
         expiresAt: entry.expiresAt,
         scope,
       })
+
+      memorySet(cacheKey, entry, ttlMs)
 
       return {
         ...entry,
@@ -374,6 +412,8 @@ export async function writeStoredSearchCacheEntry({
     expiresAt: entry.expiresAt,
     scope,
   })
+
+  memorySet(cacheKey, entry, ttlMs)
 
   return {
     ...entry,
@@ -528,48 +568,6 @@ export async function recordSearchHistory({
   }
 }
 
-export async function takeSharedRateLimitToken({ key, limit, windowMs }) {
-  if (!isSupabaseConfigured()) {
-    return null
-  }
-
-  try {
-    const supabase = getSupabaseAdminClient()
-    const now = new Date()
-    const expiresAt = new Date(now.getTime() + windowMs).toISOString()
-    const windowStartedAt = new Date(now.getTime() - windowMs).toISOString()
-
-    const { error: insertError } = await supabase.from(RATE_LIMIT_EVENTS_TABLE).insert({
-      request_key: key,
-      request_id: randomUUID(),
-      expires_at: expiresAt,
-    })
-
-    if (insertError) {
-      throw insertError
-    }
-
-    const { count, error: countError } = await supabase
-      .from(RATE_LIMIT_EVENTS_TABLE)
-      .select('request_id', { head: true, count: 'exact' })
-      .eq('request_key', key)
-      .gte('created_at', windowStartedAt)
-
-    if (countError) {
-      throw countError
-    }
-
-    return {
-      allowed: Number(count) <= limit,
-      remaining: Math.max(limit - Number(count || 0), 0),
-      resetAt: now.getTime() + windowMs,
-      storage: 'supabase',
-    }
-  } catch {
-    return null
-  }
-}
-
 export async function upsertAnalyticsSearchRun(run) {
   if (!isSupabaseConfigured() || !run?.searchId || !run?.sessionId || !run?.productQuery) {
     return
@@ -707,7 +705,6 @@ export async function getSupabaseHealth() {
     const tableChecks = await Promise.all([
       checkSupabaseTable(supabase, SEARCH_CACHE_TABLE, 'cache_key'),
       checkSupabaseTable(supabase, SEARCH_HISTORY_TABLE, 'id'),
-      checkSupabaseTable(supabase, RATE_LIMIT_EVENTS_TABLE, 'request_id'),
       checkSupabaseTable(supabase, PRODUCT_DETAILS_CACHE_TABLE, 'asin'),
     ])
 
