@@ -18,7 +18,7 @@ describe('retry advice', () => {
         output_text: JSON.stringify({
           recommendation: 'new_search',
           suggested_query: 'compact city stroller under 18 pounds',
-          rationale: 'The feedback points to portability, so a narrower search should help.',
+          rationale: 'Focuses the search on lighter city strollers that fit daily travel better.',
         }),
       }),
     })
@@ -40,7 +40,7 @@ describe('retry advice', () => {
     expect(result).toEqual({
       recommendation: 'new_search',
       suggestedQuery: 'compact city stroller under 18 pounds',
-      rationale: 'The feedback points to portability, so a narrower search should help.',
+      rationale: 'Focuses the search on lighter city strollers that fit daily travel better.',
       usage: {
         inputTokens: 90,
         outputTokens: 30,
@@ -55,11 +55,14 @@ describe('retry advice', () => {
 
     expect(parsedBody.reasoning.effort).toBe('minimal')
     expect(parsedBody.text.format.name).toBe('retry_advice')
+    expect(parsedBody.text.format.schema.properties.recommendation.enum).toEqual(['new_search'])
     expect(parsedBody.text.format.schema.required).toEqual([
       'recommendation',
       'suggested_query',
       'rationale',
     ])
+    expect(parsedBody.input[1].content).toContain('Always return recommendation as new_search.')
+    expect(parsedBody.input[1].content).toContain('Write rationale as exactly 1 sentence of natural UI copy.')
     expect(parsedBody.input[1].content).toContain('User feedback: Still too bulky for city travel.')
     expect(parsedBody.input[1].content).toContain('1. Full-size stroller')
   })

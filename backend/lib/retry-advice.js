@@ -1,9 +1,9 @@
 import { DEFAULT_REFINEMENT_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
 
 const MAX_QUERY_LENGTH = 80
-const MAX_RATIONALE_LENGTH = 180
 const MAX_SHORTLIST_ITEMS = 6
 const MAX_TITLE_LENGTH = 160
+const MAX_RATIONALE_LENGTH = 120
 
 function normalizeText(value) {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
@@ -13,6 +13,11 @@ function clampText(value, maxLength) {
   const normalized = normalizeText(value)
   if (!normalized) return ''
   return normalized.slice(0, maxLength).trim()
+}
+
+function normalizeRationale(value) {
+  const normalized = clampText(value, MAX_RATIONALE_LENGTH)
+  return normalized || 'Focuses the search more closely on what you want.'
 }
 
 function normalizeOpenAiUsage(payload) {
@@ -60,7 +65,7 @@ function buildRetryAdviceSchema() {
     properties: {
       recommendation: {
         type: 'string',
-        enum: ['new_search', 'same_pool'],
+        enum: ['new_search'],
       },
       suggested_query: {
         type: 'string',
@@ -68,7 +73,6 @@ function buildRetryAdviceSchema() {
       },
       rationale: {
         type: 'string',
-        maxLength: MAX_RATIONALE_LENGTH,
       },
     },
     required: ['recommendation', 'suggested_query', 'rationale'],
@@ -99,11 +103,16 @@ function buildRetryAdviceInput({
     : 'No shortlist titles were provided.'
 
   return [
-    'A shopper rejected a product shortlist. Decide whether their feedback points to a wrong search pool or just imperfect picks.',
+    'A shopper rejected a set of product picks. Suggest a better fresh search they can try next.',
+    'Always return recommendation as new_search.',
     'Always provide a concise suggested_query that can be pasted into a normal shopping search box.',
     'The suggested_query must be 80 characters or fewer — write a tight, complete phrase.',
-    'If the pool seems wrong, rewrite the search more specifically around the feedback.',
-    'If the same pool could work, still produce a better fresh-search query that preserves the original intent and adds the feedback.',
+    'Rewrite the search more specifically around the feedback while keeping the shopper intent.',
+    'Write rationale as exactly 1 sentence of natural UI copy.',
+    'Keep rationale concise, usually 10 to 20 words, and ideally under 120 characters.',
+    'Briefly explain how the new search is better.',
+    'Do not use the words intent, pool, shortlist, category, same pool, or original search.',
+    'Do not include step-by-step reasoning, semicolons, slashes, or parentheses.',
     'Do not include retailer names unless the user explicitly requested one.',
     `Original search: ${normalizeText(productQuery)}`,
     `Follow-up notes: ${normalizeText(followUpNotes) || 'None'}`,
@@ -183,9 +192,9 @@ export async function generateRetryAdvice(
   const suggestedQuery = normalizeText(parsed.suggested_query)
 
   return {
-    recommendation: parsed.recommendation === 'same_pool' ? 'same_pool' : 'new_search',
+    recommendation: 'new_search',
     suggestedQuery: suggestedQuery || normalizeText(productQuery),
-    rationale: clampText(parsed.rationale, MAX_RATIONALE_LENGTH),
+    rationale: normalizeRationale(parsed.rationale),
     usage: normalizeOpenAiUsage(payload),
     generatedAt: new Date().toISOString(),
   }

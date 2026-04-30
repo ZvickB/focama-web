@@ -745,7 +745,7 @@ describe('HomePage', () => {
     expect(suggestedQueryInput).toHaveValue('compact city stroller under 18 pounds')
     await user.clear(suggestedQueryInput)
     await user.type(suggestedQueryInput, 'lightweight umbrella stroller for city travel')
-    await user.click(screen.getByRole('button', { name: /search this instead/i }))
+    await user.click(screen.getByRole('button', { name: /use this search/i }))
 
     expect(screen.getByLabelText(/product topic/i)).toHaveValue(
       'lightweight umbrella stroller for city travel',
@@ -1063,7 +1063,7 @@ describe('HomePage', () => {
 
     expect(await screen.findByText(/a narrower search should help/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/try this search/i)).toHaveValue('')
-    expect(screen.getByRole('button', { name: /search this instead/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /use this search/i })).toBeDisabled()
   }, 10000)
 
   it('filters raw live-route reason copy out of the result cards', async () => {

@@ -593,10 +593,12 @@ export function ResultsSection({
 
             {retryAdvice ? (
               <div className="space-y-3 rounded-[24px] border border-primary/15 bg-primary/5 p-4">
-                {retryAdvice.rationale ? (
-                  <p className="text-sm leading-6 text-slate-700">{retryAdvice.rationale}</p>
-                ) : null}
                 <div className="space-y-2">
+                  {retryAdvice.rationale ? (
+                    <p className="text-sm leading-6 text-slate-700">
+                      {retryAdvice.rationale}
+                    </p>
+                  ) : null}
                   <Label htmlFor="retry-suggested-query" className="text-xs font-medium text-slate-500">
                     Try this search — edit if needed:
                   </Label>
@@ -613,7 +615,7 @@ export function ResultsSection({
                       className="h-11 shrink-0 rounded-2xl bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90"
                       onClick={() => onSearchSuggestedQuery(suggestedRetryQuery)}
                     >
-                      Search this instead
+                      Use this search
                       <Search className="ml-2 h-4 w-4" />
                     </Button>
                   </div>
