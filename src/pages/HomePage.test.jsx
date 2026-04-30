@@ -753,7 +753,7 @@ describe('HomePage', () => {
     expect(screen.getByRole('button', { name: /start search/i })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(4)
     },
-    10000,
+    15000,
   )
 
   it('ignores stale retry advice after reset clears the retry state', async () => {

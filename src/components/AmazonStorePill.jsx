@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 
-import { AMAZON_MARKETPLACE_AUTO, useAmazonStore } from '@/contexts/AmazonStoreContext.jsx'
+import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
+import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { AMAZON_MARKETPLACES } from '../../shared/amazon-marketplaces.js'
 
 function countryCodeToFlag(code) {

@@ -7,7 +7,8 @@ import {
   trackAnalytics,
 } from '@/lib/analytics.js'
 import { enrichFinalResultsForDisplay } from '@/components/home/resultPresentation.js'
-import { AMAZON_MARKETPLACE_AUTO, useAmazonStore } from '@/contexts/AmazonStoreContext.jsx'
+import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
+import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { validateSearchInput } from '../../../shared/search-input.js'
 
 export { AMAZON_MARKETPLACE_AUTO }

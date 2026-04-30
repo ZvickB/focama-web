@@ -311,12 +311,7 @@ export function ResultsSection({
   submittedQuery,
 }) {
   const [showRetryView, setShowRetryView] = useState(false)
-
-  useEffect(() => {
-    if (!hasFinalResults) {
-      setShowRetryView(false)
-    }
-  }, [hasFinalResults])
+  const isRetryViewVisible = hasFinalResults && showRetryView
 
   const shouldShowBadgeLabels = !hasFinalResults || showFinalResultBadges
   const orderedResults = displayedResults
@@ -528,7 +523,7 @@ export function ResultsSection({
         </div>
       ) : null}
 
-      {hasFinalResults && !showRetryView ? (
+      {hasFinalResults && !isRetryViewVisible ? (
         <div className="flex justify-center pt-2">
           <Button
             type="button"
@@ -541,7 +536,7 @@ export function ResultsSection({
         </div>
       ) : null}
 
-      {hasFinalResults && showRetryView ? (
+      {isRetryViewVisible ? (
         <div className="rounded-[36px] border border-stone-200/80 bg-white/80 p-5 shadow-[0_28px_120px_-72px_rgba(15,23,42,0.45)]">
           <button
             type="button"

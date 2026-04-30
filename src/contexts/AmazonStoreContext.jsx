@@ -1,13 +1,6 @@
-import { createContext, useContext, useState } from 'react'
-
-export const AMAZON_MARKETPLACE_AUTO = 'auto'
-
-const AmazonStoreContext = createContext(null)
-
-const fallback = {
-  selectedAmazonDomain: AMAZON_MARKETPLACE_AUTO,
-  setSelectedAmazonDomain: () => {},
-}
+import { useState } from 'react'
+import { AMAZON_MARKETPLACE_AUTO } from './amazonStoreConstants.js'
+import { AmazonStoreContext } from './useAmazonStore.js'
 
 export function AmazonStoreProvider({ children }) {
   const [selectedAmazonDomain, setSelectedAmazonDomain] = useState(AMAZON_MARKETPLACE_AUTO)
@@ -17,8 +10,4 @@ export function AmazonStoreProvider({ children }) {
       {children}
     </AmazonStoreContext.Provider>
   )
-}
-
-export function useAmazonStore() {
-  return useContext(AmazonStoreContext) ?? fallback
 }
