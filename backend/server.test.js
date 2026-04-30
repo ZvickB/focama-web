@@ -5,7 +5,6 @@ vi.mock('./lib/ai-selector.js', async () => {
 
   return {
     ...actual,
-    nanoLockWinnersAndBadges: vi.fn(),
     haikuLockWinnersAndBadges: vi.fn(),
     miniEnrichSelectedCandidates: vi.fn().mockResolvedValue({
       model: 'gpt-5-mini',
@@ -781,7 +780,7 @@ describe('server handlers', () => {
         requestMode: 'guided_empty_notes',
         debug: expect.objectContaining({
           finalizeFastLayer: 'finalize_fast',
-          flowPath: 'nano_lock',
+          flowPath: 'haiku_lock',
         }),
         finalizeFast: expect.objectContaining({
           layer: 'finalize_fast',
@@ -797,11 +796,11 @@ describe('server handlers', () => {
           layer: 'finalize_fast',
           mode: 'ai',
           shortlistLocked: true,
-          strategy: 'nano_lock',
-          flowPath: 'nano_lock',
+          strategy: 'haiku_lock',
+          flowPath: 'haiku_lock',
         }),
         usage: expect.objectContaining({
-          openai: expect.objectContaining({
+          haiku: expect.objectContaining({
             totalTokens: 210,
           }),
         }),
@@ -888,7 +887,7 @@ describe('server handlers', () => {
         requestMode: 'guided_refined',
         debug: expect.objectContaining({
           finalizeFastLayer: 'finalize_fast',
-          flowPath: 'nano_lock',
+          flowPath: 'haiku_lock',
           tokenUsageByStage: expect.objectContaining({
             finalize: {
               inputTokens: 180,
@@ -907,8 +906,8 @@ describe('server handlers', () => {
         selection: expect.objectContaining({
           layer: 'finalize_fast',
           shortlistLocked: true,
-          strategy: 'nano_lock',
-          flowPath: 'nano_lock',
+          strategy: 'haiku_lock',
+          flowPath: 'haiku_lock',
         }),
       }),
     )
@@ -1157,13 +1156,13 @@ describe('server handlers', () => {
     expect(miniEnrichSelectedCandidates.mock.calls[0][0].candidatePool.candidates[1].productDescription ?? '').toBe('')
   })
 
-  it('keeps finalize model metadata for context while Haiku owns winner selection', async () => {
+  it('reports Haiku finalize model metadata for context-added requests', async () => {
     mockFinalizeEnv({
       OPENAI_FINALIZE_CONTEXT_MODEL: 'gpt-5.4-nano',
       OPENAI_MODEL: 'gpt-5-mini',
     })
     haikuLockWinnersAndBadges.mockResolvedValue({
-      model: 'gpt-5.4-nano',
+      model: 'claude-haiku-4-5-20251001',
       lockedIds: ['one'],
       usage: null,
     })
@@ -1194,11 +1193,11 @@ describe('server handlers', () => {
     expect(JSON.parse(response.body)).toEqual(
       expect.objectContaining({
         debug: expect.objectContaining({
-          finalizeModel: 'gpt-5.4-nano',
+          finalizeModel: 'claude-haiku-4-5-20251001',
           finalizeModelPath: 'context_added',
         }),
         selection: expect.objectContaining({
-          model: 'gpt-5.4-nano',
+          model: 'claude-haiku-4-5-20251001',
           modelPath: 'context_added',
         }),
       }),
@@ -1206,12 +1205,12 @@ describe('server handlers', () => {
     expect(haikuLockWinnersAndBadges.mock.calls[0][0]).not.toHaveProperty('model')
   })
 
-  it('defaults context-added finalize metadata to the context model lane', async () => {
+  it('uses the Haiku result model for context-added finalize metadata', async () => {
     mockFinalizeEnv({
       OPENAI_FINALIZE_MODEL: 'gpt-5-mini',
     })
     haikuLockWinnersAndBadges.mockResolvedValue({
-      model: 'gpt-5.4-nano',
+      model: 'claude-haiku-4-5-20251001',
       lockedIds: ['one'],
       usage: null,
     })
@@ -1242,24 +1241,24 @@ describe('server handlers', () => {
     expect(JSON.parse(response.body)).toEqual(
       expect.objectContaining({
         debug: expect.objectContaining({
-          finalizeModel: 'gpt-5.4-nano',
+          finalizeModel: 'claude-haiku-4-5-20251001',
           finalizeModelPath: 'context_added',
         }),
         selection: expect.objectContaining({
-          model: 'gpt-5.4-nano',
+          model: 'claude-haiku-4-5-20251001',
           modelPath: 'context_added',
         }),
       }),
     )
   })
 
-  it('lets OPENAI_FINALIZE_CONTEXT_MODEL override context finalize metadata', async () => {
+  it('does not let OpenAI finalize env override Haiku finalize metadata', async () => {
     mockFinalizeEnv({
       OPENAI_FINALIZE_MODEL: 'gpt-5-mini',
       OPENAI_FINALIZE_CONTEXT_MODEL: 'gpt-5.2',
     })
     haikuLockWinnersAndBadges.mockResolvedValue({
-      model: 'gpt-5.2',
+      model: 'claude-haiku-4-5-20251001',
       lockedIds: ['one'],
       usage: null,
     })
@@ -1290,23 +1289,23 @@ describe('server handlers', () => {
     expect(JSON.parse(response.body)).toEqual(
       expect.objectContaining({
         debug: expect.objectContaining({
-          finalizeModel: 'gpt-5.2',
+          finalizeModel: 'claude-haiku-4-5-20251001',
           finalizeModelPath: 'context_added',
         }),
         selection: expect.objectContaining({
-          model: 'gpt-5.2',
+          model: 'claude-haiku-4-5-20251001',
           modelPath: 'context_added',
         }),
       }),
     )
   })
 
-  it('keeps empty-note finalize requests on the baseline finalize metadata lane', async () => {
+  it('keeps empty-note finalize requests on the baseline metadata lane', async () => {
     mockFinalizeEnv({
       OPENAI_FINALIZE_MODEL: 'gpt-5-mini',
     })
     haikuLockWinnersAndBadges.mockResolvedValue({
-      model: 'gpt-5-mini',
+      model: 'claude-haiku-4-5-20251001',
       lockedIds: ['one'],
       usage: null,
     })
@@ -1334,11 +1333,11 @@ describe('server handlers', () => {
     expect(JSON.parse(response.body)).toEqual(
       expect.objectContaining({
         debug: expect.objectContaining({
-          finalizeModel: 'gpt-5-mini',
+          finalizeModel: 'claude-haiku-4-5-20251001',
           finalizeModelPath: 'baseline',
         }),
         selection: expect.objectContaining({
-          model: 'gpt-5-mini',
+          model: 'claude-haiku-4-5-20251001',
           modelPath: 'baseline',
         }),
       }),
@@ -1402,7 +1401,7 @@ describe('server handlers', () => {
           },
         }),
         usage: {
-          openai: {
+          haiku: {
             inputTokens: 510,
             outputTokens: 84,
             totalTokens: 594,

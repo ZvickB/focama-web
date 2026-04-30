@@ -1,12 +1,9 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import {
   DEFAULT_FINALIZE_MODEL,
   DEFAULT_REFINEMENT_MODEL,
-  DEFAULT_CONTEXT_FINALIZE_MODEL,
-  nanoLockWinnersAndBadges,
   haikuLockWinnersAndBadges,
   miniEnrichSelectedCandidates,
 } from './lib/ai-selector.js'
@@ -108,16 +105,6 @@ function hasContextAddedFinalizeSignals({
     retryCount > 0 ||
     excludedCandidateIds.length > 0
   )
-}
-
-function getFinalizeModel({ hasContextSignals = false } = {}) {
-  const sharedFinalizeModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
-
-  if (!hasContextSignals) {
-    return getEnv('OPENAI_FINALIZE_EMPTY_MODEL') || sharedFinalizeModel
-  }
-
-  return getEnv('OPENAI_FINALIZE_CONTEXT_MODEL') || DEFAULT_CONTEXT_FINALIZE_MODEL
 }
 
 function getFinalizeEnrichmentMode() {
@@ -849,270 +836,6 @@ export const handleRetryAdvice = createRetryAdviceHandler({
 
 export const handleSupabaseHealth = createSupabaseHealthHandler()
 
-export async function handleModelCompare(request, response) {
-  if (process.env.NODE_ENV === 'production') {
-    sendJson(response, 404, { error: 'Not found.' })
-    return
-  }
-
-  const body = await readJsonBody(request)
-  const candidatePool = body?.candidatePool
-  const details = typeof body?.details === 'string' ? body.details.trim() : ''
-  const finalResultLimit = Number.isFinite(Number(body?.finalResultLimit)) ? Number(body.finalResultLimit) : 6
-
-  if (!candidatePool || !Array.isArray(candidatePool.candidates) || candidatePool.candidates.length === 0) {
-    sendJson(response, 400, { error: 'candidatePool with candidates is required.' })
-    return
-  }
-
-  const openAiApiKey = getEnv('OPENAI_API_KEY')
-  const claudeApiKey = getEnv('CLAUDE_API_KEY')
-
-  if (!openAiApiKey) {
-    sendJson(response, 500, { error: 'OPENAI_API_KEY not configured.' })
-    return
-  }
-
-  if (!claudeApiKey) {
-    sendJson(response, 500, { error: 'CLAUDE_API_KEY not configured.' })
-    return
-  }
-
-  const poolWithDetails = { ...candidatePool, details }
-
-  async function runNano() {
-    const start = nowMs()
-    const result = await nanoLockWinnersAndBadges(
-      { candidatePool: poolWithDetails, finalResultLimit, apiKey: openAiApiKey, model: 'gpt-5.4-nano' },
-    )
-    const durationMs = nowMs() - start
-    const candidateById = new Map(candidatePool.candidates.map((c) => [String(c.id), c]))
-    return {
-      model: 'gpt-5.4-nano',
-      durationMs,
-      usage: result.usage,
-      picks: result.lockedIds.map((id) => {
-        const c = candidateById.get(String(id))
-        return c ? { id, title: c.title, price: c.price, rating: c.rating, reviewCount: c.reviewCount } : { id }
-      }),
-    }
-  }
-
-  async function runHaiku() {
-    const start = nowMs()
-    const anthropic = new Anthropic({ apiKey: claudeApiKey })
-    const candidateById = new Map(candidatePool.candidates.map((c) => [String(c.id), c]))
-    const desiredCount = Math.min(finalResultLimit, candidatePool.candidates.length)
-
-    const prompt = [
-      'Choose the best final products.',
-      '1. The user\'s follow-up context is the dominant selection signal — weight it above all other factors. If a candidate violates a hard constraint stated in the context (e.g. exceeds a stated budget), exclude it unless no better option exists. When no candidate fully satisfies the constraint, prefer the closest match — for a budget constraint, prefer the cheapest available option over a more expensive one, even if the cheaper option has lower ratings.',
-      '2. Relevance to the product query.',
-      '3. Quality and trust using rating and review count.',
-      '4. Prefer diversity across style, merchant, or use case when helpful.',
-      `Return exactly ${desiredCount} picks. Respond with valid JSON only: {"picks":[{"candidate_id":"..."},...]}.`,
-      'Only choose from the provided candidate ids.',
-      '',
-      `Product query: ${candidatePool.query}`,
-      `Extra context: ${details || 'None provided.'}`,
-      '',
-      'Candidates:',
-      JSON.stringify(candidatePool.candidates.map((c, i) => ({
-        id: c.id,
-        rank: i + 1,
-        title: c.title,
-        price: c.price,
-        rating: c.rating,
-        reviewCount: c.reviewCount,
-      }))),
-    ].join('\n')
-
-    const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
-      messages: [{ role: 'user', content: prompt }],
-    })
-
-    const durationMs = nowMs() - start
-    const text = message.content?.[0]?.type === 'text' ? message.content[0].text.trim() : ''
-    let picks = []
-
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/)
-      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
-      const rawPicks = Array.isArray(parsed?.picks) ? parsed.picks : []
-      const seen = new Set()
-
-      for (const pick of rawPicks) {
-        const id = String(pick?.candidate_id || '')
-        if (!id || seen.has(id) || !candidateById.has(id)) continue
-        const c = candidateById.get(id)
-        picks.push({ id, title: c.title, price: c.price, rating: c.rating, reviewCount: c.reviewCount })
-        seen.add(id)
-        if (picks.length >= finalResultLimit) break
-      }
-    } catch {
-      picks = []
-    }
-
-    return {
-      model: 'claude-haiku-4-5-20251001',
-      durationMs,
-      usage: {
-        inputTokens: message.usage?.input_tokens ?? 0,
-        outputTokens: message.usage?.output_tokens ?? 0,
-      },
-      picks,
-    }
-  }
-
-  async function runRefineMini() {
-    const start = nowMs()
-    const { generateRefinementPrompt: genPrompt } = await import('./lib/refinement-assistant.js')
-    const result = await genPrompt({ productQuery: candidatePool.query, apiKey: openAiApiKey })
-    return { model: 'gpt-5-mini', durationMs: nowMs() - start, usage: result.usage, question: result.prompt }
-  }
-
-  async function runRefineHaiku() {
-    const start = nowMs()
-    const anthropic = new Anthropic({ apiKey: claudeApiKey })
-    const MAX_PROMPT_LENGTH = 140
-
-    const prompt = [
-      'Write one short follow-up question for a shopping search before any product results exist.',
-      'Stay query-only. Do not assume specific products, brands, or merchants.',
-      `Keep the question at or under ${MAX_PROMPT_LENGTH} characters.`,
-      'Ask only one question.',
-      'Do not add helper text, examples, a placeholder, category notes, or reasoning fields.',
-      'Focus on the detail most likely to change ranking, such as use case, must-have, budget, size, comfort, or what to avoid.',
-      `Product request: ${candidatePool.query}`,
-      '',
-      'Respond with the question text only. No JSON, no explanation.',
-    ].join('\n')
-
-    const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 64,
-      messages: [{ role: 'user', content: prompt }],
-    })
-
-    const durationMs = nowMs() - start
-    const question = message.content?.[0]?.type === 'text' ? message.content[0].text.trim() : ''
-
-    return {
-      model: 'claude-haiku-4-5-20251001',
-      durationMs,
-      usage: { inputTokens: message.usage?.input_tokens ?? 0, outputTokens: message.usage?.output_tokens ?? 0 },
-      question,
-    }
-  }
-
-  async function runEnrichmentMini(lockedIds) {
-    const start = nowMs()
-    const result = await miniEnrichSelectedCandidates({
-      lockedIds,
-      candidatePool: poolWithDetails,
-      apiKey: openAiApiKey,
-      model: 'gpt-5-mini',
-    })
-    return { model: 'gpt-5-mini', durationMs: nowMs() - start, usage: result.usage, enriched: result.enriched }
-  }
-
-  async function runEnrichmentHaiku(lockedIds) {
-    const start = nowMs()
-    const anthropic = new Anthropic({ apiKey: claudeApiKey })
-    const candidateById = new Map(candidatePool.candidates.map((c) => [String(c.id), c]))
-
-    const lockedCandidates = lockedIds
-      .map((id) => candidateById.get(String(id)))
-      .filter(Boolean)
-      .map((c) => ({
-        candidate_id: String(c.id),
-        title: c.title,
-        source: c.source,
-        price: c.price,
-        rating: c.rating,
-        reviewCount: c.reviewCount,
-        feature_bullets: Array.isArray(c.feature_bullets) ? c.feature_bullets.slice(0, 10) : [],
-        product_description: typeof c.productDescription === 'string' ? c.productDescription.slice(0, 3000) : '',
-      }))
-
-    const prompt = [
-      'Write a short explanation for each of these selected products. Write like a trusted assistant, not a salesperson.',
-      'The shortlist is already decided. Do not change the order or swap any product.',
-      'For each product, write two separate fields:',
-      '1. fit_reason: One or two sentences explaining why it was picked for this specific need. Be specific to the user context. Avoid superlatives, hype phrases, and generic positives.',
-      '2. caveat: One honest drawback or caveat — practical (e.g. exceeds budget, heavier than alternatives) or contextual (e.g. better if X matters more than Y). Do not skip this even if the pick is strong.',
-      'Use feature bullets and any richer product description when they are provided. Prefer concrete product attributes over generic praise.',
-      'If richer product detail is missing, fall back to the basic title/price/rating context and do not invent attributes.',
-      '',
-      `Product query: ${candidatePool.query}`,
-      `User context: ${details || 'None provided.'}`,
-      '',
-      'Selected products (preserve this exact order and these exact candidate_ids):',
-      JSON.stringify(lockedCandidates),
-      '',
-      'Respond with valid JSON only: {"enriched":[{"candidate_id":"...","fit_reason":"...","caveat":"..."},...]}',
-    ].join('\n')
-
-    const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
-      messages: [{ role: 'user', content: prompt }],
-    })
-
-    const durationMs = nowMs() - start
-    const text = message.content?.[0]?.type === 'text' ? message.content[0].text.trim() : ''
-    let enriched = []
-
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/)
-      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
-      enriched = Array.isArray(parsed?.enriched) ? parsed.enriched : []
-    } catch {
-      enriched = []
-    }
-
-    return {
-      model: 'claude-haiku-4-5-20251001',
-      durationMs,
-      usage: { inputTokens: message.usage?.input_tokens ?? 0, outputTokens: message.usage?.output_tokens ?? 0 },
-      enriched,
-    }
-  }
-
-  try {
-    const [nanoResult, haikuResult, refineMiniResult, refineHaikuResult] = await Promise.all([
-      runNano(),
-      runHaiku(),
-      runRefineMini(),
-      runRefineHaiku(),
-    ])
-
-    const lockedIds = nanoResult.picks.map((p) => p.id)
-    const [enrichMiniResult, enrichHaikuResult] = await Promise.all([
-      runEnrichmentMini(lockedIds),
-      runEnrichmentHaiku(lockedIds),
-    ])
-
-    sendJson(response, 200, {
-      nano: nanoResult,
-      haiku: haikuResult,
-      refine: {
-        mini: refineMiniResult,
-        haiku: refineHaikuResult,
-      },
-      enrichment: {
-        lockedIds,
-        mini: enrichMiniResult,
-        haiku: enrichHaikuResult,
-      },
-    })
-  } catch (error) {
-    sendJson(response, 500, { error: error instanceof Error ? error.message : 'Comparison failed.' })
-  }
-}
-
 export async function handleSearchDebug(requestUrl, response) {
   const { error, isValid, normalizedDetails, normalizedQuery } = getValidatedSearchRequest(requestUrl)
 
@@ -1184,7 +907,7 @@ export async function handleSearchDebug(requestUrl, response) {
   })
 }
 
-// Runs mini enrichment after nano has locked the shortlist, stores result in discovery cache.
+// Runs mini enrichment after Haiku has locked the shortlist, stores result in discovery cache.
 async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model, normalizedQuery, discoveryScope = CACHE_SCOPE_DISCOVERY }) {
   const miniResult = await miniEnrichSelectedCandidates({
     lockedIds,
@@ -1471,24 +1194,23 @@ export async function handleFinalizeSelection(request, response) {
     return
   }
 
-  const nanoModel = getFinalizeModel({ hasContextSignals })
   const configuredEnrichmentMode = getFinalizeEnrichmentMode()
   const enrichmentMode = configuredEnrichmentMode === 'blocking' ? 'async' : configuredEnrichmentMode
 
   try {
-    const openAiStartedAt = nowMs()
-    const nanoResult = await haikuLockWinnersAndBadges({
+    const haikuStartedAt = nowMs()
+    const haikuResult = await haikuLockWinnersAndBadges({
       candidatePool: nextCandidatePool,
       finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
       apiKey: getEnv('CLAUDE_API_KEY'),
     })
-    const openAiDuration = nowMs() - openAiStartedAt
-    tokenUsageByStage.finalize = nanoResult.usage || null
+    const haikuDuration = nowMs() - haikuStartedAt
+    tokenUsageByStage.finalize = haikuResult.usage || null
 
     const candidateById = new Map(
       nextCandidatePool.candidates.map((c) => [String(c.id), c]),
     )
-    const nanoResults = nanoResult.lockedIds
+    const haikuResults = haikuResult.lockedIds
       .map((id) => {
         const candidate = candidateById.get(String(id))
         return candidate ? toFinalizeFastCard(candidate) : null
@@ -1496,12 +1218,12 @@ export async function handleFinalizeSelection(request, response) {
       .filter(Boolean)
 
     const fallbackResults = buildFinalizeFallbackResults(nextCandidatePool)
-    let results = nanoResults.length > 0 ? nanoResults : fallbackResults
+    let results = haikuResults.length > 0 ? haikuResults : fallbackResults
     const selectedCandidateIds =
-      nanoResults.length > 0 ? nanoResult.lockedIds : fallbackResults.map((item) => item.id)
-    const selectionStrategy = nanoResults.length > 0 ? 'nano_lock' : 'rules_fallback'
-    const flowPath = nanoResults.length > 0 ? 'nano_lock' : 'nano_lock_fallback'
-    const miniEnrichmentStatus = nanoResults.length > 0 ? 'running_async' : 'skipped'
+      haikuResults.length > 0 ? haikuResult.lockedIds : fallbackResults.map((item) => item.id)
+    const selectionStrategy = haikuResults.length > 0 ? 'haiku_lock' : 'rules_fallback'
+    const flowPath = haikuResults.length > 0 ? 'haiku_lock' : 'nano_lock_fallback'
+    const miniEnrichmentStatus = haikuResults.length > 0 ? 'running_async' : 'skipped'
 
     const finalizeFast = buildFinalizeFastResponseContract({
       query: sanitizedDiscoveryContext.normalizedQuery,
@@ -1509,7 +1231,7 @@ export async function handleFinalizeSelection(request, response) {
       latestUserContext: refinedDetails,
       results,
       selectedCandidateIds,
-      model: nanoResults.length > 0 ? nanoModel : '',
+      model: haikuResults.length > 0 ? haikuResult.model : '',
       strategy: selectionStrategy,
     })
     const totalDuration = nowMs() - requestStartedAt
@@ -1522,15 +1244,15 @@ export async function handleFinalizeSelection(request, response) {
       retryCount,
       requestMode,
       cacheMs: roundTimingDuration(cacheLookupDuration),
-      openaiMs: roundTimingDuration(openAiDuration),
+      haikuMs: roundTimingDuration(haikuDuration),
       productDetailsMs: null,
       totalMs: roundTimingDuration(totalDuration),
-      openaiUsage: nanoResult.usage || null,
-      rankingOwner: nanoResults.length > 0 ? 'nano_lock' : 'deterministic_fallback',
-      selectionMode: nanoResults.length > 0 ? 'ai' : 'rules_fallback',
+      haikuUsage: haikuResult.usage || null,
+      rankingOwner: haikuResults.length > 0 ? 'haiku_lock' : 'deterministic_fallback',
+      selectionMode: haikuResults.length > 0 ? 'ai' : 'rules_fallback',
       selectionStrategy,
       flowPath,
-      finalizeModel: nanoModel,
+      finalizeModel: haikuResult.model,
       finalizeModelPath: hasContextSignals ? 'context_added' : 'baseline',
     })
 
@@ -1538,7 +1260,7 @@ export async function handleFinalizeSelection(request, response) {
       debug: {
         finalizeFastLayer: finalizeFast.layer,
         flowPath,
-        finalizeModel: nanoModel,
+        finalizeModel: haikuResult.model,
         finalizeModelPath: hasContextSignals ? 'context_added' : 'baseline',
         requestMode,
         enrichmentMode,
@@ -1546,7 +1268,7 @@ export async function handleFinalizeSelection(request, response) {
         stageLatencyMs: {
           body: roundTimingDuration(body.bodyReadDuration || 0),
           cache: roundTimingDuration(cacheLookupDuration),
-          openai: roundTimingDuration(openAiDuration),
+          haiku: roundTimingDuration(haikuDuration),
           productDetails: null,
           total: roundTimingDuration(totalDuration),
         },
@@ -1558,35 +1280,35 @@ export async function handleFinalizeSelection(request, response) {
       results,
       selection: {
         layer: finalizeFast.layer,
-        mode: nanoResults.length > 0 ? 'ai' : 'rules_fallback',
+        mode: haikuResults.length > 0 ? 'ai' : 'rules_fallback',
         strategy: selectionStrategy,
-        model: nanoResults.length > 0 ? nanoModel : null,
+        model: haikuResults.length > 0 ? haikuResult.model : null,
         modelPath: hasContextSignals ? 'context_added' : 'baseline',
         requestMode,
         shortlistLocked: finalizeFast.shortlistLocked,
-        usage: nanoResults.length > 0 ? nanoResult.usage || null : null,
+        usage: haikuResults.length > 0 ? haikuResult.usage || null : null,
         selectedCandidateIds: finalizeFast.selectedCandidateIds,
-        details: nanoResults.length > 0
-          ? 'Nano locked the shortlist. Product details and mini enrichment are running async.'
+        details: haikuResults.length > 0
+          ? 'Haiku locked the shortlist. Product details and mini enrichment are running async.'
           : 'Rules-based fallback was used.',
         flowPath,
         enrichmentMode,
         miniEnrichmentStatus,
       },
       usage: {
-        openai: nanoResult.usage || null,
+        haiku: haikuResult.usage || null,
       },
     }, {
       serverTiming: [
         { name: 'body', duration: body.bodyReadDuration || 0 },
         { name: 'cache', duration: cacheLookupDuration },
-        { name: 'openai', duration: openAiDuration },
+        { name: 'haiku', duration: haikuDuration },
         { name: 'total', duration: totalDuration },
       ],
     })
 
     // Fire off product details and mini enrichment async; do not block the response.
-    if (nanoResults.length > 0) {
+    if (haikuResults.length > 0) {
       const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
       const oxylabsUsername = getEnv('OXYLABS_USERNAME') // TODO: swap back to Rainforest before launch.
       const oxylabsPassword = getEnv('OXYLABS_PASSWORD') // TODO: swap back to Rainforest before launch.
@@ -1595,7 +1317,7 @@ export async function handleFinalizeSelection(request, response) {
         try {
           const productDetailsStartedAt = nowMs()
           const productDetailsById = await fetchOxylabsProductDetailsByAsin({ // TODO: swap back to Rainforest before launch.
-            asins: nanoResult.lockedIds,
+            asins: haikuResult.lockedIds,
             oxylabsUsername,
             oxylabsPassword,
             amazonDomain: sanitizedDiscoveryContext.amazonDomain,
@@ -1606,7 +1328,7 @@ export async function handleFinalizeSelection(request, response) {
           const enrichedCandidatePool = mergeProductDetailsIntoCandidatePool(nextCandidatePool, productDetailsById)
 
           await runMiniEnrichmentAsync({
-            lockedIds: nanoResult.lockedIds,
+            lockedIds: haikuResult.lockedIds,
             candidatePool: enrichedCandidatePool,
             apiKey: openAiApiKey,
             model: miniModel,
@@ -1773,11 +1495,6 @@ export function createApiServer() {
 
     if (request.method === 'GET' && requestUrl.pathname === '/api/search/debug') {
       await handleSearchDebug(requestUrl, response)
-      return
-    }
-
-    if (request.method === 'POST' && requestUrl.pathname === '/api/dev/compare-models') {
-      await handleModelCompare(request, response)
       return
     }
 

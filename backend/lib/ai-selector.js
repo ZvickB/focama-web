@@ -1,11 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { toFinalizeFastCard } from './layered-contracts.js'
 
 export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses'
 export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini'
 export const DEFAULT_REFINEMENT_MODEL = DEFAULT_OPENAI_MODEL
 export const DEFAULT_FINALIZE_MODEL = DEFAULT_OPENAI_MODEL
-export const DEFAULT_CONTEXT_FINALIZE_MODEL = 'gpt-5.4-nano'
 export const CANDIDATE_AWARE_PRIOR_VERSION = 1
 export const PRE_RANK_ARTIFACT_VERSION = CANDIDATE_AWARE_PRIOR_VERSION
 const ARTIFACT_RERANK_CANDIDATE_LIMIT = 12
@@ -224,53 +222,6 @@ function buildCandidateSummary(candidatePool) {
   }))
 }
 
-function buildSelectionPrompt({ candidatePool, finalResultLimit }) {
-  const desiredCount = Math.min(finalResultLimit, candidatePool.candidates.length)
-
-  return [
-    'Choose the best final products for this shopping request.',
-    '1. The user\'s follow-up context is the dominant selection signal — weight it above all other factors. If a candidate violates a hard constraint stated in the context (e.g. exceeds a stated budget), exclude it unless no better option exists. When no candidate fully satisfies the constraint, prefer the closest match — for a budget constraint, prefer the cheapest available option over a more expensive one, even if the cheaper option has lower ratings.',
-    '2. Relevance to the product query.',
-    '3. Quality and trust using rating and review count.',
-    '4. Prefer diversity across style, merchant, or use case when helpful, and avoid near-duplicates unless they are meaningfully different.',
-    '5. For each pick, write one short fit reason (1-2 sentences) directed at the user explaining why this product fits their need. Write for the user, not as internal analysis. Do not comment on the search pool, data quality, or missing options.',
-    `Return up to ${desiredCount} picks. If there are at least ${desiredCount} strong candidates, return exactly ${desiredCount}.`,
-    'Only choose from the provided candidate ids.',
-    '',
-    `Product query: ${candidatePool.query}`,
-    `Extra context: ${candidatePool.details || 'None provided.'}`,
-    '',
-    'Candidates:',
-    JSON.stringify(buildCandidateSummary(candidatePool)),
-  ].join('\n')
-}
-
-function buildSelectionSchema() {
-  return {
-    type: 'object',
-    properties: {
-      picks: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            candidate_id: {
-              type: 'string',
-            },
-            rationale: {
-              type: 'string',
-            },
-          },
-          required: ['candidate_id', 'rationale'],
-          additionalProperties: false,
-        },
-      },
-    },
-    required: ['picks'],
-    additionalProperties: false,
-  }
-}
-
 function buildCandidateAwarePriorPrompt(candidatePool) {
   return [
     'Create a reusable candidate-aware shopping prior from this candidate pool.',
@@ -314,60 +265,6 @@ function buildCandidateAwarePriorSchema() {
     required: ['ranked_candidates'],
     additionalProperties: false,
   }
-}
-
-function buildPriorRerankPrompt({
-  priorCandidates,
-  candidatePool,
-  finalResultLimit,
-}) {
-  const desiredCount = Math.min(finalResultLimit, priorCandidates.length)
-
-  return [
-    'Choose the best final products with help from this reusable candidate-aware prior.',
-    '1. The user\'s follow-up context is the dominant selection signal — weight it above all other factors. If a candidate violates a hard constraint stated in the context (e.g. exceeds a stated budget), exclude it unless no better option exists. When no candidate fully satisfies the constraint, prefer the closest match — for a budget constraint, prefer the cheapest available option over a more expensive one, even if the cheaper option has lower ratings.',
-    '2. Retry feedback and exclusions are high-priority intent signals.',
-    '3. Use the baseline ranking and notes as helpful prior context, not as a hard rule.',
-    '4. Preserve diversity only when it still fits the stated intent well.',
-    '5. Return only the selected candidate ids plus one short intent-fit reason (1-2 sentences) for each pick, directed at the user. Do not comment on the search pool, data quality, or missing options.',
-    `Return up to ${desiredCount} picks. If there are at least ${desiredCount} strong candidates, return exactly ${desiredCount}.`,
-    '',
-    `Product query: ${candidatePool.query}`,
-    `Extra context: ${candidatePool.details || 'None provided.'}`,
-    '',
-    'Reusable candidate-aware prior:',
-    JSON.stringify(priorCandidates),
-  ].join('\n')
-}
-
-function buildPriorRerankSchema() {
-  return {
-    type: 'object',
-    properties: {
-      picks: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            candidate_id: {
-              type: 'string',
-            },
-            rationale: {
-              type: 'string',
-            },
-          },
-          required: ['candidate_id', 'rationale'],
-          additionalProperties: false,
-        },
-      },
-    },
-    required: ['picks'],
-    additionalProperties: false,
-  }
-}
-
-function buildUiResult(candidate) {
-  return toFinalizeFastCard(candidate)
 }
 
 async function requestStructuredSelection(
@@ -535,145 +432,6 @@ function mapCandidateAwarePrior(rankedCandidates, candidatePool, model) {
   }
 }
 
-function getReusablePriorEntries(candidateAwarePrior, candidates) {
-  if (
-    !candidateAwarePrior ||
-    typeof candidateAwarePrior !== 'object' ||
-    Array.isArray(candidateAwarePrior) ||
-    candidateAwarePrior.version !== CANDIDATE_AWARE_PRIOR_VERSION ||
-    !Array.isArray(candidateAwarePrior.rankedCandidates)
-  ) {
-    return []
-  }
-
-  const candidateById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]))
-  const reusableEntries = []
-
-  for (const entry of candidateAwarePrior.rankedCandidates) {
-    const candidateId = String(entry?.candidateId || entry?.candidate_id || '')
-
-    if (!candidateId) {
-      continue
-    }
-
-    const candidate = candidateById.get(candidateId)
-
-    if (!candidate) {
-      continue
-    }
-
-    reusableEntries.push({
-      candidate,
-      candidateId,
-      baselineCaution: truncateText(entry?.baselineCaution || entry?.baseline_caution, 160),
-      baselineFit: truncateText(entry?.baselineFit || entry?.baseline_fit, 160),
-      rank: Number.isFinite(Number(entry?.rank))
-        ? Number(entry.rank)
-        : reusableEntries.length + 1,
-      reusableSummary: {
-        candidate_id: candidateId,
-        rank: Number.isFinite(Number(entry?.rank))
-          ? Number(entry.rank)
-          : reusableEntries.length + 1,
-        title: candidate.title,
-        source: candidate.source,
-        price: candidate.price,
-        rating: candidate.rating,
-        reviewCount: candidate.reviewCount,
-        attributes: Array.isArray(entry?.attributes)
-          ? entry.attributes.slice(0, 6)
-          : Array.isArray(candidate.attributes)
-            ? candidate.attributes.slice(0, 6)
-            : [],
-        baseline_fit: truncateText(entry?.baselineFit || entry?.baseline_fit, 160),
-        baseline_caution: truncateText(entry?.baselineCaution || entry?.baseline_caution, 160),
-        trustScore:
-          Number.isFinite(Number(entry?.trustScore))
-            ? Number(entry.trustScore)
-            : candidate.trustSignals && typeof candidate.trustSignals === 'object' && !Array.isArray(candidate.trustSignals)
-              ? Number.isFinite(Number(candidate.trustSignals.score))
-                ? Number(candidate.trustSignals.score)
-                : 0
-              : null,
-      },
-    })
-  }
-
-  return reusableEntries.sort((left, right) => left.rank - right.rank)
-}
-
-function mapSelectionPicksToResults(picks, candidates, finalResultLimit) {
-  const candidateById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]))
-  const seen = new Set()
-  const selected = []
-
-  for (const pick of picks) {
-    const candidateId = String(pick?.candidate_id || '')
-
-    if (!candidateId || seen.has(candidateId)) {
-      continue
-    }
-
-    const candidate = candidateById.get(candidateId)
-
-    if (!candidate) {
-      continue
-    }
-
-    selected.push({
-      candidateId,
-      rationale: pick?.rationale?.trim() || '',
-      candidate,
-    })
-    seen.add(candidateId)
-
-    if (selected.length >= finalResultLimit) {
-      break
-    }
-  }
-
-  return {
-    selectedCandidateIds: selected.map((entry) => entry.candidateId),
-    results: selected.map((entry) => buildUiResult(entry.candidate)),
-  }
-}
-
-function mapPriorRerankPicksToResults(picks, reusableEntries, finalResultLimit) {
-  const entryById = new Map(reusableEntries.map((entry) => [entry.candidateId, entry]))
-  const seen = new Set()
-  const selected = []
-
-  for (const pick of picks) {
-    const candidateId = String(pick?.candidate_id || '')
-
-    if (!candidateId || seen.has(candidateId)) {
-      continue
-    }
-
-    const entry = entryById.get(candidateId)
-
-    if (!entry) {
-      continue
-    }
-
-    selected.push({
-      candidateId,
-      rationale: truncateText(pick?.rationale, 300) || entry.baselineFit,
-      entry,
-    })
-    seen.add(candidateId)
-
-    if (selected.length >= finalResultLimit) {
-      break
-    }
-  }
-
-  return {
-    selectedCandidateIds: selected.map((entry) => entry.candidateId),
-    results: selected.map(({ entry, rationale }) => buildUiResult(entry.candidate, rationale)),
-  }
-}
-
 function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }) {
   const desiredCount = Math.min(finalResultLimit, candidatePool.candidates.length)
 
@@ -692,27 +450,6 @@ function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }) {
     'Candidates:',
     JSON.stringify(buildCandidateSummary(candidatePool)),
   ].join('\n')
-}
-
-function buildNanoLockAndBadgesSchema() {
-  return {
-    type: 'object',
-    properties: {
-      picks: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            candidate_id: { type: 'string' },
-          },
-          required: ['candidate_id'],
-          additionalProperties: false,
-        },
-      },
-    },
-    required: ['picks'],
-    additionalProperties: false,
-  }
 }
 
 function buildMiniEnrichmentPrompt({ lockedCandidates, query, details }) {
@@ -753,30 +490,6 @@ function buildMiniEnrichmentSchema() {
     },
     required: ['enriched'],
     additionalProperties: false,
-  }
-}
-
-async function runOneShotSelection(
-  { candidatePool, finalResultLimit, apiKey, model },
-  fetchImpl,
-) {
-  const { parsed, usage } = await requestStructuredSelection(
-    {
-      prompt: buildSelectionPrompt({ candidatePool, finalResultLimit }),
-      schema: buildSelectionSchema(),
-      responseName: 'product_selection',
-      apiKey,
-      model,
-    },
-    fetchImpl,
-  )
-  const picks = Array.isArray(parsed?.picks) ? parsed.picks : []
-  const mapped = mapSelectionPicksToResults(picks, candidatePool.candidates, finalResultLimit)
-
-  return {
-    ...mapped,
-    strategy: 'single_pass',
-    usage,
   }
 }
 
@@ -838,59 +551,6 @@ export async function createCandidateAwarePrior(
 }
 
 export const createPreRankArtifact = createCandidateAwarePrior
-
-export async function nanoLockWinnersAndBadges(
-  {
-    candidatePool,
-    finalResultLimit,
-    apiKey,
-    model = DEFAULT_CONTEXT_FINALIZE_MODEL,
-  },
-  fetchImpl = fetch,
-) {
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is missing from the root .env file.')
-  }
-
-  const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
-
-  if (candidates.length === 0) {
-    return { model, lockedIds: [], usage: null }
-  }
-
-  const { parsed, usage } = await requestStructuredSelection(
-    {
-      prompt: buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }),
-      schema: buildNanoLockAndBadgesSchema(),
-      responseName: 'nano_lock_and_badges',
-      apiKey,
-      model,
-    },
-    fetchImpl,
-  )
-
-  const picks = Array.isArray(parsed?.picks) ? parsed.picks : []
-  const candidateById = new Map(candidates.map((candidate) => [String(candidate.id), candidate]))
-  const seen = new Set()
-  const lockedIds = []
-
-  for (const pick of picks) {
-    const candidateId = String(pick?.candidate_id || '')
-
-    if (!candidateId || seen.has(candidateId) || !candidateById.has(candidateId)) {
-      continue
-    }
-
-    lockedIds.push(candidateId)
-    seen.add(candidateId)
-
-    if (lockedIds.length >= finalResultLimit) {
-      break
-    }
-  }
-
-  return { model, lockedIds, usage }
-}
 
 export async function haikuLockWinnersAndBadges(
   {
