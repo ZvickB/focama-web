@@ -1,3 +1,4 @@
+import Anthropic from '@anthropic-ai/sdk'
 import { toFinalizeFastCard } from './layered-contracts.js'
 
 export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses'
@@ -889,6 +890,65 @@ export async function nanoLockWinnersAndBadges(
   }
 
   return { model, lockedIds, usage }
+}
+
+export async function haikuLockWinnersAndBadges(
+  {
+    candidatePool,
+    finalResultLimit,
+    apiKey,
+  },
+) {
+  if (!apiKey) {
+    throw new Error('CLAUDE_API_KEY is missing from the root .env file.')
+  }
+
+  const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
+
+  if (candidates.length === 0) {
+    return { model: 'claude-haiku-4-5-20251001', lockedIds: [], usage: null }
+  }
+
+  const desiredCount = Math.min(finalResultLimit, candidates.length)
+  const prompt = buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit })
+    + '\n\nRespond with valid JSON only: {"picks":[{"candidate_id":"..."},...]}. No explanation.'
+
+  const anthropic = new Anthropic({ apiKey })
+  const message = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 256,
+    messages: [{ role: 'user', content: prompt }],
+  })
+
+  const text = message.content?.[0]?.type === 'text' ? message.content[0].text.trim() : ''
+  const candidateById = new Map(candidates.map((c) => [String(c.id), c]))
+  const seen = new Set()
+  const lockedIds = []
+
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
+    const picks = Array.isArray(parsed?.picks) ? parsed.picks : []
+
+    for (const pick of picks) {
+      const id = String(pick?.candidate_id || '')
+      if (!id || seen.has(id) || !candidateById.has(id)) continue
+      lockedIds.push(id)
+      seen.add(id)
+      if (lockedIds.length >= desiredCount) break
+    }
+  } catch {
+    // return empty if parse fails
+  }
+
+  return {
+    model: 'claude-haiku-4-5-20251001',
+    lockedIds,
+    usage: {
+      inputTokens: message.usage?.input_tokens ?? 0,
+      outputTokens: message.usage?.output_tokens ?? 0,
+    },
+  }
 }
 
 export async function miniEnrichSelectedCandidates(

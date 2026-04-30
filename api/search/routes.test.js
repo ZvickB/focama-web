@@ -1,13 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const handleLiveSearch = vi.fn((requestUrl, response) => {
-  response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-  response.end(JSON.stringify({ pathname: requestUrl.pathname }))
-})
-const handleDiscoverySearch = vi.fn((requestUrl, response) => {
-  response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-  response.end(JSON.stringify({ pathname: requestUrl.pathname }))
-})
 const handleRainforestDiscoverySearch = vi.fn((requestUrl, response) => {
   response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
   response.end(JSON.stringify({ pathname: requestUrl.pathname }))
@@ -47,16 +39,12 @@ const handleRetryAdvice = vi.fn((request, response) => {
   })
 })
 vi.mock('../../backend/server.js', () => ({
-  handleDiscoverySearch,
   handleEnrichmentPoll,
   handleFinalizeSelection,
-  handleLiveSearch,
   handleRainforestDiscoverySearch,
   handleRetryAdvice,
 }))
 
-const { GET: getLiveSearch } = await import('./live.js')
-const { GET: getDiscoverySearch } = await import('./discover.js')
 const { GET: getEnrichmentPoll } = await import('./enrichment.js')
 const { POST: postFinalizeSelection } = await import('./finalize.js')
 const { GET: getRainforestDiscoverySearch } = await import('./rainforest-discover.js')
@@ -65,30 +53,6 @@ const { POST: postRetryAdvice } = await import('./retry-advice.js')
 describe('Vercel search route wrappers', () => {
   afterEach(() => {
     vi.clearAllMocks()
-  })
-
-  it('forwards request headers into the guided discovery wrapper', async () => {
-    const request = new Request('https://example.com/api/search/discover?query=stroller', {
-      headers: {
-        'x-forwarded-for': '203.0.113.30',
-      },
-    })
-
-    const response = await getDiscoverySearch(request)
-
-    expect(response.status).toBe(200)
-    expect(handleDiscoverySearch).toHaveBeenCalledWith(
-      expect.any(URL),
-      expect.any(Object),
-      expect.objectContaining({
-        headers: expect.any(Headers),
-      }),
-    )
-
-    const forwardedRequest = handleDiscoverySearch.mock.calls[0][2]
-    expect(Object.fromEntries(forwardedRequest.headers.entries())).toMatchObject({
-      'x-forwarded-for': '203.0.113.30',
-    })
   })
 
   it('forwards request headers into the rainforest discovery wrapper', async () => {
@@ -115,30 +79,6 @@ describe('Vercel search route wrappers', () => {
     })
     expect(await response.json()).toEqual({
       pathname: '/api/search/rainforest-discover',
-    })
-  })
-
-  it('forwards request headers into the live search wrapper', async () => {
-    const request = new Request('https://example.com/api/search/live?query=stroller', {
-      headers: {
-        'x-forwarded-for': '203.0.113.31',
-      },
-    })
-
-    const response = await getLiveSearch(request)
-
-    expect(response.status).toBe(200)
-    expect(handleLiveSearch).toHaveBeenCalledWith(
-      expect.any(URL),
-      expect.any(Object),
-      expect.objectContaining({
-        headers: expect.any(Headers),
-      }),
-    )
-
-    const forwardedRequest = handleLiveSearch.mock.calls[0][2]
-    expect(Object.fromEntries(forwardedRequest.headers.entries())).toMatchObject({
-      'x-forwarded-for': '203.0.113.31',
     })
   })
 

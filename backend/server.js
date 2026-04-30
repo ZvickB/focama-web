@@ -1,3 +1,4 @@
+import Anthropic from '@anthropic-ai/sdk'
 import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
@@ -5,17 +6,24 @@ import {
   DEFAULT_FINALIZE_MODEL,
   DEFAULT_REFINEMENT_MODEL,
   DEFAULT_CONTEXT_FINALIZE_MODEL,
-  selectAiResults,
   nanoLockWinnersAndBadges,
+  haikuLockWinnersAndBadges,
   miniEnrichSelectedCandidates,
 } from './lib/ai-selector.js'
 import { createFinalizeFastContract, toFinalizeFastCard } from './lib/layered-contracts.js'
 import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, getCountryCode, takeRateLimitToken } from './lib/rate-limit.js'
+import { ALLOWED_ORIGIN, sendJson, readJsonBody } from './lib/http.js'
+import {
+  sanitizeAnalyticsEventData,
+  sanitizeAnalyticsItems,
+  sanitizeStringList,
+  truncateText,
+} from './lib/text-sanitizers.js'
+import { createRetryAdviceHandler } from './lib/handlers/retry-advice-handler.js'
+import { createSupabaseHealthHandler } from './lib/handlers/supabase-health-handler.js'
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
-import { generateRetryAdvice } from './lib/retry-advice.js'
 import { DEFAULT_FILTER_CONFIG } from './lib/result-filter.js'
 import {
-  fetchSearchArtifacts,
   getValidatedSearchRequest,
   readCachedSearchSnapshot,
   recordSearchCacheEvent,
@@ -23,7 +31,6 @@ import {
 } from './lib/search-pipeline.js'
 import { fetchOxylabsArtifacts, fetchOxylabsProductDetailsByAsin } from './lib/oxylabs-pipeline.js'
 import {
-  getSupabaseHealth,
   isSupabaseConfigured,
   recordAnalyticsResultClick,
   recordAnalyticsResultImpressions,
@@ -36,7 +43,6 @@ import { buildCacheKey, getEnv, validateSearchInput } from './lib/search-data.js
 import { getAmazonDomainFromCountryCode, normalizeAmazonDomain } from '../shared/amazon-marketplaces.js'
 
 const PORT = Number(process.env.PORT || 8787)
-const ALLOWED_ORIGIN = getEnv('ALLOWED_ORIGIN') || (process.env.NODE_ENV === 'production' ? 'https://focama.vercel.app' : 'http://localhost:5173')
 const LIVE_RESULT_FILTER_CONFIG = {
   ...DEFAULT_FILTER_CONFIG,
   candidatePoolSize: 20,
@@ -124,13 +130,6 @@ function roundTimingDuration(value) {
   return Math.round(value * 10) / 10
 }
 
-function formatServerTiming(metrics = []) {
-  return metrics
-    .filter((metric) => metric && metric.name && Number.isFinite(metric.duration))
-    .map((metric) => `${metric.name};dur=${roundTimingDuration(metric.duration)}`)
-    .join(', ')
-}
-
 function nowMs() {
   return performance.now()
 }
@@ -153,22 +152,6 @@ function logSearchFlowEvent(eventName, details = {}) {
   )
 
   console.info('[search-flow]', JSON.stringify(payload))
-}
-
-function getRuntimeDebugDetails(request = null) {
-  return {
-    nodeEnv: process.env.NODE_ENV || null,
-    vercelEnv: process.env.VERCEL_ENV || null,
-    vercelRegion: process.env.VERCEL_REGION || null,
-    vercelUrl: process.env.VERCEL_URL || null,
-    vercelGitCommitRef: process.env.VERCEL_GIT_COMMIT_REF || null,
-    requestHost:
-      typeof request?.headers?.get === 'function' ? request.headers.get('host') || null : null,
-    requestOrigin:
-      typeof request?.headers?.get === 'function' ? request.headers.get('origin') || null : null,
-    userAgent:
-      typeof request?.headers?.get === 'function' ? request.headers.get('user-agent') || null : null,
-  }
 }
 
 function buildDiscoveryPreviewSelection(results, extraSelection = {}) {
@@ -205,113 +188,11 @@ function getStoredCandidateAwarePrior(selection) {
     : null
 }
 
-export function sendJson(response, statusCode, payload, headers = {}) {
-  const serverTiming = formatServerTiming(headers.serverTiming)
-  const responseHeaders = {
-    ...headers,
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
-    Vary: 'Origin',
-  }
-
-  delete responseHeaders.serverTiming
-
-  if (serverTiming) {
-    responseHeaders['Server-Timing'] = serverTiming
-  }
-
-  response.writeHead(statusCode, responseHeaders)
-  response.end(JSON.stringify(payload))
-}
-
-function readRequestBody(request, { maxBytes = Infinity } = {}) {
-  return new Promise((resolve, reject) => {
-    let body = ''
-    let byteLength = 0
-    let aborted = false
-
-    request.on('data', (chunk) => {
-      if (aborted) {
-        return
-      }
-
-      const chunkText = typeof chunk === 'string' ? chunk : String(chunk)
-      byteLength += Buffer.byteLength(chunkText)
-
-      if (byteLength > maxBytes) {
-        aborted = true
-        reject(new Error('Request body is too large.'))
-        return
-      }
-
-      body += chunkText
-    })
-
-    request.on('end', () => {
-      if (aborted) {
-        return
-      }
-
-      resolve(body)
-    })
-
-    request.on('error', reject)
-  })
-}
-
-async function readJsonBody(request, options) {
-  const rawBody = await readRequestBody(request, options)
-
-  if (!rawBody.trim()) {
-    return {}
-  }
-
-  try {
-    return JSON.parse(rawBody)
-  } catch {
-    throw new Error('Request body must be valid JSON.')
-  }
-}
-
-function truncateText(value, maxLength) {
-  const normalizedValue = typeof value === 'string' ? value.trim() : ''
-
-  if (!normalizedValue) {
-    return ''
-  }
-
-  return normalizedValue.slice(0, maxLength)
-}
-
-function sanitizeStringList(values, { maxItems, maxItemLength }) {
-  if (!Array.isArray(values)) {
-    return []
-  }
-
-  return values
-    .map((value) => truncateText(value, maxItemLength))
-    .filter(Boolean)
-    .slice(0, maxItems)
-}
-
 function sanitizeExcludedCandidateIds(values) {
   return sanitizeStringList(values, {
     maxItems: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
     maxItemLength: 200,
   })
-}
-
-function sanitizeRetryAdviceShortlist(values) {
-  if (!Array.isArray(values)) {
-    return []
-  }
-
-  return values
-    .map((item) => ({
-      title: truncateText(item?.title, RETRY_ADVICE_MAX_TITLE_LENGTH),
-    }))
-    .filter((item) => item.title)
-    .slice(0, RETRY_ADVICE_MAX_SHORTLIST_ITEMS)
 }
 
 function sanitizeFinalizeDiscoveryContext(body) {
@@ -694,316 +575,6 @@ export async function handleCachedSearch(requestUrl, response) {
   })
 }
 
-export async function handleLiveSearch(requestUrl, response, request = { headers: {} }) {
-  const requestStartedAt = nowMs()
-  const serpApiKey = getEnv('SERPAPI_API_KEY')
-  const openAiApiKey = getEnv('OPENAI_API_KEY')
-
-  if (!serpApiKey) {
-    sendJson(response, 500, { error: 'SERPAPI_API_KEY is missing from the root .env file.' })
-    return
-  }
-
-  if (!openAiApiKey) {
-    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
-    return
-  }
-
-  const clientIpAddress = getClientIpAddress(request.headers || {})
-  const countryCode = getCountryCode(request.headers || {})
-  const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
-
-  if (!rateLimit.allowed) {
-    logSearchFlowEvent('guided_discovery_rate_limited', {
-      route: '/api/search/discover',
-      query: requestUrl.searchParams.get('query') || '',
-      clientIpAddress,
-    })
-    sendJson(response, 429, {
-      error: `Too many searches from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
-    })
-    return
-  }
-
-  const { cacheKey, error, isValid, normalizedDetails, normalizedQuery } = getValidatedSearchRequest(requestUrl)
-
-  if (!isValid) {
-    logSearchFlowEvent('guided_discovery_invalid', {
-      route: '/api/search/discover',
-      query: requestUrl.searchParams.get('query') || '',
-      error,
-    })
-    sendJson(response, 400, { error })
-    return
-  }
-
-  try {
-    const searchStartedAt = nowMs()
-    let openAiDuration = null
-    const { artifacts, error: artifactsError } = await fetchSearchArtifacts({
-      filterConfig: LIVE_RESULT_FILTER_CONFIG,
-      productQuery: normalizedQuery,
-      details: normalizedDetails,
-      reasonFallback: 'Returned by the live SerpApi search route',
-      serpApiKey,
-      countryCode,
-    })
-
-    if (artifactsError) {
-      sendJson(response, artifactsError.statusCode, {
-        error: artifactsError.error,
-      })
-      return
-    }
-
-    const serpApiDuration = nowMs() - searchStartedAt
-    const { candidatePool, results: fallbackResults } = artifacts
-
-    let results = fallbackResults
-    let selection = {
-      mode: 'rules_fallback',
-      model: null,
-      selectedCandidateIds: fallbackResults.map((item) => item.id),
-      details: 'Rules-based fallback was used.',
-    }
-
-    try {
-      const aiStartedAt = nowMs()
-      const aiSelection = await selectAiResults({
-        candidatePool,
-        finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
-        apiKey: openAiApiKey,
-        model: getFinalizeModel(),
-      })
-      openAiDuration = nowMs() - aiStartedAt
-
-      if (aiSelection.results.length > 0) {
-        results = aiSelection.results
-        selection = {
-          mode: 'ai',
-          model: aiSelection.model,
-          usage: aiSelection.usage,
-          selectedCandidateIds: aiSelection.selectedCandidateIds,
-          details: 'AI selected the final recommendations from the cleaned candidate pool.',
-        }
-      }
-    } catch (error) {
-      selection = {
-        ...selection,
-        details: error instanceof Error ? error.message : 'AI selection failed; using fallback results.',
-      }
-    }
-
-    await recordSearchCacheEvent({
-      cacheKey,
-      cacheStatus: 'bypass',
-      candidateCount: Array.isArray(candidatePool?.candidates) ? candidatePool.candidates.length : 0,
-      details: normalizedDetails,
-      productQuery: normalizedQuery,
-      resultCount: results.length,
-      selectionMode: selection.mode,
-      source: 'live_search',
-    })
-
-    sendJson(response, 200, {
-      candidatePool,
-      results,
-      selection,
-      usage: {
-        openai: selection.usage || null,
-      },
-    }, {
-      serverTiming: [
-        { name: 'serpapi', duration: serpApiDuration },
-        ...(Number.isFinite(openAiDuration) ? [{ name: 'openai', duration: openAiDuration }] : []),
-        { name: 'total', duration: nowMs() - requestStartedAt },
-      ],
-    })
-  } catch (error) {
-    sendJson(response, 500, {
-      error: 'Unable to reach SerpApi.',
-      details: error instanceof Error ? error.message : 'Unknown error',
-    })
-  }
-}
-
-export async function handleDiscoverySearch(requestUrl, response, request = { headers: {} }) {
-  const requestStartedAt = nowMs()
-  const serpApiKey = getEnv('SERPAPI_API_KEY')
-
-  if (!serpApiKey) {
-    sendJson(response, 500, { error: 'SERPAPI_API_KEY is missing from the root .env file.' })
-    return
-  }
-
-  const clientIpAddress = getClientIpAddress(request.headers || {})
-  const countryCode = getCountryCode(request.headers || {})
-  const amazonDomain = resolveAmazonDomain({ requestUrl, countryCode })
-  const rainforestScope = getAmazonMarketplaceScope(CACHE_SCOPE_RAINFOREST, amazonDomain)
-  const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
-
-  if (!rateLimit.allowed) {
-    sendJson(response, 429, {
-      error: `Too many searches from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
-    })
-    return
-  }
-
-  const { error, isValid, normalizedQuery } = getValidatedSearchRequest(requestUrl, {
-    includeDetails: false,
-  })
-
-  if (!isValid) {
-    sendJson(response, 400, { error })
-    return
-  }
-
-  const normalizedDetails = ''
-  const discoveryCacheKey = buildCacheKey(normalizedQuery, normalizedDetails, CACHE_SCOPE_DISCOVERY)
-  const cacheLookupStartedAt = nowMs()
-  const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
-    productQuery: normalizedQuery,
-    details: normalizedDetails,
-    scope: CACHE_SCOPE_DISCOVERY,
-  })
-  const cacheLookupDuration = nowMs() - cacheLookupStartedAt
-
-  if (cachedEntry?.candidatePool && cachedEntry?.results?.length) {
-    const tokenizedDiscovery = await ensureDiscoverySnapshotToken({
-      normalizedQuery,
-      normalizedDetails,
-      cachedEntry,
-      scope: CACHE_SCOPE_DISCOVERY,
-    })
-    const cachedCandidateAwarePrior = getStoredCandidateAwarePrior(cachedEntry.selection)
-
-    await recordSearchCacheEvent({
-      cacheKey: discoveryCacheKey,
-      cacheStatus: 'hit',
-      candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
-        ? cachedEntry.candidatePool.candidates.length
-        : normalizedCachedResults.length,
-      details: normalizedDetails,
-      productQuery: normalizedQuery,
-      resultCount: normalizedCachedResults.length,
-      selectionMode: cachedEntry.selection?.mode || 'discovery_cache',
-      source: cachedEntry.source || 'cache',
-    })
-
-    logSearchFlowEvent('guided_discovery_cache_hit', {
-      route: '/api/search/discover',
-      lane: 'discover',
-      query: normalizedQuery,
-      candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
-        ? cachedEntry.candidatePool.candidates.length
-        : normalizedCachedResults.length,
-      previewCount: normalizedCachedResults.length,
-      candidateAwarePriorReady: Boolean(cachedCandidateAwarePrior),
-      cacheMs: roundTimingDuration(cacheLookupDuration),
-      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
-    })
-
-    sendJson(response, 200, {
-      discoveryToken: tokenizedDiscovery.discoveryToken,
-      candidatePool: tokenizedDiscovery.cachedEntry.candidatePool,
-      previewResults: normalizedCachedResults,
-      source: 'cache',
-      cachedAt: tokenizedDiscovery.cachedEntry.cachedAt,
-    }, {
-      serverTiming: [
-        { name: 'cache', duration: cacheLookupDuration },
-        { name: 'total', duration: nowMs() - requestStartedAt },
-      ],
-    })
-    return
-  }
-
-  try {
-    const discoveryToken = createDiscoveryToken()
-    const serpApiStartedAt = nowMs()
-    const { artifacts, error: artifactsError } = await fetchSearchArtifacts({
-      filterConfig: LIVE_RESULT_FILTER_CONFIG,
-      productQuery: normalizedQuery,
-      details: normalizedDetails,
-      reasonFallback: 'Returned by the live SerpApi search route',
-      serpApiKey,
-      countryCode,
-    })
-
-    if (artifactsError) {
-      sendJson(response, artifactsError.statusCode, {
-        error: artifactsError.error,
-      })
-      return
-    }
-    const serpApiDuration = nowMs() - serpApiStartedAt
-
-    runInBackground(
-      writeSearchSnapshot({
-        productQuery: normalizedQuery,
-        details: normalizedDetails,
-        candidatePool: artifacts.candidatePool,
-        discoveryToken,
-        results: artifacts.results,
-        selection: buildDiscoveryPreviewSelection(artifacts.results),
-        source: 'guided_discovery',
-        scope: CACHE_SCOPE_DISCOVERY,
-      }),
-    )
-
-    await recordSearchCacheEvent({
-      cacheKey: discoveryCacheKey,
-      cacheStatus: 'miss',
-      candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
-        ? artifacts.candidatePool.candidates.length
-        : 0,
-      details: normalizedDetails,
-      productQuery: normalizedQuery,
-      resultCount: artifacts.results.length,
-      selectionMode: 'discovery_preview',
-      source: 'guided_discovery',
-    })
-
-    logSearchFlowEvent('guided_discovery_completed', {
-      route: '/api/search/discover',
-      lane: 'discover',
-      query: normalizedQuery,
-      cacheStatus: 'miss',
-      candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
-        ? artifacts.candidatePool.candidates.length
-        : 0,
-      previewCount: artifacts.results.length,
-      cacheMs: roundTimingDuration(cacheLookupDuration),
-      serpapiMs: roundTimingDuration(serpApiDuration),
-      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
-    })
-
-    sendJson(response, 200, {
-      discoveryToken,
-      candidatePool: artifacts.candidatePool,
-      previewResults: artifacts.results,
-    }, {
-      serverTiming: [
-        { name: 'cache', duration: cacheLookupDuration },
-        { name: 'serpapi', duration: serpApiDuration },
-        { name: 'total', duration: nowMs() - requestStartedAt },
-      ],
-    })
-  } catch (error) {
-    logSearchFlowEvent('guided_discovery_failed', {
-      route: '/api/search/discover',
-      lane: 'discover',
-      query: normalizedQuery,
-      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    })
-    sendJson(response, 500, {
-      error: 'Unable to reach SerpApi.',
-      details: error instanceof Error ? error.message : 'Unknown error',
-    })
-  }
-}
-
 export async function handleRainforestDiscoverySearch(requestUrl, response, request = { headers: {} }) {
   const requestStartedAt = nowMs()
   const oxylabsUsername = getEnv('OXYLABS_USERNAME') // TODO: swap back to Rainforest before launch.
@@ -1263,130 +834,283 @@ export async function handleRefinementPrompt(requestUrl, response) {
 }
 
 
-export async function handleRetryAdvice(request, response) {
-  const requestStartedAt = nowMs()
+export const handleRetryAdvice = createRetryAdviceHandler({
+  getRefinementModel,
+  logSearchFlowEvent,
+  nowMs,
+  rateLimitConfig: RETRY_ADVICE_RATE_LIMIT,
+  bodyLimitBytes: RETRY_ADVICE_BODY_LIMIT_BYTES,
+  maxNoteLength: FINALIZE_MAX_NOTE_LENGTH,
+  maxRejectionFeedbackLength: FINALIZE_MAX_REJECTION_FEEDBACK_LENGTH,
+  maxShortlistItems: RETRY_ADVICE_MAX_SHORTLIST_ITEMS,
+  maxShortlistTitleLength: RETRY_ADVICE_MAX_TITLE_LENGTH,
+  rateLimitWaitMessage: RATE_LIMIT_WAIT_MESSAGE,
+})
+
+export const handleSupabaseHealth = createSupabaseHealthHandler()
+
+export async function handleModelCompare(request, response) {
+  if (process.env.NODE_ENV === 'production') {
+    sendJson(response, 404, { error: 'Not found.' })
+    return
+  }
+
+  const body = await readJsonBody(request)
+  const candidatePool = body?.candidatePool
+  const details = typeof body?.details === 'string' ? body.details.trim() : ''
+  const finalResultLimit = Number.isFinite(Number(body?.finalResultLimit)) ? Number(body.finalResultLimit) : 6
+
+  if (!candidatePool || !Array.isArray(candidatePool.candidates) || candidatePool.candidates.length === 0) {
+    sendJson(response, 400, { error: 'candidatePool with candidates is required.' })
+    return
+  }
+
   const openAiApiKey = getEnv('OPENAI_API_KEY')
+  const claudeApiKey = getEnv('CLAUDE_API_KEY')
 
   if (!openAiApiKey) {
-    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
+    sendJson(response, 500, { error: 'OPENAI_API_KEY not configured.' })
     return
   }
 
-  let body
-
-  try {
-    body = await readJsonBody(request, { maxBytes: RETRY_ADVICE_BODY_LIMIT_BYTES })
-    body.bodyReadDuration = nowMs() - requestStartedAt
-  } catch (error) {
-    sendJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid request body.' })
+  if (!claudeApiKey) {
+    sendJson(response, 500, { error: 'CLAUDE_API_KEY not configured.' })
     return
   }
 
-  const clientIpAddress = getClientIpAddress(request.headers || {})
-  const rateLimit = await takeRateLimitToken(clientIpAddress, RETRY_ADVICE_RATE_LIMIT)
+  const poolWithDetails = { ...candidatePool, details }
 
-  if (!rateLimit.allowed) {
-    logSearchFlowEvent('retry_advice_rate_limited', {
-      route: '/api/search/retry-advice',
-      clientIpAddress,
+  async function runNano() {
+    const start = nowMs()
+    const result = await nanoLockWinnersAndBadges(
+      { candidatePool: poolWithDetails, finalResultLimit, apiKey: openAiApiKey, model: 'gpt-5.4-nano' },
+    )
+    const durationMs = nowMs() - start
+    const candidateById = new Map(candidatePool.candidates.map((c) => [String(c.id), c]))
+    return {
+      model: 'gpt-5.4-nano',
+      durationMs,
+      usage: result.usage,
+      picks: result.lockedIds.map((id) => {
+        const c = candidateById.get(String(id))
+        return c ? { id, title: c.title, price: c.price, rating: c.rating, reviewCount: c.reviewCount } : { id }
+      }),
+    }
+  }
+
+  async function runHaiku() {
+    const start = nowMs()
+    const anthropic = new Anthropic({ apiKey: claudeApiKey })
+    const candidateById = new Map(candidatePool.candidates.map((c) => [String(c.id), c]))
+    const desiredCount = Math.min(finalResultLimit, candidatePool.candidates.length)
+
+    const prompt = [
+      'Choose the best final products.',
+      '1. The user\'s follow-up context is the dominant selection signal — weight it above all other factors. If a candidate violates a hard constraint stated in the context (e.g. exceeds a stated budget), exclude it unless no better option exists. When no candidate fully satisfies the constraint, prefer the closest match — for a budget constraint, prefer the cheapest available option over a more expensive one, even if the cheaper option has lower ratings.',
+      '2. Relevance to the product query.',
+      '3. Quality and trust using rating and review count.',
+      '4. Prefer diversity across style, merchant, or use case when helpful.',
+      `Return exactly ${desiredCount} picks. Respond with valid JSON only: {"picks":[{"candidate_id":"..."},...]}.`,
+      'Only choose from the provided candidate ids.',
+      '',
+      `Product query: ${candidatePool.query}`,
+      `Extra context: ${details || 'None provided.'}`,
+      '',
+      'Candidates:',
+      JSON.stringify(candidatePool.candidates.map((c, i) => ({
+        id: c.id,
+        rank: i + 1,
+        title: c.title,
+        price: c.price,
+        rating: c.rating,
+        reviewCount: c.reviewCount,
+      }))),
+    ].join('\n')
+
+    const message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 256,
+      messages: [{ role: 'user', content: prompt }],
     })
-    sendJson(response, 429, {
-      error: `Too many retry advice requests from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
+
+    const durationMs = nowMs() - start
+    const text = message.content?.[0]?.type === 'text' ? message.content[0].text.trim() : ''
+    let picks = []
+
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/)
+      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
+      const rawPicks = Array.isArray(parsed?.picks) ? parsed.picks : []
+      const seen = new Set()
+
+      for (const pick of rawPicks) {
+        const id = String(pick?.candidate_id || '')
+        if (!id || seen.has(id) || !candidateById.has(id)) continue
+        const c = candidateById.get(id)
+        picks.push({ id, title: c.title, price: c.price, rating: c.rating, reviewCount: c.reviewCount })
+        seen.add(id)
+        if (picks.length >= finalResultLimit) break
+      }
+    } catch {
+      picks = []
+    }
+
+    return {
+      model: 'claude-haiku-4-5-20251001',
+      durationMs,
+      usage: {
+        inputTokens: message.usage?.input_tokens ?? 0,
+        outputTokens: message.usage?.output_tokens ?? 0,
+      },
+      picks,
+    }
+  }
+
+  async function runRefineMini() {
+    const start = nowMs()
+    const { generateRefinementPrompt: genPrompt } = await import('./lib/refinement-assistant.js')
+    const result = await genPrompt({ productQuery: candidatePool.query, apiKey: openAiApiKey })
+    return { model: 'gpt-5-mini', durationMs: nowMs() - start, usage: result.usage, question: result.prompt }
+  }
+
+  async function runRefineHaiku() {
+    const start = nowMs()
+    const anthropic = new Anthropic({ apiKey: claudeApiKey })
+    const MAX_PROMPT_LENGTH = 140
+
+    const prompt = [
+      'Write one short follow-up question for a shopping search before any product results exist.',
+      'Stay query-only. Do not assume specific products, brands, or merchants.',
+      `Keep the question at or under ${MAX_PROMPT_LENGTH} characters.`,
+      'Ask only one question.',
+      'Do not add helper text, examples, a placeholder, category notes, or reasoning fields.',
+      'Focus on the detail most likely to change ranking, such as use case, must-have, budget, size, comfort, or what to avoid.',
+      `Product request: ${candidatePool.query}`,
+      '',
+      'Respond with the question text only. No JSON, no explanation.',
+    ].join('\n')
+
+    const message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 64,
+      messages: [{ role: 'user', content: prompt }],
     })
-    return
+
+    const durationMs = nowMs() - start
+    const question = message.content?.[0]?.type === 'text' ? message.content[0].text.trim() : ''
+
+    return {
+      model: 'claude-haiku-4-5-20251001',
+      durationMs,
+      usage: { inputTokens: message.usage?.input_tokens ?? 0, outputTokens: message.usage?.output_tokens ?? 0 },
+      question,
+    }
   }
 
-  const query = typeof body?.query === 'string' ? body.query : ''
-  const { error, isValid, normalizedQuery } = validateSearchInput(query, '')
-
-  if (!isValid) {
-    logSearchFlowEvent('retry_advice_invalid', {
-      route: '/api/search/retry-advice',
-      error,
-    })
-    sendJson(response, 400, { error })
-    return
-  }
-
-  const rejectionFeedback = truncateText(
-    body?.rejectionFeedback,
-    FINALIZE_MAX_REJECTION_FEEDBACK_LENGTH,
-  )
-
-  if (!rejectionFeedback) {
-    sendJson(response, 400, { error: 'Tell us what felt off before trying again.' })
-    return
-  }
-
-  try {
-    const openAiStartedAt = nowMs()
-    const advice = await generateRetryAdvice({
-      productQuery: normalizedQuery,
-      followUpNotes: truncateText(body?.followUpNotes, FINALIZE_MAX_NOTE_LENGTH),
-      rejectionFeedback,
-      shortlist: sanitizeRetryAdviceShortlist(body?.shortlist),
+  async function runEnrichmentMini(lockedIds) {
+    const start = nowMs()
+    const result = await miniEnrichSelectedCandidates({
+      lockedIds,
+      candidatePool: poolWithDetails,
       apiKey: openAiApiKey,
-      model: getRefinementModel(),
+      model: 'gpt-5-mini',
     })
-    const openAiDuration = nowMs() - openAiStartedAt
-    const totalDuration = nowMs() - requestStartedAt
+    return { model: 'gpt-5-mini', durationMs: nowMs() - start, usage: result.usage, enriched: result.enriched }
+  }
 
-    logSearchFlowEvent('retry_advice_completed', {
-      route: '/api/search/retry-advice',
-      query: normalizedQuery,
-      recommendation: advice.recommendation,
-      suggestedQueryLength: advice.suggestedQuery.length,
-      feedbackLength: rejectionFeedback.length,
-      openaiMs: roundTimingDuration(openAiDuration),
-      openaiUsage: advice.usage || null,
-      totalMs: roundTimingDuration(totalDuration),
+  async function runEnrichmentHaiku(lockedIds) {
+    const start = nowMs()
+    const anthropic = new Anthropic({ apiKey: claudeApiKey })
+    const candidateById = new Map(candidatePool.candidates.map((c) => [String(c.id), c]))
+
+    const lockedCandidates = lockedIds
+      .map((id) => candidateById.get(String(id)))
+      .filter(Boolean)
+      .map((c) => ({
+        candidate_id: String(c.id),
+        title: c.title,
+        source: c.source,
+        price: c.price,
+        rating: c.rating,
+        reviewCount: c.reviewCount,
+        feature_bullets: Array.isArray(c.feature_bullets) ? c.feature_bullets.slice(0, 10) : [],
+        product_description: typeof c.productDescription === 'string' ? c.productDescription.slice(0, 3000) : '',
+      }))
+
+    const prompt = [
+      'Write a short explanation for each of these selected products. Write like a trusted assistant, not a salesperson.',
+      'The shortlist is already decided. Do not change the order or swap any product.',
+      'For each product, write two separate fields:',
+      '1. fit_reason: One or two sentences explaining why it was picked for this specific need. Be specific to the user context. Avoid superlatives, hype phrases, and generic positives.',
+      '2. caveat: One honest drawback or caveat — practical (e.g. exceeds budget, heavier than alternatives) or contextual (e.g. better if X matters more than Y). Do not skip this even if the pick is strong.',
+      'Use feature bullets and any richer product description when they are provided. Prefer concrete product attributes over generic praise.',
+      'If richer product detail is missing, fall back to the basic title/price/rating context and do not invent attributes.',
+      '',
+      `Product query: ${candidatePool.query}`,
+      `User context: ${details || 'None provided.'}`,
+      '',
+      'Selected products (preserve this exact order and these exact candidate_ids):',
+      JSON.stringify(lockedCandidates),
+      '',
+      'Respond with valid JSON only: {"enriched":[{"candidate_id":"...","fit_reason":"...","caveat":"..."},...]}',
+    ].join('\n')
+
+    const message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
+      messages: [{ role: 'user', content: prompt }],
     })
+
+    const durationMs = nowMs() - start
+    const text = message.content?.[0]?.type === 'text' ? message.content[0].text.trim() : ''
+    let enriched = []
+
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/)
+      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
+      enriched = Array.isArray(parsed?.enriched) ? parsed.enriched : []
+    } catch {
+      enriched = []
+    }
+
+    return {
+      model: 'claude-haiku-4-5-20251001',
+      durationMs,
+      usage: { inputTokens: message.usage?.input_tokens ?? 0, outputTokens: message.usage?.output_tokens ?? 0 },
+      enriched,
+    }
+  }
+
+  try {
+    const [nanoResult, haikuResult, refineMiniResult, refineHaikuResult] = await Promise.all([
+      runNano(),
+      runHaiku(),
+      runRefineMini(),
+      runRefineHaiku(),
+    ])
+
+    const lockedIds = nanoResult.picks.map((p) => p.id)
+    const [enrichMiniResult, enrichHaikuResult] = await Promise.all([
+      runEnrichmentMini(lockedIds),
+      runEnrichmentHaiku(lockedIds),
+    ])
 
     sendJson(response, 200, {
-      recommendation: advice.recommendation,
-      suggestedQuery: advice.suggestedQuery,
-      rationale: advice.rationale,
-      query: normalizedQuery,
-    }, {
-      serverTiming: [
-        { name: 'body', duration: body.bodyReadDuration || 0 },
-        { name: 'openai', duration: openAiDuration },
-        { name: 'total', duration: totalDuration },
-      ],
+      nano: nanoResult,
+      haiku: haikuResult,
+      refine: {
+        mini: refineMiniResult,
+        haiku: refineHaikuResult,
+      },
+      enrichment: {
+        lockedIds,
+        mini: enrichMiniResult,
+        haiku: enrichHaikuResult,
+      },
     })
   } catch (error) {
-    logSearchFlowEvent('retry_advice_failed', {
-      route: '/api/search/retry-advice',
-      query: normalizedQuery,
-      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    })
-    sendJson(response, 500, {
-      error: 'Unable to suggest a better search direction.',
-      details: error instanceof Error ? error.message : 'Unknown error',
-    })
+    sendJson(response, 500, { error: error instanceof Error ? error.message : 'Comparison failed.' })
   }
-}
-
-export async function handleSupabaseHealth(response) {
-  const health = await getSupabaseHealth()
-
-  if (!health.configured) {
-    sendJson(response, 200, {
-      ...health,
-      storageMode: 'local_file_fallback',
-      status: 'optional',
-      details: 'Supabase is not configured. The app is using the supported local cache/history fallback for this environment.',
-      setupHint: 'Add SUPABASE_URL and SUPABASE_SECRET_KEY or the legacy SUPABASE_SERVICE_ROLE_KEY to enable Supabase-backed storage.',
-    })
-    return
-  }
-
-  sendJson(response, health.ok ? 200 : 500, {
-    ...health,
-    storageMode: 'supabase',
-    status: health.ok ? 'ok' : 'error',
-  })
 }
 
 export async function handleSearchDebug(requestUrl, response) {
@@ -1437,11 +1161,10 @@ export async function handleSearchDebug(requestUrl, response) {
     },
       architecture: {
         primaryProductFlow: [
-          '/api/search/discover',
+          '/api/search/rainforest-discover',
           '/api/search/refine',
           '/api/search/finalize',
         ],
-        manualCombinedRoute: '/api/search/live',
         storageMode: isSupabaseConfigured() ? 'supabase' : 'local_file_fallback',
         finalizeUsesDiscoveryCache: true,
         finalizeUsesRequestCandidatePool: false,
@@ -1457,116 +1180,8 @@ export async function handleSearchDebug(requestUrl, response) {
           callsSerpApi: false,
           callsOpenAi: true,
         },
-      liveSearch: {
-        usesCache: false,
-        callsSerpApi: true,
-        callsOpenAi: true,
-      },
     },
   })
-}
-
-// Temporary harness-only handler — not wired to Vercel or frontend.
-// Measures nano lock/badges then mini async enrichment as two separate AI calls.
-export async function handleNanoMiniSplitFinalize(request, response) {
-  const requestStartedAt = nowMs()
-  const openAiApiKey = getEnv('OPENAI_API_KEY')
-
-  if (!openAiApiKey) {
-    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
-    return
-  }
-
-  let body
-
-  try {
-    body = await readJsonBody(request, { maxBytes: FINALIZE_BODY_LIMIT_BYTES })
-  } catch (error) {
-    sendJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid request body.' })
-    return
-  }
-
-  const sanitizedDiscoveryContext = sanitizeFinalizeDiscoveryContext(body)
-
-  if (!sanitizedDiscoveryContext.isValid) {
-    sendJson(response, 400, { error: sanitizedDiscoveryContext.error })
-    return
-  }
-
-  const resolvedDiscoveryContext = await resolveDiscoveryContext(
-    sanitizedDiscoveryContext.normalizedQuery,
-    sanitizedDiscoveryContext.discoveryToken,
-  )
-
-  if (!resolvedDiscoveryContext.isValid) {
-    sendJson(response, resolvedDiscoveryContext.statusCode, { error: resolvedDiscoveryContext.error })
-    return
-  }
-
-  const resolvedCandidatePool = resolveFinalizeCandidatePool(resolvedDiscoveryContext.cachedEntry)
-
-  if (!resolvedCandidatePool.isValid) {
-    sendJson(response, resolvedCandidatePool.statusCode, { error: resolvedCandidatePool.error })
-    return
-  }
-
-  const followUpNotes = truncateText(body?.followUpNotes, FINALIZE_MAX_NOTE_LENGTH)
-  const candidatePool = {
-    ...resolvedCandidatePool.candidatePool,
-    details: followUpNotes || '',
-  }
-
-  const nanoModel = DEFAULT_CONTEXT_FINALIZE_MODEL
-  const miniModel = DEFAULT_FINALIZE_MODEL
-
-  try {
-    const nanoStartedAt = nowMs()
-    const nanoResult = await nanoLockWinnersAndBadges({
-      candidatePool,
-      finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
-      apiKey: openAiApiKey,
-      model: nanoModel,
-    })
-    const nanoDuration = nowMs() - nanoStartedAt
-
-    const miniStartedAt = nowMs()
-    const miniResult = await miniEnrichSelectedCandidates({
-      lockedIds: nanoResult.lockedIds,
-      candidatePool,
-      apiKey: openAiApiKey,
-      model: miniModel,
-    })
-    const miniDuration = nowMs() - miniStartedAt
-
-    sendJson(
-      response,
-      200,
-      {
-        nanoModel,
-        miniModel,
-        nanoLockMs: roundTimingDuration(nanoDuration),
-        miniEnrichMs: roundTimingDuration(miniDuration),
-        totalMs: roundTimingDuration(nowMs() - requestStartedAt),
-        lockedIds: nanoResult.lockedIds,
-        nanoUsage: nanoResult.usage,
-        miniUsage: miniResult.usage,
-        miniPreservedOrder: miniResult.preservedOrder,
-        enriched: miniResult.enriched,
-        candidateCount: candidatePool.candidates.length,
-      },
-      {
-        serverTiming: [
-          { name: 'nano-lock', duration: nanoDuration },
-          { name: 'mini-enrich', duration: miniDuration },
-          { name: 'total', duration: nowMs() - requestStartedAt },
-        ],
-      },
-    )
-  } catch (error) {
-    sendJson(response, 500, {
-      error: error instanceof Error ? error.message : 'nano-mini split finalize failed.',
-    })
-  }
 }
 
 // Runs mini enrichment after nano has locked the shortlist, stores result in discovery cache.
@@ -1617,37 +1232,6 @@ async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model,
   })
 
   return miniResult
-}
-
-function mergeMiniEnrichmentIntoResults(results, enrichmentEntries) {
-  if (!Array.isArray(results) || !Array.isArray(enrichmentEntries) || enrichmentEntries.length === 0) {
-    return Array.isArray(results) ? results : []
-  }
-
-  const enrichmentById = new Map(
-    enrichmentEntries.map((entry) => [String(entry?.candidate_id || entry?.candidateId || ''), entry]),
-  )
-
-  return results.map((result) => {
-    const entry = enrichmentById.get(String(result?.id || ''))
-
-    if (!entry) {
-      return result
-    }
-
-    return {
-      ...result,
-      fit_reason: entry?.fit_reason || entry?.fitReason || '',
-      caveat: entry?.caveat || '',
-      feature_bullets: Array.isArray(entry?.feature_bullets)
-        ? entry.feature_bullets
-        : Array.isArray(entry?.featureBullets)
-          ? entry.featureBullets
-          : Array.isArray(result?.feature_bullets)
-            ? result.feature_bullets
-            : [],
-    }
-  })
 }
 
 export async function handleEnrichmentPoll(request, response) {
@@ -1888,34 +1472,21 @@ export async function handleFinalizeSelection(request, response) {
   }
 
   const nanoModel = getFinalizeModel({ hasContextSignals })
-  const enrichmentMode = getFinalizeEnrichmentMode()
+  const configuredEnrichmentMode = getFinalizeEnrichmentMode()
+  const enrichmentMode = configuredEnrichmentMode === 'blocking' ? 'async' : configuredEnrichmentMode
 
   try {
     const openAiStartedAt = nowMs()
-    const nanoResult = await nanoLockWinnersAndBadges({
+    const nanoResult = await haikuLockWinnersAndBadges({
       candidatePool: nextCandidatePool,
       finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
-      apiKey: openAiApiKey,
-      model: nanoModel,
+      apiKey: getEnv('CLAUDE_API_KEY'),
     })
     const openAiDuration = nowMs() - openAiStartedAt
     tokenUsageByStage.finalize = nanoResult.usage || null
-    const oxylabsUsername = getEnv('OXYLABS_USERNAME') // TODO: swap back to Rainforest before launch.
-    const oxylabsPassword = getEnv('OXYLABS_PASSWORD') // TODO: swap back to Rainforest before launch.
-    const productDetailsStartedAt = nowMs()
-    const productDetailsById = await fetchOxylabsProductDetailsByAsin({ // TODO: swap back to Rainforest before launch.
-      asins: nanoResult.lockedIds,
-      oxylabsUsername,
-      oxylabsPassword,
-      amazonDomain: sanitizedDiscoveryContext.amazonDomain,
-      readCache: readProductDetailsCacheEntries,
-      writeCache: writeProductDetailsCacheEntries,
-    })
-    const productDetailsDuration = nowMs() - productDetailsStartedAt
-    const enrichedCandidatePool = mergeProductDetailsIntoCandidatePool(nextCandidatePool, productDetailsById)
 
     const candidateById = new Map(
-      enrichedCandidatePool.candidates.map((c) => [String(c.id), c]),
+      nextCandidatePool.candidates.map((c) => [String(c.id), c]),
     )
     const nanoResults = nanoResult.lockedIds
       .map((id) => {
@@ -1930,35 +1501,7 @@ export async function handleFinalizeSelection(request, response) {
       nanoResults.length > 0 ? nanoResult.lockedIds : fallbackResults.map((item) => item.id)
     const selectionStrategy = nanoResults.length > 0 ? 'nano_lock' : 'rules_fallback'
     const flowPath = nanoResults.length > 0 ? 'nano_lock' : 'nano_lock_fallback'
-    let miniEnrichmentStatus = 'skipped'
-
-    if (nanoResults.length > 0) {
-      const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
-
-      if (enrichmentMode === 'blocking') {
-        try {
-          const miniResult = await runMiniEnrichmentAsync({
-            lockedIds: nanoResult.lockedIds,
-            candidatePool: enrichedCandidatePool,
-            apiKey: openAiApiKey,
-            model: miniModel,
-            normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
-            discoveryScope: resolvedDiscoveryContext.discoveryScope,
-          })
-          results = mergeMiniEnrichmentIntoResults(results, miniResult?.enriched || [])
-          miniEnrichmentStatus = 'completed_inline'
-        } catch (error) {
-          miniEnrichmentStatus = 'failed_inline'
-          logSearchFlowEvent('mini_enrichment_failed', {
-            query: sanitizedDiscoveryContext.normalizedQuery,
-            error: error instanceof Error ? error.message : 'Unknown error',
-            mode: 'blocking',
-          })
-        }
-      } else {
-        miniEnrichmentStatus = 'running_async'
-      }
-    }
+    const miniEnrichmentStatus = nanoResults.length > 0 ? 'running_async' : 'skipped'
 
     const finalizeFast = buildFinalizeFastResponseContract({
       query: sanitizedDiscoveryContext.normalizedQuery,
@@ -1980,7 +1523,7 @@ export async function handleFinalizeSelection(request, response) {
       requestMode,
       cacheMs: roundTimingDuration(cacheLookupDuration),
       openaiMs: roundTimingDuration(openAiDuration),
-      productDetailsMs: roundTimingDuration(productDetailsDuration),
+      productDetailsMs: null,
       totalMs: roundTimingDuration(totalDuration),
       openaiUsage: nanoResult.usage || null,
       rankingOwner: nanoResults.length > 0 ? 'nano_lock' : 'deterministic_fallback',
@@ -2004,7 +1547,7 @@ export async function handleFinalizeSelection(request, response) {
           body: roundTimingDuration(body.bodyReadDuration || 0),
           cache: roundTimingDuration(cacheLookupDuration),
           openai: roundTimingDuration(openAiDuration),
-          productDetails: roundTimingDuration(productDetailsDuration),
+          productDetails: null,
           total: roundTimingDuration(totalDuration),
         },
         tokenUsageByStage,
@@ -2024,11 +1567,7 @@ export async function handleFinalizeSelection(request, response) {
         usage: nanoResults.length > 0 ? nanoResult.usage || null : null,
         selectedCandidateIds: finalizeFast.selectedCandidateIds,
         details: nanoResults.length > 0
-          ? enrichmentMode === 'blocking'
-            ? miniEnrichmentStatus === 'completed_inline'
-              ? 'Nano locked the shortlist. Mini enrichment completed inline.'
-              : 'Nano locked the shortlist. Inline mini enrichment did not complete, so shortlist-only results were returned.'
-            : 'Nano locked the shortlist. Mini enrichment is running async.'
+          ? 'Nano locked the shortlist. Product details and mini enrichment are running async.'
           : 'Rules-based fallback was used.',
         flowPath,
         enrichmentMode,
@@ -2042,28 +1581,52 @@ export async function handleFinalizeSelection(request, response) {
         { name: 'body', duration: body.bodyReadDuration || 0 },
         { name: 'cache', duration: cacheLookupDuration },
         { name: 'openai', duration: openAiDuration },
-        { name: 'product-details', duration: productDetailsDuration },
         { name: 'total', duration: totalDuration },
       ],
     })
 
-    // Fire off mini enrichment async — does not block the response
-    if (nanoResults.length > 0 && enrichmentMode !== 'blocking') {
+    // Fire off product details and mini enrichment async; do not block the response.
+    if (nanoResults.length > 0) {
       const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
-      runMiniEnrichmentAsync({
-        lockedIds: nanoResult.lockedIds,
-        candidatePool: enrichedCandidatePool,
-        apiKey: openAiApiKey,
-        model: miniModel,
-        normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
-        discoveryScope: resolvedDiscoveryContext.discoveryScope,
-      }).catch((error) => {
-        logSearchFlowEvent('mini_enrichment_failed', {
-          query: sanitizedDiscoveryContext.normalizedQuery,
-          error: error instanceof Error ? error.message : 'Unknown error',
-          mode: 'async',
-        })
-      })
+      const oxylabsUsername = getEnv('OXYLABS_USERNAME') // TODO: swap back to Rainforest before launch.
+      const oxylabsPassword = getEnv('OXYLABS_PASSWORD') // TODO: swap back to Rainforest before launch.
+
+      runInBackground((async () => {
+        try {
+          const productDetailsStartedAt = nowMs()
+          const productDetailsById = await fetchOxylabsProductDetailsByAsin({ // TODO: swap back to Rainforest before launch.
+            asins: nanoResult.lockedIds,
+            oxylabsUsername,
+            oxylabsPassword,
+            amazonDomain: sanitizedDiscoveryContext.amazonDomain,
+            readCache: readProductDetailsCacheEntries,
+            writeCache: writeProductDetailsCacheEntries,
+          })
+          const productDetailsDuration = nowMs() - productDetailsStartedAt
+          const enrichedCandidatePool = mergeProductDetailsIntoCandidatePool(nextCandidatePool, productDetailsById)
+
+          await runMiniEnrichmentAsync({
+            lockedIds: nanoResult.lockedIds,
+            candidatePool: enrichedCandidatePool,
+            apiKey: openAiApiKey,
+            model: miniModel,
+            normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
+            discoveryScope: resolvedDiscoveryContext.discoveryScope,
+          })
+
+          logSearchFlowEvent('mini_enrichment_background_completed', {
+            query: sanitizedDiscoveryContext.normalizedQuery,
+            productDetailsMs: roundTimingDuration(productDetailsDuration),
+            mode: 'async',
+          })
+        } catch (error) {
+          logSearchFlowEvent('mini_enrichment_failed', {
+            query: sanitizedDiscoveryContext.normalizedQuery,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            mode: 'async',
+          })
+        }
+      })())
     }
   } catch (error) {
     logSearchFlowEvent('guided_finalize_failed', {
@@ -2080,57 +1643,6 @@ export async function handleFinalizeSelection(request, response) {
       details: error instanceof Error ? error.message : 'Unknown error',
     })
   }
-}
-
-function sanitizeAnalyticsEventData(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return {}
-  }
-
-  return Object.fromEntries(
-    Object.entries(value).slice(0, 20).map(([key, entryValue]) => {
-      const normalizedKey = truncateText(key, 60)
-
-      if (!normalizedKey) {
-        return null
-      }
-
-      if (typeof entryValue === 'string') {
-        return [normalizedKey, truncateText(entryValue, 500)]
-      }
-
-      if (typeof entryValue === 'number' || typeof entryValue === 'boolean' || entryValue === null) {
-        return [normalizedKey, entryValue]
-      }
-
-      return [normalizedKey, truncateText(JSON.stringify(entryValue), 500)]
-    }).filter(Boolean),
-  )
-}
-
-function sanitizeAnalyticsItems(items) {
-  if (!Array.isArray(items)) {
-    return []
-  }
-
-  return items
-    .slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit)
-    .map((item, index) => {
-      const resultKey = truncateText(item?.resultKey, 200)
-
-      if (!resultKey) {
-        return null
-      }
-
-      return {
-        resultKey,
-        position: Number.isFinite(Number(item?.position)) ? Number(item.position) : index,
-        provider: truncateText(item?.provider, 160),
-        badgeType: truncateText(item?.badgeType, 80),
-        isBestPick: Boolean(item?.isBestPick),
-      }
-    })
-    .filter(Boolean)
 }
 
 export async function handleAnalyticsTrack(request, response) {
@@ -2185,7 +1697,9 @@ export async function handleAnalyticsTrack(request, response) {
       })
       break
     case 'result_impressions': {
-      const items = sanitizeAnalyticsItems(body?.items)
+      const items = sanitizeAnalyticsItems(body?.items, {
+        maxItems: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
+      })
 
       if (items.length === 0) {
         sendJson(response, 400, { error: 'At least one result impression item is required.' })
@@ -2237,11 +1751,6 @@ export function createApiServer() {
       return
     }
 
-    if (request.method === 'GET' && requestUrl.pathname === '/api/search/discover') {
-      await handleDiscoverySearch(requestUrl, response, request)
-      return
-    }
-
     if (request.method === 'GET' && requestUrl.pathname === '/api/search/rainforest-discover') {
       await handleRainforestDiscoverySearch(requestUrl, response, request)
       return
@@ -2267,8 +1776,8 @@ export function createApiServer() {
       return
     }
 
-    if (request.method === 'POST' && requestUrl.pathname === '/api/search/finalize-nano-mini-split') {
-      await handleNanoMiniSplitFinalize(request, response)
+    if (request.method === 'POST' && requestUrl.pathname === '/api/dev/compare-models') {
+      await handleModelCompare(request, response)
       return
     }
 
@@ -2284,11 +1793,6 @@ export function createApiServer() {
 
     if (request.method === 'POST' && requestUrl.pathname === '/api/analytics/track') {
       await handleAnalyticsTrack(request, response)
-      return
-    }
-
-    if (request.method === 'GET' && requestUrl.pathname === '/api/search/live') {
-      await handleLiveSearch(requestUrl, response, request)
       return
     }
 

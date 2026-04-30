@@ -6,6 +6,7 @@ vi.mock('./lib/ai-selector.js', async () => {
   return {
     ...actual,
     nanoLockWinnersAndBadges: vi.fn(),
+    haikuLockWinnersAndBadges: vi.fn(),
     miniEnrichSelectedCandidates: vi.fn().mockResolvedValue({
       model: 'gpt-5-mini',
       enriched: [],
@@ -13,7 +14,6 @@ vi.mock('./lib/ai-selector.js', async () => {
       usage: null,
       preservedOrder: true,
     }),
-    selectAiResults: vi.fn(),
   }
 })
 
@@ -63,17 +63,14 @@ vi.mock('./lib/search-storage.js', () => ({
 import {
   createApiServer,
   handleCachedSearch,
-  handleDiscoverySearch,
   handleEnrichmentPoll,
   handleFinalizeSelection,
-  handleLiveSearch,
   handleRetryAdvice,
   handleSearchDebug,
   handleSupabaseHealth,
 } from './server.js'
 import { resetRateLimitStore } from './lib/rate-limit.js'
-import { miniEnrichSelectedCandidates, nanoLockWinnersAndBadges, selectAiResults } from './lib/ai-selector.js'
-import { getFilteredSearchArtifacts } from './lib/result-filter.js'
+import { haikuLockWinnersAndBadges, miniEnrichSelectedCandidates } from './lib/ai-selector.js'
 import { generateRetryAdvice } from './lib/retry-advice.js'
 import { getSupabaseHealth, readStoredSearchCacheEntry, writeStoredSearchCacheEntry } from './lib/search-storage.js'
 import {
@@ -171,11 +168,59 @@ function createFinalizeDiscoveryBody(overrides = {}) {
   }
 }
 
+function mockFinalizeEnv(overrides = {}) {
+  getEnv.mockImplementation((name) => ({
+    OPENAI_API_KEY: 'openai-key',
+    CLAUDE_API_KEY: 'claude-key',
+    ...overrides,
+  })[name] || '')
+}
+
+function createDeferred() {
+  let resolve
+  let reject
+  const promise = new Promise((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, reject, resolve }
+}
+
+async function flushAsyncWork() {
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+async function waitForExpectation(assertion, attempts = 20) {
+  let lastError
+
+  for (let index = 0; index < attempts; index += 1) {
+    try {
+      assertion()
+      return
+    } catch (error) {
+      lastError = error
+      await flushAsyncWork()
+    }
+  }
+
+  throw lastError
+}
+
 describe('server handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllGlobals()
     resetRateLimitStore()
+    haikuLockWinnersAndBadges.mockReset()
+    miniEnrichSelectedCandidates.mockReset()
+    miniEnrichSelectedCandidates.mockResolvedValue({
+      model: 'gpt-5-mini',
+      enriched: [],
+      enrichedIds: [],
+      usage: null,
+      preservedOrder: true,
+    })
     readStoredSearchCacheEntry.mockResolvedValue(null)
   })
 
@@ -204,156 +249,9 @@ describe('server handlers', () => {
     })
   })
 
-  it('returns a server error when the live search API key is missing', async () => {
-    getEnv.mockReturnValue('')
 
-    const response = createResponseRecorder()
 
-    await handleLiveSearch(new URL('http://localhost/api/search/live?query=lego'), response)
 
-    expect(response.statusCode).toBe(500)
-    expect(JSON.parse(response.body)).toEqual({
-      error: 'SERPAPI_API_KEY is missing from the root .env file.',
-    })
-  })
-
-  it('returns cached guided discovery results when present', async () => {
-    getEnv.mockReturnValue('serp-key')
-    readStoredSearchCacheEntry.mockResolvedValue({
-      cachedAt: '2026-03-17T12:00:00.000Z',
-      candidatePool: {
-        query: 'thermos',
-        details: '',
-        combinedSearchText: 'thermos',
-        searchState: 'Cached search results',
-        similarQueries: [],
-        candidates: [{ id: 'cached-1', title: 'Thermos bottle' }],
-      },
-      results: [{ id: 'cached-1', title: 'Thermos bottle' }],
-      selection: { mode: 'discovery_preview' },
-      source: 'guided_discovery',
-    })
-
-    const response = createResponseRecorder()
-
-    await handleDiscoverySearch(new URL('http://localhost/api/search/discover?query=thermos'), response)
-
-    expect(response.statusCode).toBe(200)
-    expect(readStoredSearchCacheEntry).toHaveBeenCalledWith({
-      productQuery: 'thermos',
-      details: '',
-      scope: 'guided_discovery',
-    })
-    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
-      expect.objectContaining({
-        productQuery: 'thermos',
-        details: '',
-        discoveryToken: expect.any(String),
-        scope: 'guided_discovery',
-      }),
-    )
-    const payload = JSON.parse(response.body)
-    expect(payload).toEqual({
-      discoveryToken: expect.any(String),
-      candidatePool: {
-        query: 'thermos',
-        details: '',
-        combinedSearchText: 'thermos',
-        searchState: 'Cached search results',
-        similarQueries: [],
-        candidates: [{ id: 'cached-1', title: 'Thermos bottle' }],
-      },
-      previewResults: [
-        {
-          id: 'cached-1',
-          title: 'Thermos bottle',
-          badgeLabel: 'Best match',
-        },
-      ],
-      source: 'cache',
-      cachedAt: '2026-03-17T12:00:00.000Z',
-    })
-    expect(payload.discoveryToken).not.toBe('guided_discovery:thermos|')
-    expect(response.headers.Vary).toBe('Origin')
-  })
-
-  it('writes guided discovery results to cache after a miss', async () => {
-    getEnv.mockReturnValue('serp-key')
-    getFilteredSearchArtifacts.mockReturnValue({
-      candidatePool: {
-        query: 'thermos',
-        details: '',
-        combinedSearchText: 'thermos',
-        searchState: 'Results for exact spelling',
-        similarQueries: [],
-        candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
-      },
-      results: [{ id: 'live-1', title: 'Thermos bottle' }],
-    })
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ shopping_results: [{ title: 'Thermos bottle' }] }),
-      }),
-    )
-
-    const response = createResponseRecorder()
-
-    await handleDiscoverySearch(new URL('http://localhost/api/search/discover?query=thermos'), response)
-
-    expect(response.statusCode).toBe(200)
-    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith({
-      productQuery: 'thermos',
-      details: '',
-      candidatePool: {
-        query: 'thermos',
-        details: '',
-        combinedSearchText: 'thermos',
-        searchState: 'Results for exact spelling',
-        similarQueries: [],
-        candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
-      },
-      discoveryToken: expect.any(String),
-      results: [{ id: 'live-1', title: 'Thermos bottle' }],
-      selection: {
-        mode: 'discovery_preview',
-        model: null,
-        selectedCandidateIds: ['live-1'],
-        details: 'Discovery preview results were cached for the guided search flow. Finalized picks stay request-specific.',
-      },
-      source: 'guided_discovery',
-      scope: 'guided_discovery',
-    })
-    const payload = JSON.parse(response.body)
-    expect(payload).toEqual({
-      discoveryToken: expect.any(String),
-      candidatePool: {
-        query: 'thermos',
-        details: '',
-        combinedSearchText: 'thermos',
-        searchState: 'Results for exact spelling',
-        similarQueries: [],
-        candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
-      },
-      previewResults: [{ id: 'live-1', title: 'Thermos bottle' }],
-    })
-    expect(payload.discoveryToken).not.toBe('guided_discovery:thermos|')
-  })
-
-  it('returns a server error when the OpenAI API key is missing', async () => {
-    getEnv.mockImplementation((name) => (name === 'SERPAPI_API_KEY' ? 'serp-key' : ''))
-
-    const response = createResponseRecorder()
-
-    await handleLiveSearch(new URL('http://localhost/api/search/live?query=lego'), response)
-
-    expect(response.statusCode).toBe(500)
-    expect(JSON.parse(response.body)).toEqual({
-      error: 'OPENAI_API_KEY is missing from the root .env file.',
-    })
-  })
 
   it('returns retry advice for rejected final picks', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
@@ -633,11 +531,10 @@ describe('server handlers', () => {
       },
       architecture: {
         primaryProductFlow: [
-          '/api/search/discover',
+          '/api/search/rainforest-discover',
           '/api/search/refine',
           '/api/search/finalize',
         ],
-        manualCombinedRoute: '/api/search/live',
         storageMode: 'local_file_fallback',
         finalizeUsesDiscoveryCache: true,
         finalizeUsesRequestCandidatePool: false,
@@ -651,11 +548,6 @@ describe('server handlers', () => {
         guidedFinalize: {
           usesCache: true,
           callsSerpApi: false,
-          callsOpenAi: true,
-        },
-        liveSearch: {
-          usesCache: false,
-          callsSerpApi: true,
           callsOpenAi: true,
         },
       },
@@ -712,443 +604,11 @@ describe('server handlers', () => {
     })
   })
 
-  it('keeps guided discovery cache separate from uncached live search responses', async () => {
-    getEnv.mockImplementation((name) => {
-      if (name === 'SERPAPI_API_KEY') {
-        return 'serp-key'
-      }
 
-      if (name === 'OPENAI_API_KEY') {
-        return 'openai-key'
-      }
 
-      return ''
-    })
 
-    readStoredSearchCacheEntry.mockResolvedValueOnce({
-      cachedAt: '2026-03-17T12:00:00.000Z',
-      candidatePool: {
-        query: 'thermos',
-        details: '',
-        combinedSearchText: 'thermos',
-        searchState: 'Cached discovery results',
-        similarQueries: [],
-        candidates: [{ id: 'cached-1', title: 'Thermos bottle' }],
-      },
-      results: [{ id: 'cached-1', title: 'Thermos bottle' }],
-      selection: { mode: 'discovery_preview' },
-      source: 'guided_discovery',
-    })
-    readStoredSearchCacheEntry.mockResolvedValueOnce(null)
-    getFilteredSearchArtifacts.mockReturnValue({
-      candidatePool: {
-        query: 'thermos',
-        details: '',
-        combinedSearchText: 'thermos',
-        searchState: 'Results for exact spelling',
-        similarQueries: [],
-        candidates: [{ id: 'live-1', title: 'Thermos bottle' }],
-      },
-      results: [{ id: 'live-1', title: 'Thermos bottle' }],
-    })
-    selectAiResults.mockResolvedValue({
-      model: 'gpt-5-mini',
-      selectedCandidateIds: ['live-1'],
-      results: [{ id: 'live-1', title: 'Thermos bottle', reasons: [], drawbacks: [] }],
-    })
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ shopping_results: [{ title: 'Thermos bottle' }] }),
-      }),
-    )
 
-    const discoveryResponse = createResponseRecorder()
-    await handleDiscoverySearch(new URL('http://localhost/api/search/discover?query=thermos'), discoveryResponse)
-
-    const liveResponse = createResponseRecorder()
-    await handleLiveSearch(new URL('http://localhost/api/search/live?query=thermos'), liveResponse)
-
-    expect(discoveryResponse.statusCode).toBe(200)
-    expect(liveResponse.statusCode).toBe(200)
-    expect(readStoredSearchCacheEntry).toHaveBeenCalledTimes(1)
-    expect(readStoredSearchCacheEntry).toHaveBeenCalledWith({
-      productQuery: 'thermos',
-      details: '',
-      scope: 'guided_discovery',
-    })
-    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
-      expect.objectContaining({
-        productQuery: 'thermos',
-        details: '',
-        discoveryToken: expect.any(String),
-        scope: 'guided_discovery',
-      }),
-    )
-  })
-
-  it('rejects obvious gibberish product queries before calling SerpApi', async () => {
-    getEnv.mockReturnValue('test-key')
-
-    const response = createResponseRecorder()
-
-    await handleLiveSearch(new URL('http://localhost/api/search/live?query=jhljlhl'), response)
-
-    expect(response.statusCode).toBe(400)
-    expect(JSON.parse(response.body)).toEqual({
-      error: 'Try a real product topic, like "lego", "desk lamp", or "travel stroller".',
-    })
-  })
-
-  it('rate limits repeated live searches from the same ip address', async () => {
-    getEnv.mockImplementation((name) => {
-      if (name === 'SERPAPI_API_KEY') {
-        return 'serp-key'
-      }
-
-      if (name === 'OPENAI_API_KEY') {
-        return 'openai-key'
-      }
-
-      return ''
-    })
-
-    getFilteredSearchArtifacts.mockReturnValue({
-      candidatePool: {
-        query: 'stroller',
-        details: '',
-        combinedSearchText: 'stroller',
-        searchState: 'Results for exact spelling',
-        similarQueries: [],
-        candidates: [],
-      },
-      results: [{ id: 'live-1', title: 'Travel stroller' }],
-    })
-    selectAiResults.mockResolvedValue({
-      model: 'gpt-5-mini',
-      selectedCandidateIds: ['live-1'],
-      results: [{ id: 'live-1', title: 'Travel stroller', reasons: [], drawbacks: [] }],
-    })
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ shopping_results: [{ title: 'Travel stroller' }] }),
-      }),
-    )
-
-    for (let index = 0; index < 15; index += 1) {
-      const response = createResponseRecorder()
-
-      await handleLiveSearch(
-        new URL('http://localhost/api/search/live?query=stroller'),
-        response,
-        { headers: { 'x-forwarded-for': '203.0.113.10' } },
-      )
-
-      expect(response.statusCode).toBe(200)
-    }
-
-    const limitedResponse = createResponseRecorder()
-
-    await handleLiveSearch(
-      new URL('http://localhost/api/search/live?query=stroller'),
-      limitedResponse,
-      { headers: { 'x-forwarded-for': '203.0.113.10' } },
-    )
-
-    expect(limitedResponse.statusCode).toBe(429)
-    expect(JSON.parse(limitedResponse.body)).toEqual({
-      error: 'Too many searches from this connection. Please wait about 10 seconds and try again.',
-    })
-  })
-
-  it('rate limits repeated guided discovery searches from the same ip address', async () => {
-    getEnv.mockReturnValue('serp-key')
-    getFilteredSearchArtifacts.mockReturnValue({
-      candidatePool: {
-        query: 'stroller',
-        details: '',
-        combinedSearchText: 'stroller',
-        searchState: 'Results for exact spelling',
-        similarQueries: [],
-        candidates: [{ id: 'live-1', title: 'Travel stroller' }],
-      },
-      results: [{ id: 'live-1', title: 'Travel stroller' }],
-    })
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ shopping_results: [{ title: 'Travel stroller' }] }),
-      }),
-    )
-
-    for (let index = 0; index < 15; index += 1) {
-      const response = createResponseRecorder()
-
-      await handleDiscoverySearch(
-        new URL('http://localhost/api/search/discover?query=stroller'),
-        response,
-        { headers: { 'x-forwarded-for': '203.0.113.11' } },
-      )
-
-      expect(response.statusCode).toBe(200)
-    }
-
-    const limitedResponse = createResponseRecorder()
-
-    await handleDiscoverySearch(
-      new URL('http://localhost/api/search/discover?query=stroller'),
-      limitedResponse,
-      { headers: { 'x-forwarded-for': '203.0.113.11' } },
-    )
-
-    expect(limitedResponse.statusCode).toBe(429)
-    expect(JSON.parse(limitedResponse.body)).toEqual({
-      error: 'Too many searches from this connection. Please wait about 10 seconds and try again.',
-    })
-  })
-
-  it('returns normalized live search results when SerpApi succeeds', async () => {
-    getEnv.mockImplementation((name) => {
-      if (name === 'SERPAPI_API_KEY') {
-        return 'serp-key'
-      }
-
-      if (name === 'OPENAI_API_KEY') {
-        return 'openai-key'
-      }
-
-      return ''
-    })
-    getFilteredSearchArtifacts.mockReturnValue({
-      candidatePool: {
-        query: 'stroller',
-        details: 'airport travel',
-        combinedSearchText: 'stroller airport travel',
-        searchState: 'Results for exact spelling',
-        similarQueries: ['compact stroller'],
-        candidates: [
-          {
-            id: 'live-1',
-            score: 24.5,
-            title: 'Travel stroller',
-            description: 'Lightweight stroller for flights',
-            source: 'Target',
-            price: '$199.99',
-            numericPrice: 199.99,
-            rating: 4.7,
-            reviewCount: 342,
-            delivery: 'Free shipping',
-            tag: 'Top rated',
-            extensions: ['Carry-on friendly'],
-            multipleSources: true,
-            link: 'https://example.com/stroller',
-            image: 'https://example.com/stroller.jpg',
-            reasons: ['Available from Target'],
-            matchSignals: {
-              titleMatches: 1,
-              supportMatches: 1,
-              detailMatches: 1,
-              exactMatchSearchState: true,
-              hasMultipleSources: true,
-              hasDeliveryInfo: true,
-              hasTag: true,
-            },
-          },
-        ],
-      },
-      results: [{ id: 'live-1', title: 'Travel stroller' }],
-    })
-    selectAiResults.mockResolvedValue({
-      model: 'gpt-5-mini',
-      usage: {
-        inputTokens: 420,
-        outputTokens: 96,
-        totalTokens: 516,
-        reasoningTokens: 44,
-      },
-      selectedCandidateIds: ['live-1'],
-      results: [
-        {
-          id: 'live-1',
-          title: 'Travel stroller',
-          subtitle: 'Target',
-          reasons: ['AI fit: Best for airport travel'],
-          drawbacks: ['Pricier than some umbrella strollers.'],
-          badgeLabel: 'Best match',
-        },
-      ],
-    })
-
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ shopping_results: [{ title: 'Travel stroller' }] }),
-    })
-
-    vi.stubGlobal('fetch', fetchMock)
-
-    const response = createResponseRecorder()
-
-    await handleLiveSearch(
-      new URL('http://localhost/api/search/live?query=stroller&details=airport%20travel'),
-      response,
-    )
-
-    expect(response.statusCode).toBe(200)
-    expect(JSON.parse(response.body)).toEqual({
-      candidatePool: {
-        query: 'stroller',
-        details: 'airport travel',
-        combinedSearchText: 'stroller airport travel',
-        searchState: 'Results for exact spelling',
-        similarQueries: ['compact stroller'],
-        candidates: [
-          {
-            id: 'live-1',
-            score: 24.5,
-            title: 'Travel stroller',
-            description: 'Lightweight stroller for flights',
-            source: 'Target',
-            price: '$199.99',
-            numericPrice: 199.99,
-            rating: 4.7,
-            reviewCount: 342,
-            delivery: 'Free shipping',
-            tag: 'Top rated',
-            extensions: ['Carry-on friendly'],
-            multipleSources: true,
-            link: 'https://example.com/stroller',
-            image: 'https://example.com/stroller.jpg',
-            reasons: ['Available from Target'],
-            matchSignals: {
-              titleMatches: 1,
-              supportMatches: 1,
-              detailMatches: 1,
-              exactMatchSearchState: true,
-              hasMultipleSources: true,
-              hasDeliveryInfo: true,
-              hasTag: true,
-            },
-          },
-        ],
-      },
-      results: [
-        {
-          id: 'live-1',
-          title: 'Travel stroller',
-          subtitle: 'Target',
-          reasons: ['AI fit: Best for airport travel'],
-          drawbacks: ['Pricier than some umbrella strollers.'],
-          badgeLabel: 'Best match',
-        },
-      ],
-      selection: {
-        mode: 'ai',
-        model: 'gpt-5-mini',
-        usage: {
-          inputTokens: 420,
-          outputTokens: 96,
-          totalTokens: 516,
-          reasoningTokens: 44,
-        },
-        selectedCandidateIds: ['live-1'],
-        details: 'AI selected the final recommendations from the cleaned candidate pool.',
-      },
-      usage: {
-        openai: {
-          inputTokens: 420,
-          outputTokens: 96,
-          totalTokens: 516,
-          reasoningTokens: 44,
-        },
-      },
-    })
-
-    const requestedUrl = fetchMock.mock.calls[0][0]
-    expect(requestedUrl).toBeInstanceOf(URL)
-    expect(requestedUrl.searchParams.get('q')).toBe('stroller airport travel')
-    expect(requestedUrl.searchParams.get('api_key')).toBe('serp-key')
-    expect(requestedUrl.searchParams.get('engine')).toBe('google_shopping')
-    expect(selectAiResults).toHaveBeenCalledWith({
-      candidatePool: expect.any(Object),
-      finalResultLimit: 6,
-      apiKey: 'openai-key',
-      model: expect.any(String),
-    })
-  })
-
-  it('falls back to filtered live search results when AI returns no picks', async () => {
-    getEnv.mockImplementation((name) => {
-      if (name === 'SERPAPI_API_KEY') {
-        return 'serp-key'
-      }
-
-      if (name === 'OPENAI_API_KEY') {
-        return 'openai-key'
-      }
-
-      return ''
-    })
-    getFilteredSearchArtifacts.mockReturnValue({
-      candidatePool: {
-        query: 'stroller',
-        details: '',
-        combinedSearchText: 'stroller',
-        searchState: 'Results for exact spelling',
-        similarQueries: [],
-        candidates: [{ id: 'live-1', title: 'Travel stroller' }],
-      },
-      results: [{ id: 'live-1', title: 'Travel stroller', badgeLabel: 'Best match' }],
-    })
-    selectAiResults.mockResolvedValue({
-      model: 'gpt-5-mini',
-      selectedCandidateIds: [],
-      results: [],
-    })
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ shopping_results: [{ title: 'Travel stroller' }] }),
-      }),
-    )
-
-    const response = createResponseRecorder()
-
-    await handleLiveSearch(
-      new URL('http://localhost/api/search/live?query=stroller'),
-      response,
-    )
-
-    expect(response.statusCode).toBe(200)
-    expect(JSON.parse(response.body)).toEqual({
-      candidatePool: {
-        query: 'stroller',
-        details: '',
-        combinedSearchText: 'stroller',
-        searchState: 'Results for exact spelling',
-        similarQueries: [],
-        candidates: [{ id: 'live-1', title: 'Travel stroller' }],
-      },
-      results: [{ id: 'live-1', title: 'Travel stroller', badgeLabel: 'Best match' }],
-      selection: {
-        mode: 'rules_fallback',
-        model: null,
-        selectedCandidateIds: ['live-1'],
-        details: 'Rules-based fallback was used.',
-      },
-      usage: {
-        openai: null,
-      },
-    })
-  })
 
   it('rejects malformed finalize request bodies', async () => {
     getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
@@ -1273,12 +733,12 @@ describe('server handlers', () => {
     expect(JSON.parse(response.body)).toEqual({
       error: 'Your search session expired. Start a new search.',
     })
-    expect(nanoLockWinnersAndBadges).not.toHaveBeenCalled()
+    expect(haikuLockWinnersAndBadges).not.toHaveBeenCalled()
   })
 
-  it('nano locks the shortlist for empty-note finalize and returns a fast response', async () => {
-    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
-    nanoLockWinnersAndBadges.mockResolvedValue({
+  it('haiku locks the shortlist for empty-note finalize and returns a fast response', async () => {
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5-mini',
       lockedIds: ['one'],
       usage: {
@@ -1308,14 +768,13 @@ describe('server handlers', () => {
     )
 
     expect(response.statusCode).toBe(200)
-    expect(nanoLockWinnersAndBadges).toHaveBeenCalledWith({
+    expect(haikuLockWinnersAndBadges).toHaveBeenCalledWith({
       candidatePool: expect.objectContaining({
         details: '',
         candidates: [expect.objectContaining({ id: 'one' })],
       }),
       finalResultLimit: 6,
-      apiKey: 'openai-key',
-      model: expect.any(String),
+      apiKey: 'claude-key',
     })
     expect(JSON.parse(response.body)).toEqual(
       expect.objectContaining({
@@ -1351,8 +810,8 @@ describe('server handlers', () => {
   })
 
   it('caps finalize note length before calling OpenAI', async () => {
-    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
-    nanoLockWinnersAndBadges.mockResolvedValue({
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['id-1'],
       usage: { inputTokens: 510, outputTokens: 84, totalTokens: 594, reasoningTokens: 38 },
@@ -1376,23 +835,22 @@ describe('server handlers', () => {
     )
 
     expect(response.statusCode).toBe(200)
-    expect(nanoLockWinnersAndBadges).toHaveBeenCalledTimes(1)
-    expect(nanoLockWinnersAndBadges).toHaveBeenCalledWith({
+    expect(haikuLockWinnersAndBadges).toHaveBeenCalledTimes(1)
+    expect(haikuLockWinnersAndBadges).toHaveBeenCalledWith({
       candidatePool: expect.objectContaining({
         details: `Priorities: lightweight, easy fold. Notes: ${'n'.repeat(500)}`,
         candidates: expect.arrayContaining(candidates.map((candidate) => expect.objectContaining({ id: candidate.id }))),
       }),
       finalResultLimit: 6,
-      apiKey: 'openai-key',
-      model: expect.any(String),
+      apiKey: 'claude-key',
     })
-    expect(nanoLockWinnersAndBadges.mock.calls[0][0].candidatePool.candidates).toHaveLength(20)
-    expect(nanoLockWinnersAndBadges.mock.calls[0][0].candidatePool.details.endsWith('n'.repeat(500))).toBe(true)
+    expect(haikuLockWinnersAndBadges.mock.calls[0][0].candidatePool.candidates).toHaveLength(20)
+    expect(haikuLockWinnersAndBadges.mock.calls[0][0].candidatePool.details.endsWith('n'.repeat(500))).toBe(true)
   })
 
-  it('nano locks the shortlist for refined finalize and includes notes in candidatePool details', async () => {
-    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
-    nanoLockWinnersAndBadges.mockResolvedValue({
+  it('haiku locks the shortlist for refined finalize and includes notes in candidatePool details', async () => {
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['one'],
       usage: { inputTokens: 180, outputTokens: 30, totalTokens: 210, reasoningTokens: 6 },
@@ -1418,13 +876,12 @@ describe('server handlers', () => {
     )
 
     expect(response.statusCode).toBe(200)
-    expect(nanoLockWinnersAndBadges).toHaveBeenCalledWith({
+    expect(haikuLockWinnersAndBadges).toHaveBeenCalledWith({
       candidatePool: expect.objectContaining({
         details: 'Notes: best for city travel',
       }),
       finalResultLimit: 6,
-      apiKey: 'openai-key',
-      model: expect.any(String),
+      apiKey: 'claude-key',
     })
     expect(JSON.parse(response.body)).toEqual(
       expect.objectContaining({
@@ -1457,23 +914,12 @@ describe('server handlers', () => {
     )
   })
 
-  it('adds Oxylabs feature bullets to the finalize response and mini enrichment context when available', async () => {
-    getEnv.mockImplementation((name) => {
-      if (name === 'OPENAI_API_KEY') {
-        return 'openai-key'
-      }
-
-      if (name === 'OXYLABS_USERNAME') {
-        return 'oxy-user'
-      }
-
-      if (name === 'OXYLABS_PASSWORD') {
-        return 'oxy-pass'
-      }
-
-      return ''
+  it('returns cards before Oxylabs resolves, then enriches with product details in the polling cache', async () => {
+    mockFinalizeEnv({
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
     })
-    nanoLockWinnersAndBadges.mockResolvedValue({
+    haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['one'],
       usage: null,
@@ -1485,20 +931,10 @@ describe('server handlers', () => {
       usage: null,
       preservedOrder: true,
     })
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          results: [{
-            content: {
-              bullet_points: 'One-hand fold\nCompact enough for overhead bins',
-              description: 'A compact stroller built for airport travel.',
-            },
-          }],
-        }),
-      }),
-    )
+    const detailFetch = createDeferred()
+    const fetchMock = vi.fn(() => detailFetch.promise)
+
+    vi.stubGlobal('fetch', fetchMock)
     readStoredSearchCacheEntry.mockResolvedValue(
       createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')], {
         mode: 'discovery_preview',
@@ -1520,59 +956,97 @@ describe('server handlers', () => {
     )
 
     expect(response.statusCode).toBe(200)
-    expect(JSON.parse(response.body)).toEqual(
+
+    const payload = JSON.parse(response.body)
+
+    expect(payload).toEqual(
       expect.objectContaining({
+        selection: expect.objectContaining({
+          enrichmentMode: 'async',
+          miniEnrichmentStatus: 'running_async',
+        }),
+        debug: expect.objectContaining({
+          stageLatencyMs: expect.objectContaining({
+            productDetails: null,
+          }),
+        }),
         results: [
           expect.objectContaining({
             id: 'one',
-            feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+            feature_bullets: [],
           }),
         ],
         finalizeFast: expect.objectContaining({
           shortlist: [
             expect.objectContaining({
               id: 'one',
-              feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+              feature_bullets: [],
             }),
           ],
         }),
       }),
     )
+    expect(miniEnrichSelectedCandidates).not.toHaveBeenCalled()
 
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await waitForExpectation(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
 
-    expect(miniEnrichSelectedCandidates).toHaveBeenCalledWith(
-      expect.objectContaining({
-        candidatePool: expect.objectContaining({
-          candidates: [
-            expect.objectContaining({
-              id: 'one',
-              feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
-              productDescription: 'A compact stroller built for airport travel.',
-            }),
-          ],
-        }),
+    detailFetch.resolve({
+      ok: true,
+      json: async () => ({
+        results: [{
+          content: {
+            bullet_points: 'One-hand fold\nCompact enough for overhead bins',
+            description: 'A compact stroller built for airport travel.',
+          },
+        }],
       }),
-    )
+    })
+
+    await waitForExpectation(() => {
+      expect(miniEnrichSelectedCandidates).toHaveBeenCalledWith(
+        expect.objectContaining({
+          candidatePool: expect.objectContaining({
+            candidates: [
+              expect.objectContaining({
+                id: 'one',
+                feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+                productDescription: 'A compact stroller built for airport travel.',
+              }),
+            ],
+          }),
+        }),
+      )
+      expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          productQuery: 'stroller',
+          scope: 'guided_discovery',
+          selection: expect.objectContaining({
+            enrichment: expect.objectContaining({
+              entries: [
+                {
+                  candidate_id: 'one',
+                  fit_reason: 'Good match',
+                  caveat: 'A bit pricey',
+                  feature_bullets: ['One-hand fold'],
+                },
+              ],
+              model: 'gpt-5-mini',
+              preservedOrder: true,
+            }),
+          }),
+        }),
+      )
+    })
   })
 
-  it('keeps shortlisted products when an Oxylabs detail call fails and falls back to empty feature bullets', async () => {
-    getEnv.mockImplementation((name) => {
-      if (name === 'OPENAI_API_KEY') {
-        return 'openai-key'
-      }
-
-      if (name === 'OXYLABS_USERNAME') {
-        return 'oxy-user'
-      }
-
-      if (name === 'OXYLABS_PASSWORD') {
-        return 'oxy-pass'
-      }
-
-      return ''
+  it('keeps initial cards usable while an Oxylabs detail call fails, then enriches with available details', async () => {
+    mockFinalizeEnv({
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
     })
-    nanoLockWinnersAndBadges.mockResolvedValue({
+    haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['one', 'two'],
       usage: null,
@@ -1639,7 +1113,7 @@ describe('server handlers', () => {
     expect(payload.results).toEqual([
       expect.objectContaining({
         id: 'one',
-        feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+        feature_bullets: [],
       }),
       expect.objectContaining({
         id: 'two',
@@ -1650,7 +1124,7 @@ describe('server handlers', () => {
       shortlist: [
         expect.objectContaining({
           id: 'one',
-          feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+          feature_bullets: [],
         }),
         expect.objectContaining({
           id: 'two',
@@ -1659,47 +1133,36 @@ describe('server handlers', () => {
       ],
     }))
 
-    await new Promise((resolve) => setTimeout(resolve, 0))
-
-    expect(miniEnrichSelectedCandidates).toHaveBeenCalledWith(
-      expect.objectContaining({
-        candidatePool: expect.objectContaining({
-          candidates: [
-            expect.objectContaining({
-              id: 'one',
-              feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
-              productDescription: 'A compact stroller built for airport travel.',
-            }),
-            expect.objectContaining({
-              id: 'two',
-            }),
-          ],
+    await waitForExpectation(() => {
+      expect(miniEnrichSelectedCandidates).toHaveBeenCalledWith(
+        expect.objectContaining({
+          candidatePool: expect.objectContaining({
+            candidates: [
+              expect.objectContaining({
+                id: 'one',
+                feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+                productDescription: 'A compact stroller built for airport travel.',
+              }),
+              expect.objectContaining({
+                id: 'two',
+              }),
+            ],
+          }),
         }),
-      }),
-    )
+      )
+    })
     expect(
       miniEnrichSelectedCandidates.mock.calls[0][0].candidatePool.candidates[1].feature_bullets ?? [],
     ).toEqual([])
     expect(miniEnrichSelectedCandidates.mock.calls[0][0].candidatePool.candidates[1].productDescription ?? '').toBe('')
   })
 
-  it('prefers OPENAI_FINALIZE_CONTEXT_MODEL over the shared model for guided finalize with context', async () => {
-    getEnv.mockImplementation((name) => {
-      if (name === 'OPENAI_API_KEY') {
-        return 'openai-key'
-      }
-
-      if (name === 'OPENAI_FINALIZE_CONTEXT_MODEL') {
-        return 'gpt-5.4-nano'
-      }
-
-      if (name === 'OPENAI_MODEL') {
-        return 'gpt-5-mini'
-      }
-
-      return ''
+  it('keeps finalize model metadata for context while Haiku owns winner selection', async () => {
+    mockFinalizeEnv({
+      OPENAI_FINALIZE_CONTEXT_MODEL: 'gpt-5.4-nano',
+      OPENAI_MODEL: 'gpt-5-mini',
     })
-    nanoLockWinnersAndBadges.mockResolvedValue({
+    haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['one'],
       usage: null,
@@ -1722,28 +1185,32 @@ describe('server handlers', () => {
     )
 
     expect(response.statusCode).toBe(200)
-    expect(nanoLockWinnersAndBadges).toHaveBeenCalledTimes(1)
-    expect(nanoLockWinnersAndBadges.mock.calls[0][0]).toEqual(
+    expect(haikuLockWinnersAndBadges).toHaveBeenCalledTimes(1)
+    expect(haikuLockWinnersAndBadges.mock.calls[0][0]).toEqual(
       expect.objectContaining({
-        apiKey: 'openai-key',
-        model: 'gpt-5.4-nano',
+        apiKey: 'claude-key',
       }),
     )
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        debug: expect.objectContaining({
+          finalizeModel: 'gpt-5.4-nano',
+          finalizeModelPath: 'context_added',
+        }),
+        selection: expect.objectContaining({
+          model: 'gpt-5.4-nano',
+          modelPath: 'context_added',
+        }),
+      }),
+    )
+    expect(haikuLockWinnersAndBadges.mock.calls[0][0]).not.toHaveProperty('model')
   })
 
-  it('defaults context-added finalize requests to the nano model lane', async () => {
-    getEnv.mockImplementation((name) => {
-      if (name === 'OPENAI_API_KEY') {
-        return 'openai-key'
-      }
-
-      if (name === 'OPENAI_FINALIZE_MODEL') {
-        return 'gpt-5-mini'
-      }
-
-      return ''
+  it('defaults context-added finalize metadata to the context model lane', async () => {
+    mockFinalizeEnv({
+      OPENAI_FINALIZE_MODEL: 'gpt-5-mini',
     })
-    nanoLockWinnersAndBadges.mockResolvedValue({
+    haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['one'],
       usage: null,
@@ -1766,11 +1233,10 @@ describe('server handlers', () => {
     )
 
     expect(response.statusCode).toBe(200)
-    expect(nanoLockWinnersAndBadges).toHaveBeenCalledTimes(1)
-    expect(nanoLockWinnersAndBadges.mock.calls[0][0]).toEqual(
+    expect(haikuLockWinnersAndBadges).toHaveBeenCalledTimes(1)
+    expect(haikuLockWinnersAndBadges.mock.calls[0][0]).toEqual(
       expect.objectContaining({
-        apiKey: 'openai-key',
-        model: 'gpt-5.4-nano',
+        apiKey: 'claude-key',
       }),
     )
     expect(JSON.parse(response.body)).toEqual(
@@ -1787,23 +1253,12 @@ describe('server handlers', () => {
     )
   })
 
-  it('lets OPENAI_FINALIZE_CONTEXT_MODEL override the default context finalize lane', async () => {
-    getEnv.mockImplementation((name) => {
-      if (name === 'OPENAI_API_KEY') {
-        return 'openai-key'
-      }
-
-      if (name === 'OPENAI_FINALIZE_MODEL') {
-        return 'gpt-5-mini'
-      }
-
-      if (name === 'OPENAI_FINALIZE_CONTEXT_MODEL') {
-        return 'gpt-5.2'
-      }
-
-      return ''
+  it('lets OPENAI_FINALIZE_CONTEXT_MODEL override context finalize metadata', async () => {
+    mockFinalizeEnv({
+      OPENAI_FINALIZE_MODEL: 'gpt-5-mini',
+      OPENAI_FINALIZE_CONTEXT_MODEL: 'gpt-5.2',
     })
-    nanoLockWinnersAndBadges.mockResolvedValue({
+    haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.2',
       lockedIds: ['one'],
       usage: null,
@@ -1826,28 +1281,31 @@ describe('server handlers', () => {
     )
 
     expect(response.statusCode).toBe(200)
-    expect(nanoLockWinnersAndBadges).toHaveBeenCalledTimes(1)
-    expect(nanoLockWinnersAndBadges.mock.calls[0][0]).toEqual(
+    expect(haikuLockWinnersAndBadges).toHaveBeenCalledTimes(1)
+    expect(haikuLockWinnersAndBadges.mock.calls[0][0]).toEqual(
       expect.objectContaining({
-        apiKey: 'openai-key',
-        model: 'gpt-5.2',
+        apiKey: 'claude-key',
+      }),
+    )
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        debug: expect.objectContaining({
+          finalizeModel: 'gpt-5.2',
+          finalizeModelPath: 'context_added',
+        }),
+        selection: expect.objectContaining({
+          model: 'gpt-5.2',
+          modelPath: 'context_added',
+        }),
       }),
     )
   })
 
-  it('keeps empty-note finalize requests on the baseline finalize model lane', async () => {
-    getEnv.mockImplementation((name) => {
-      if (name === 'OPENAI_API_KEY') {
-        return 'openai-key'
-      }
-
-      if (name === 'OPENAI_FINALIZE_MODEL') {
-        return 'gpt-5-mini'
-      }
-
-      return ''
+  it('keeps empty-note finalize requests on the baseline finalize metadata lane', async () => {
+    mockFinalizeEnv({
+      OPENAI_FINALIZE_MODEL: 'gpt-5-mini',
     })
-    nanoLockWinnersAndBadges.mockResolvedValue({
+    haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5-mini',
       lockedIds: ['one'],
       usage: null,
@@ -1867,11 +1325,10 @@ describe('server handlers', () => {
     )
 
     expect(response.statusCode).toBe(200)
-    expect(nanoLockWinnersAndBadges).toHaveBeenCalledTimes(1)
-    expect(nanoLockWinnersAndBadges.mock.calls[0][0]).toEqual(
+    expect(haikuLockWinnersAndBadges).toHaveBeenCalledTimes(1)
+    expect(haikuLockWinnersAndBadges.mock.calls[0][0]).toEqual(
       expect.objectContaining({
-        apiKey: 'openai-key',
-        model: 'gpt-5-mini',
+        apiKey: 'claude-key',
       }),
     )
     expect(JSON.parse(response.body)).toEqual(
@@ -1889,8 +1346,8 @@ describe('server handlers', () => {
   })
 
   it('passes retry feedback into finalize selection details and returns the retry count', async () => {
-    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
-    nanoLockWinnersAndBadges.mockResolvedValue({
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['two'],
       usage: {
@@ -1921,8 +1378,8 @@ describe('server handlers', () => {
     )
 
     expect(response.statusCode).toBe(200)
-    expect(nanoLockWinnersAndBadges).toHaveBeenCalledTimes(1)
-    expect(nanoLockWinnersAndBadges.mock.calls[0][0]).toEqual(
+    expect(haikuLockWinnersAndBadges).toHaveBeenCalledTimes(1)
+    expect(haikuLockWinnersAndBadges.mock.calls[0][0]).toEqual(
       expect.objectContaining({
         candidatePool: expect.objectContaining({
           details:
@@ -1930,8 +1387,7 @@ describe('server handlers', () => {
           candidates: [expect.objectContaining({ id: 'two' })],
         }),
         finalResultLimit: 6,
-        apiKey: 'openai-key',
-        model: expect.any(String),
+        apiKey: 'claude-key',
       }),
     )
     expect(JSON.parse(response.body)).toEqual(
@@ -1958,8 +1414,8 @@ describe('server handlers', () => {
   })
 
   it('echoes requestMode back in the finalize response', async () => {
-    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
-    nanoLockWinnersAndBadges.mockResolvedValue({
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5-mini',
       lockedIds: ['one'],
       usage: { inputTokens: 200, outputTokens: 40, totalTokens: 240, reasoningTokens: 12 },
@@ -2014,7 +1470,7 @@ describe('server handlers', () => {
     )
 
     expect(response.statusCode).toBe(200)
-    expect(nanoLockWinnersAndBadges).not.toHaveBeenCalled()
+    expect(haikuLockWinnersAndBadges).not.toHaveBeenCalled()
     expect(JSON.parse(response.body)).toEqual({
       finalizeFast: expect.objectContaining({
         version: 1,
@@ -2042,8 +1498,8 @@ describe('server handlers', () => {
   })
 
   it('rate limits repeated finalize requests from the same ip address', async () => {
-    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
-    nanoLockWinnersAndBadges.mockResolvedValue({
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5-mini',
       lockedIds: ['one'],
       usage: null,
@@ -2154,9 +1610,9 @@ describe('server handlers', () => {
     })
   })
 
-  it('stores mini enrichment in discovery cache after nano finalizes', async () => {
-    getEnv.mockImplementation((name) => (name === 'OPENAI_API_KEY' ? 'openai-key' : ''))
-    nanoLockWinnersAndBadges.mockResolvedValue({
+  it('stores mini enrichment in discovery cache after haiku finalizes', async () => {
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['one'],
       usage: null,
@@ -2184,37 +1640,30 @@ describe('server handlers', () => {
 
     expect(response.statusCode).toBe(200)
 
-    // Allow the fire-and-forget enrichment to complete
-    await new Promise((resolve) => setTimeout(resolve, 0))
-
-    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
-      expect.objectContaining({
-        productQuery: 'stroller',
-        scope: 'guided_discovery',
-        selection: expect.objectContaining({
-          enrichment: expect.objectContaining({
-            entries: [{ candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey' }],
-            model: 'gpt-5-mini',
-            preservedOrder: true,
+    await waitForExpectation(() => {
+      expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          productQuery: 'stroller',
+          scope: 'guided_discovery',
+          selection: expect.objectContaining({
+            enrichment: expect.objectContaining({
+              entries: [{ candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey' }],
+              model: 'gpt-5-mini',
+              preservedOrder: true,
+            }),
           }),
         }),
-      }),
-    )
+      )
+    })
   })
 
-  it('can return inline enrichment during finalize when blocking mode is enabled', async () => {
-    getEnv.mockImplementation((name) => {
-      if (name === 'OPENAI_API_KEY') {
-        return 'openai-key'
-      }
-
-      if (name === 'FINALIZE_ENRICHMENT_MODE') {
-        return 'blocking'
-      }
-
-      return ''
+  it('keeps finalize async even when legacy blocking mode is configured', async () => {
+    mockFinalizeEnv({
+      FINALIZE_ENRICHMENT_MODE: 'blocking',
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
     })
-    nanoLockWinnersAndBadges.mockResolvedValue({
+    haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
       lockedIds: ['one'],
       usage: null,
@@ -2229,6 +1678,9 @@ describe('server handlers', () => {
     })
     const cacheEntry = createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')])
     readStoredSearchCacheEntry.mockResolvedValue(cacheEntry)
+    const detailFetch = createDeferred()
+
+    vi.stubGlobal('fetch', vi.fn(() => detailFetch.promise))
 
     const response = createResponseRecorder()
 
@@ -2246,27 +1698,37 @@ describe('server handlers', () => {
         results: [
           expect.objectContaining({
             id: 'one',
-            fit_reason: 'Good match',
-            caveat: 'A bit pricey',
+            feature_bullets: [],
           }),
         ],
         selection: expect.objectContaining({
-          enrichmentMode: 'blocking',
-          miniEnrichmentStatus: 'completed_inline',
+          enrichmentMode: 'async',
+          miniEnrichmentStatus: 'running_async',
         }),
       }),
     )
-    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
-      expect.objectContaining({
-        productQuery: 'stroller',
-        scope: 'guided_discovery',
-        selection: expect.objectContaining({
-          enrichment: expect.objectContaining({
-            entries: [{ candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey' }],
+    expect(writeStoredSearchCacheEntry).not.toHaveBeenCalled()
+
+    detailFetch.resolve({
+      ok: true,
+      json: async () => ({
+        results: [{ content: { bullet_points: '', description: '' } }],
+      }),
+    })
+
+    await waitForExpectation(() => {
+      expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          productQuery: 'stroller',
+          scope: 'guided_discovery',
+          selection: expect.objectContaining({
+            enrichment: expect.objectContaining({
+              entries: [{ candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey' }],
+            }),
           }),
         }),
-      }),
-    )
+      )
+    })
   })
 
   it('includes Vary: Origin on OPTIONS preflight responses', async () => {

@@ -7,7 +7,6 @@ import {
   handleEnrichmentPoll,
   handleFinalizeSelection,
   handleLiveSearch,
-  handleNanoMiniSplitFinalize,
   handleRainforestDiscoverySearch,
   handleRefinementPrompt,
   handleRetryAdvice,
@@ -87,10 +86,6 @@ app.post('/api/search/retry-advice', async (req, res) => {
 
 app.post('/api/search/finalize', async (req, res) => {
   await handleFinalizeSelection(req, res)
-})
-
-app.post('/api/search/finalize-nano-mini-split', async (req, res) => {
-  await handleNanoMiniSplitFinalize(req, res)
 })
 
 // Analytics
