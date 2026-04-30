@@ -62,14 +62,15 @@ project-notes/archive/      Superseded docs — read for history, don't treat as
 
 ## Tech Stack
 - **Frontend:** React 19, React Router v7, TanStack Query, Tailwind CSS 3, Vite
-- **Backend:** Node.js native HTTP (no Express), OpenAI API, SerpApi, Supabase
+- **Backend:** Node.js native HTTP (no Express), OpenAI API, Anthropic API, SerpApi, Supabase
 - **Testing:** Vitest + @testing-library/react
-- **Deploy:** Vercel (serverless `/api` wrappers)
+- **Deploy:** Frontend on Vercel (serverless `/api` wrappers forward to backend); Backend on Render (`render.yaml`)
 
 ## AI Models
 - Refinement: lightweight/fast model (~1s)
-- Finalize: context-aware model (~5s baseline)
-- Model env vars: `OPENAI_REFINEMENT_MODEL`, `OPENAI_FINALIZE_MODEL`, `OPENAI_FINALIZE_CONTEXT_MODEL`, `OPENAI_FINALIZE_EMPTY_MODEL`
+- Finalize lock: claude-haiku-4-5-20251001 (~2s, shortlist selection)
+- Finalize enrichment: gpt-5-mini (async, writes fit_reason + caveat after lock)
+- Model env vars: `OPENAI_REFINEMENT_MODEL`, `OPENAI_FINALIZE_MODEL`, `OPENAI_FINALIZE_CONTEXT_MODEL`, `OPENAI_FINALIZE_EMPTY_MODEL`, `CLAUDE_API_KEY`
 
 ## Caching
 - Discovery results cached (Supabase or local file fallback)

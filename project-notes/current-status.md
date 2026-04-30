@@ -44,7 +44,7 @@
 - Result diversification now differs by path on purpose: Serp-style multi-merchant discovery still caps duplicate merchants, while Amazon-style single-marketplace discovery (Rainforest/Oxylabs/later Amazon API) skips that per-source cap.
 
 ## Current finalize reality
-- `/api/search/finalize` uses nano to lock the shortlist, then fetches product details for the 6 locked winners through `fetchOxylabsProductDetailsByAsin` in `backend/lib/oxylabs-pipeline.js`.
+- `/api/search/finalize` uses haiku (claude-haiku-4-5-20251001) to lock the shortlist, then fetches product details for the 6 locked winners through `fetchOxylabsProductDetailsByAsin` in `backend/lib/oxylabs-pipeline.js`.
 - That helper now reads and writes a provider-agnostic per-ASIN cache first (`readProductDetailsCacheEntries` / `writeProductDetailsCacheEntries` in `backend/lib/search-storage.js`), so repeated ASINs can reuse cached bullets/descriptions across requests.
 - Complete cached rows are reused as-is. Partial cached rows are also returned immediately; if their `next_update_at` is due, the helper kicks off a detached best-effort refresh for a future request without delaying the current response.
 - Blocking finalize response still includes `feature_bullets` per shortlisted product when detail calls or cache hits succeed; failed detail calls still fall back to `feature_bullets: []`.
@@ -53,7 +53,7 @@
 - `/api/search/enrichment` entries also carry `feature_bullets` so an already-open modal can hydrate them from polling if needed.
 - Modal shows feature bullets immediately when present and keeps the `fit_reason`/`caveat` loading placeholder until enrichment arrives (`enrichmentReady = Boolean(item?.fit_reason)`).
 - Badge labels are frontend-owned deterministic heuristics assigned after the shortlist arrives.
-- Finalize response shape: `flowPath: 'nano_lock'`, `strategy: 'nano_lock'`, no `reusedCandidateAwarePrior`.
+- Finalize response shape: `flowPath: 'haiku_lock'`, `strategy: 'haiku_lock'`, no `reusedCandidateAwarePrior`.
 - Normal guided finalize responses do not echo the rich candidate pool back to the browser.
 - Query framing is question-fast only through `/api/search/refine`; the old `/api/search/framing-fields` background lane is removed and no longer part of runtime flow.
 - Rainforest detail-fetch support now exists in `backend/lib/rainforest-pipeline.js` as `fetchRainforestProductDetailsByAsin`, but it is not wired into `/api/search/finalize` yet.
@@ -77,11 +77,11 @@
 Full measurement history: `project-notes/active-experiment-override.md`.
 
 Key outcomes:
-- Nano still locks winners first; finalize now spends additional time fetching cached-or-live product details for the locked winners so cards/modal data can ship with feature bullets before AI copy is ready.
+- Haiku (claude-haiku-4-5-20251001) locks winners first; finalize now spends additional time fetching cached-or-live product details for the locked winners so cards/modal data can ship with feature bullets before AI copy is ready.
 - Mini async enrichment still arrives later and uses product bullets/descriptions for more specific fit/caveat copy.
 - Prewarm removed — not a latency win. Backend route and all references fully deleted.
-- `gpt-5.4-nano` is the only plausible fast model for streamed finalize; `gpt-5-mini` rejected (8s+ lock time).
-- One-call stream experiment measured and concluded; nano-lock + mini async-enrichment is the wired path.
+- Lock step switched from gpt-5.4-nano to claude-haiku-4-5-20251001; `gpt-5-mini` was rejected for the lock path (8s+ lock time).
+- One-call stream experiment measured and concluded; haiku-lock + mini async-enrichment is the wired path.
 
 ## Environment notes
 - Required for live search/AI: `SERPAPI_API_KEY`, `OPENAI_API_KEY`, `OXYLABS_USERNAME`, `OXYLABS_PASSWORD` (Oxylabs powers the primary Rainforest-named discovery and finalize product-detail fetch).

@@ -6,7 +6,7 @@
 - Use `active-experiment-override.md` for the latest finalize/prewarm experiment conclusions.
 
 ## Current reality
-- The app is live on Vercel.
+- The frontend is live on Vercel; the backend is deployed on Render (configured via `render.yaml`).
 - The homepage uses the `open` layout and the guided `/api/search/rainforest-discover -> /api/search/refine -> /api/search/finalize -> /api/search/enrichment` product path. `/api/search/discover` is the legacy SerpApi path, preserved for scripts and tests.
 - Query framing is now question-fast only through `/api/search/refine`; the old `/api/search/framing-fields` lane is removed. Prewarm is fully removed (2026-04-17).
 - `/api/search/retry-advice` is a live POST route — generates AI-powered suggested queries when users reject results, powering the "Search this instead" retry path.
@@ -35,9 +35,9 @@
 Canonical detail: `project-notes/active-experiment-override.md` and `project-notes/layered-latency-plan.md`.
 
 Summary:
-- Nano-lock + mini async-enrichment is wired into the real product flow.
+- Haiku-lock + mini async-enrichment is wired into the real product flow. Lock step uses claude-haiku-4-5-20251001.
 - Prewarm is fully removed (2026-04-17). Not a latency win.
-- `gpt-5.4-nano` is the only viable fast model; mini is rejected for blocking/stream paths.
+- gpt-5.4-nano was the best measured OpenAI fast model; the lock step now uses Haiku instead. Mini is still rejected for blocking/stream paths.
 - One-call stream experiment is measured and concluded; not yet productized.
 - Working conclusion: keep AI in the product, narrow its blocking critical-path role.
 

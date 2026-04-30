@@ -39,7 +39,7 @@
 - `/api/search/prewarm` is fully removed (2026-04-17).
 - `/api/search/refine` returns one fast user-facing follow-up question.
 - Query framing now runs only through `/api/search/refine`; the old `/api/search/framing-fields` background lane is removed.
-- `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache, locks the shortlist via nano, fetches product details for the locked winners through the current Oxylabs helper, then returns `flowPath: 'nano_lock'` plus shortlist cards that now include `feature_bullets` when available.
+- `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache, locks the shortlist via haiku (claude-haiku-4-5-20251001), fetches product details for the locked winners through the current Oxylabs helper, then returns `flowPath: 'haiku_lock'` plus shortlist cards that now include `feature_bullets` when available.
 - `/api/search/enrichment` GET — frontend polls with `?token=&query=` until `ready: true` then merges `fit_reason`/`caveat` into results.
 - Grid cards still stay metadata-only on the surface: image, title, source, price, ratings, badge label. No AI copy.
 - Product detail modals can now show `feature_bullets` immediately from finalize, while AI copy (`fit_reason`, `caveat`) still arrives via enrichment polling.
@@ -50,8 +50,8 @@
 ## Current experiment status — CLOSED AND WIRED
 All latency experiments are concluded and wired into the real product flow. Decisions:
 - **Prewarm: off and removed.** Fully deleted from codebase 2026-04-17.
-- **nano-lock + mini async-enrichment: live.** Nano locks winners at ~2s (cards appear), mini enriches async at ~8-12s (modal AI copy arrives via polling).
-- **One-call stream: measured but not wired.** nano is the only viable fast model.
+- **haiku-lock + mini async-enrichment: live.** Haiku (claude-haiku-4-5-20251001) locks winners at ~2s (cards appear), mini enriches async at ~8-12s (modal AI copy arrives via polling).
+- **One-call stream: measured but not wired.** gpt-5.4-nano was the only viable fast OpenAI model measured; the lock step now uses Haiku instead.
 
 ## What was wired (completed 2026-04-14)
 1. `/api/search/finalize` uses nano to lock shortlist fast, fires mini enrichment async after responding
@@ -94,11 +94,11 @@ All latency experiments are concluded and wired into the real product flow. Deci
 - Pending cleanup: remove `measurementPreparedQueryFraming`, `measurementSelectionMode: selection_only/winner_lock_ids_only`, the local `/api/search/finalize-stream` route, and `stream-clean` harness mode — see `todo.md`.
 
 ## Deployment note
-- Current backend deployment is Vercel.
-- `VITE_BACKEND_URL` is still the frontend base-URL switch for API calls and can point at the same Vercel deployment or another backend when explicitly needed.
+- Current backend deployment is **Render** (configured via `render.yaml`; starts `backend/express-server.js`).
+- Frontend is still on Vercel; the `api/search/*` serverless wrappers forward requests to the Render backend via `VITE_BACKEND_URL`.
+- `VITE_BACKEND_URL` is the frontend base-URL switch for API calls — set it to the Render backend URL in production.
 - `GET /api/ping` is still used for the first-focus warmup probe.
 - `/api/geo` intentionally remains a relative path because it reads Vercel geolocation headers.
-- Historical Render migration notes are superseded by the current Vercel deployment state.
 
 ## Active exploration — Oxylabs as cheap Rainforest substitute (2026-04-19)
 - Goal: test whether Oxylabs can replace Rainforest `type=product` calls for the dual-endpoint enrichment flow during development, before paying Rainforest credits closer to launch.

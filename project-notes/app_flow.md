@@ -33,7 +33,7 @@
 - The current homepage flow calls `/api/search/rainforest-discover` for primary guided discovery. `/api/search/discover` still exists as the older generic guided-discovery path and for some backend scripts/tests, but it is not the main homepage route now.
 - `/api/search/prewarm` backend route fully removed (2026-04-17).
 - `/api/search/refine` returns one short user-facing follow-up question with static helper/placeholder copy.
-- `/api/search/finalize` accepts lightweight context, reconstructs the rich candidate pool server-side from guided discovery cache, locks the shortlist via nano, fetches product details for the locked winners through the current Oxylabs helper, and returns shortlist cards with `feature_bullets` immediately. Mini enrichment still fires async after the response is sent and stores `fit_reason`/`caveat` in the discovery cache.
+- `/api/search/finalize` accepts lightweight context, reconstructs the rich candidate pool server-side from guided discovery cache, locks the shortlist via haiku (claude-haiku-4-5-20251001), fetches product details for the locked winners through the current Oxylabs helper, and returns shortlist cards with `feature_bullets` immediately. Mini enrichment still fires async after the response is sent and stores `fit_reason`/`caveat` in the discovery cache.
 - `/api/search/enrichment` GET — accepts `?token=&query=`, returns `{ ready: false }` or `{ ready: true, entries: [...] }` where each entry has `candidateId`, `fitReason`, `caveat`. On Vercel this route must receive the original web `Request`, not just a parsed `URL`, because the handler reads `request.url`.
 - `/api/search/live` is the explicit manual/debug combined route.
 - `/api/search/debug` should describe guided flow as primary.
@@ -43,7 +43,7 @@
 - Guided refine uses minimal reasoning effort and only asks AI for one short question.
 - Query framing is question-fast only now. `/api/search/refine` owns the runtime follow-up question path.
 - The old `framing_fields` background lane and `/api/search/framing-fields` route are removed and no longer called by the frontend.
-- Finalize uses nano (~2s) to lock winners, then fires mini enrichment async after responding.
+- Finalize uses haiku (claude-haiku-4-5-20251001, ~2s) to lock winners, then fires mini enrichment async after responding.
 - Mini enrichment writes `fit_reason` + `caveat` per pick and stores in the discovery cache `selection.enrichment` field.
 - Frontend polls `/api/search/enrichment` every 1.5s (30s timeout) and merges enrichment into results by `candidateId`.
 - Normal user-facing flow does not send `measurementPreparedQueryFraming`, `measurementSelectionMode: selection_only`, or `measurementSelectionMode: winner_lock_ids_only`; those are temporary measurement-only finalize inputs.

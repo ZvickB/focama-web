@@ -125,7 +125,7 @@ AI maintains this file. Each item should be one plain sentence.
 
 | Status | Item |
 |--------|------|
-| done | Nano-lock + mini async enrichment wired — cards appear at ~2s, AI explanation fills in async via polling |
+| done | Haiku-lock + mini async enrichment wired — cards appear at ~2s, AI explanation fills in async via polling (lock step uses claude-haiku-4-5-20251001) |
 | done | Prewarm disabled — experiments showed it was slowing finalize down, not speeding it up |
 | done | Rainforest API added as primary discovery endpoint, SerpAPI preserved as secondary |
 | done | Supabase-backed discovery cache confirmed working in production |
