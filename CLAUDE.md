@@ -80,7 +80,7 @@ project-notes/archive/      Superseded docs — read for history, don't treat as
 
 ## Backend Guardrails (don't remove these)
 - Request body limit: 32 KB on finalize
-- Candidate pool cap: 20
+- Candidate pool cap: 30
 - Follow-up notes truncated to 500 chars before AI
 - Rate limit: 15 requests per IP per 10-second rolling window
 - Max 2 retry attempts per search

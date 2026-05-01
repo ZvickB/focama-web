@@ -43,7 +43,7 @@ import { getAmazonDomainFromCountryCode, normalizeAmazonDomain } from '../shared
 const PORT = Number(process.env.PORT || 8787)
 const LIVE_RESULT_FILTER_CONFIG = {
   ...DEFAULT_FILTER_CONFIG,
-  candidatePoolSize: 20,
+  candidatePoolSize: 30,
   finalResultLimit: 6,
 }
 const LIVE_SEARCH_RATE_LIMIT = {
