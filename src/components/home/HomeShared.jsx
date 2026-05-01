@@ -133,7 +133,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 8 }}
         transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-        className="max-h-[94vh] w-full overflow-y-auto rounded-t-[32px] bg-[#fcf8f1] shadow-2xl lg:max-h-[88vh] lg:max-w-4xl lg:rounded-[32px]"
+        className="max-h-[94vh] w-full overflow-y-auto rounded-t-[32px] bg-[#fcf8f1] shadow-2xl lg:flex lg:max-h-[88vh] lg:max-w-4xl lg:flex-col lg:overflow-hidden lg:rounded-[32px]"
         onClick={(event) => event.stopPropagation()}
       >
         {/* Minimal close bar — just the X, no title text */}
@@ -148,10 +148,10 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
           </Button>
         </div>
 
-        <div className="grid gap-6 px-4 pb-4 sm:gap-8 sm:px-6 sm:pb-6 lg:grid-cols-[1fr_1.1fr] lg:gap-8 lg:px-8 lg:pb-8">
-          {/* Left — image only */}
-          <div className="overflow-hidden rounded-[24px] bg-white shadow-[0_16px_60px_-30px_rgba(15,23,42,0.35)]">
-            <div className="flex h-60 items-center justify-center bg-stone-50 p-4 sm:h-[300px] sm:p-6">
+        <div className="grid gap-6 px-4 pb-4 sm:gap-8 sm:px-6 sm:pb-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[1fr_1.1fr] lg:gap-8 lg:overflow-hidden lg:px-8 lg:pb-0">
+          {/* Left — image only; sticky on desktop so it never scrolls away */}
+          <div className="overflow-hidden rounded-[24px] bg-white shadow-[0_16px_60px_-30px_rgba(15,23,42,0.35)] lg:h-full">
+            <div className="flex h-60 items-center justify-center bg-stone-50 p-4 sm:h-[300px] sm:p-6 lg:h-full">
               <img
                 src={item.image}
                 alt={item.title}
@@ -160,8 +160,8 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
             </div>
           </div>
 
-          {/* Right — info */}
-          <div className="flex flex-col gap-4">
+          {/* Right — info; scrolls independently on desktop */}
+          <div className="flex flex-col gap-4 lg:overflow-y-auto lg:pb-8">
             {/* Title block */}
             <div className="space-y-1.5">
               {item.subtitle ? (

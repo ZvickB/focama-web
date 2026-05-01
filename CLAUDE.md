@@ -34,7 +34,7 @@ This is a non-negotiable product direction. Apply it to every AI prompt that gen
 ```bash
 npm run dev          # Frontend only (Vite, port 5173)
 npm run dev:all      # Frontend + backend together (recommended)
-npm run server       # Backend only (port 8787)
+npm run server       # Backend only — local native HTTP dev server (port 8787); NOT the Render entry point
 npm run test         # Run all tests once
 npm run test:watch   # Watch mode
 npm run build        # Production build
@@ -53,16 +53,17 @@ Finalize **reconstructs** the candidate pool from cache — never trusts browser
 ```
 src/                        React frontend
 src/components/home/        Core guided search UI + useGuidedSearch hook
-backend/server.js           Node native HTTP server (no framework)
+backend/server.js           Core route handler functions (exported; not the entry point)
+backend/express-server.js   Express server — Render production entry point (node backend/express-server.js)
 backend/lib/                Business logic modules (ai-selector, rate-limiter, search-cache, etc.)
-api/search/                 Vercel serverless wrappers → forward to backend
+api/search/                 Vercel serverless wrappers → forward to Render backend via VITE_BACKEND_URL
 project-notes/              Living docs: flow, status, decisions, experiment notes
 project-notes/archive/      Superseded docs — read for history, don't treat as current
 ```
 
 ## Tech Stack
 - **Frontend:** React 19, React Router v7, TanStack Query, Tailwind CSS 3, Vite
-- **Backend:** Node.js native HTTP (no Express), OpenAI API, Anthropic API, SerpApi, Supabase
+- **Backend:** Node.js + Express (`backend/express-server.js`), OpenAI API, Anthropic API, SerpApi, Supabase, Oxylabs
 - **Testing:** Vitest + @testing-library/react
 - **Deploy:** Frontend on Vercel (serverless `/api` wrappers forward to backend); Backend on Render (`render.yaml`)
 
@@ -86,10 +87,17 @@ project-notes/archive/      Superseded docs — read for history, don't treat as
 
 ## Required Environment Variables
 ```
-SERPAPI_API_KEY
-OPENAI_API_KEY
+SERPAPI_API_KEY          # SerpApi (legacy discovery path)
+OPENAI_API_KEY           # OpenAI (refinement + enrichment)
+CLAUDE_API_KEY           # Anthropic (haiku finalize lock)
+OXYLABS_USERNAME         # Oxylabs (primary Rainforest-style discovery + product detail fetch)
+OXYLABS_PASSWORD
 ```
-Optional: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SEARCH_CACHE_TTL_MINUTES`, model overrides above.
+Frontend (set in Vercel):
+```
+VITE_BACKEND_URL         # URL of the Render backend — used by Vercel API wrappers to forward requests
+```
+Optional: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SEARCH_CACHE_TTL_MINUTES`, `ALLOWED_ORIGIN`, model overrides above.
 
 ## Working Conventions
 
@@ -137,8 +145,6 @@ Optional: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SEARCH_CACHE_TTL_MINUTES`, mod
 ## Project Notes Reading Order
 When starting a session or touching finalize/latency work, read in this order:
 1. `project-notes/session-handoff.md` — fastest current reset
-2. `project-notes/active-experiment-override.md` — if touching finalize/prewarm experiment
-3. `project-notes/finalize-strategy.md` — before any finalize or latency-architecture changes
-4. `project-notes/current-status.md` — immediate snapshot and active constraints
-5. `project-notes/app_flow.md` — current implemented behavior
-6. `project-notes/handoff.md` — medium-term work and open questions
+2. `project-notes/current-status.md` — immediate snapshot and active constraints
+3. `project-notes/app_flow.md` — current implemented behavior
+4. `project-notes/handoff.md` — medium-term work and open questions

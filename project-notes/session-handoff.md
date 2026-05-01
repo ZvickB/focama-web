@@ -9,10 +9,8 @@
 1. `AGENTS.md`
 2. `project-notes/current-status.md`
 3. `project-notes/app_flow.md`
-4. `project-notes/finalize-strategy.md` before finalize or latency changes
-5. `project-notes/active-experiment-override.md` when touching the current prewarm/finalize experiment
-6. `project-notes/layered-latency-plan.md` when touching preferred latency architecture
-7. `project-notes/handoff.md` only when planning broader MVP/backlog work
+4. `project-notes/layered-latency-plan.md` when touching preferred latency architecture
+5. `project-notes/handoff.md` only when planning broader MVP/backlog work
 
 ## Current direction
 - `/` uses the `open` homepage layout.
@@ -88,7 +86,7 @@ All latency experiments are concluded and wired into the real product flow. Deci
 
 ## If continuing from here
 - For product behavior questions, read `app_flow.md`.
-- For measurement conclusions, read `active-experiment-override.md`.
+- For measurement conclusions, read `active-experiment-override.md` (experiment history) or `current-status.md`.
 - For implementation planning, read `layered-latency-plan.md` and do one pending checklist step at a time.
 - All latency experiments are concluded. Nano-lock + mini async-enrichment is the wired product path.
 - Pending cleanup: remove `measurementPreparedQueryFraming`, `measurementSelectionMode: selection_only/winner_lock_ids_only`, the local `/api/search/finalize-stream` route, and `stream-clean` harness mode — see `todo.md`.
