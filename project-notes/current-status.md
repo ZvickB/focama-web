@@ -1,98 +1,54 @@
 # Current Status
 
 ## Purpose
-- Short current snapshot for future chats.
-- Keep this focused on what is true now and where to read details.
-- Canonical references:
-  - Current implemented behavior: `project-notes/app_flow.md`
-  - Finalize guardrails and AI-scope strategy: `project-notes/finalize-strategy.md`
-  - Finalize/latency experiment conclusions: `project-notes/active-experiment-override.md`
-  - Preferred layered latency plan: `project-notes/layered-latency-plan.md`
-  - Longer MVP backlog: `project-notes/handoff.md`
+- Short snapshot of what is true right now.
+- Use `project-notes/app_flow.md` for the full implemented flow.
+- Use `project-notes/handoff.md` for remaining work and open product decisions.
 
 ## Current product state
-- The app is Vite + React with React Router, TanStack Query, Tailwind, and Vitest.
-- The homepage at `/` uses the `open` layout: spacious, search-first, single-column, mobile-first, and not marketplace-shaped.
-- Older homepage experiments were removed after the open layout became the chosen direction.
-- Product shortlists are 6 items end to end.
-- The current frontend uses the PNG wordmark and Instrument Sans.
-- A true HTML boot splash starts in `index.html`, shows the PNG wordmark plus `Focused shopping`, includes a static header shell, and fades after React is ready and the splash has been visible for about 1 second.
-- Search/refine copy now tells users to start with a normal product search and use the refine step for natural-language narrowing such as budget, size, comfort, style, or use case.
-- The homepage supports preview results, final focused picks, a `Start a new search` reset path, and up to 2 same-pool retry passes that exclude rejected shortlist items. Retries now go through an AI advice step first (`/api/search/retry-advice`), which suggests a new search query before the user decides whether to retry or start fresh.
+- The app is Vite + React + React Router + TanStack Query + Tailwind + Vitest.
+- The homepage at `/` uses the `open` layout: single-column, search-first, calm, and mobile-first.
+- The current user path is: search -> short follow-up -> preview or focused shortlist -> modal details -> retailer clickout.
+- Shortlists are always 6 items.
+- The PNG wordmark is the active wordmark.
+- A boot splash still lives in `index.html` and fades after React is ready.
 
-## Prewarm status
-- Prewarm is fully removed from the codebase (completed 2026-04-17).
-- Route deleted, all references removed from backend, frontend, tests, and scripts.
+## Current search flow
+- The homepage starts with a normal product query, not a long form.
+- Discovery and the AI follow-up question run in parallel after submit.
+- `Show products now` reveals the preview set without finalize.
+- `Show focused picks` runs guided finalize and scrolls directly to the results region.
+- Final result cards stay metadata-first on the grid.
+- The product modal shows feature bullets immediately when available, then fills in `fit_reason` and `caveat` when enrichment arrives.
+- Retry is currently suggestion-led: the user explains what felt off, `/api/search/retry-advice` proposes a better next query, and the suggested query can be edited before starting a fresh search.
 
-## Current backend state
-- The primary product flow is guided search:
-  - `/api/search/rainforest-discover` (primary homepage discovery; `/api/search/discover` is the legacy SerpApi path, preserved for scripts/tests)
-  - `/api/search/refine`
-  - `/api/search/finalize`
-  - `/api/search/enrichment-stream` (SSE primary path for ready enrichment pushes)
-  - `/api/search/enrichment` (async polling)
-  - `/api/search/retry-advice` (POST; AI-powered advice before retry — returns `recommendation`, `suggestedQuery`, `rationale`)
-- `/api/search/live` is the explicit manual/debug combined route, not the primary product path.
-- Guided discovery is the persistent search-cache boundary; guided finalize and live search remain intentionally uncached.
-- `/api/search/discover` returns a preview set plus `discoveryToken`; finalize reconstructs the rich candidate pool from guided discovery cache instead of trusting a browser-posted pool.
-- Supabase-backed guided discovery cache is confirmed working in production on `focama.vercel.app`, with local file fallback for development.
-- Provider-agnostic per-ASIN product-details caching now exists, with Supabase preferred and `temp-data/product-details-cache.json` as the local fallback.
-- Search-history records are internal operational telemetry, not a user-facing saved-history feature.
-- Shared rate limiting prefers Supabase when configured, with in-memory fallback for local/degraded environments.
-- Amazon marketplace auto-resolution now happens on the frontend before guided requests are sent: `/api/geo` resolves the detected country, and Auto searches send the concrete `amazonDomain` instead of relying on backend header inference.
-- Guided discovery/refine/framing/finalize emit structured `[search-flow]` logs with latency, token usage, candidate counts, and ranking ownership.
-- Guided search responses expose `Server-Timing`; the homepage timing panel appears in development or when `?timing=1` is present.
-- Result diversification now differs by path on purpose: Serp-style multi-merchant discovery still caps duplicate merchants, while Amazon-style single-marketplace discovery (Rainforest/Oxylabs/later Amazon API) skips that per-source cap.
+## Current backend/deployment reality
+- Frontend is deployed on Vercel.
+- Backend is deployed on Render through `backend/express-server.js`.
+- `GET /api/search/rainforest-discover` is the primary homepage discovery route.
+- `GET /api/search/refine`, `POST /api/search/finalize`, `GET /api/search/enrichment-stream`, `GET /api/search/enrichment`, and `POST /api/search/retry-advice` are all active in the Render app.
+- `GET /api/geo` intentionally stays on Vercel so the frontend can resolve the user’s country from Vercel headers and send an explicit Amazon domain on guided requests when the store picker is left on `Auto`.
+- Discovery cache and operational history use Supabase when configured, with local file fallback in development.
+- Product details use a separate provider-agnostic per-ASIN cache, also with Supabase preferred and local fallback available.
+- Rate limiting is currently process-local in-memory on the Render server, not Supabase-backed.
 
 ## Current finalize reality
-- `/api/search/finalize` uses haiku (claude-haiku-4-5-20251001) to lock the shortlist, then fetches product details for the 6 locked winners through `fetchOxylabsProductDetailsByAsin` in `backend/lib/oxylabs-pipeline.js`.
-- That helper now reads and writes a provider-agnostic per-ASIN cache first (`readProductDetailsCacheEntries` / `writeProductDetailsCacheEntries` in `backend/lib/search-storage.js`), so repeated ASINs can reuse cached bullets/descriptions across requests.
-- Complete cached rows are reused as-is. Partial cached rows are also returned immediately; if their `next_update_at` is due, the helper kicks off a detached best-effort refresh for a future request without delaying the current response.
-- Blocking finalize response still includes `feature_bullets` per shortlisted product when detail calls or cache hits succeed; failed detail calls still fall back to `feature_bullets: []`.
-- AI copy (`fit_reason` + `caveat`) is still written by mini and stored in the discovery cache `selection.enrichment` field.
-- `/api/search/enrichment` GET endpoint — frontend polls with `?token=&query=` until enrichment is ready, then merges `fit_reason`/`caveat` into results by `candidateId`.
-- `/api/search/enrichment` entries also carry `feature_bullets` so an already-open modal can hydrate them from polling if needed.
-- Modal shows feature bullets immediately when present and keeps the `fit_reason`/`caveat` loading placeholder until enrichment arrives (`enrichmentReady = Boolean(item?.fit_reason)`).
-- Badge labels are frontend-owned deterministic heuristics assigned after the shortlist arrives.
-- Normal guided finalize responses do not echo the rich candidate pool back to the browser.
-- Query framing is question-fast only through `/api/search/refine`; the old `/api/search/framing-fields` background lane is removed and no longer part of runtime flow.
-- Rainforest detail-fetch support now exists in `backend/lib/rainforest-pipeline.js` as `fetchRainforestProductDetailsByAsin`, but it is not wired into `/api/search/finalize` yet.
-- Planned future re-entry point for the provider swap: the finalize route call site in `backend/server.js` that currently calls `fetchOxylabsProductDetailsByAsin`, plus the import at the top of that file.
-- Cached detail rows are not fed into the AI pick-selection prompt. They only support post-lock product facts for the already-chosen shortlist.
+- Finalize rebuilds the candidate pool from guided discovery cache instead of trusting a browser-posted rich pool.
+- Haiku locks the shortlist first.
+- The current detail helper for shortlisted ASINs is still `fetchOxylabsProductDetailsByAsin`.
+- Product details are cached per ASIN before mini enrichment runs.
+- Mini enrichment writes `fit_reason` and `caveat` back into guided cache, then the frontend hydrates the modal via SSE first and polling fallback second.
 
-## DEV-ONLY settings (revert before launch)
-- `SEARCH_CACHE_TTL_MINUTES=999999999` in `.env` — cache effectively never expires while conserving Rainforest credits. Revert to `1440` (24h) or appropriate value at launch.
-- Auto-save of every raw Rainforest API response to `temp-data/rainforest-samples/` — fire-and-forget in `backend/lib/rainforest-pipeline.js`. No action needed at launch unless disk usage is a concern; safe to remove or gate behind a `NODE_ENV` check.
+## Active constraints
+- Keep the guided flow as the main product path.
+- Keep shortlist count at 6 unless the user explicitly changes it.
+- Keep the product vendor-agnostic in frontend shape and normalized backend responses.
+- Keep `search_history` as internal telemetry, not user-facing saved history.
+- Keep current behavior and future ideas clearly separated in notes.
 
-## Guardrails
-- Keep the guided flow as the main product path unless the user explicitly approves a change.
-- Keep shortlist count at 6 unless the user explicitly chooses otherwise.
-- Keep the app vendor-agnostic at the response/product level.
-- Keep fit explanation value and scan-friendly badges as product behaviors, even if their production shape changes.
-- Do not let finalization drift back into a heavy all-polish-before-results AI pass.
-- Keep current behavior and planned layered behavior clearly separated.
-- For finalize/latency work, read `active-experiment-override.md`, `layered-latency-plan.md`, and `finalize-strategy.md` before changing code.
-
-## Latest measurement conclusions
-Full measurement history: `project-notes/active-experiment-override.md`.
-
-Key outcomes:
-- Haiku (claude-haiku-4-5-20251001) locks winners first; finalize now spends additional time fetching cached-or-live product details for the locked winners so cards/modal data can ship with feature bullets before AI copy is ready.
-- Mini async enrichment still arrives later and uses product bullets/descriptions for more specific fit/caveat copy.
-- Prewarm removed — not a latency win. Backend route and all references fully deleted.
-- Lock step switched from gpt-5.4-nano to claude-haiku-4-5-20251001; `gpt-5-mini` was rejected for the lock path (8s+ lock time).
-- One-call stream experiment measured and concluded; haiku-lock + mini async-enrichment is the wired path.
-
-## Environment notes
-- Required for live search/AI: `SERPAPI_API_KEY`, `OPENAI_API_KEY`, `OXYLABS_USERNAME`, `OXYLABS_PASSWORD` (Oxylabs powers the primary Rainforest-named discovery and finalize product-detail fetch).
-- Optional model overrides: `OPENAI_MODEL`, `OPENAI_REFINEMENT_MODEL`, `OPENAI_FINALIZE_MODEL`, `OPENAI_FINALIZE_CONTEXT_MODEL`, `OPENAI_FINALIZE_EMPTY_MODEL`.
-- Optional Supabase config: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`; legacy `SUPABASE_SERVICE_ROLE_KEY` is also accepted.
-- `SEARCH_CACHE_TTL_MINUTES` defaults to `1440`.
-- Work happens in PowerShell on Windows. Never print raw `.env` secret values.
-
-## Recommended next task
-- Retry redesign is partially landed (`/api/search/retry-advice` wired, UI advice card implemented, new copy in place). Remaining:
-  - Wire same-pool retry as a secondary option — `handleRetryWithFeedback` exists in the hook but is not exported or connected to the UI.
-  - Confirm the "Search this instead" suggested-query flow works end-to-end in the browser.
-  - Decide whether to keep the `selectAiResults` path in `ai-selector.js` or clean it up since finalize no longer calls it directly.
-  - When ready to switch providers, replace the current finalize import/call in `backend/server.js` so it uses `fetchRainforestProductDetailsByAsin` instead of `fetchOxylabsProductDetailsByAsin`.
+## Recommended next checks
+- Verify the browser golden path on the live app: fast cards first, modal AI copy later.
+- Check modal AI tone so it reads like a trusted assistant, not marketing copy.
+- Tighten the loading states between search, refine, and results.
+- Improve weak-result and low-confidence handling.
+- Decide how affiliate-ready outbound links and disclosures should appear.

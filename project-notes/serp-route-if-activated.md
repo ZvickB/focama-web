@@ -1,39 +1,24 @@
-# SerpApi Route — What Needs Work Before Production Use
+# SerpApi Path — If It Gets Reactivated Later
 
-The SerpApi route (`/api/search/discover` via `handleDiscoverySearch`) exists and is wired, but was deprioritized in favor of Rainforest. This file captures everything that would need to be addressed before it could be used as a real production path.
+## Current reality
+- The homepage does not use a SerpApi discovery route.
+- The active Render backend is centered on `GET /api/search/rainforest-discover`.
+- Older scripts and tests still reference `/api/search/discover`, but that path is not part of the active product flow.
 
-## What's already done
-- Country-aware `gl` param: `getCountryCode` reads `x-vercel-ip-country` from Vercel headers and passes the lowercase 2-letter code as `gl` to SerpApi. Implemented alongside the Rainforest geolocation work (2026-04-17).
-- Basic result normalization and filtering through `getFilteredSearchArtifacts` (shared with Rainforest pipeline).
-- Rate limiting (shared with Rainforest route).
-- Cache (shared Supabase-backed cache with `CACHE_SCOPE_DISCOVERY`).
+## What would need to be true before bringing Serp back
+- Reintroduce and wire a real discovery route in the backend instead of assuming the old path still exists.
+- Re-check normalization for Google Shopping style results:
+  - no ASINs
+  - different price/rating formats
+  - different product IDs and clickout links
+- Decide how retailer clickouts should behave when links point to Google Shopping or mixed merchants instead of Amazon product pages.
+- Verify enrichment matching still works when `candidateId` is not Amazon/ASIN-shaped.
+- Revisit geo and language handling for non-US markets.
+- Re-add monitoring for SerpApi-specific cost, rate limits, and error behavior.
 
-## What still needs work
-
-### Result shape
-- SerpApi returns Google Shopping results — different fields, different product IDs (no ASIN), different price/rating formats than Rainforest/Amazon. Verify the normalized shape actually produces useful results end-to-end before relying on it.
-- The `product_link` from SerpApi goes to Google Shopping, not a retailer — check whether downstream UI and enrichment logic handle non-Amazon links gracefully.
-- `store` field is not hardcoded to 'Amazon' for SerpApi results — make sure badge logic and UI copy handle multi-retailer results.
-
-### Enrichment
-- The async enrichment step (`/api/search/enrichment`) pulls `fit_reason`/`caveat` from the discovery cache. If SerpApi results don't have ASINs, `candidateId` matching may break or produce no-ops. Verify.
-
-### Geolocation
-- `gl` (country) is now passed in, but `hl` is hardcoded to `'en'`. For non-English markets this may produce mixed-language results. Consider mapping country → language if SerpApi is used seriously in non-US markets.
-- SerpApi also supports `google_domain` (e.g. `google.co.uk`) — not currently set. May affect result relevance in non-US markets.
-
-### API cost and reliability
-- SerpApi credits are separate from Rainforest credits. Set up monitoring so you know when credits are running low before hitting limits in production.
-- SerpApi has different rate limits and error shapes than Rainforest — verify the error handling in `fetchSearchArtifacts` surfaces useful messages.
-
-### Testing
-- Existing test fixtures in `temp-data/` are mostly SerpApi-era samples. Worth confirming that the current normalization pipeline still produces valid results against those fixtures before activating.
-- The `save-serpapi-full-response.js` and `save-serpapi-cache.js` scripts exist for capturing real responses — use them to build a test corpus (similar to how Rainforest samples are now auto-saved).
-
-## When to activate
-Only switch back to SerpApi as a primary path if:
-- Rainforest becomes unavailable or too expensive at scale
-- You need multi-retailer results (not just Amazon)
-- A specific product category doesn't have good Amazon coverage
-
-Otherwise, keep Rainforest as primary. The SerpApi route is a useful fallback, not a parallel path.
+## Product guardrail
+- Do not reactivate SerpApi just because old code or scripts still mention it.
+- Bring it back only for a deliberate product reason such as:
+  - multi-retailer discovery becoming part of the real product
+  - Amazon coverage proving too narrow for important categories
+  - Oxylabs/Rainforest economics forcing a different path

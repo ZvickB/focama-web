@@ -1,142 +1,54 @@
 # Current DB Needs
 
 ## Purpose
-- This note explains, in simple terms, which database tables the project needs right now and why.
-- It is meant to be easier to read than the lower-level setup doc.
+- Plain-language summary of which Supabase tables the current app actually uses.
+- This is the current storage reference, not a future schema wishlist.
 
-## What the app needs right now
+## Tables the app uses now
 
-These are the Supabase tables the current app uses today when Supabase-backed storage and shared rate limiting are enabled. This includes the analytics tables — they are already wired in the backend and frontend, not future work.
+### `search_cache`
+- Stores guided discovery snapshots.
+- Lets finalize and retry rebuild context from a `discoveryToken` instead of trusting a rich browser-posted pool.
 
-### 1. `search_cache`
-Why this table is needed:
-- It stores the guided discovery candidate pool on the server.
-- It lets `/api/search/finalize` and retry flows reuse that candidate pool.
-- It avoids repeating expensive search/discovery work when the same search is reused.
-- It keeps finalize/retry requests lighter because the browser can send a `discoveryToken` instead of the full rich candidate pool.
+### `search_history`
+- Internal operational log for cache/debug visibility.
+- Not user-facing saved history.
 
-Plain-language summary:
-- `search_cache` helps the app stay fast, cheaper to run, and better structured on the backend.
+### `product_details_cache`
+- Stores reusable per-ASIN product details for shortlist winners.
+- Shared by the current Oxylabs detail helper and the later Rainforest detail helper.
 
-### 2. `search_history`
-Why this table is needed:
-- It records internal search/debug information such as cache hits or misses.
-- It helps inspect candidate counts, result counts, and request behavior.
-- It gives operational visibility into how the backend is performing.
+### `analytics_search_runs`
+- One anchor row per search flow.
 
-Plain-language summary:
-- `search_history` is an internal log table for debugging and monitoring, not a user-facing feature.
+### `analytics_search_events`
+- Step-by-step event log for the flow.
 
-### 3. `rate_limit_events`
-Why this table is needed:
-- It lets rate limiting work across multiple server instances instead of only inside one local process.
-- It gives the Vercel deployment a shared backend place to count recent requests by client key.
-- It keeps local in-memory limiting as a fallback instead of pretending that fallback is production-grade protection.
+### `analytics_result_impressions`
+- Records which results were shown and in what order.
 
-Plain-language summary:
-- `rate_limit_events` is infrastructure for shared abuse protection, not product data.
+### `analytics_result_clicks`
+- Records card opens and retailer clickouts.
 
-### 4. `product_details_cache`
-Why this table is needed:
-- It stores one provider-agnostic product-details row per ASIN for finalize-time enrichment.
-- It lets Oxylabs and Rainforest write into the same cache instead of keeping provider-specific copies.
-- It avoids repeating expensive per-ASIN detail calls when the same shortlisted ASIN appears again.
-- It keeps partial rows available immediately while throttling background refresh attempts for future requests.
+## Not used now
+- `rate_limit_events`
+- user accounts tables
+- saved search tables
+- saved item tables
+- preference-learning tables
 
-Plain-language summary:
-- `product_details_cache` is reusable backend infrastructure for per-ASIN product details, not a user-facing saved-data feature.
-
-Table definition to add in Supabase when you are ready:
-
-```sql
-create table if not exists public.product_details_cache (
-  asin text primary key,
-  feature_bullets jsonb not null default '[]'::jsonb,
-  product_description text not null default '',
-  source text not null default '',
-  needs_updating boolean not null default false,
-  next_update_at timestamptz null,
-  cached_at timestamptz not null default now()
-);
-```
-
-Semantics:
-- One row per ASIN.
-- Latest writer wins.
-- Partial rows can be cached.
-- Fully empty provider results are skipped and should not be cached.
-- `needs_updating` marks partial rows that should be refreshed later.
-- `next_update_at` throttles background refresh attempts for partial rows.
-- There is no expiry-based deletion for this table.
-- No extra index is needed because reads are primary-key lookups by `asin`.
-
-### 5. `analytics_search_runs`
-Why this table is needed:
-- It gives each search flow a stable `search_id` that ties all events and clicks together.
-- It records whether the user entered the AI refinement step, chose `Show products now`, completed finalize, or retried.
-- It is written by `/api/analytics/track` via `upsertAnalyticsSearchRun` in `backend/lib/search-storage.js`.
-
-Plain-language summary:
-- `analytics_search_runs` is the anchor row for everything the user does in one search session.
-
-### 6. `analytics_search_events`
-Why this table is needed:
-- It records the flow steps (e.g. `search_started`, `refine_viewed`, `ai_followup_submitted`, `final_results_shown`, `retry_started`) without forcing every event into fixed columns.
-- It lets you identify where users drop off in the funnel.
-- It is written by `/api/analytics/track` via `recordAnalyticsSearchEvent`.
-
-Plain-language summary:
-- `analytics_search_events` is the step-by-step event log for each search run.
-
-### 7. `analytics_result_impressions`
-Why this table is needed:
-- It records which products were shown in each shortlist (preview, final, or retry).
-- It stores rank position, provider, and badge information.
-- It lets you measure whether position and badges affect later clicks.
-- It is written by `/api/analytics/track` via `recordAnalyticsResultImpressions`.
-
-Plain-language summary:
-- `analytics_result_impressions` records what was shown, not what was clicked.
-
-### 8. `analytics_result_clicks`
-Why this table is needed:
-- It records which product the user actually opened (card click) or clicked through to (retailer click).
-- It distinguishes `click_target: 'card'` from `click_target: 'retailer'`.
-- It lets you measure whether the top-ranked or best-badged item is what users actually select.
-- It is written by `/api/analytics/track` via `recordAnalyticsResultClick`.
-
-Plain-language summary:
-- `analytics_result_clicks` is the outcome signal — what the user actually chose.
-
-## What is available later, but not needed yet
-- `search_sessions`
-- `search_shortlists`
-- `shortlist_items`
-- User accounts tables
-- Saved searches tables
-- Saved items tables
-- User preferences tables
-- Broad analytics warehouse tables
-
-Why not yet:
-- The current product direction uses the database mainly as backend infrastructure.
-- The current notes treat `search_history` as operational telemetry, not as user-facing history.
-- Adding more tables now would increase complexity before the app actually writes to them.
+Rate limiting is currently in-memory on the Render process, so there is no active Supabase rate-limit table in the current architecture.
 
 ## Current recommendation
-- All eight tables listed above are in use now and should be created.
-- Only add product-memory tables (`search_sessions`, `search_shortlists`, etc.) later if the app needs to remember real search flows as product data.
-- Do not add broad analytics warehouse tables — the focused funnel tables already cover what the app tracks.
+- Create the seven tables above if you want full Supabase-backed storage and analytics.
+- Keep user-facing memory features separate from `search_history`.
 
 ## Environment variables
-Add these to the root `.env`:
-
 ```env
 SERPAPI_API_KEY=your-serpapi-key
 OPENAI_API_KEY=your-openai-key
 OXYLABS_USERNAME=your-oxylabs-username
 OXYLABS_PASSWORD=your-oxylabs-password
-OPENAI_MODEL=gpt-5-mini
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SECRET_KEY=your-supabase-secret-key
 SEARCH_CACHE_TTL_MINUTES=1440
@@ -144,35 +56,12 @@ SEARCH_CACHE_TTL_MINUTES=1440
 
 Notes:
 - `SUPABASE_SECRET_KEY` is the preferred server-side key.
-- Legacy `SUPABASE_SERVICE_ROLE_KEY` is also accepted as a fallback.
+- Legacy `SUPABASE_SERVICE_ROLE_KEY` is still accepted.
 - Do not expose either server-side key to the browser.
-- `SEARCH_CACHE_TTL_MINUTES` defaults to `1440` if omitted.
 
-## Cache behavior notes
-- Cache keys are scoped by flow: guided discovery uses `guided_discovery:query`, Rainforest uses `rainforest_discovery:query`.
-- TTL-based invalidation only — expired rows are ignored but not actively deleted (future: add pg_cron cleanup).
-- Guided discovery is the only persistent cache path; finalize and live search are intentionally uncached.
-- Per-ASIN product detail caching is separate from guided discovery cache. It is keyed only by `asin`, shared across providers, and used to avoid repeating finalize-time detail fetches.
+## SQL to run
 
-## Related notes
-- `project-notes/current-status.md`
-- `project-notes/app_flow.md`
-- `project-notes/analytics-funnel-schema.sql`
-
-## Supabase table names
-- `public.search_cache`
-- `public.search_history`
-- `public.rate_limit_events`
-- `public.product_details_cache`
-- `public.analytics_search_runs`
-- `public.analytics_search_events`
-- `public.analytics_result_impressions`
-- `public.analytics_result_clicks`
-
-## SQL to run in Supabase
-Paste this into the Supabase SQL editor and run it.
-This creates the tables the current app uses now, in one pass:
-
+### Core app tables
 ```sql
 create table if not exists public.search_cache (
   cache_key text primary key,
@@ -208,19 +97,6 @@ create index if not exists search_history_created_at_idx
 create index if not exists search_history_cache_key_idx
   on public.search_history (cache_key);
 
-create table if not exists public.rate_limit_events (
-  request_id uuid primary key,
-  request_key text not null,
-  created_at timestamptz not null default timezone('utc', now()),
-  expires_at timestamptz not null
-);
-
-create index if not exists rate_limit_events_request_key_created_at_idx
-  on public.rate_limit_events (request_key, created_at desc);
-
-create index if not exists rate_limit_events_expires_at_idx
-  on public.rate_limit_events (expires_at);
-
 create table if not exists public.product_details_cache (
   asin text primary key,
   feature_bullets jsonb not null default '[]'::jsonb,
@@ -232,45 +108,14 @@ create table if not exists public.product_details_cache (
 );
 ```
 
-## What to do in Supabase
-1. Open your Supabase project.
-2. Go to `SQL Editor`.
-3. Create a new query.
-4. Paste the SQL above.
-5. Run it.
+### Analytics tables
+- Run `project-notes/analytics-funnel-schema.sql` for:
+  - `analytics_search_runs`
+  - `analytics_search_events`
+  - `analytics_result_impressions`
+  - `analytics_result_clicks`
 
-## What these tables are called
-- Cache table: `search_cache`
-- Internal history table: `search_history`
-- Shared rate-limit table: `rate_limit_events`
-- Product details cache table: `product_details_cache`
-
-## What to expect after running it
-- `search_cache` will store reusable guided discovery cache rows.
-- `search_history` will store internal search/debug log rows.
-- `rate_limit_events` will store short-lived shared rate-limit events.
-- `product_details_cache` will store one latest-writer-wins detail row per ASIN for finalize-time bullets/descriptions.
-- `analytics_search_runs` / `analytics_search_events` / `analytics_result_impressions` / `analytics_result_clicks` will receive live data from the frontend analytics calls routed through `/api/analytics/track`.
-- Your backend can keep using Supabase for all cache, history, and analytics with the current app structure.
-
-## Simple decision summary
-- Create now: `search_cache`, `search_history`, `rate_limit_events`, `product_details_cache`, `analytics_search_runs`, `analytics_search_events`, `analytics_result_impressions`, `analytics_result_clicks`
-- Do not create yet: `search_sessions`, `search_shortlists`, `shortlist_items`
-- Reason: all eight current tables are actively written to by the backend; the others are future product-schema work
-
-## Analytics SQL
-The analytics tables are already wired in the backend. Run the SQL in:
-
+## Related notes
+- `project-notes/current-status.md`
+- `project-notes/app_flow.md`
 - `project-notes/analytics-funnel-schema.sql`
-
-This creates:
-- `analytics_search_runs`
-- `analytics_search_events`
-- `analytics_result_impressions`
-- `analytics_result_clicks`
-
-These tables answer:
-- whether users entered the AI refinement path
-- whether users chose `Show products now`
-- whether ranking and `best` badges influenced behavior
-- which product users actually clicked through to on the retailer side

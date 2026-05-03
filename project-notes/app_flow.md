@@ -1,119 +1,84 @@
 # Focamai App Flow
 
 ## Purpose
-- Canonical note for how the current web app behaves now.
-- Keep planning-only architecture in `layered-latency-plan.md`.
-- Keep measurement conclusions in `active-experiment-override.md` and the short summary in `current-status.md`.
+- Canonical note for what the app does now.
+- Keep this file about implemented behavior, not superseded experiments.
 
 ## Current app structure
-- The site uses React Router with a shared layout shell.
-- The shared shell includes the logo, top navigation, footer, and trust pages.
-- Current public pages: Home, About, Contact, Privacy, Affiliate Disclosure.
-- The default homepage is the `open` variant.
-- Older homepage UI concepts were removed after the `open` layout direction was chosen.
+- The site uses React Router with a shared shell.
+- Current public pages are Home, About, Contact, Privacy, and Affiliate Disclosure.
+- The homepage is the main product experience and uses the `open` layout.
 
-## Homepage behavior
-- The homepage is the main product experience.
-- First load shows an HTML boot splash from `index.html` with the PNG wordmark and `Focused shopping`, then fades after app readiness and about 1 second minimum visibility.
-- The user starts with a product-search query in a spacious central input.
+## Homepage flow
+- First load shows an HTML boot splash from `index.html`.
+- The user starts with a product query in the homepage input.
 - After submit:
-  - the same area expands into the AI refinement state
-  - results skeletons begin below
-  - the refinement step stays visually higher-priority than skeletons
-  - the page scrolls cleanly to refinement/results without bouncing past them
-- `Show products now` reveals the preview set and does not use finalize.
-- `Show focused picks` immediately scrolls to the results region and shows skeletons while final AI selection runs.
-- If preview results are already visible during finalization, they stay visible with a calmer narrowing-state message.
-- `Start a new search` resets guided state to a clean blank search.
-- Final results offer `Didn't find anything you like? Tell us why.`
-- Retry requires feedback, reuses guided discovery context, excludes rejected shortlist ids, and is capped at 2 follow-up retries.
-- After retry succeeds, earlier picks move into a collapsed `Previous picks` section.
+  - guided discovery starts
+  - the follow-up question starts in parallel
+  - result skeletons appear below
+  - the page scrolls toward the refine/results region
+- `Show products now` reveals the preview set.
+- `Show focused picks` runs guided finalize and narrows to the final 6.
+- `Start a new search` clears the guided state and returns to a fresh search box.
+- After final results appear, the user can open the retry panel and ask for a better search direction.
 
 ## Guided backend flow
-- The current homepage flow calls `/api/search/rainforest-discover` for primary guided discovery. `/api/search/discover` still exists as the older generic guided-discovery path and for some backend scripts/tests, but it is not the main homepage route now.
-- `/api/search/prewarm` backend route fully removed (2026-04-17).
-- `/api/search/refine` returns one short user-facing follow-up question with static helper/placeholder copy.
-- When the store picker stays on `Auto`, the frontend resolves the geo-detected country to a concrete Amazon domain and sends that explicit `amazonDomain` in guided search requests.
-- `/api/search/finalize` accepts lightweight context, reconstructs the rich candidate pool server-side from guided discovery cache, locks the shortlist via haiku (claude-haiku-4-5-20251001), fetches product details for the locked winners through the current Oxylabs helper, and returns shortlist cards with `feature_bullets` immediately. Mini enrichment still fires async after the response is sent and stores `fit_reason`/`caveat` in the discovery cache.
-- `/api/search/enrichment-stream` opens an SSE channel first so ready enrichment can push straight into the active session; the frontend falls back to polling if the stream fails or times out.
-- `/api/search/enrichment` GET — accepts `?token=&query=`, returns `{ ready: false }` or `{ ready: true, entries: [...] }` where each entry has `candidateId`, `fitReason`, `caveat`.
-- `/api/search/live` is the explicit manual/debug combined route.
-- `/api/search/debug` should describe guided flow as primary.
-- `/api/health/supabase` should treat local file fallback as a supported development/storage mode when Supabase is not configured.
+- `GET /api/search/rainforest-discover`
+  - primary homepage discovery route
+  - currently uses the Oxylabs-backed Amazon path under the Rainforest-named route
+  - writes guided discovery cache plus a `discoveryToken`
+- `GET /api/search/refine`
+  - returns one short follow-up question plus helper copy
+- `POST /api/search/finalize`
+  - accepts lightweight context
+  - rebuilds the candidate pool server-side from guided cache
+  - locks 6 winners with haiku
+  - returns shortlist cards immediately
+  - starts async product-detail fetch + mini enrichment in the background
+- `GET /api/search/enrichment-stream`
+  - first enrichment path used by the frontend
+  - pushes ready enrichment when the background work finishes
+- `GET /api/search/enrichment`
+  - polling fallback for enrichment
+- `POST /api/search/retry-advice`
+  - reads the rejected shortlist plus user feedback
+  - returns `recommendation`, `suggestedQuery`, and `rationale`
+- `GET /api/search/debug`, `GET /api/search/cache`, and `/api/search/live`
+  - debugging/support routes, not the main product flow
 
-## Current AI and latency shape
-- Guided refine uses minimal reasoning effort and only asks AI for one short question.
-- Query framing is question-fast only now. `/api/search/refine` owns the runtime follow-up question path.
-- The old `framing_fields` background lane and `/api/search/framing-fields` route are removed and no longer called by the frontend.
-- Finalize uses haiku (claude-haiku-4-5-20251001, ~2s) to lock winners, then fires mini enrichment async after responding.
-- Mini enrichment writes `fit_reason` + `caveat` per pick and stores in the discovery cache `selection.enrichment` field.
-- Frontend polls `/api/search/enrichment` every 1.5s (30s timeout) and merges enrichment into results by `candidateId`.
-- Normal user-facing flow does not send `measurementPreparedQueryFraming`, `measurementSelectionMode: selection_only`, or `measurementSelectionMode: winner_lock_ids_only`; those are temporary measurement-only finalize inputs.
-- A temporary local-only measurement route, `POST /api/search/finalize-stream`, exists for the measured one-call stream harness. It is not wired to the frontend and does not change normal finalize behavior.
+## Amazon store behavior
+- The store picker defaults to `Auto`.
+- `api/geo.js` returns a country code from Vercel headers.
+- The frontend resolves that country code to an explicit Amazon domain and sends it on guided requests when `Auto` is selected.
+- Manual store overrides still win over the auto-resolved domain.
 
 ## Final result behavior
-- Result lists display up to 6 normalized product cards.
-- Cards still stay clean on the grid surface: image, title, merchant/source, price, ratings, and a deterministic badge label. No AI copy on the card surface.
-- The modal now shows manufacturer/product `feature_bullets` immediately when available, before async AI copy arrives.
-- AI copy (`fit_reason`, `caveat`) still lives in the modal and arrives via enrichment polling.
-- AI no longer returns badge labels in the blocking finalize response. Frontend heuristics assign scan-friendly badges after the shortlist arrives with a slight delayed reveal.
-- Clicking a product opens a detail modal. If enrichment has arrived, the modal shows "Why this pick stands out" (`fit_reason`) and "Possible drawbacks" (`caveat`). If enrichment is still pending, those sections show a loading placeholder.
-- `enrichmentReady = Boolean(item?.fit_reason)` drives the modal loading state.
+- Result lists show up to 6 cards.
+- Cards stay metadata-first: image, title, provider/source, price, rating, review count, and a deterministic badge.
+- Clicking a result opens a modal.
+- The modal shows `feature_bullets` immediately when available.
+- The modal later hydrates `fit_reason` and `caveat` from enrichment.
+- Retailer clicks happen from the modal CTA.
+
+## Retry behavior
+- Retry is not an endless-results flow.
+- The current retry UX asks what felt wrong about the picks.
+- `/api/search/retry-advice` suggests a more specific next query.
+- Clicking the suggestion resets the app to a fresh search with that query prefilled and editable.
+- The same-pool retry path is not part of the active homepage UI right now.
 
 ## Data, cache, and observability
-- Product data comes from the live guided backend path, not a frontend mock catalog.
-- Search cache and operational search-history logging use the storage layer, with Supabase preferred and local fallback for development.
-- Guided discovery is the reusable persistent cache layer; `/api/search/live` and guided finalization stay request-specific.
-- Discovery filtering keeps source diversification for multi-merchant shopping paths such as SerpApi/Google Shopping.
-- Discovery filtering disables the per-source diversity cap for Amazon-style single-marketplace paths such as Rainforest, Oxylabs, and any later direct Amazon API path, so all-Amazon searches do not collapse to 2 items.
-- Finalize-time product details now also use a separate provider-agnostic per-ASIN cache (`product_details_cache` in Supabase, `temp-data/product-details-cache.json` locally).
-- The per-ASIN detail cache returns any stored row immediately, stores partial rows with `needs_updating`, and can kick off a detached refresh for future requests without slowing the current response.
-- Cached product details are not fed into the AI shortlist-selection prompt; they only support post-lock product facts for the chosen ASINs.
-- Guided discovery cache keys normalize lowercase/spacing and obvious plural product terms on the main query.
-- `search_history` is internal operational telemetry, not user-facing saved history.
-- Same-IP search rate limiting currently uses a 10-second rolling window with up to 15 requests.
-- Guided search requests expose `Server-Timing`; timing UI appears in development or with `?timing=1`.
-- Guided AI routes surface OpenAI token usage metadata when calls run.
-- Structured `[search-flow]` logs cover discovery, refine, finalize, and enrichment.
-- Optional Supabase analytics can track guided-search steps, result impressions, card opens, and retailer clicks.
-
-## Backend guardrails
-- Guided finalize rejects request bodies larger than 32 KB.
-- Candidate pools are capped at 20 candidates.
-- Follow-up notes are truncated to 500 characters before OpenAI selection.
-- Priorities are sanitized and capped before final selection context.
-- Finalize reconstructs candidates from guided discovery cache instead of trusting browser-posted rich pools.
-- Discovery filtering removes a narrow slice of clearly redundant same-family same-variant listings before the cached candidate pool is written.
+- Guided discovery is the reusable persistent cache layer.
+- Finalize remains request-specific and rebuilds from discovery cache.
+- Search cache and operational history use Supabase when configured, with local fallback in development.
+- Product details have a separate per-ASIN cache shared across detail providers.
+- `search_history` is internal telemetry, not user-facing history.
+- Rate limiting is currently a 10-second in-memory rolling window with a limit of 15 requests per IP on the Render process.
+- Guided routes expose `Server-Timing`.
+- The homepage timing panel appears in development or when `?timing=1` is present.
+- Analytics events post to `/api/analytics/track`.
 
 ## Marketplace direction
-- Focamai should help users narrow choices before going into a retailer marketplace.
-- Retailer integration should stay flexible and vendor-agnostic in product shape.
-- Rainforest API is the primary discovery integration; SerpAPI is preserved as secondary fallback.
-- Amazon is the likely future free-tier affiliate priority; Walmart remains worth considering because it has an affiliate path.
-- The frontend should not be redesigned around any specific data provider because it is an integration layer, not the product identity.
-
-## UI principles
-- Keep the overall feeling calm, focused, premium, and lower-friction than typical marketplaces.
-- Mobile-first layout decisions remain the default.
-- Loading states should feel intentional, not abrupt.
-- Brand elements like wordmark, nav, logo, and footer should remain consistent.
-
-## AI copy tone
-- AI-generated copy must read like a trusted assistant, not marketing.
-- For each pick, the copy should explain why the AI chose it AND note any meaningful drawback or caveat — without being harsh.
-- Drawbacks can be practical (exceeds budget, heavier than alternatives, only works if X) or contextual (better if you care more about Y than Z).
-- Do not write copy that sounds like the product is definitely the right choice. Write copy that helps the user decide for themselves.
-- Avoid superlatives, hype phrasing, and generic positives. Be specific to the user's stated context.
-- This tone applies to all AI copy — fit reasons, modal explanations, and any future enrichment layers.
-
-## Placeholder vs real
-- Real now: shell, routing, open homepage, branding/loading fallback, product-card interaction, guided search endpoints, AI-assisted shortlist selection, retailer links when available, Supabase cache/history path, guided-primary debug output.
-- Placeholder now: affiliate-specific linking/disclosure behavior, auth flows, deeper analytics/observability, and user-facing saved history.
-
-## Next likely implementation steps
-- Keep watching the Vercel deployment using the current cache/storage flow.
-- Keep tightening weak-result handling and AI judgment quality.
-- Keep the slimmer one-shot finalize selector as active unless the user explicitly approves another experiment.
-- For future latency architecture work, use `project-notes/layered-latency-plan.md`; this file describes implemented behavior, not planned layering.
-- Decide how affiliate-ready outbound retailer links and disclosures should work in modal/cards.
-- Refine the default open homepage based on tester feedback.
+- Focamai narrows choices before the user goes into a retailer marketplace.
+- The normalized product shape should stay vendor-agnostic even if Amazon is the strongest near-term path.
+- Rainforest-style Amazon discovery is the main route; SerpApi stays secondary and only matters if deliberately reactivated.

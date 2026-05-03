@@ -43,8 +43,8 @@ npm run build        # Production build
 ## Architecture
 
 ### Guided Search Flow (main product path)
-1. `POST /api/search/discover` — fetch search results, build 20-candidate pool, return preview + `discoveryToken`
-2. `POST /api/search/refine` — generate one short AI follow-up question
+1. `GET /api/search/rainforest-discover` — fetch search results, build 20-candidate pool, return preview + `discoveryToken`
+2. `GET /api/search/refine` — generate one short AI follow-up question
 3. `POST /api/search/finalize` — accept user's follow-up answer, pick 6 results with fit reasons
 
 Finalize **reconstructs** the candidate pool from cache — never trusts browser-posted candidate data.
@@ -56,7 +56,7 @@ src/components/home/        Core guided search UI + useGuidedSearch hook
 backend/server.js           Core route handler functions (exported; not the entry point)
 backend/express-server.js   Express server — Render production entry point (node backend/express-server.js)
 backend/lib/                Business logic modules (ai-selector, rate-limiter, search-cache, etc.)
-api/search/                 Vercel serverless wrappers → forward to Render backend via VITE_BACKEND_URL
+api/geo.js                  Deliberate Vercel-only geo helper used by the frontend Auto marketplace flow
 project-notes/              Living docs: flow, status, decisions, experiment notes
 project-notes/archive/      Superseded docs — read for history, don't treat as current
 ```
@@ -65,7 +65,7 @@ project-notes/archive/      Superseded docs — read for history, don't treat as
 - **Frontend:** React 19, React Router v7, TanStack Query, Tailwind CSS 3, Vite
 - **Backend:** Node.js + Express (`backend/express-server.js`), OpenAI API, Anthropic API, SerpApi, Supabase, Oxylabs
 - **Testing:** Vitest + @testing-library/react
-- **Deploy:** Frontend on Vercel (serverless `/api` wrappers forward to backend); Backend on Render (`render.yaml`)
+- **Deploy:** Frontend on Vercel; Backend on Render (`render.yaml`). Frontend API calls go directly to Render via `VITE_BACKEND_URL`, except `api/geo.js` which stays on Vercel for geolocation headers.
 
 ## AI Models
 - Refinement: lightweight/fast model (~1s)
@@ -95,7 +95,7 @@ OXYLABS_PASSWORD
 ```
 Frontend (set in Vercel):
 ```
-VITE_BACKEND_URL         # URL of the Render backend — used by Vercel API wrappers to forward requests
+VITE_BACKEND_URL         # URL of the Render backend — used by the frontend for direct API calls
 ```
 Optional: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SEARCH_CACHE_TTL_MINUTES`, `ALLOWED_ORIGIN`, model overrides above.
 

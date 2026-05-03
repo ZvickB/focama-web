@@ -1,43 +1,36 @@
 # Project Notes
 
-This folder holds working notes for the Focamai project and is the best place to point future AI chats for context.
+This folder is the active notes layer for Focamai. Keep active files focused on current behavior, current constraints, and real remaining work. Historical audits, completed migration notes, and superseded strategy docs belong in `project-notes/archive/`.
 
-## Startup read order (fresh chat)
-1. `session-handoff.md` — fastest current reset
-2. `current-status.md` — immediate snapshot and active constraints
-3. `app_flow.md` — current implemented behavior
-4. `finalize-strategy.md` — guardrails before any finalize or latency changes
-5. `active-experiment-override.md` — when touching finalize/prewarm experiment
-6. `layered-latency-plan.md` — when touching latency architecture
+## Startup read order
+1. `session-handoff.md` — fastest reset for a fresh chat
+2. `current-status.md` — immediate snapshot of what is true now
+3. `app_flow.md` — canonical implemented behavior
+4. `handoff.md` — real remaining work and open product decisions
+5. `doc_briefs.md` — product intent, UX direction, and compliance notes
+6. `db-needs.md` — current Supabase/storage tables when backend/storage work is involved
+7. `todo.md` — active backlog only
 
-## Active notes
+## Active reference
 
-### To-do
-- `todo.md` — full prioritized to-do list with status, organized by area
+### Core source of truth
+- `session-handoff.md` — startup checklist, current direction, key files
+- `current-status.md` — short status snapshot and active constraints
+- `app_flow.md` — implemented frontend/backend flow
+- `handoff.md` — durable backlog and open questions
+- `doc_briefs.md` — product intent and UX direction
+- `db-needs.md` — current storage tables and SQL setup
+- `todo.md` — pending and in-progress work only
 
-### Core reference
-- `session-handoff.md` — startup checklist and current experiment status
-- `current-status.md` — immediate snapshot: product state, backend state, guardrails
-- `app_flow.md` — current implemented behavior and route flow
-- `handoff.md` — MVP backlog, known remaining work, longer-term ideas
-
-### Strategy and guardrails
-- `finalize-strategy.md` — canonical finalize strategy and hard guardrails
-- `active-experiment-override.md` — latest experiment conclusions (finalize/prewarm)
-- `layered-latency-plan.md` — preferred layered latency plan and implementation checklist
-
-### Product and UI
-- `doc_briefs.md` — product intent, UI direction, Amazon compliance notes
-- `ui-desktop-suggestions.md` — desktop UI improvement backlog
-- `product-card-overhaul.md` — product card redesign plan
-
-### Database
-- `db-needs.md` — Supabase tables, SQL schema, env vars, cache behavior notes
-
-### Business strategy
-- `monetization-strategy.md` — core monetization principles and user psychology
-- `rainforest-strategy/product-data-strategy.md` — Rainforest vs SerpAPI strategy, tiering
-- `rainforest-strategy/subscriber-features.md` — planned subscriber-tier features
+### Supplemental active notes
+- `search-flow.html` — visual flow reference
+- `serp-route-if-activated.md` — only if the SerpApi path is being reactivated
+- `monetization-strategy.md` — longer-term monetization thinking
+- `rainforest-strategy/product-data-strategy.md` — provider/data strategy
+- `rainforest-strategy/subscriber-features.md` — later tiering ideas
+- `rainforest-strategy/oxylabs-feasibility.md` — detail-fetch provider swap reference
+- `ui-desktop-suggestions.md` — extra desktop polish ideas
 
 ## Archive
-`archive/` holds superseded notes, completed migrations, and historical audits. Read for history only.
+- `archive/` holds completed audits, superseded strategy notes, and historical implementation docs.
+- `archive/completed-work-2026-05-03.md` is the current index for recently archived done items that were removed from active notes.
