@@ -3,10 +3,9 @@ import { getEnv } from './lib/search-data.js'
 import {
   handleAnalyticsTrack,
   handleCachedSearch,
-  handleDiscoverySearch,
   handleEnrichmentPoll,
+  handleEnrichmentStream,
   handleFinalizeSelection,
-  handleLiveSearch,
   handleRainforestDiscoverySearch,
   handleRefinementPrompt,
   handleRetryAdvice,
@@ -50,10 +49,6 @@ app.get('/api/ping', (req, res) => {
 })
 
 // Search routes
-app.get('/api/search/discover', async (req, res) => {
-  await handleDiscoverySearch(getRequestUrl(req), res, req)
-})
-
 app.get('/api/search/rainforest-discover', async (req, res) => {
   await handleRainforestDiscoverySearch(getRequestUrl(req), res, req)
 })
@@ -67,10 +62,6 @@ app.get('/api/search/debug', async (req, res) => {
   await handleSearchDebug(getRequestUrl(req), res)
 })
 
-app.get('/api/search/live', async (req, res) => {
-  await handleLiveSearch(getRequestUrl(req), res, req)
-})
-
 app.get('/api/search/cache', async (req, res) => {
   await handleCachedSearch(getRequestUrl(req), res)
 })
@@ -78,6 +69,10 @@ app.get('/api/search/cache', async (req, res) => {
 // handleEnrichmentPoll takes (request, response) and constructs its own URL internally
 app.get('/api/search/enrichment', async (req, res) => {
   await handleEnrichmentPoll(req, res)
+})
+
+app.get('/api/search/enrichment-stream', async (req, res) => {
+  await handleEnrichmentStream(req, res)
 })
 
 app.post('/api/search/retry-advice', async (req, res) => {

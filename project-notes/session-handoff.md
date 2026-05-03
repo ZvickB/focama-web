@@ -38,6 +38,7 @@
 - `/api/search/refine` returns one fast user-facing follow-up question.
 - Query framing now runs only through `/api/search/refine`; the old `/api/search/framing-fields` background lane is removed.
 - `/api/search/finalize` reconstructs the rich candidate pool from guided discovery cache, locks the shortlist via haiku (claude-haiku-4-5-20251001), fetches product details for the locked winners through the current Oxylabs helper, then returns `flowPath: 'haiku_lock'` plus shortlist cards that now include `feature_bullets` when available.
+- `/api/search/enrichment-stream` SSE is now registered in the Render Express entrypoint and is active for live enrichment pushes; polling remains the fallback path.
 - `/api/search/enrichment` GET — frontend polls with `?token=&query=` until `ready: true` then merges `fit_reason`/`caveat` into results.
 - Grid cards still stay metadata-only on the surface: image, title, source, price, ratings, badge label. No AI copy.
 - Product detail modals can now show `feature_bullets` immediately from finalize, while AI copy (`fit_reason`, `caveat`) still arrives via enrichment polling.
@@ -93,10 +94,9 @@ All latency experiments are concluded and wired into the real product flow. Deci
 
 ## Deployment note
 - Current backend deployment is **Render** (configured via `render.yaml`; starts `backend/express-server.js`).
-- Frontend is still on Vercel; the `api/search/*` serverless wrappers forward requests to the Render backend via `VITE_BACKEND_URL`.
-- `VITE_BACKEND_URL` is the frontend base-URL switch for API calls — set it to the Render backend URL in production.
+- Frontend is still on Vercel and calls the Render backend directly through `VITE_BACKEND_URL`.
+- The `api/` directory now intentionally keeps only `api/geo.js`, which stays on Vercel so the frontend can read Vercel geolocation headers through a relative path.
 - `GET /api/ping` is still used for the first-focus warmup probe.
-- `/api/geo` intentionally remains a relative path because it reads Vercel geolocation headers.
 
 ## Active exploration — Oxylabs as cheap Rainforest substitute (2026-04-19)
 - Goal: test whether Oxylabs can replace Rainforest `type=product` calls for the dual-endpoint enrichment flow during development, before paying Rainforest credits closer to launch.

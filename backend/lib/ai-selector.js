@@ -4,9 +4,6 @@ export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses'
 export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini'
 export const DEFAULT_REFINEMENT_MODEL = DEFAULT_OPENAI_MODEL
 export const DEFAULT_FINALIZE_MODEL = DEFAULT_OPENAI_MODEL
-export const CANDIDATE_AWARE_PRIOR_VERSION = 1
-export const PRE_RANK_ARTIFACT_VERSION = CANDIDATE_AWARE_PRIOR_VERSION
-const ARTIFACT_RERANK_CANDIDATE_LIMIT = 12
 const DESCRIPTION_BOILERPLATE_TOKENS = new Set([
   'at',
   'buy',
@@ -222,51 +219,6 @@ function buildCandidateSummary(candidatePool) {
   }))
 }
 
-function buildCandidateAwarePriorPrompt(candidatePool) {
-  return [
-    'Create a reusable candidate-aware shopping prior from this candidate pool.',
-    'This is not the final shortlist.',
-    'Rank every candidate from strongest to weakest baseline fit before any future follow-up context.',
-    'Use product-query relevance, quality/trust, and overall shopping usefulness as the baseline ranking signals.',
-    'For each candidate, write one short baseline fit note and one short baseline caution.',
-    'Keep the notes concise because another step may use this prior later.',
-    '',
-    `Product query: ${candidatePool.query}`,
-    '',
-    'Candidates:',
-    JSON.stringify(buildCandidateSummary(candidatePool)),
-  ].join('\n')
-}
-
-function buildCandidateAwarePriorSchema() {
-  return {
-    type: 'object',
-    properties: {
-      ranked_candidates: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            candidate_id: {
-              type: 'string',
-            },
-            baseline_fit: {
-              type: 'string',
-            },
-            baseline_caution: {
-              type: 'string',
-            },
-          },
-          required: ['candidate_id', 'baseline_fit', 'baseline_caution'],
-          additionalProperties: false,
-        },
-      },
-    },
-    required: ['ranked_candidates'],
-    additionalProperties: false,
-  }
-}
-
 async function requestStructuredSelection(
   {
     prompt,
@@ -331,107 +283,6 @@ async function requestStructuredSelection(
   }
 }
 
-function createFallbackBaselineFit(candidate) {
-  const summaryReason = getCandidateSummaryReasons(candidate)[0]
-
-  if (summaryReason) {
-    return summaryReason
-  }
-
-  if (candidate.source) {
-    return `Strong baseline option from ${candidate.source}.`
-  }
-
-  return 'Strong baseline option for this query.'
-}
-
-function createFallbackBaselineCaution(candidate) {
-  if (candidate.price) {
-    return `Check whether ${candidate.price} fits the budget.`
-  }
-
-  return 'Double-check the tradeoffs against your exact needs.'
-}
-
-function mapCandidateAwarePrior(rankedCandidates, candidatePool, model) {
-  const candidateById = new Map(candidatePool.candidates.map((candidate) => [String(candidate.id), candidate]))
-  const seen = new Set()
-  const artifactCandidates = []
-
-  for (const entry of rankedCandidates) {
-    const candidateId = String(entry?.candidate_id || '')
-
-    if (!candidateId || seen.has(candidateId)) {
-      continue
-    }
-
-    const candidate = candidateById.get(candidateId)
-
-    if (!candidate) {
-      continue
-    }
-
-    artifactCandidates.push({
-      candidateId,
-
-      title: candidate.title,
-      source: candidate.source,
-      price: candidate.price,
-      rating: candidate.rating,
-      reviewCount: candidate.reviewCount,
-      attributes: Array.isArray(candidate.attributes) ? candidate.attributes.slice(0, 6) : [],
-      trustScore:
-        candidate.trustSignals && typeof candidate.trustSignals === 'object' && !Array.isArray(candidate.trustSignals)
-          ? Number.isFinite(Number(candidate.trustSignals.score))
-            ? Number(candidate.trustSignals.score)
-            : 0
-          : null,
-      baselineFit: truncateText(entry?.baseline_fit, 160) || createFallbackBaselineFit(candidate),
-      baselineCaution: truncateText(entry?.baseline_caution, 160) || createFallbackBaselineCaution(candidate),
-    })
-    seen.add(candidateId)
-  }
-
-  for (const candidate of candidatePool.candidates) {
-    const candidateId = String(candidate.id)
-
-    if (seen.has(candidateId)) {
-      continue
-    }
-
-    artifactCandidates.push({
-      candidateId,
-
-      title: candidate.title,
-      source: candidate.source,
-      price: candidate.price,
-      rating: candidate.rating,
-      reviewCount: candidate.reviewCount,
-      attributes: Array.isArray(candidate.attributes) ? candidate.attributes.slice(0, 6) : [],
-      trustScore:
-        candidate.trustSignals && typeof candidate.trustSignals === 'object' && !Array.isArray(candidate.trustSignals)
-          ? Number.isFinite(Number(candidate.trustSignals.score))
-            ? Number(candidate.trustSignals.score)
-            : 0
-          : null,
-      baselineFit: createFallbackBaselineFit(candidate),
-      baselineCaution: createFallbackBaselineCaution(candidate),
-    })
-  }
-
-  return {
-    version: CANDIDATE_AWARE_PRIOR_VERSION,
-    layer: 'candidate_aware_prior',
-    generatedAt: new Date().toISOString(),
-    model,
-    query: candidatePool.query,
-    details: candidatePool.details || '',
-    discoveryToken: candidatePool.discoveryToken || '',
-    candidateCount: candidatePool.candidates.length,
-    rankedCandidates: artifactCandidates,
-  }
-}
-
 function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }) {
   const desiredCount = Math.min(finalResultLimit, candidatePool.candidates.length)
 
@@ -492,65 +343,6 @@ function buildMiniEnrichmentSchema() {
     additionalProperties: false,
   }
 }
-
-export async function createCandidateAwarePrior(
-  {
-    candidatePool,
-    apiKey,
-    model = DEFAULT_OPENAI_MODEL,
-  },
-  fetchImpl = fetch,
-) {
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is missing from the root .env file.')
-  }
-
-  const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
-
-  if (candidates.length === 0) {
-    const prior = {
-      version: CANDIDATE_AWARE_PRIOR_VERSION,
-      layer: 'candidate_aware_prior',
-      generatedAt: new Date().toISOString(),
-      model,
-      query: candidatePool?.query || '',
-      details: candidatePool?.details || '',
-      candidateCount: 0,
-      rankedCandidates: [],
-    }
-
-    return {
-      model,
-      prior,
-      artifact: prior,
-      usage: null,
-      strategy: 'candidate_aware_prior',
-    }
-  }
-
-  const { parsed, usage } = await requestStructuredSelection(
-    {
-      prompt: buildCandidateAwarePriorPrompt(candidatePool),
-      schema: buildCandidateAwarePriorSchema(),
-      responseName: 'candidate_aware_prior',
-      apiKey,
-      model,
-    },
-    fetchImpl,
-  )
-
-  const prior = mapCandidateAwarePrior(parsed?.ranked_candidates || [], candidatePool, model)
-
-  return {
-    model,
-    prior,
-    artifact: prior,
-    usage,
-    strategy: 'candidate_aware_prior',
-  }
-}
-
-export const createPreRankArtifact = createCandidateAwarePrior
 
 export async function haikuLockWinnersAndBadges(
   {

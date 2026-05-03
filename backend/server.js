@@ -46,15 +46,6 @@ const LIVE_RESULT_FILTER_CONFIG = {
   candidatePoolSize: 30,
   finalResultLimit: 6,
 }
-const LIVE_SEARCH_RATE_LIMIT = {
-  ...DEFAULT_RATE_LIMIT_CONFIG,
-}
-const FINALIZE_SELECTION_RATE_LIMIT = {
-  ...DEFAULT_RATE_LIMIT_CONFIG,
-}
-const RETRY_ADVICE_RATE_LIMIT = {
-  ...DEFAULT_RATE_LIMIT_CONFIG,
-}
 const FINALIZE_BODY_LIMIT_BYTES = 32 * 1024
 const RETRY_ADVICE_BODY_LIMIT_BYTES = 16 * 1024
 const FINALIZE_MAX_CANDIDATES = LIVE_RESULT_FILTER_CONFIG.candidatePoolSize
@@ -109,12 +100,6 @@ function hasContextAddedFinalizeSignals({
   )
 }
 
-function getFinalizeEnrichmentMode() {
-  return String(getEnv('FINALIZE_ENRICHMENT_MODE') || 'async').trim().toLowerCase() === 'blocking'
-    ? 'blocking'
-    : 'async'
-}
-
 function roundTimingDuration(value) {
   return Math.round(value * 10) / 10
 }
@@ -151,30 +136,6 @@ function buildDiscoveryPreviewSelection(results, extraSelection = {}) {
     details: 'Discovery preview results were cached for the guided search flow. Finalized picks stay request-specific.',
     ...extraSelection,
   }
-}
-
-function getStoredCandidateAwarePrior(selection) {
-  if (!selection || typeof selection !== 'object' || Array.isArray(selection)) {
-    return null
-  }
-
-  const candidateAwarePrior =
-    selection.candidateAwarePrior &&
-    typeof selection.candidateAwarePrior === 'object' &&
-    !Array.isArray(selection.candidateAwarePrior)
-      ? selection.candidateAwarePrior
-      : null
-
-  if (candidateAwarePrior) {
-    return candidateAwarePrior
-  }
-
-  // Compatibility for guided-discovery cache entries written before the prior rename.
-  return selection.preRankArtifact &&
-    typeof selection.preRankArtifact === 'object' &&
-    !Array.isArray(selection.preRankArtifact)
-    ? selection.preRankArtifact
-    : null
 }
 
 function sanitizeExcludedCandidateIds(values) {
@@ -393,12 +354,9 @@ function resolveFinalizeCandidatePool(cachedEntry) {
     }
   }
 
-  const cachedPrior = getStoredCandidateAwarePrior(cachedEntry?.selection)
-
   return {
     candidatePool: sanitizedCandidatePool.candidatePool,
     cachedEntry,
-    candidateAwarePrior: cachedPrior,
     isValid: true,
   }
 }
@@ -578,7 +536,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   const countryCode = getCountryCode(request.headers || {})
   const amazonDomain = resolveAmazonDomain({ requestUrl, countryCode })
   const rainforestScope = getAmazonMarketplaceScope(CACHE_SCOPE_RAINFOREST, amazonDomain)
-  const rateLimit = await takeRateLimitToken(clientIpAddress, LIVE_SEARCH_RATE_LIMIT)
+  const rateLimit = await takeRateLimitToken(clientIpAddress, DEFAULT_RATE_LIMIT_CONFIG)
 
   if (!rateLimit.allowed) {
     sendJson(response, 429, {
@@ -613,8 +571,6 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       cachedEntry,
       scope: rainforestScope,
     })
-    const cachedCandidateAwarePrior = getStoredCandidateAwarePrior(cachedEntry.selection)
-
     await recordSearchCacheEvent({
       cacheKey: discoveryCacheKey,
       cacheStatus: 'hit',
@@ -635,7 +591,6 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
         ? cachedEntry.candidatePool.candidates.length
         : normalizedCachedResults.length,
       previewCount: normalizedCachedResults.length,
-      candidateAwarePriorReady: Boolean(cachedCandidateAwarePrior),
       cacheMs: roundTimingDuration(cacheLookupDuration),
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
@@ -827,7 +782,7 @@ export const handleRetryAdvice = createRetryAdviceHandler({
   getRefinementModel,
   logSearchFlowEvent,
   nowMs,
-  rateLimitConfig: RETRY_ADVICE_RATE_LIMIT,
+  rateLimitConfig: DEFAULT_RATE_LIMIT_CONFIG,
   bodyLimitBytes: RETRY_ADVICE_BODY_LIMIT_BYTES,
   maxNoteLength: FINALIZE_MAX_NOTE_LENGTH,
   maxRejectionFeedbackLength: FINALIZE_MAX_REJECTION_FEEDBACK_LENGTH,
@@ -855,7 +810,6 @@ export async function handleSearchDebug(requestUrl, response) {
     normalizedDetails === '' &&
     Boolean(discoveryCachedEntry?.candidatePool?.candidates) &&
     discoveryCachedResults.length > 0
-  const guidedDiscoveryCandidateAwarePrior = getStoredCandidateAwarePrior(discoveryCachedEntry?.selection)
 
   sendJson(response, 200, {
     query: normalizedQuery,
@@ -872,11 +826,6 @@ export async function handleSearchDebug(requestUrl, response) {
           : 0,
         previewResultCount: discoveryCachedResults.length,
         selectionMode: discoveryCachedEntry?.selection?.mode || null,
-        candidateAwarePriorReady: Boolean(guidedDiscoveryCandidateAwarePrior),
-        candidateAwarePriorGeneratedAt: guidedDiscoveryCandidateAwarePrior?.generatedAt || null,
-        candidateAwarePriorCandidateCount: Array.isArray(guidedDiscoveryCandidateAwarePrior?.rankedCandidates)
-          ? guidedDiscoveryCandidateAwarePrior.rankedCandidates.length
-          : 0,
       },
     },
     environment: {
@@ -1110,7 +1059,7 @@ export async function handleFinalizeSelection(request, response) {
   }
 
   const clientIpAddress = getClientIpAddress(request.headers || {})
-  const rateLimit = await takeRateLimitToken(clientIpAddress, FINALIZE_SELECTION_RATE_LIMIT)
+  const rateLimit = await takeRateLimitToken(clientIpAddress, DEFAULT_RATE_LIMIT_CONFIG)
 
   if (!rateLimit.allowed) {
     logSearchFlowEvent('guided_finalize_rate_limited', {
@@ -1293,9 +1242,6 @@ export async function handleFinalizeSelection(request, response) {
     return
   }
 
-  const configuredEnrichmentMode = getFinalizeEnrichmentMode()
-  const enrichmentMode = configuredEnrichmentMode === 'blocking' ? 'async' : configuredEnrichmentMode
-
   try {
     const haikuStartedAt = nowMs()
     const haikuResult = await haikuLockWinnersAndBadges({
@@ -1362,7 +1308,6 @@ export async function handleFinalizeSelection(request, response) {
         finalizeModel: haikuResult.model,
         finalizeModelPath: hasContextSignals ? 'context_added' : 'baseline',
         requestMode,
-        enrichmentMode,
         miniEnrichmentStatus,
         stageLatencyMs: {
           body: roundTimingDuration(body.bodyReadDuration || 0),
@@ -1391,7 +1336,6 @@ export async function handleFinalizeSelection(request, response) {
           ? 'Haiku locked the shortlist. Product details and mini enrichment are running async.'
           : 'Rules-based fallback was used.',
         flowPath,
-        enrichmentMode,
         miniEnrichmentStatus,
       },
       usage: {

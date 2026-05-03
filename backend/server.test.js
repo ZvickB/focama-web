@@ -54,7 +54,6 @@ vi.mock('./lib/search-storage.js', () => ({
   readProductDetailsCacheEntries: vi.fn().mockResolvedValue(new Map()),
   readStoredSearchCacheEntry: vi.fn(),
   recordSearchHistory: vi.fn(),
-  takeSharedRateLimitToken: vi.fn().mockResolvedValue(null),
   writeProductDetailsCacheEntries: vi.fn().mockResolvedValue(undefined),
   writeStoredSearchCacheEntry: vi.fn(),
 }))
@@ -518,9 +517,6 @@ describe('server handlers', () => {
           candidateCount: 1,
           previewResultCount: 1,
           selectionMode: 'discovery_preview',
-          candidateAwarePriorReady: false,
-          candidateAwarePriorGeneratedAt: null,
-          candidateAwarePriorCandidateCount: 0,
         },
       },
       environment: {
@@ -961,7 +957,6 @@ describe('server handlers', () => {
     expect(payload).toEqual(
       expect.objectContaining({
         selection: expect.objectContaining({
-          enrichmentMode: 'async',
           miniEnrichmentStatus: 'running_async',
         }),
         debug: expect.objectContaining({
@@ -1656,9 +1651,8 @@ describe('server handlers', () => {
     })
   })
 
-  it('keeps finalize async even when legacy blocking mode is configured', async () => {
+  it('keeps finalize async while product details and mini enrichment run in the background', async () => {
     mockFinalizeEnv({
-      FINALIZE_ENRICHMENT_MODE: 'blocking',
       OXYLABS_USERNAME: 'oxy-user',
       OXYLABS_PASSWORD: 'oxy-pass',
     })
@@ -1701,7 +1695,6 @@ describe('server handlers', () => {
           }),
         ],
         selection: expect.objectContaining({
-          enrichmentMode: 'async',
           miniEnrichmentStatus: 'running_async',
         }),
       }),
