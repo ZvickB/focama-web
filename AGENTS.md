@@ -33,6 +33,8 @@ Read this file first at the start of every chat.
 - Treat implemented behavior and planned work as different things.
 - Do not present a future idea as already decided unless the user explicitly chose it.
 - If current implementation and future direction differ, write both clearly.
+- If active notes and code disagree, treat the code as current reality unless the user explicitly says otherwise.
+- When you notice that active notes do not reflect reality, flag the mismatch clearly once and update the relevant active notes when it is part of the work.
 - Project notes and constraints are guardrails for the assistant, not limits on the user.
 - If the user explicitly wants a direction that conflicts with existing notes or prior guidance, give a clear warning about the tradeoff or risk once, then follow the user's decision.
 - When the user overrides a prior note or planned direction, update the relevant notes so future chats do not keep treating the older direction as the active one.
