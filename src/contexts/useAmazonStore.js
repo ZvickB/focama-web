@@ -6,7 +6,9 @@ export const AmazonStoreContext = createContext(null)
 
 const fallback = {
   selectedAmazonDomain: AMAZON_MARKETPLACE_AUTO,
+  resolvedAmazonDomain: '',
   setSelectedAmazonDomain: () => {},
+  setResolvedAmazonDomain: () => {},
 }
 
 export function useAmazonStore() {

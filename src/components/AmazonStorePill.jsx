@@ -3,7 +3,10 @@ import { ChevronDown } from 'lucide-react'
 
 import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
-import { AMAZON_MARKETPLACES } from '../../shared/amazon-marketplaces.js'
+import {
+  AMAZON_MARKETPLACES,
+  getAmazonDomainFromCountryCode,
+} from '../../shared/amazon-marketplaces.js'
 
 function countryCodeToFlag(code) {
   return [...code.toUpperCase()]
@@ -14,7 +17,11 @@ function countryCodeToFlag(code) {
 // variant='header' — smaller, subtler trigger; used in the site header
 // variant='default' — standard full-size pill (fallback)
 export function AmazonStorePill({ variant = 'default' }) {
-  const { selectedAmazonDomain, setSelectedAmazonDomain } = useAmazonStore()
+  const {
+    selectedAmazonDomain,
+    setSelectedAmazonDomain,
+    setResolvedAmazonDomain,
+  } = useAmazonStore()
   const [isOpen, setIsOpen] = useState(false)
   const [detectedCountryCode, setDetectedCountryCode] = useState(null)
   const containerRef = useRef(null)
@@ -25,10 +32,15 @@ export function AmazonStorePill({ variant = 'default' }) {
     fetch('/api/geo')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.countryCode) setDetectedCountryCode(data.countryCode)
+        if (data?.countryCode) {
+          setDetectedCountryCode(data.countryCode)
+          setResolvedAmazonDomain(getAmazonDomainFromCountryCode(data.countryCode))
+        }
       })
-      .catch(() => {})
-  }, [])
+      .catch(() => {
+        setResolvedAmazonDomain('')
+      })
+  }, [setResolvedAmazonDomain])
 
   useEffect(() => {
     if (!isOpen) return undefined

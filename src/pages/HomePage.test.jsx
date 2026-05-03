@@ -280,6 +280,76 @@ describe('HomePage', () => {
     )
   })
 
+  it('uses the geo-resolved Amazon domain when the store stays on Auto', async () => {
+    delete window.__FOCAMAI_DISABLE_GEO_FETCH__
+
+    const user = userEvent.setup()
+    const fetchMock = vi.fn((input) => {
+      const url = String(input)
+
+      if (url === '/api/geo') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ countryCode: 'CA' }),
+        })
+      }
+
+      if (url.includes('/api/search/rainforest-discover')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              amazonDomain: 'amazon.ca',
+              discoveryToken: 'opaque-discovery-token',
+              candidatePool: {
+                query: 'stroller',
+                details: '',
+                amazonDomain: 'amazon.ca',
+                candidates: [],
+              },
+              previewResults: [createMockResult({ subtitle: 'Amazon', link: 'https://www.amazon.ca/dp/B001' })],
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/refine')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              prompt: 'What should we optimize for with this stroller?',
+              helperText: 'Pick anything that matters.',
+              followUpPlaceholder: 'Anything else?',
+            }),
+        })
+      }
+
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /change amazon store/i })[0]).toHaveTextContent('CA')
+    })
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+    await screen.findByText(/what should we optimize for with this stroller/i)
+
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(
+          '/api/search/rainforest-discover?query=stroller&amazonDomain=amazon.ca',
+        ),
+      ]),
+    )
+  })
+
   it('shows the backend error message when discovery fails', async () => {
     const user = userEvent.setup()
     const fetchMock = vi

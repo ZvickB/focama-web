@@ -68,6 +68,18 @@ function appendAmazonDomain(searchParams, amazonDomain) {
   }
 }
 
+function resolveAmazonDomainForRequest(selectedAmazonDomain, resolvedAmazonDomain) {
+  if (selectedAmazonDomain && selectedAmazonDomain !== AMAZON_MARKETPLACE_AUTO) {
+    return selectedAmazonDomain
+  }
+
+  if (resolvedAmazonDomain && resolvedAmazonDomain !== AMAZON_MARKETPLACE_AUTO) {
+    return resolvedAmazonDomain
+  }
+
+  return AMAZON_MARKETPLACE_AUTO
+}
+
 async function readJsonResponse(response, requestStartedAt) {
   const responseReceivedAt = performance.now()
   const rawBody = await response.text()
@@ -305,7 +317,11 @@ export function resolveSelectedProductForDisplay({
 
 export function useGuidedSearch() {
   const [productQuery, setProductQuery] = useState('')
-  const { selectedAmazonDomain, setSelectedAmazonDomain } = useAmazonStore()
+  const {
+    selectedAmazonDomain,
+    resolvedAmazonDomain,
+    setSelectedAmazonDomain,
+  } = useAmazonStore()
   const [submittedAmazonDomain, setSubmittedAmazonDomain] = useState('')
   const [selectedProductState, setSelectedProductState] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
@@ -732,7 +748,7 @@ export function useGuidedSearch() {
     activeSearchIdRef.current = nextSearchId
     const analyticsSearchId = createAnalyticsSearchId()
     const analyticsSessionId = getOrCreateAnalyticsSessionId()
-    const nextAmazonDomain = selectedAmazonDomain
+    const nextAmazonDomain = resolveAmazonDomainForRequest(selectedAmazonDomain, resolvedAmazonDomain)
     analyticsSearchIdRef.current = analyticsSearchId
     analyticsSessionIdRef.current = analyticsSessionId
 

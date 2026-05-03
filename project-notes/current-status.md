@@ -29,6 +29,7 @@
   - `/api/search/rainforest-discover` (primary homepage discovery; `/api/search/discover` is the legacy SerpApi path, preserved for scripts/tests)
   - `/api/search/refine`
   - `/api/search/finalize`
+  - `/api/search/enrichment-stream` (SSE primary path for ready enrichment pushes)
   - `/api/search/enrichment` (async polling)
   - `/api/search/retry-advice` (POST; AI-powered advice before retry — returns `recommendation`, `suggestedQuery`, `rationale`)
 - `/api/search/live` is the explicit manual/debug combined route, not the primary product path.
@@ -38,7 +39,7 @@
 - Provider-agnostic per-ASIN product-details caching now exists, with Supabase preferred and `temp-data/product-details-cache.json` as the local fallback.
 - Search-history records are internal operational telemetry, not a user-facing saved-history feature.
 - Shared rate limiting prefers Supabase when configured, with in-memory fallback for local/degraded environments.
-- Vercel API wrappers preserve forwarded headers so IP-based rate limiting works in production.
+- Amazon marketplace auto-resolution now happens on the frontend before guided requests are sent: `/api/geo` resolves the detected country, and Auto searches send the concrete `amazonDomain` instead of relying on backend header inference.
 - Guided discovery/refine/framing/finalize emit structured `[search-flow]` logs with latency, token usage, candidate counts, and ranking ownership.
 - Guided search responses expose `Server-Timing`; the homepage timing panel appears in development or when `?timing=1` is present.
 - Result diversification now differs by path on purpose: Serp-style multi-merchant discovery still caps duplicate merchants, while Amazon-style single-marketplace discovery (Rainforest/Oxylabs/later Amazon API) skips that per-source cap.
@@ -53,7 +54,6 @@
 - `/api/search/enrichment` entries also carry `feature_bullets` so an already-open modal can hydrate them from polling if needed.
 - Modal shows feature bullets immediately when present and keeps the `fit_reason`/`caveat` loading placeholder until enrichment arrives (`enrichmentReady = Boolean(item?.fit_reason)`).
 - Badge labels are frontend-owned deterministic heuristics assigned after the shortlist arrives.
-- Finalize response shape: `flowPath: 'haiku_lock'`, `strategy: 'haiku_lock'`, no `reusedCandidateAwarePrior`.
 - Normal guided finalize responses do not echo the rich candidate pool back to the browser.
 - Query framing is question-fast only through `/api/search/refine`; the old `/api/search/framing-fields` background lane is removed and no longer part of runtime flow.
 - Rainforest detail-fetch support now exists in `backend/lib/rainforest-pipeline.js` as `fetchRainforestProductDetailsByAsin`, but it is not wired into `/api/search/finalize` yet.
