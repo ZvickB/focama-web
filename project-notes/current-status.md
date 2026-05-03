@@ -35,8 +35,9 @@
 ## Current finalize reality
 - Finalize rebuilds the candidate pool from guided discovery cache instead of trusting a browser-posted rich pool.
 - Haiku locks the shortlist first.
+- Partial valid Haiku output is treated as recoverable: the backend tops it up from deterministic fallback and returns `selection.strategy: 'haiku_lock_topped_up'`.
 - The current detail helper for shortlisted ASINs is still `fetchOxylabsProductDetailsByAsin`.
-- Product details are cached per ASIN before mini enrichment runs.
+- Product details are cached per ASIN before mini enrichment runs, using the final displayed shortlist IDs.
 - Mini enrichment writes `fit_reason` and `caveat` back into guided cache, then the frontend hydrates the modal via SSE first and polling fallback second.
 
 ## Active constraints

@@ -23,8 +23,8 @@
 ## Current guided flow
 - `GET /api/search/rainforest-discover` is the main discovery route used by the homepage.
 - `GET /api/search/refine` returns one short follow-up question while discovery runs.
-- `POST /api/search/finalize` rebuilds the candidate pool from guided cache, locks 6 winners with haiku, returns shortlist cards, and starts async enrichment work.
-- `GET /api/search/enrichment-stream` is the first enrichment path from the frontend; if the stream fails, the frontend falls back to polling.
+- `POST /api/search/finalize` rebuilds the candidate pool from guided cache, uses Haiku first, tops partial valid Haiku output up from deterministic fallback when needed, returns shortlist cards, and starts async enrichment work for the final displayed IDs.
+- `GET /api/search/enrichment-stream` is the first enrichment path from the frontend; it is cross-origin enabled for the Render backend, and if the stream fails, the frontend falls back to polling.
 - `GET /api/search/enrichment` remains the polling fallback and script-friendly read path.
 - `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist.
 

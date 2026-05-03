@@ -993,6 +993,8 @@ export async function handleEnrichmentStream(request, response) {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     Connection: 'keep-alive',
+    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    Vary: 'Origin',
   })
   response.flushHeaders()
 
@@ -1255,20 +1257,51 @@ export async function handleFinalizeSelection(request, response) {
     const candidateById = new Map(
       nextCandidatePool.candidates.map((c) => [String(c.id), c]),
     )
+    const seenHaikuIds = new Set()
     const haikuResults = haikuResult.lockedIds
       .map((id) => {
-        const candidate = candidateById.get(String(id))
+        const normalizedId = String(id)
+
+        if (seenHaikuIds.has(normalizedId)) {
+          return null
+        }
+
+        seenHaikuIds.add(normalizedId)
+        const candidate = candidateById.get(normalizedId)
         return candidate ? toFinalizeFastCard(candidate) : null
       })
       .filter(Boolean)
 
     const fallbackResults = buildFinalizeFallbackResults(nextCandidatePool)
-    let results = haikuResults.length > 0 ? haikuResults : fallbackResults
-    const selectedCandidateIds =
-      haikuResults.length > 0 ? haikuResult.lockedIds : fallbackResults.map((item) => item.id)
-    const selectionStrategy = haikuResults.length > 0 ? 'haiku_lock' : 'rules_fallback'
-    const flowPath = haikuResults.length > 0 ? 'haiku_lock' : 'nano_lock_fallback'
-    const miniEnrichmentStatus = haikuResults.length > 0 ? 'running_async' : 'skipped'
+    const targetResultCount = fallbackResults.length
+    const fallbackTopUpResults = fallbackResults.filter(
+      (item) => !haikuResults.some((haikuItem) => String(haikuItem.id) === String(item.id)),
+    )
+
+    let results = fallbackResults
+    let selectionStrategy = 'rules_fallback'
+    let flowPath = 'nano_lock_fallback'
+    let miniEnrichmentStatus = 'skipped'
+
+    if (haikuResults.length > 0) {
+      if (haikuResults.length >= targetResultCount) {
+        results = haikuResults.slice(0, targetResultCount)
+        selectionStrategy = 'haiku_lock'
+        flowPath = 'haiku_lock'
+      } else {
+        results = [
+          ...haikuResults,
+          ...fallbackTopUpResults.slice(0, Math.max(0, targetResultCount - haikuResults.length)),
+        ]
+        selectionStrategy = 'haiku_lock_topped_up'
+        flowPath = 'haiku_lock_topped_up'
+      }
+
+      miniEnrichmentStatus = 'running_async'
+    }
+
+    const selectedCandidateIds = results.map((item) => item.id)
+    const usedHaikuSelection = haikuResults.length > 0
 
     const finalizeFast = buildFinalizeFastResponseContract({
       query: sanitizedDiscoveryContext.normalizedQuery,
@@ -1276,7 +1309,7 @@ export async function handleFinalizeSelection(request, response) {
       latestUserContext: refinedDetails,
       results,
       selectedCandidateIds,
-      model: haikuResults.length > 0 ? haikuResult.model : '',
+      model: usedHaikuSelection ? haikuResult.model : '',
       strategy: selectionStrategy,
     })
     const totalDuration = nowMs() - requestStartedAt
@@ -1293,8 +1326,12 @@ export async function handleFinalizeSelection(request, response) {
       productDetailsMs: null,
       totalMs: roundTimingDuration(totalDuration),
       haikuUsage: haikuResult.usage || null,
-      rankingOwner: haikuResults.length > 0 ? 'haiku_lock' : 'deterministic_fallback',
-      selectionMode: haikuResults.length > 0 ? 'ai' : 'rules_fallback',
+      rankingOwner: usedHaikuSelection
+        ? selectionStrategy === 'haiku_lock'
+          ? 'haiku_lock'
+          : 'haiku_lock_topped_up'
+        : 'deterministic_fallback',
+      selectionMode: usedHaikuSelection ? 'ai' : 'rules_fallback',
       selectionStrategy,
       flowPath,
       finalizeModel: haikuResult.model,
@@ -1324,17 +1361,19 @@ export async function handleFinalizeSelection(request, response) {
       results,
       selection: {
         layer: finalizeFast.layer,
-        mode: haikuResults.length > 0 ? 'ai' : 'rules_fallback',
+        mode: usedHaikuSelection ? 'ai' : 'rules_fallback',
         strategy: selectionStrategy,
-        model: haikuResults.length > 0 ? haikuResult.model : null,
+        model: usedHaikuSelection ? haikuResult.model : null,
         modelPath: hasContextSignals ? 'context_added' : 'baseline',
         requestMode,
         shortlistLocked: finalizeFast.shortlistLocked,
-        usage: haikuResults.length > 0 ? haikuResult.usage || null : null,
+        usage: usedHaikuSelection ? haikuResult.usage || null : null,
         selectedCandidateIds: finalizeFast.selectedCandidateIds,
-        details: haikuResults.length > 0
+        details: selectionStrategy === 'haiku_lock'
           ? 'Haiku locked the shortlist. Product details and mini enrichment are running async.'
-          : 'Rules-based fallback was used.',
+          : selectionStrategy === 'haiku_lock_topped_up'
+            ? 'Haiku locked part of the shortlist. The remaining picks were topped up from deterministic fallback, and product details plus mini enrichment are running async.'
+            : 'Rules-based fallback was used.',
         flowPath,
         miniEnrichmentStatus,
       },
@@ -1351,7 +1390,7 @@ export async function handleFinalizeSelection(request, response) {
     })
 
     // Fire off product details and mini enrichment async; do not block the response.
-    if (haikuResults.length > 0) {
+    if (usedHaikuSelection) {
       const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
       const oxylabsUsername = getEnv('OXYLABS_USERNAME') // TODO: swap back to Rainforest before launch.
       const oxylabsPassword = getEnv('OXYLABS_PASSWORD') // TODO: swap back to Rainforest before launch.
@@ -1360,7 +1399,7 @@ export async function handleFinalizeSelection(request, response) {
         try {
           const productDetailsStartedAt = nowMs()
           const productDetailsById = await fetchOxylabsProductDetailsByAsin({ // TODO: swap back to Rainforest before launch.
-            asins: haikuResult.lockedIds,
+            asins: selectedCandidateIds,
             oxylabsUsername,
             oxylabsPassword,
             amazonDomain: sanitizedDiscoveryContext.amazonDomain,
@@ -1371,7 +1410,7 @@ export async function handleFinalizeSelection(request, response) {
           const enrichedCandidatePool = mergeProductDetailsIntoCandidatePool(nextCandidatePool, productDetailsById)
 
           await runMiniEnrichmentAsync({
-            lockedIds: haikuResult.lockedIds,
+            lockedIds: selectedCandidateIds,
             candidatePool: enrichedCandidatePool,
             apiKey: openAiApiKey,
             model: miniModel,

@@ -401,44 +401,43 @@ export function useGuidedSearch() {
     if (window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__) return
     stopEnrichmentPolling()
     enrichmentPollRef.current.searchId = searchId
+    const startedAt = performance.now()
 
-    if (typeof EventSource !== 'function') {
-      const startedAt = performance.now()
+    function schedulePoll() {
+      enrichmentPollRef.current.timerId = window.setTimeout(async () => {
+        if (enrichmentPollRef.current.searchId !== searchId) {
+          return
+        }
 
-      function schedulePoll() {
-        enrichmentPollRef.current.timerId = window.setTimeout(async () => {
+        if (performance.now() - startedAt > ENRICHMENT_POLL_TIMEOUT_MS) {
+          stopEnrichmentPolling()
+          return
+        }
+
+        try {
+          const payload = await fetchEnrichment({ token, query, amazonDomain })
+
           if (enrichmentPollRef.current.searchId !== searchId) {
             return
           }
 
-          if (performance.now() - startedAt > ENRICHMENT_POLL_TIMEOUT_MS) {
+          if (payload.ready && Array.isArray(payload.entries) && payload.entries.length > 0) {
             stopEnrichmentPolling()
+            setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
+            setIsEnrichmentReady(true)
             return
           }
+        } catch {
+          // Poll silently — enrichment is best-effort
+        }
 
-          try {
-            const payload = await fetchEnrichment({ token, query, amazonDomain })
+        if (enrichmentPollRef.current.searchId === searchId) {
+          schedulePoll()
+        }
+      }, ENRICHMENT_POLL_INTERVAL_MS)
+    }
 
-            if (enrichmentPollRef.current.searchId !== searchId) {
-              return
-            }
-
-            if (payload.ready && Array.isArray(payload.entries) && payload.entries.length > 0) {
-              stopEnrichmentPolling()
-              setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
-              setIsEnrichmentReady(true)
-              return
-            }
-          } catch {
-            // Poll silently — enrichment is best-effort
-          }
-
-          if (enrichmentPollRef.current.searchId === searchId) {
-            schedulePoll()
-          }
-        }, ENRICHMENT_POLL_INTERVAL_MS)
-      }
-
+    if (typeof EventSource !== 'function') {
       schedulePoll()
       return
     }
@@ -447,6 +446,7 @@ export function useGuidedSearch() {
     appendAmazonDomain(searchParams, amazonDomain)
     const source = new EventSource(`${BACKEND_URL}/api/search/enrichment-stream?${searchParams.toString()}`)
     enrichmentPollRef.current.source = source
+    let hasFallenBackToPolling = false
 
     source.onmessage = (event) => {
       if (enrichmentPollRef.current.searchId !== searchId) {
@@ -467,7 +467,18 @@ export function useGuidedSearch() {
     }
 
     source.onerror = () => {
-      stopEnrichmentPolling()
+      if (hasFallenBackToPolling || enrichmentPollRef.current.searchId !== searchId) {
+        return
+      }
+
+      hasFallenBackToPolling = true
+
+      if (enrichmentPollRef.current.source) {
+        enrichmentPollRef.current.source.close()
+        enrichmentPollRef.current.source = null
+      }
+
+      schedulePoll()
     }
   }
 

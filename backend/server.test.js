@@ -62,11 +62,13 @@ import {
   createApiServer,
   handleCachedSearch,
   handleEnrichmentPoll,
+  handleEnrichmentStream,
   handleFinalizeSelection,
   handleRetryAdvice,
   handleSearchDebug,
   handleSupabaseHealth,
 } from './server.js'
+import { ALLOWED_ORIGIN } from './lib/http.js'
 import { resetRateLimitStore } from './lib/rate-limit.js'
 import { haikuLockWinnersAndBadges, miniEnrichSelectedCandidates } from './lib/ai-selector.js'
 import { generateRetryAdvice } from './lib/retry-advice.js'
@@ -85,7 +87,11 @@ function createResponseRecorder() {
       this.headers = headers
     },
     end(body = '') {
-      this.body = body
+      this.body += body
+    },
+    flushHeaders() {},
+    write(chunk = '') {
+      this.body += chunk
     },
   }
 }
@@ -1407,6 +1413,132 @@ describe('server handlers', () => {
     )
   })
 
+  it('tops up a partial valid Haiku shortlist to six items', async () => {
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
+      model: 'claude-haiku-4-5-20251001',
+      lockedIds: ['three', 'one', 'four', 'six'],
+      usage: null,
+    })
+
+    const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry(
+        'stroller',
+        ['one', 'two', 'three', 'four', 'five', 'six'].map((id) => createFinalizeCandidate(id)),
+      ),
+    )
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(JSON.stringify(createFinalizeDiscoveryBody()), { 'x-forwarded-for': '203.0.113.43' }),
+      response,
+    )
+
+    const payload = JSON.parse(response.body)
+
+    expect(response.statusCode).toBe(200)
+    expect(payload.results).toHaveLength(6)
+    expect(payload.results.map((item) => item.id)).toEqual(['three', 'one', 'four', 'six', 'two', 'five'])
+    expect(payload.selection).toEqual(expect.objectContaining({
+      strategy: 'haiku_lock_topped_up',
+      selectedCandidateIds: ['three', 'one', 'four', 'six', 'two', 'five'],
+    }))
+    expect(payload.finalizeFast).toEqual(expect.objectContaining({
+      selectedCandidateIds: ['three', 'one', 'four', 'six', 'two', 'five'],
+      strategy: 'haiku_lock_topped_up',
+    }))
+  })
+
+  it('tops up invalid and duplicate Haiku picks to six unique items', async () => {
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
+      model: 'claude-haiku-4-5-20251001',
+      lockedIds: ['one', 'missing', 'one', 'two', 'ghost', 'two'],
+      usage: null,
+    })
+
+    const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry(
+        'stroller',
+        ['one', 'two', 'three', 'four', 'five', 'six'].map((id) => createFinalizeCandidate(id)),
+      ),
+    )
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(JSON.stringify(createFinalizeDiscoveryBody()), { 'x-forwarded-for': '203.0.113.44' }),
+      response,
+    )
+
+    const payload = JSON.parse(response.body)
+
+    expect(response.statusCode).toBe(200)
+    expect(payload.results.map((item) => item.id)).toEqual(['one', 'two', 'three', 'four', 'five', 'six'])
+    expect(payload.selection).toEqual(expect.objectContaining({
+      strategy: 'haiku_lock_topped_up',
+      selectedCandidateIds: ['one', 'two', 'three', 'four', 'five', 'six'],
+    }))
+  })
+
+  it('uses the final merged shortlist ids for async detail fetch and mini enrichment', async () => {
+    mockFinalizeEnv({
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
+    })
+    haikuLockWinnersAndBadges.mockResolvedValue({
+      model: 'claude-haiku-4-5-20251001',
+      lockedIds: ['one', 'three', 'five', 'six'],
+      usage: null,
+    })
+
+    const fetchMock = vi.fn(async (_requestUrl, requestInit) => ({
+      ok: true,
+      json: async () => ({
+        results: [{
+          content: {
+            bullet_points: '',
+            description: '',
+          },
+        }],
+      }),
+    }))
+
+    vi.stubGlobal('fetch', fetchMock)
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry(
+        'stroller',
+        ['one', 'two', 'three', 'four', 'five', 'six'].map((id) => createFinalizeCandidate(id)),
+      ),
+    )
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(JSON.stringify(createFinalizeDiscoveryBody()), { 'x-forwarded-for': '203.0.113.45' }),
+      response,
+    )
+
+    const payload = JSON.parse(response.body)
+
+    expect(response.statusCode).toBe(200)
+    expect(payload.selection).toEqual(expect.objectContaining({
+      strategy: 'haiku_lock_topped_up',
+      selectedCandidateIds: ['one', 'three', 'five', 'six', 'two', 'four'],
+    }))
+
+    await waitForExpectation(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(6)
+      expect(
+        fetchMock.mock.calls.map(([, requestInit]) => JSON.parse(requestInit.body).query),
+      ).toEqual(['one', 'three', 'five', 'six', 'two', 'four'])
+      expect(miniEnrichSelectedCandidates).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lockedIds: ['one', 'three', 'five', 'six', 'two', 'four'],
+        }),
+      )
+    })
+  })
+
   it('echoes requestMode back in the finalize response', async () => {
     mockFinalizeEnv()
     haikuLockWinnersAndBadges.mockResolvedValue({
@@ -1574,6 +1706,34 @@ describe('server handlers', () => {
       entries: [{ candidate_id: 'one', fit_reason: 'Good city stroller', caveat: 'Slightly pricey' }],
       model: 'gpt-5-mini',
     })
+  })
+
+  it('adds CORS headers to the enrichment stream response', async () => {
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')], {
+        mode: 'discovery_preview',
+        enrichment: {
+          entries: [{ candidate_id: 'one', fit_reason: 'Good city stroller', caveat: 'Slightly pricey' }],
+          model: 'gpt-5-mini',
+        },
+      }),
+    )
+
+    const response = createResponseRecorder()
+    const request = {
+      url: 'http://localhost/api/search/enrichment-stream?token=opaque-discovery-token&query=stroller',
+      on() {},
+    }
+
+    await handleEnrichmentStream(request, response)
+
+    expect(response.statusCode).toBe(200)
+    expect(response.headers).toEqual(expect.objectContaining({
+      'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+      Vary: 'Origin',
+      'Content-Type': 'text/event-stream',
+    }))
+    expect(response.body).toContain('"ready":true')
   })
 
   it('rejects enrichment poll with missing token or query', async () => {

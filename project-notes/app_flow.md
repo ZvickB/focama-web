@@ -32,11 +32,13 @@
 - `POST /api/search/finalize`
   - accepts lightweight context
   - rebuilds the candidate pool server-side from guided cache
-  - locks 6 winners with haiku
+  - locks the shortlist with haiku first
+  - if haiku returns a partial valid subset, tops up from deterministic fallback so the response still returns up to 6 eligible products
   - returns shortlist cards immediately
   - starts async product-detail fetch + mini enrichment in the background
 - `GET /api/search/enrichment-stream`
   - first enrichment path used by the frontend
+  - responds cross-origin for the Vercel -> Render setup
   - pushes ready enrichment when the background work finishes
 - `GET /api/search/enrichment`
   - polling fallback for enrichment
@@ -70,12 +72,14 @@
 ## Data, cache, and observability
 - Guided discovery is the reusable persistent cache layer.
 - Finalize remains request-specific and rebuilds from discovery cache.
+- Partial valid haiku output is recoverable, not final: zero picks still use rules fallback, full valid picks stay `haiku_lock`, and partial valid picks are returned as `haiku_lock_topped_up`.
 - Search cache and operational history use Supabase when configured, with local fallback in development.
 - Product details have a separate per-ASIN cache shared across detail providers.
 - `search_history` is internal telemetry, not user-facing history.
 - Rate limiting is currently a 10-second in-memory rolling window with a limit of 15 requests per IP on the Render process.
 - Guided routes expose `Server-Timing`.
 - The homepage timing panel appears in development or when `?timing=1` is present.
+- The frontend tries SSE enrichment first and falls back to polling if the stream errors.
 - Analytics events post to `/api/analytics/track`.
 
 ## Marketplace direction
