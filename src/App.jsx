@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
-import { SpeedInsights } from '@vercel/speed-insights'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 import SiteLayout from '@/components/SiteLayout.jsx'
 import { AmazonStoreProvider } from '@/contexts/AmazonStoreContext.jsx'
 import { SearchProgressProvider } from '@/contexts/SearchProgressContext.jsx'
