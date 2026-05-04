@@ -676,8 +676,7 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /new search/i }))
 
     expect(screen.getByLabelText(/product topic/i)).toHaveValue('')
-    expect(screen.getByText(/search first, refine while it loads\./i)).toBeInTheDocument()
-    expect(screen.queryByText('Travel stroller')).not.toBeInTheDocument()
+expect(screen.queryByText('Travel stroller')).not.toBeInTheDocument()
     expect(screen.queryByText('Enter a product topic to get started.')).not.toBeInTheDocument()
   })
 

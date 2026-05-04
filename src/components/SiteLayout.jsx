@@ -2,17 +2,18 @@ import { useEffect, useRef, useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import logo from '@/assets/logo_header_mark.svg'
+import wordmark from '@/assets/wordmark.PNG'
 import { AmazonStorePill } from '@/components/AmazonStorePill.jsx'
 import { useSearchProgress } from '@/contexts/useSearchProgress.js'
 
 const navItems = [
   { to: '/', label: 'Home', end: true },
-  { to: '/about', label: 'About' },
+  { to: '/why', label: 'Why Focamai', highlight: true },
   { to: '/contact', label: 'Contact' },
 ]
 
 const mobileMenuItems = navItems.filter((item) =>
-  ['/', '/about', '/contact'].includes(item.to),
+  ['/', '/why', '/contact'].includes(item.to),
 )
 const HEADER_COLLAPSE_SCROLL_Y = 72
 const HEADER_EXPAND_SCROLL_Y = 20
@@ -78,11 +79,15 @@ function SlidingNav({ items, className = '' }) {
               'relative z-10 rounded-full border border-transparent px-4 py-2 text-sm transition-colors duration-300',
               isActive
                 ? 'text-primary-foreground'
-                : 'text-slate-600 hover:border-white/80 hover:bg-white/80 hover:text-slate-900',
+                : item.highlight
+                  ? 'text-primary hover:border-white/80 hover:bg-white/80 hover:text-primary'
+                  : 'text-slate-600 hover:border-white/80 hover:bg-white/80 hover:text-slate-900',
             ].join(' ')
           }
         >
-          {item.label}
+          {item.highlight ? (
+            <><span className="font-semibold" style={{ color: '#0F6175' }}>Why Focama</span><span className="font-semibold italic" style={{ color: '#E59B26' }}>i</span></>
+          ) : item.label}
         </NavLink>
       ))}
     </nav>
@@ -162,9 +167,11 @@ function SiteLayout() {
                     isCompact ? 'h-12 w-12 sm:h-14 sm:w-14' : 'h-16 w-16 sm:h-20 sm:w-20'
                   }`}
                 />
-                <span className="text-lg font-semibold tracking-[0.08em] sm:text-xl">
-                  <span className="text-[#0F6175]">FOCAMA</span><span className="italic text-[#E59B26]">I</span>
-                </span>
+                <img
+                  src={wordmark}
+                  alt="Focamai"
+                  className={`h-7 w-auto object-contain transition-all duration-300 ease-out ${isCompact ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                />
               </NavLink>
               <p
                 className={`text-sm text-slate-500 transition-all duration-300 ease-out ${

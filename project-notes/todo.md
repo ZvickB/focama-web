@@ -39,6 +39,16 @@ Active backlog only. Completed items were moved into `project-notes/archive/comp
 
 ---
 
+## SEO
+
+| Status | Item |
+|--------|------|
+| pending | Add meta descriptions and page titles to all pages |
+| pending | Add structured data / schema markup |
+| pending | Review and improve overall SEO setup beyond favicon |
+
+---
+
 ## Pre-Launch / Security
 
 | Status | Item |

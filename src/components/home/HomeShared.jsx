@@ -626,49 +626,6 @@ export function ResultsSection({
         </div>
       ) : null}
 
-      {!hasStartedSearch && !errorMessage ? (
-        <div className="rounded-[28px] border border-dashed border-stone-200 bg-stone-50/70 px-6 py-12 text-center sm:px-8">
-          <div className="mx-auto max-w-2xl space-y-5 text-left">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
-              <Sparkles className="h-4 w-4 text-primary" />
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Guided search
-              </p>
-              <h2 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-                Search first, refine while it loads.
-              </h2>
-              <p className="text-base leading-7 text-slate-600">
-                Start with the product, then let Focamai ask the more useful follow-up instead of
-                making you fill out a long form up front.
-              </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-stone-200/80 bg-white/80 px-4 py-4">
-                <p className="text-sm font-medium text-slate-900">Start with the product search</p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Use the kind of search you&apos;d normally type into Google, like a product plus
-                  the main use case.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-stone-200/80 bg-white/80 px-4 py-4">
-                <p className="text-sm font-medium text-slate-900">Refine in plain language</p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  The next step is where budget, comfort, size, quality, or style help narrow that
-                  initial product search.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-stone-200/80 bg-white/80 px-4 py-4">
-                <p className="text-sm font-medium text-slate-900">See six focused picks</p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  You can view the cleaned shortlist right away, or let Focamai narrow it first.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {!hasStartedSearch && !errorMessage ? null : !isLoading && displayedResults.length === 0 && !errorMessage ? (
         <div className="rounded-[28px] border border-dashed border-stone-200 bg-stone-50/70 px-6 py-12 text-center sm:px-8">

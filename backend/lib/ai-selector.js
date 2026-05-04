@@ -376,22 +376,43 @@ export async function haikuLockWinnersAndBadges(
   const candidateById = new Map(candidates.map((c) => [String(c.id), c]))
   const seen = new Set()
   const lockedIds = []
+  const rejectedIds = []
+
+  console.log('[haiku-lock] raw response:', text)
 
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
     const picks = Array.isArray(parsed?.picks) ? parsed.picks : []
 
+    console.log('[haiku-lock] parsed picks count:', picks.length, 'desired:', desiredCount)
+
     for (const pick of picks) {
       const id = String(pick?.candidate_id || '')
-      if (!id || seen.has(id) || !candidateById.has(id)) continue
+      if (!id) {
+        rejectedIds.push({ id, reason: 'empty' })
+        continue
+      }
+      if (seen.has(id)) {
+        rejectedIds.push({ id, reason: 'duplicate' })
+        continue
+      }
+      if (!candidateById.has(id)) {
+        rejectedIds.push({ id, reason: 'not_in_pool' })
+        continue
+      }
       lockedIds.push(id)
       seen.add(id)
       if (lockedIds.length >= desiredCount) break
     }
-  } catch {
-    // return empty if parse fails
+  } catch (err) {
+    console.log('[haiku-lock] parse error:', err?.message)
   }
+
+  if (rejectedIds.length > 0) {
+    console.log('[haiku-lock] rejected ids:', JSON.stringify(rejectedIds))
+  }
+  console.log('[haiku-lock] locked:', lockedIds.length, '/', desiredCount, JSON.stringify(lockedIds))
 
   return {
     model: 'claude-haiku-4-5-20251001',
