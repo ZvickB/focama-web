@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { LoaderCircle, Search, Sparkles } from 'lucide-react'
+import { MAX_PRODUCT_QUERY_LENGTH, MAX_DETAILS_LENGTH } from '../../../shared/search-input.js'
 
 import wordmark from '@/assets/wordmark.PNG'
 import { ProductDetailModal, ResultsSection, ResultSkeleton } from '@/components/home/HomeShared.jsx'
@@ -14,6 +15,19 @@ import { Textarea } from '@/components/ui/textarea.jsx'
 import { useSearchProgress } from '@/contexts/useSearchProgress.js'
 
 const HERO_SUBLINE = "Tell us what you need. We'll find your six."
+
+function CharCounter({ current, max }) {
+  if (current === 0) return null
+  const remaining = max - current
+  const pct = current / max
+  return (
+    <span className={`text-xs tabular-nums transition-colors ${
+      pct >= 0.95 ? 'text-red-500' : pct >= 0.8 ? 'text-amber-500' : 'text-slate-400'
+    }`}>
+      {remaining}
+    </span>
+  )
+}
 const MotionParagraph = motion.p
 
 function shouldShowTimingPanel() {
@@ -464,6 +478,11 @@ function OpenLayout(props) {
                     className="h-16 w-full rounded-[28px] border border-stone-200 bg-white px-5 text-lg text-slate-900 outline-none transition placeholder:text-[15px] placeholder:text-slate-400 sm:placeholder:text-base focus:border-primary/50"
                     disabled={isLoading}
                   />
+                  {state.productQuery.length > 0 ? (
+                    <div className="mt-1.5 flex justify-end px-2">
+                      <CharCounter current={state.productQuery.length} max={MAX_PRODUCT_QUERY_LENGTH} />
+                    </div>
+                  ) : null}
                 </div>
                 <Button
                   type={hasStartedSearch ? 'button' : 'submit'}
@@ -527,6 +546,11 @@ function OpenLayout(props) {
                         placeholder={refinementCopy.placeholder}
                         disabled={state.isFinalizing}
                       />
+                      {state.followUpNotes.length > 0 ? (
+                        <div className="flex justify-end px-4 pb-3">
+                          <CharCounter current={state.followUpNotes.length} max={MAX_DETAILS_LENGTH} />
+                        </div>
+                      ) : null}
                     </div>
                     {state.isGeneratingPrompt ? (
                       <div className="space-y-2">

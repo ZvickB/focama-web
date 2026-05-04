@@ -1,5 +1,5 @@
 export const MAX_PRODUCT_QUERY_LENGTH = 80
-export const MAX_DETAILS_LENGTH = 280
+export const MAX_DETAILS_LENGTH = 500
 
 function normalizeInput(value) {
   return value.trim().replace(/\s+/g, ' ')
