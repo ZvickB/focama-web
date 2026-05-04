@@ -147,14 +147,14 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.5, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              className="max-w-2xl text-xl font-medium leading-8 text-[#8f4e2f] sm:text-[1.65rem]"
-              style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+              className="max-w-2xl text-lg font-normal leading-7 text-[#8f4e2f] sm:text-xl"
+              style={{ fontFamily: '"Manrope", sans-serif' }}
             >
               {displayedCopy.titleQuestion}
             </MotionParagraph>
           ) : null}
         </AnimatePresence>
-        <p className="max-w-2xl text-sm leading-7 text-slate-600">
+        <p className="max-w-2xl text-sm font-medium leading-7 text-slate-600 sm:text-[15px]">
           {helperCopy}
           {isGeneratingPrompt ? (
             <span className="ml-0.5 inline-block h-4 w-px translate-y-0.5 animate-pulse bg-slate-400 align-middle" />
@@ -506,14 +506,11 @@ function OpenLayout(props) {
                   />
 
                   <div className="space-y-2">
-                    <Label htmlFor="open-follow-up-notes" className="text-slate-700">
-                      Tell us more
-                    </Label>
                     <div
-                      className={`rounded-[30px] border border-stone-200 bg-[#fffdf9] p-1 transition-all duration-300 ${
+                      className={`rounded-[30px] border bg-[#fffdf9] p-1 transition-all duration-300 ${
                         state.isGeneratingPrompt
-                          ? 'translate-y-0 shadow-[0_20px_60px_-42px_rgba(37,99,235,0.45)] ring-1 ring-primary/12'
-                          : 'translate-y-0 shadow-[0_16px_40px_-36px_rgba(15,23,42,0.2)]'
+                          ? 'border-primary/20 shadow-[0_20px_60px_-42px_rgba(37,99,235,0.55)] ring-1 ring-primary/15'
+                          : 'border-stone-200 shadow-[0_20px_60px_-36px_rgba(15,23,42,0.25)]'
                       }`}
                     >
                       <Textarea

@@ -23,6 +23,7 @@ export function AmazonStorePill({ variant = 'default' }) {
     setResolvedAmazonDomain,
   } = useAmazonStore()
   const [isOpen, setIsOpen] = useState(false)
+  const [isMoreRegionsOpen, setIsMoreRegionsOpen] = useState(false)
   const [detectedCountryCode, setDetectedCountryCode] = useState(null)
   const containerRef = useRef(null)
   const popoverId = useId()
@@ -68,6 +69,37 @@ export function AmazonStorePill({ variant = 'default' }) {
   function handleSelect(domain) {
     setSelectedAmazonDomain(domain)
     setIsOpen(false)
+  }
+
+  const primaryMarketplaceDomains = ['amazon.com', 'amazon.ca', 'amazon.co.uk']
+  const primaryMarketplaces = primaryMarketplaceDomains
+    .map((domain) => AMAZON_MARKETPLACES.find((marketplace) => marketplace.domain === domain))
+    .filter(Boolean)
+  const additionalMarketplaces = AMAZON_MARKETPLACES.filter(
+    (marketplace) => !primaryMarketplaceDomains.includes(marketplace.domain),
+  )
+
+  function renderMarketplaceOption(marketplace) {
+    const isSelected = !isAuto && selectedAmazonDomain === marketplace.domain
+
+    return (
+      <button
+        key={marketplace.countryCode}
+        type="button"
+        onClick={() => handleSelect(marketplace.domain)}
+        role="option"
+        aria-selected={isSelected}
+        className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-stone-50 ${
+          isSelected ? 'text-primary' : 'text-slate-700'
+        }`}
+      >
+        <span aria-hidden="true" className="text-base">
+          {countryCodeToFlag(marketplace.countryCode)}
+        </span>
+        <span className="flex-1">{marketplace.label}</span>
+        {isSelected ? <span className="h-1.5 w-1.5 rounded-full bg-primary" /> : null}
+      </button>
+    )
   }
 
   function handleTriggerKeyDown(event) {
@@ -143,27 +175,30 @@ export function AmazonStorePill({ variant = 'default' }) {
 
             <div className="my-1 border-t border-stone-100" />
 
-            {AMAZON_MARKETPLACES.map((marketplace) => {
-              const isSelected = !isAuto && selectedAmazonDomain === marketplace.domain
-              return (
+            {primaryMarketplaces.map(renderMarketplaceOption)}
+
+            {additionalMarketplaces.length ? (
+              <>
+                <div className="my-1 border-t border-stone-100" />
                 <button
-                  key={marketplace.countryCode}
                   type="button"
-                  onClick={() => handleSelect(marketplace.domain)}
-                  role="option"
-                  aria-selected={isSelected}
-                  className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-stone-50 ${
-                    isSelected ? 'text-primary' : 'text-slate-700'
-                  }`}
+                  onClick={() => setIsMoreRegionsOpen((open) => !open)}
+                  aria-expanded={isMoreRegionsOpen}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 transition hover:bg-stone-50"
                 >
                   <span aria-hidden="true" className="text-base">
-                    {countryCodeToFlag(marketplace.countryCode)}
+                    🌍
                   </span>
-                  <span className="flex-1">{marketplace.label}</span>
-                  {isSelected ? <span className="h-1.5 w-1.5 rounded-full bg-primary" /> : null}
+                  <span className="flex-1 font-medium">More regions</span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-150 ${
+                      isMoreRegionsOpen ? 'rotate-180' : ''
+                    }`}
+                  />
                 </button>
-              )
-            })}
+                {isMoreRegionsOpen ? additionalMarketplaces.map(renderMarketplaceOption) : null}
+              </>
+            ) : null}
           </div>
         </div>
       ) : null}

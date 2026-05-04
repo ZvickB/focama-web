@@ -269,6 +269,8 @@ function SiteLayout() {
                     {item.label}
                   </NavLink>
                 ))}
+              <NavLink to="/privacy" className="hover:text-slate-900">Privacy</NavLink>
+              <NavLink to="/affiliate-disclosure" className="hover:text-slate-900">Affiliate Disclosure</NavLink>
             </div>
           </div>
         </div>
