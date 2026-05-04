@@ -106,10 +106,11 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
   const { selectedAmazonDomain, resolvedAmazonDomain } = useAmazonStore()
   const retailerLabel = resolveAmazonRetailerLabel(item?.subtitle, selectedAmazonDomain, resolvedAmazonDomain)
   const outerRef = useRef(null)
+  const contentRef = useRef(null)
   const [showScrollHint, setShowScrollHint] = useState(true)
 
   useEffect(() => {
-    const el = outerRef.current
+    const el = contentRef.current
     if (!el) return
     function handleScroll() {
       if (el.scrollTop > 40) setShowScrollHint(false)
@@ -157,7 +158,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
         exit={{ opacity: 0, scale: 0.97, y: 8 }}
         transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
         ref={outerRef}
-        className="max-h-[94vh] w-full overflow-y-auto rounded-t-[32px] bg-[#fcf8f1] shadow-2xl lg:flex lg:max-h-[88vh] lg:max-w-4xl lg:flex-col lg:overflow-hidden lg:rounded-[32px]"
+        className="flex max-h-[94vh] w-full flex-col overflow-hidden rounded-t-[32px] bg-[#fcf8f1] shadow-2xl lg:max-h-[88vh] lg:max-w-4xl lg:rounded-[32px]"
         onClick={(event) => event.stopPropagation()}
       >
         {/* Minimal close bar — just the X, no title text */}
@@ -172,7 +173,10 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
           </Button>
         </div>
 
-        <div className="grid gap-6 px-4 pb-4 sm:gap-8 sm:px-6 sm:pb-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[2fr_3fr] lg:gap-8 lg:overflow-hidden lg:px-8 lg:pb-0">
+        <div
+          ref={contentRef}
+          className="grid flex-1 gap-6 overflow-y-auto px-4 pb-0 sm:gap-8 sm:px-6 lg:min-h-0 lg:grid-cols-[2fr_3fr] lg:gap-8 lg:overflow-hidden lg:px-8"
+        >
           {/* Left — image only; sticky on desktop so it never scrolls away */}
           <div className="overflow-hidden rounded-[24px] bg-white shadow-[0_16px_60px_-30px_rgba(15,23,42,0.35)] lg:h-full">
             <div className="flex h-60 items-center justify-center bg-stone-50 p-4 sm:h-[300px] sm:p-6 lg:h-full">
@@ -185,7 +189,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
           </div>
 
           {/* Right — info; scrolls independently on desktop */}
-          <div className="flex flex-col gap-4 lg:overflow-y-auto lg:pb-8">
+          <div className="flex flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
             {/* Title block */}
             <div className="space-y-1.5">
               {item.subtitle ? (
@@ -270,15 +274,18 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
               </div>
             )}
 
-            {/* Scroll hint — mobile only, disappears after first scroll */}
-            {showScrollHint ? (
-              <div aria-hidden="true" className="flex justify-center pb-1 lg:hidden">
-                <ChevronDown className="h-5 w-5 animate-bounce text-slate-300" />
-              </div>
-            ) : null}
-
             {/* CTA */}
-            <div className="sticky bottom-0 space-y-2 border-t border-stone-200/80 bg-[#fcf8f1]/95 py-4 backdrop-blur">
+            <div className="sticky bottom-0 space-y-2 border-t border-stone-200/80 bg-[#fcf8f1]/95 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] backdrop-blur">
+              {showScrollHint ? (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-1/2 top-0 z-10 flex -translate-x-1/2 -translate-y-[60%] justify-center lg:hidden"
+                >
+                  <div className="rounded-full border border-stone-200/80 bg-[#fcf8f1] p-1 shadow-sm">
+                    <ChevronDown className="h-5 w-5 animate-bounce text-slate-400" />
+                  </div>
+                </div>
+              ) : null}
               {item.link ? (
                 <Button
                   asChild
