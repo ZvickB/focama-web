@@ -549,7 +549,7 @@ function OpenLayout(props) {
                   </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="order-2 flex flex-col gap-1 sm:order-1">
+                    <div className="order-2 hidden flex-col gap-1 sm:order-1">
                       <Button
                         type="button"
                         disabled={!hasDiscoveryResults || state.isFinalizing}
