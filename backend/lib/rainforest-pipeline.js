@@ -4,6 +4,7 @@ import { fetchProductDetailsWithCache } from './product-details-cache.js'
 import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './result-filter.js'
 import { buildQuery } from './search-data.js'
 import {
+  appendAffiliateTag,
   formatAmazonPrice,
   getAmazonDomainFromCountryCode,
   normalizeAmazonDomain,
@@ -37,7 +38,7 @@ function normalizeRainforestItem(item, { amazonDomain = 'amazon.com' } = {}) {
     rating: item.rating ?? null,
     reviews: item.ratings_total ?? null,
     thumbnail: item.image || null,
-    product_link: item.link || '',
+    product_link: appendAffiliateTag(item.link || '', amazonDomain),
     snippet: item.description || item.brand || '',
     extensions: [],
     multiple_sources: false,

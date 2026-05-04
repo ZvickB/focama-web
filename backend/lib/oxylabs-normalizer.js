@@ -1,4 +1,5 @@
 import {
+  appendAffiliateTag,
   buildAmazonBaseUrl,
   formatAmazonPrice,
   getAmazonPricePrefix,
@@ -19,9 +20,10 @@ import {
 export function normalizeOxylabsSearchResult(item, { amazonDomain = 'amazon.com' } = {}) {
   const normalizedDomain = normalizeAmazonDomain(amazonDomain) || 'amazon.com'
   const rawLink = item.url || ''
-  const productLink = rawLink.startsWith('http')
+  const baseLink = rawLink.startsWith('http')
     ? rawLink
     : `${buildAmazonBaseUrl(normalizedDomain)}${rawLink}`
+  const productLink = appendAffiliateTag(baseLink, normalizedDomain)
 
   return {
     product_id: item.asin || null,

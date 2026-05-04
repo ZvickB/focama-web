@@ -23,6 +23,11 @@ export const AMAZON_MARKETPLACES = [
   { countryCode: 'TR', domain: 'amazon.com.tr', label: 'Turkey', pricePrefix: 'TRY ' },
 ]
 
+const DOMAIN_TO_AFFILIATE_TAG = {
+  'amazon.com': 'focamai42-20',
+  'amazon.ca': 'focamai4203-20',
+}
+
 const COUNTRY_TO_AMAZON_DOMAIN = Object.fromEntries(
   AMAZON_MARKETPLACES.map(({ countryCode, domain }) => [countryCode, domain]),
 )
@@ -62,6 +67,20 @@ export function buildAmazonBaseUrl(domain = 'amazon.com') {
 export function getAmazonPricePrefix(domain = 'amazon.com') {
   const normalizedDomain = normalizeAmazonDomain(domain) || 'amazon.com'
   return DOMAIN_TO_PRICE_PREFIX[normalizedDomain] || '$'
+}
+
+export function appendAffiliateTag(url, domain = 'amazon.com') {
+  if (!url) return url
+  const normalizedDomain = normalizeAmazonDomain(domain) || 'amazon.com'
+  const tag = DOMAIN_TO_AFFILIATE_TAG[normalizedDomain]
+  if (!tag) return url
+  try {
+    const u = new URL(url)
+    u.searchParams.set('tag', tag)
+    return u.toString()
+  } catch {
+    return url
+  }
 }
 
 export function formatAmazonPrice(value, domain = 'amazon.com') {
