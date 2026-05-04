@@ -68,7 +68,7 @@ function appendAmazonDomain(searchParams, amazonDomain) {
   }
 }
 
-function resolveAmazonDomainForRequest(selectedAmazonDomain, resolvedAmazonDomain) {
+export function resolveAmazonDomainForRequest(selectedAmazonDomain, resolvedAmazonDomain) {
   if (selectedAmazonDomain && selectedAmazonDomain !== AMAZON_MARKETPLACE_AUTO) {
     return selectedAmazonDomain
   }

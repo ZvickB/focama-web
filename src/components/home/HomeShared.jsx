@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
+import { useAmazonStore } from '@/contexts/useAmazonStore.js'
+import { resolveAmazonDomainForRequest } from '@/components/home/useGuidedSearch.js'
 
 const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 import {
@@ -89,11 +91,31 @@ export function ResultSkeleton({ className = '' }) {
   )
 }
 
+function resolveAmazonRetailerLabel(subtitle, selectedAmazonDomain, resolvedAmazonDomain) {
+  if (subtitle !== 'Amazon') return subtitle
+  const domain = resolveAmazonDomainForRequest(selectedAmazonDomain, resolvedAmazonDomain) || 'amazon.com'
+  return domain.replace(/^amazon\./, 'Amazon.')
+}
+
 export function ProductDetailModal({ item, onClose, onRetailerClick }) {
   const fitReason = item?.fit_reason || item?.fitReason || ''
   const caveat = item?.caveat || ''
   const featureBullets = Array.isArray(item?.feature_bullets) ? item.feature_bullets.slice(0, 5) : []
   const enrichmentReady = Boolean(fitReason)
+  const { selectedAmazonDomain, resolvedAmazonDomain } = useAmazonStore()
+  const retailerLabel = resolveAmazonRetailerLabel(item?.subtitle, selectedAmazonDomain, resolvedAmazonDomain)
+  const outerRef = useRef(null)
+  const [showScrollHint, setShowScrollHint] = useState(true)
+
+  useEffect(() => {
+    const el = outerRef.current
+    if (!el) return
+    function handleScroll() {
+      if (el.scrollTop > 40) setShowScrollHint(false)
+    }
+    el.addEventListener('scroll', handleScroll, { passive: true })
+    return () => el.removeEventListener('scroll', handleScroll)
+  }, [])
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -133,6 +155,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 8 }}
         transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+        ref={outerRef}
         className="max-h-[94vh] w-full overflow-y-auto rounded-t-[32px] bg-[#fcf8f1] shadow-2xl lg:flex lg:max-h-[88vh] lg:max-w-4xl lg:flex-col lg:overflow-hidden lg:rounded-[32px]"
         onClick={(event) => event.stopPropagation()}
       >
@@ -148,7 +171,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
           </Button>
         </div>
 
-        <div className="grid gap-6 px-4 pb-4 sm:gap-8 sm:px-6 sm:pb-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[1fr_1.1fr] lg:gap-8 lg:overflow-hidden lg:px-8 lg:pb-0">
+        <div className="grid gap-6 px-4 pb-4 sm:gap-8 sm:px-6 sm:pb-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[2fr_3fr] lg:gap-8 lg:overflow-hidden lg:px-8 lg:pb-0">
           {/* Left — image only; sticky on desktop so it never scrolls away */}
           <div className="overflow-hidden rounded-[24px] bg-white shadow-[0_16px_60px_-30px_rgba(15,23,42,0.35)] lg:h-full">
             <div className="flex h-60 items-center justify-center bg-stone-50 p-4 sm:h-[300px] sm:p-6 lg:h-full">
@@ -220,9 +243,9 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                className="space-y-2.5 border-l-2 border-primary/40 pl-4"
+                className="space-y-3 rounded-2xl bg-primary/5 p-4"
               >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-primary/70">
+                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-primary">
                   Why we picked it
                 </p>
                 <p className="text-sm leading-6 text-slate-700">{fitReason}</p>
@@ -246,6 +269,13 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
               </div>
             )}
 
+            {/* Scroll hint — mobile only, disappears after first scroll */}
+            {showScrollHint ? (
+              <div aria-hidden="true" className="flex justify-center pb-1 lg:hidden">
+                <ChevronDown className="h-5 w-5 animate-bounce text-slate-300" />
+              </div>
+            ) : null}
+
             {/* CTA */}
             <div className="sticky bottom-0 space-y-2 border-t border-stone-200/80 bg-[#fcf8f1]/95 py-4 backdrop-blur">
               {item.link ? (
@@ -254,7 +284,7 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
                   className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
                 >
                   <a href={item.link} target="_blank" rel="noreferrer" onClick={onRetailerClick}>
-                    {item.subtitle ? `View on ${item.subtitle}` : 'View on retailer site'}
+                    {retailerLabel ? `View on ${retailerLabel}` : 'View on retailer site'}
                     <ArrowUpRight className="h-4 w-4" />
                   </a>
                 </Button>
