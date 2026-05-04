@@ -93,7 +93,8 @@ export function ResultSkeleton({ className = '' }) {
 
 function resolveAmazonRetailerLabel(subtitle, selectedAmazonDomain, resolvedAmazonDomain) {
   if (subtitle !== 'Amazon') return subtitle
-  const domain = resolveAmazonDomainForRequest(selectedAmazonDomain, resolvedAmazonDomain) || 'amazon.com'
+  const domain = resolveAmazonDomainForRequest(selectedAmazonDomain, resolvedAmazonDomain)
+  if (!domain || !domain.startsWith('amazon.')) return 'Amazon.com'
   return domain.replace(/^amazon\./, 'Amazon.')
 }
 
