@@ -17,32 +17,13 @@ import { useSearchProgress } from '@/contexts/useSearchProgress.js'
 import { getOrCreateAnalyticsSessionId } from '@/lib/analytics.js'
 
 const HERO_SUBLINE = "Tell us what you need. We'll find your six."
-const BACKGROUND_MODE_STORAGE_KEY = 'focamai_home_background_mode'
 
-function getBackgroundModeStorage() {
-  if (typeof window === 'undefined') {
-    return null
-  }
-
-  try {
-    return window.localStorage
-  } catch {
-    return null
-  }
-}
-
-function readBackgroundMode() {
-  const storage = getBackgroundModeStorage()
-  const savedMode = storage?.getItem(BACKGROUND_MODE_STORAGE_KEY)
-  return savedMode === 'soft' ? 'soft' : 'plain'
-}
-
-function applyBackgroundMode(mode) {
+function applyPlainBackgroundMode() {
   if (typeof document === 'undefined') {
     return
   }
 
-  document.documentElement.dataset.bgMode = mode
+  document.documentElement.dataset.bgMode = 'plain'
 }
 
 function CharCounter({ current, max }) {
@@ -192,7 +173,7 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
 
   return (
     <div className="space-y-2">
-      <div className="inline-flex items-center gap-2 rounded-full bg-primary/8 px-3 py-1 text-sm text-primary">
+      <div className="inline-flex items-center gap-2 rounded-full border border-[#e6d8c5] bg-[linear-gradient(180deg,rgba(250,245,239,0.98),rgba(255,255,255,0.96))] px-3 py-1 text-sm text-[#80573f] shadow-[0_10px_30px_-24px_rgba(120,87,63,0.5)]">
         <Sparkles className={`h-4 w-4 ${isGeneratingPrompt ? 'animate-pulse' : ''}`} />
         The more you share, the better the picks
       </div>
@@ -248,7 +229,7 @@ function TimingPanel({ requestTiming }) {
   }
 
   return (
-    <section className="w-full max-w-5xl rounded-[28px] border border-dashed border-stone-200 bg-stone-50/70 p-4 sm:p-5">
+    <section className="w-full max-w-5xl rounded-[28px] border border-dashed border-[#e6dacb] bg-[linear-gradient(180deg,rgba(250,246,240,0.68),rgba(255,255,255,0.92))] p-4 sm:p-5">
       <div className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
           Dev timing
@@ -262,7 +243,7 @@ function TimingPanel({ requestTiming }) {
         {entries.map(([label, timing]) => (
           <div
             key={label}
-            className="rounded-[22px] border border-stone-200/80 bg-white/85 p-4 text-sm text-slate-600"
+            className="rounded-[22px] border border-[#ece1d3] bg-white/92 p-4 text-sm text-slate-600 shadow-[0_18px_46px_-38px_rgba(120,87,63,0.24)]"
           >
             <p className="font-medium text-slate-900">{label}</p>
             <p className="mt-2">Client total: {formatTimingValue(timing?.client?.totalMs)}</p>
@@ -322,11 +303,7 @@ function OpenLayout(props) {
     showTimingPanel,
     state,
     submittedQuery,
-    backgroundMode,
-    onToggleBackgroundMode,
   } = props
-
-  const isPlainBackground = backgroundMode === 'plain'
 
   useEffect(() => {
     const revealTimer = window.setTimeout(() => {
@@ -463,20 +440,17 @@ function OpenLayout(props) {
     <>
       <main className="px-3 pt-4 pb-6 sm:px-6 sm:pt-5 sm:pb-8 lg:px-6 xl:px-8">
       <div className="mx-auto flex max-w-7xl flex-col items-center gap-8">
-        <section className="w-full max-w-4xl space-y-6 text-center">
+        <section className="relative w-full max-w-4xl overflow-hidden rounded-[36px] px-2 py-3 text-center sm:px-4 sm:py-5">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 h-[78%] opacity-90"
+            style={{
+              background:
+                'radial-gradient(circle at 20% 22%, rgba(229,155,38,0.11), transparent 26%), radial-gradient(circle at 78% 18%, rgba(15,97,117,0.09), transparent 24%), radial-gradient(circle at 50% 0%, rgba(255,255,255,0.9), transparent 56%)',
+            }}
+          />
+          <div className="relative space-y-6">
           <div className="space-y-4">
-            <div className="flex justify-center">
-              <button
-                type="button"
-                aria-pressed={isPlainBackground}
-                aria-label={isPlainBackground ? 'Switch to soft background' : 'Switch to white background'}
-                onClick={onToggleBackgroundMode}
-                className="inline-flex items-center gap-2 rounded-full border border-stone-200/80 bg-white/88 px-3.5 py-2 text-sm font-medium text-slate-600 shadow-[0_12px_30px_-22px_rgba(15,23,42,0.35)] transition hover:border-stone-300 hover:text-slate-900"
-              >
-                <span className="text-slate-400">Background:</span>
-                <span className="text-slate-900">{isPlainBackground ? '#fff' : 'Soft'}</span>
-              </button>
-            </div>
             <div className="space-y-2">
               <img
                 src={wordmark}
@@ -486,7 +460,7 @@ function OpenLayout(props) {
             </div>
             <div className="space-y-3">
               <h2
-                className={`text-2xl font-medium tracking-tight text-primary transition-opacity duration-300 sm:text-4xl ${
+                className={`text-2xl font-medium tracking-tight text-[#155f70] transition-opacity duration-300 sm:text-4xl ${
                   showHeroCopy ? 'opacity-100' : 'opacity-0'
                 }`}
               >
@@ -526,12 +500,10 @@ function OpenLayout(props) {
           <form className="flex justify-center" onSubmit={state.beginGuidedSearch}>
             <div
               ref={refinementRef}
-              className={`scroll-mt-28 w-full max-w-3xl rounded-[36px] border p-4 text-left shadow-[0_28px_120px_-72px_rgba(15,23,42,0.45)] backdrop-blur transition-all duration-300 sm:p-5 ${
+                  className={`scroll-mt-28 w-full max-w-3xl rounded-[36px] border p-4 text-left shadow-[0_28px_120px_-72px_rgba(15,23,42,0.45)] backdrop-blur transition-all duration-300 sm:p-5 ${
                 hasStartedSearch
-                  ? 'border-primary/25 bg-white/92 shadow-[0_36px_140px_-68px_rgba(15,23,42,0.5)]'
-                  : isPlainBackground
-                    ? 'border-stone-200 bg-white'
-                    : 'border-white/70 bg-white/80'
+                  ? 'border-[#e4d5c2] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(251,248,244,0.96))] shadow-[0_36px_140px_-68px_rgba(15,23,42,0.5)]'
+                  : 'border-[#e4d7c6] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,246,241,0.94))]'
               }`}
             >
               <div className="flex flex-col gap-3 md:flex-row md:items-center">
@@ -550,7 +522,7 @@ function OpenLayout(props) {
                       prewarmBackend()
                     }}
                     placeholder='Try "travel stroller for airplane", "ergonomic office chair", or "lego botanical set"'
-                    className="h-16 w-full rounded-[28px] border border-stone-200 bg-white px-5 text-lg text-slate-900 outline-none transition placeholder:text-[15px] placeholder:text-slate-400 sm:placeholder:text-base focus:border-primary/50"
+                    className="h-16 w-full rounded-[28px] border border-[#e5dacb] bg-white px-5 text-lg text-slate-900 outline-none transition placeholder:text-[15px] placeholder:text-slate-400 sm:placeholder:text-base focus:border-primary/50 focus:shadow-[0_0_0_4px_rgba(15,97,117,0.08)]"
                     disabled={isLoading}
                   />
                   {shouldShowCharCounter(state.productQuery.length, MAX_PRODUCT_QUERY_LENGTH) ? (
@@ -562,9 +534,9 @@ function OpenLayout(props) {
                 <Button
                   type={hasStartedSearch ? 'button' : 'submit'}
                   disabled={isLoading}
-                  className={`h-16 rounded-[28px] px-6 text-base text-primary-foreground ${
+                  className={`h-16 rounded-[28px] px-6 text-base text-primary-foreground shadow-[0_22px_48px_-28px_rgba(15,97,117,0.38)] transition-transform hover:-translate-y-[1px] ${
                     hasStartedSearch
-                      ? 'bg-primary/70 hover:bg-primary/80'
+                      ? 'bg-primary/75 hover:bg-primary/85'
                       : 'bg-primary hover:bg-primary/90'
                   }`}
                   onClick={
@@ -603,8 +575,8 @@ function OpenLayout(props) {
                     <div
                       className={`rounded-[30px] border bg-white p-1 transition-all duration-300 ${
                         state.isGeneratingPrompt
-                          ? 'border-primary/20 shadow-[0_20px_60px_-42px_rgba(37,99,235,0.55)] ring-1 ring-primary/15'
-                          : 'border-stone-200 shadow-[0_20px_60px_-36px_rgba(15,23,42,0.25)]'
+                          ? 'border-primary/20 shadow-[0_24px_64px_-42px_rgba(15,97,117,0.34)] ring-1 ring-primary/15'
+                          : 'border-[#e5dacb] shadow-[0_22px_64px_-42px_rgba(120,87,63,0.24)]'
                       }`}
                     >
                       <Label htmlFor="open-follow-up-notes" className="sr-only">
@@ -653,9 +625,9 @@ function OpenLayout(props) {
                         type="button"
                         disabled={!hasDiscoveryResults || state.isFinalizing}
                         variant="outline"
-                        className={`h-12 w-full rounded-[24px] border-stone-300 px-6 text-sm font-medium transition sm:w-auto ${
+                        className={`h-12 w-full rounded-[24px] border-[#dbcdbb] px-6 text-sm font-medium transition sm:w-auto ${
                           hasDiscoveryResults && !state.isFinalizing
-                            ? 'bg-white text-slate-700 hover:border-stone-400 hover:bg-stone-50 hover:text-slate-900'
+                            ? 'bg-white/94 text-slate-700 shadow-[0_14px_34px_-28px_rgba(120,87,63,0.24)] hover:border-[#ccbba5] hover:bg-[#fdfaf6] hover:text-slate-900'
                             : 'text-slate-400'
                         }`}
                         onClick={onShowProductsNow}
@@ -670,7 +642,7 @@ function OpenLayout(props) {
                       <Button
                         type="button"
                         disabled={!hasDiscoveryResults || state.isFinalizing}
-                        className="h-14 w-full rounded-[24px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_18px_40px_-24px_rgba(37,99,235,0.7)] hover:bg-primary/90 sm:w-auto sm:min-w-[220px]"
+                        className="h-14 w-full rounded-[24px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_24px_52px_-28px_rgba(15,97,117,0.42)] hover:bg-primary/90 sm:w-auto sm:min-w-[220px]"
                         onClick={onFinalize}
                       >
                         {state.isFinalizing ? 'Narrowing your picks...' : 'Show focused picks'}
@@ -689,6 +661,7 @@ function OpenLayout(props) {
               ) : null}
             </div>
           </form>
+          </div>
         </section>
 
         <section className="w-full max-w-[1100px] space-y-4">
@@ -698,7 +671,7 @@ function OpenLayout(props) {
                 <div
                   role="status"
                   aria-live="polite"
-                  className="mb-4 rounded-[24px] border border-stone-200/80 bg-stone-50/90 px-4 py-4 text-left text-slate-600 sm:px-5"
+                  className="mb-4 rounded-[24px] border border-[#e6dacc] bg-[linear-gradient(180deg,rgba(250,246,240,0.9),rgba(255,255,255,0.96))] px-4 py-4 text-left text-slate-600 shadow-[0_22px_58px_-42px_rgba(120,87,63,0.22)] sm:px-5"
                 >
                   <div className="flex items-start gap-3">
                     <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
@@ -766,31 +739,13 @@ export function HomeExperience() {
   const state = useGuidedSearch()
   const showTimingPanel = shouldShowTimingPanel()
   const [feedbackSessionId] = useState(() => getOrCreateAnalyticsSessionId())
-  const [backgroundMode, setBackgroundMode] = useState(readBackgroundMode)
   const feedbackStage = getFeedbackStage(state)
 
   useEffect(() => {
-    applyBackgroundMode(backgroundMode)
-
-    const storage = getBackgroundModeStorage()
-    if (!storage) {
-      return
-    }
-
-    if (backgroundMode === 'soft') {
-      storage.setItem(BACKGROUND_MODE_STORAGE_KEY, backgroundMode)
-      return
-    }
-
-    storage.removeItem(BACKGROUND_MODE_STORAGE_KEY)
-  }, [backgroundMode])
-
-  function handleToggleBackgroundMode() {
-    setBackgroundMode((currentMode) => (currentMode === 'plain' ? 'soft' : 'plain'))
-  }
+    applyPlainBackgroundMode()
+  }, [])
 
   const layoutProps = {
-    backgroundMode,
     displayedResults: state.displayedResults,
     errorMessage: state.errorMessage,
     hasFinalResults: state.hasFinalResults,
@@ -800,7 +755,6 @@ export function HomeExperience() {
     onRetailerClick: state.handleRetailerClick,
     onSelectProduct: state.handleSelectProduct,
     onShowProductsNow: state.handleShowProductsNow,
-    onToggleBackgroundMode: handleToggleBackgroundMode,
     prompt: state.refinementPrompt,
     previousResults: state.previousResults,
     resetToNewSearch: state.resetToNewSearch,

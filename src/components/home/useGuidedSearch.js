@@ -339,6 +339,8 @@ export function useGuidedSearch() {
   const [suggestedRetryQuery, setSuggestedRetryQuery] = useState('')
   const [retryCount, setRetryCount] = useState(0)
   const [selectionState, setSelectionState] = useState(null)
+  const [analyticsSearchId, setAnalyticsSearchId] = useState('')
+  const [analyticsSessionId, setAnalyticsSessionId] = useState('')
   const [requestTiming, setRequestTiming] = useState({
     discover: null,
     finalize: null,
@@ -349,6 +351,7 @@ export function useGuidedSearch() {
   const [isDiscovering, setIsDiscovering] = useState(false)
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false)
   const [isEnrichmentReady, setIsEnrichmentReady] = useState(false)
+  const [isEnrichmentSettled, setIsEnrichmentSettled] = useState(false)
   const activeSearchIdRef = useRef(0)
   const enrichmentPollRef = useRef({ source: null, timerId: null, searchId: 0 })
   const analyticsSearchIdRef = useRef('')
@@ -394,6 +397,7 @@ export function useGuidedSearch() {
     setPreviousResults([])
     setSelectionState(null)
     setIsEnrichmentReady(false)
+    setIsEnrichmentSettled(false)
     setErrorMessage(message)
   }
 
@@ -411,6 +415,7 @@ export function useGuidedSearch() {
 
         if (performance.now() - startedAt > ENRICHMENT_POLL_TIMEOUT_MS) {
           stopEnrichmentPolling()
+          setIsEnrichmentSettled(true)
           return
         }
 
@@ -421,10 +426,13 @@ export function useGuidedSearch() {
             return
           }
 
-          if (payload.ready && Array.isArray(payload.entries) && payload.entries.length > 0) {
+          if (payload.ready) {
             stopEnrichmentPolling()
-            setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
-            setIsEnrichmentReady(true)
+            if (Array.isArray(payload.entries) && payload.entries.length > 0) {
+              setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
+              setIsEnrichmentReady(true)
+            }
+            setIsEnrichmentSettled(true)
             return
           }
         } catch {
@@ -456,13 +464,17 @@ export function useGuidedSearch() {
       try {
         const payload = JSON.parse(event.data)
 
-        if (payload.ready && Array.isArray(payload.entries) && payload.entries.length > 0) {
+        if (payload.ready) {
           stopEnrichmentPolling()
-          setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
-          setIsEnrichmentReady(true)
+          if (Array.isArray(payload.entries) && payload.entries.length > 0) {
+            setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
+            setIsEnrichmentReady(true)
+          }
+          setIsEnrichmentSettled(true)
         }
       } catch {
         stopEnrichmentPolling()
+        setIsEnrichmentSettled(true)
       }
     }
 
@@ -499,6 +511,7 @@ export function useGuidedSearch() {
     setResults(finalizedResults)
     setRevealedBadgeResultsKey('')
     setIsEnrichmentReady(hasInlineEnrichment)
+    setIsEnrichmentSettled(hasInlineEnrichment)
 
     const token = variables.discoveryToken
     const query = variables.query
@@ -702,6 +715,7 @@ export function useGuidedSearch() {
     setShowPreviewResults(false)
     setRefinementPrompt(null)
     setIsEnrichmentReady(false)
+    setIsEnrichmentSettled(false)
     hasTrackedRefinementViewRef.current = false
     hasTrackedPreviewImpressionsRef.current = false
   }
@@ -740,7 +754,10 @@ export function useGuidedSearch() {
     setIsDiscovering(false)
     setIsGeneratingPrompt(false)
     setIsEnrichmentReady(false)
+    setIsEnrichmentSettled(false)
     analyticsSearchIdRef.current = ''
+    setAnalyticsSearchId('')
+    setAnalyticsSessionId('')
     hasTrackedRefinementViewRef.current = false
     hasTrackedPreviewImpressionsRef.current = false
   }
@@ -762,6 +779,8 @@ export function useGuidedSearch() {
     const nextAmazonDomain = resolveAmazonDomainForRequest(selectedAmazonDomain, resolvedAmazonDomain)
     analyticsSearchIdRef.current = analyticsSearchId
     analyticsSessionIdRef.current = analyticsSessionId
+    setAnalyticsSearchId(analyticsSearchId)
+    setAnalyticsSessionId(analyticsSessionId)
 
     resetGuidedState(normalizedQuery, nextAmazonDomain)
     setIsDiscovering(true)
@@ -1091,6 +1110,8 @@ export function useGuidedSearch() {
   }
 
   return {
+    analyticsSearchId,
+    analyticsSessionId,
     candidatePool,
     displayedResults,
     errorMessage,
@@ -1101,6 +1122,7 @@ export function useGuidedSearch() {
     handleSelectProduct,
     isDiscovering,
     isEnrichmentReady,
+    isEnrichmentSettled,
     isFinalizing,
     isGeneratingRetryAdvice: retryAdviceMutation.isPending,
     isGeneratingPrompt,

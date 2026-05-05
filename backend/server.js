@@ -18,6 +18,7 @@ import {
   truncateText,
 } from './lib/text-sanitizers.js'
 import { createRetryAdviceHandler } from './lib/handlers/retry-advice-handler.js'
+import { createFeedbackHandler } from './lib/handlers/feedback-handler.js'
 import { createSupabaseHealthHandler } from './lib/handlers/supabase-health-handler.js'
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
 import { DEFAULT_FILTER_CONFIG } from './lib/result-filter.js'
@@ -48,6 +49,7 @@ const LIVE_RESULT_FILTER_CONFIG = {
 }
 const FINALIZE_BODY_LIMIT_BYTES = 32 * 1024
 const RETRY_ADVICE_BODY_LIMIT_BYTES = 16 * 1024
+const FEEDBACK_BODY_LIMIT_BYTES = 16 * 1024
 const FINALIZE_MAX_CANDIDATES = LIVE_RESULT_FILTER_CONFIG.candidatePoolSize
 const FINALIZE_MAX_NOTE_LENGTH = 500
 const FINALIZE_MAX_REJECTION_FEEDBACK_LENGTH = 300
@@ -56,6 +58,14 @@ const RETRY_ADVICE_MAX_TITLE_LENGTH = 160
 const FINALIZE_MAX_PRIORITIES = 8
 const FINALIZE_MAX_PRIORITY_LENGTH = 80
 const FINALIZE_MAX_RETRY_COUNT = 2
+const FEEDBACK_MAX_SESSION_ID_LENGTH = 120
+const FEEDBACK_MAX_SEARCH_ID_LENGTH = 100
+const FEEDBACK_MAX_STAGE_LENGTH = 40
+const FEEDBACK_MAX_PAGE_LENGTH = 120
+const FEEDBACK_MAX_QUERY_LENGTH = 200
+const FEEDBACK_MAX_FREE_TEXT_LENGTH = 2000
+const FEEDBACK_MAX_EMAIL_LENGTH = 240
+const FEEDBACK_MAX_SELECTED_PRODUCT_ID_LENGTH = 200
 const ENRICHMENT_STREAM_TIMEOUT_MS = 30000
 const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
 const CACHE_SCOPE_RAINFOREST = 'rainforest_discovery'
@@ -789,6 +799,18 @@ export const handleRetryAdvice = createRetryAdviceHandler({
   maxShortlistItems: RETRY_ADVICE_MAX_SHORTLIST_ITEMS,
   maxShortlistTitleLength: RETRY_ADVICE_MAX_TITLE_LENGTH,
   rateLimitWaitMessage: RATE_LIMIT_WAIT_MESSAGE,
+})
+
+export const handleFeedbackSubmission = createFeedbackHandler({
+  bodyLimitBytes: FEEDBACK_BODY_LIMIT_BYTES,
+  maxEmailLength: FEEDBACK_MAX_EMAIL_LENGTH,
+  maxFreeTextLength: FEEDBACK_MAX_FREE_TEXT_LENGTH,
+  maxPageLength: FEEDBACK_MAX_PAGE_LENGTH,
+  maxQueryLength: FEEDBACK_MAX_QUERY_LENGTH,
+  maxSearchIdLength: FEEDBACK_MAX_SEARCH_ID_LENGTH,
+  maxSelectedProductIdLength: FEEDBACK_MAX_SELECTED_PRODUCT_ID_LENGTH,
+  maxSessionIdLength: FEEDBACK_MAX_SESSION_ID_LENGTH,
+  maxStageLength: FEEDBACK_MAX_STAGE_LENGTH,
 })
 
 export const handleSupabaseHealth = createSupabaseHealthHandler()
@@ -1597,6 +1619,11 @@ export function createApiServer() {
 
     if (request.method === 'POST' && requestUrl.pathname === '/api/analytics/track') {
       await handleAnalyticsTrack(request, response)
+      return
+    }
+
+    if (request.method === 'POST' && requestUrl.pathname === '/api/feedback') {
+      await handleFeedbackSubmission(request, response)
       return
     }
 

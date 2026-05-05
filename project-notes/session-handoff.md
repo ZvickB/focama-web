@@ -27,6 +27,7 @@
 - `GET /api/search/enrichment-stream` is the first enrichment path from the frontend; it is cross-origin enabled for the Render backend, and if the stream fails, the frontend falls back to polling.
 - `GET /api/search/enrichment` remains the polling fallback and script-friendly read path.
 - `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist.
+- `POST /api/feedback` stores tester feedback from the homepage FAB.
 
 ## Key files
 - App route shell: `/src/App.jsx`

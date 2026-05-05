@@ -11,6 +11,7 @@
 
 ## Homepage flow
 - First load shows an HTML boot splash from `index.html`.
+- The active homepage ships in the plain white visual mode; the earlier background toggle is no longer exposed in the production UI.
 - The user starts with a product query in the homepage input.
 - After submit:
   - guided discovery starts
@@ -21,6 +22,7 @@
 - `Show focused picks` runs guided finalize and narrows to the final 6.
 - `Start a new search` clears the guided state and returns to a fresh search box.
 - After final results appear, the user can open the retry panel and ask for a better search direction.
+- A tester-facing `Feedback` FAB appears after search starts, or after a short delay on the homepage, and opens a lightweight feedback sheet.
 
 ## Guided backend flow
 - `GET /api/search/rainforest-discover`
@@ -45,6 +47,9 @@
 - `POST /api/search/retry-advice`
   - reads the rejected shortlist plus user feedback
   - returns `recommendation`, `suggestedQuery`, and `rationale`
+- `POST /api/feedback`
+  - stores lightweight tester feedback
+  - accepts quick structured answers, optional free text, optional email, and current journey context
 - `GET /api/search/debug`, `GET /api/search/cache`, and `/api/search/live`
   - debugging/support routes, not the main product flow
 
@@ -81,6 +86,7 @@
 - The homepage timing panel appears in development or when `?timing=1` is present.
 - The frontend tries SSE enrichment first and falls back to polling if the stream errors.
 - Analytics events post to `/api/analytics/track`.
+- Tester feedback writes to a dedicated `tester_feedback` table in Supabase when configured, with local file fallback in development.
 
 ## Marketplace direction
 - Focamai narrows choices before the user goes into a retailer marketplace.

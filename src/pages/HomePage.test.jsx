@@ -83,19 +83,13 @@ describe('HomePage', () => {
     expect(screen.getByText('Enter a product topic to get started.')).toBeInTheDocument()
   })
 
-  it('toggles the homepage background mode and persists the choice', async () => {
-    const user = userEvent.setup()
-
+  it('uses the plain homepage background mode without showing a toggle control', () => {
     renderHomePage()
 
-    const toggle = screen.getByRole('button', { name: /switch to soft background/i })
     expect(document.documentElement.dataset.bgMode).toBe('plain')
-
-    await user.click(toggle)
-
-    expect(document.documentElement.dataset.bgMode).toBe('soft')
-    expect(window.localStorage.getItem('focamai_home_background_mode')).toBe('soft')
-    expect(screen.getByRole('button', { name: /switch to white background/i })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /switch to (soft|white) background/i }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows a validation error for obvious gibberish queries', async () => {

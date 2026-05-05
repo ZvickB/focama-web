@@ -53,6 +53,7 @@ vi.mock('./lib/search-storage.js', () => ({
   isSupabaseConfigured: vi.fn(() => false),
   readProductDetailsCacheEntries: vi.fn().mockResolvedValue(new Map()),
   readStoredSearchCacheEntry: vi.fn(),
+  recordTesterFeedback: vi.fn().mockResolvedValue(undefined),
   recordSearchHistory: vi.fn(),
   writeProductDetailsCacheEntries: vi.fn().mockResolvedValue(undefined),
   writeStoredSearchCacheEntry: vi.fn(),
@@ -63,6 +64,7 @@ import {
   handleCachedSearch,
   handleEnrichmentPoll,
   handleEnrichmentStream,
+  handleFeedbackSubmission,
   handleFinalizeSelection,
   handleRetryAdvice,
   handleSearchDebug,
@@ -72,7 +74,7 @@ import { ALLOWED_ORIGIN } from './lib/http.js'
 import { resetRateLimitStore } from './lib/rate-limit.js'
 import { haikuLockWinnersAndBadges, miniEnrichSelectedCandidates } from './lib/ai-selector.js'
 import { generateRetryAdvice } from './lib/retry-advice.js'
-import { getSupabaseHealth, readStoredSearchCacheEntry, writeStoredSearchCacheEntry } from './lib/search-storage.js'
+import { getSupabaseHealth, readStoredSearchCacheEntry, recordTesterFeedback, writeStoredSearchCacheEntry } from './lib/search-storage.js'
 import {
   getEnv,
 } from './lib/search-data.js'
@@ -364,6 +366,76 @@ describe('server handlers', () => {
     expect(generateRetryAdvice).not.toHaveBeenCalled()
     expect(JSON.parse(response.body)).toEqual({
       error: 'Request body is too large.',
+    })
+  })
+
+  it('stores tester feedback with search context', async () => {
+    const response = createResponseRecorder()
+
+    await handleFeedbackSubmission(
+      createFinalizeRequest(
+        JSON.stringify({
+          sessionId: 'session-123',
+          searchId: 'search-456',
+          page: '/',
+          stageReached: 'finalized',
+          wasSimple: 'yes',
+          foundWhatYouWanted: 'partly',
+          enjoyedExperience: 'yes',
+          freeText: 'The shortlist was strong, but I wanted clearer tradeoffs sooner.',
+          email: 'tester@example.com',
+          queryText: 'travel stroller',
+          resultsSeen: true,
+          finalized: true,
+          selectedProductId: 'result-1',
+          metadata: {
+            source: 'fab',
+            extra: { note: 'nested values become strings when needed' },
+          },
+        }),
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(202)
+    expect(recordTesterFeedback).toHaveBeenCalledWith({
+      email: 'tester@example.com',
+      finalized: true,
+      foundWhatYouWanted: 'partly',
+      freeText: 'The shortlist was strong, but I wanted clearer tradeoffs sooner.',
+      enjoyedExperience: 'yes',
+      metadata: {
+        extra: '{"note":"nested values become strings when needed"}',
+        source: 'fab',
+      },
+      page: '/',
+      queryText: 'travel stroller',
+      resultsSeen: true,
+      searchId: 'search-456',
+      selectedProductId: 'result-1',
+      sessionId: 'session-123',
+      stageReached: 'finalized',
+      wasSimple: 'yes',
+    })
+  })
+
+  it('rejects tester feedback without any answers', async () => {
+    const response = createResponseRecorder()
+
+    await handleFeedbackSubmission(
+      createFinalizeRequest(
+        JSON.stringify({
+          sessionId: 'session-123',
+          stageReached: 'home',
+        }),
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(400)
+    expect(recordTesterFeedback).not.toHaveBeenCalled()
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'Add at least one answer before sending feedback.',
     })
   })
 
@@ -1491,7 +1563,7 @@ describe('server handlers', () => {
       usage: null,
     })
 
-    const fetchMock = vi.fn(async (_requestUrl, requestInit) => ({
+    const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({
         results: [{

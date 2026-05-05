@@ -17,8 +17,10 @@ const ANALYTICS_SEARCH_RUNS_TABLE = 'analytics_search_runs'
 const ANALYTICS_SEARCH_EVENTS_TABLE = 'analytics_search_events'
 const ANALYTICS_RESULT_IMPRESSIONS_TABLE = 'analytics_result_impressions'
 const ANALYTICS_RESULT_CLICKS_TABLE = 'analytics_result_clicks'
+const TESTER_FEEDBACK_TABLE = 'tester_feedback'
 const DEFAULT_CACHE_TTL_MINUTES = 1440
 const PRODUCT_DETAILS_CACHE_PATH = resolve(process.cwd(), 'temp-data', 'product-details-cache.json')
+const TESTER_FEEDBACK_PATH = resolve(process.cwd(), 'temp-data', 'tester-feedback.json')
 
 let supabaseAdminClient = null
 
@@ -313,6 +315,25 @@ export async function readStoredSearchCacheEntry({ productQuery, details, scope 
   }
 
   return localEntry
+}
+
+function readLocalTesterFeedbackFile() {
+  if (!existsSync(TESTER_FEEDBACK_PATH)) {
+    return { entries: [] }
+  }
+
+  try {
+    const fileContents = readFileSync(TESTER_FEEDBACK_PATH, 'utf8')
+    const parsed = JSON.parse(fileContents)
+
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.entries)) {
+      return { entries: [] }
+    }
+
+    return parsed
+  } catch {
+    return { entries: [] }
+  }
 }
 
 export async function writeStoredSearchCacheEntry({
@@ -679,6 +700,60 @@ export async function recordAnalyticsResultClick(click) {
   }
 }
 
+export async function recordTesterFeedback(feedback) {
+  const payload = {
+    email: feedback?.email || null,
+    finalized: Boolean(feedback?.finalized),
+    found_what_you_wanted: feedback?.foundWhatYouWanted || null,
+    free_text: feedback?.freeText || null,
+    enjoyed_experience: feedback?.enjoyedExperience || null,
+    metadata:
+      feedback?.metadata && typeof feedback.metadata === 'object' && !Array.isArray(feedback.metadata)
+        ? feedback.metadata
+        : {},
+    page: feedback?.page || '/',
+    query_text: feedback?.queryText || null,
+    results_seen: Boolean(feedback?.resultsSeen),
+    search_id: feedback?.searchId || null,
+    selected_product_id: feedback?.selectedProductId || null,
+    session_id: feedback?.sessionId || null,
+    stage_reached: feedback?.stageReached || 'home',
+    was_simple: feedback?.wasSimple || null,
+  }
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdminClient()
+      const { error } = await supabase.from(TESTER_FEEDBACK_TABLE).insert(payload)
+
+      if (!error) {
+        return
+      }
+
+      throw error
+    } catch (error) {
+      logStorageWarning('Tester feedback write fell back to local storage', error)
+    }
+  }
+
+  try {
+    mkdirSync(resolve(process.cwd(), 'temp-data'), { recursive: true })
+    const existingFeedback = readLocalTesterFeedbackFile()
+    const entries = Array.isArray(existingFeedback.entries) ? existingFeedback.entries : []
+    entries.push({
+      ...payload,
+      created_at: new Date().toISOString(),
+    })
+
+    writeFileSync(
+      TESTER_FEEDBACK_PATH,
+      JSON.stringify({ entries }, null, 2),
+    )
+  } catch (error) {
+    logStorageWarning('Tester feedback local write failed', error)
+  }
+}
+
 async function checkSupabaseTable(supabase, tableName, columnName) {
   const { error } = await supabase.from(tableName).select(columnName, { head: true, count: 'exact' }).limit(1)
 
@@ -706,6 +781,7 @@ export async function getSupabaseHealth() {
       checkSupabaseTable(supabase, SEARCH_CACHE_TABLE, 'cache_key'),
       checkSupabaseTable(supabase, SEARCH_HISTORY_TABLE, 'id'),
       checkSupabaseTable(supabase, PRODUCT_DETAILS_CACHE_TABLE, 'asin'),
+      checkSupabaseTable(supabase, TESTER_FEEDBACK_TABLE, 'id'),
     ])
 
     return {

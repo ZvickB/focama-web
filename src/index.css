@@ -26,6 +26,27 @@
     --input: 30 21% 82%;
     --ring: 191 64% 27%;
     --radius: 1rem;
+    --page-background:
+      radial-gradient(circle at top left, rgba(29, 121, 126, 0.12), transparent 28%),
+      radial-gradient(circle at top right, rgba(222, 126, 74, 0.16), transparent 25%),
+      linear-gradient(180deg, rgba(252, 249, 243, 0.98), rgba(244, 238, 229, 1));
+    --site-shell-border: rgba(255, 255, 255, 0.6);
+    --site-header-bg: rgba(252, 249, 243, 0.88);
+    --site-mobile-menu-bg: rgba(252, 249, 243, 0.94);
+    --site-footer-bg: rgba(252, 249, 243, 0.72);
+  }
+
+  :root[data-bg-mode='plain'] {
+    --background: 0 0% 100%;
+    --secondary: 210 20% 96%;
+    --muted: 210 20% 96%;
+    --border: 210 18% 88%;
+    --input: 210 18% 88%;
+    --page-background: #fff;
+    --site-shell-border: rgba(228, 219, 205, 0.78);
+    --site-header-bg: rgba(252, 248, 244, 0.9);
+    --site-mobile-menu-bg: rgba(253, 250, 246, 0.97);
+    --site-footer-bg: rgba(251, 246, 240, 0.82);
   }
 
   * {
@@ -35,10 +56,7 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: "Instrument Sans", sans-serif;
-    background-image:
-      radial-gradient(circle at top left, rgba(29, 121, 126, 0.12), transparent 28%),
-      radial-gradient(circle at top right, rgba(222, 126, 74, 0.16), transparent 25%),
-      linear-gradient(180deg, rgba(252, 249, 243, 0.98), rgba(244, 238, 229, 1));
+    background: var(--page-background);
     min-height: 100vh;
   }
 

@@ -18,12 +18,23 @@
       :root {
         --brand-primary: 191 64% 27%;
         --brand-accent: 17 81% 56%;
-        color: rgb(20 34 43);
-        background:
+        --page-background:
           radial-gradient(circle at top left, rgba(29, 121, 126, 0.12), transparent 28%),
           radial-gradient(circle at top right, rgba(222, 126, 74, 0.16), transparent 25%),
           linear-gradient(180deg, rgba(252, 249, 243, 0.98), rgba(244, 238, 229, 1));
+        --boot-shell-border: rgba(255, 255, 255, 0.6);
+        --boot-header-bg: rgba(252, 249, 243, 0.88);
+        --boot-footer-bg: rgba(252, 249, 243, 0.72);
+        color: rgb(20 34 43);
+        background: var(--page-background);
         font-family: "Instrument Sans", sans-serif;
+      }
+
+      :root[data-bg-mode='plain'] {
+        --page-background: #fff;
+        --boot-shell-border: rgba(228, 219, 205, 0.78);
+        --boot-header-bg: rgba(252, 248, 244, 0.9);
+        --boot-footer-bg: rgba(251, 246, 240, 0.82);
       }
 
       body {
@@ -40,10 +51,7 @@
         position: fixed;
         inset: 0;
         z-index: 9999;
-        background:
-          radial-gradient(circle at top left, rgba(29, 121, 126, 0.12), transparent 28%),
-          radial-gradient(circle at top right, rgba(222, 126, 74, 0.16), transparent 25%),
-          linear-gradient(180deg, rgba(252, 249, 243, 0.98), rgba(244, 238, 229, 1));
+        background: var(--page-background);
         opacity: 1;
         visibility: visible;
         transition:
@@ -73,12 +81,25 @@
         position: sticky;
         top: 0;
         z-index: 50;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.6);
-        background: rgba(252, 249, 243, 0.88);
+        border-bottom: 1px solid var(--boot-shell-border);
+        background: var(--boot-header-bg);
         backdrop-filter: blur(12px);
       }
 
+      .boot-header::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.45;
+        background:
+          radial-gradient(circle at 14% 18%, rgba(229, 155, 38, 0.08), transparent 22%),
+          radial-gradient(circle at 84% 12%, rgba(15, 97, 117, 0.08), transparent 20%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0));
+      }
+
       .boot-header-inner {
+        position: relative;
         margin: 0 auto;
         display: flex;
         width: 100%;
@@ -158,19 +179,35 @@
 
       .boot-nav-pill {
         position: relative;
-        z-index: 1;
+        z-index: 0;
         border-radius: 9999px;
-        border: 1px solid transparent;
         padding: 0.5rem 1rem;
         font-size: 0.875rem;
         color: rgb(71 85 105);
       }
 
+      .boot-nav-pill::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: 0.35rem;
+        width: calc(100% - 1.5rem);
+        height: 2px;
+        border-radius: 9999px;
+        background: linear-gradient(90deg, #0f6175 0%, #2f7f8a 58%, #e59b26 100%);
+        box-shadow: 0 6px 18px -12px rgba(15, 97, 117, 0.8);
+        transform: translateX(-50%) scaleX(0);
+        transform-origin: center;
+        opacity: 0;
+      }
+
       .boot-nav-pill.is-active {
-        border-color: rgb(24 101 121);
-        background: rgb(24 101 121);
-        color: rgb(252 249 243);
-        box-shadow: 0 12px 30px -18px rgba(15, 23, 42, 0.55);
+        color: rgb(15 23 42);
+      }
+
+      .boot-nav-pill.is-active::after {
+        transform: translateX(-50%) scaleX(1);
+        opacity: 1;
       }
 
       .boot-main {
@@ -187,9 +224,27 @@
       }
 
       .boot-hero {
+        position: relative;
         width: 100%;
         max-width: 56rem;
         text-align: center;
+      }
+
+      .boot-hero::before {
+        content: "";
+        position: absolute;
+        inset: 0 5% auto;
+        height: 78%;
+        pointer-events: none;
+        opacity: 0.9;
+        background:
+          radial-gradient(circle at 20% 22%, rgba(229, 155, 38, 0.11), transparent 26%),
+          radial-gradient(circle at 78% 18%, rgba(15, 97, 117, 0.09), transparent 24%),
+          radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.9), transparent 56%);
+      }
+
+      .boot-hero-inner {
+        position: relative;
       }
 
       .boot-wordmark {
@@ -201,9 +256,9 @@
       }
 
       .boot-title {
-        margin: 0.9rem 0 0;
+        margin: 1rem 0 0;
         min-height: 2.2rem;
-        font-size: 1.6rem;
+        font-size: 1.9rem;
         font-weight: 500;
         line-height: 1.12;
         letter-spacing: -0.03em;
@@ -212,8 +267,15 @@
         animation: boot-title-fade-in 220ms ease forwards;
       }
 
-      .boot-title-emphasis {
-        color: hsl(var(--brand-accent));
+      .boot-subtitle {
+        margin: 0.8rem auto 0;
+        max-width: 34rem;
+        color: rgb(100 116 139);
+        font-family: "Instrument Sans", sans-serif;
+        font-size: 0.875rem;
+        font-style: italic;
+        font-weight: 500;
+        letter-spacing: 0.01em;
       }
 
       @keyframes boot-title-fade-in {
@@ -229,9 +291,9 @@
       .boot-input-shell {
         width: 100%;
         max-width: 48rem;
-        border: 1px solid rgba(255, 255, 255, 0.7);
+        border: 1px solid rgba(228, 215, 198, 1);
         border-radius: 36px;
-        background: rgba(255, 255, 255, 0.72);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 246, 241, 0.94));
         padding: 1rem;
         box-shadow: 0 30px 120px -60px rgba(15, 23, 42, 0.28);
         backdrop-filter: blur(16px);
@@ -239,18 +301,31 @@
 
       .boot-input-placeholder {
         height: 4rem;
-        border: 1px solid rgba(214, 211, 209, 1);
+        border: 1px solid rgba(229, 218, 203, 1);
         border-radius: 28px;
-        background: rgba(255, 255, 255, 0.9);
+        background: rgba(255, 255, 255, 0.94);
       }
 
       .boot-footer {
-        border-top: 1px solid rgba(255, 255, 255, 0.6);
-        background: rgba(252, 249, 243, 0.72);
+        position: relative;
+        border-top: 1px solid var(--boot-shell-border);
+        background: var(--boot-footer-bg);
         padding: 2rem 1rem;
       }
 
+      .boot-footer::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.42;
+        background:
+          radial-gradient(circle at 12% 100%, rgba(229, 155, 38, 0.06), transparent 26%),
+          radial-gradient(circle at 88% 0%, rgba(15, 97, 117, 0.06), transparent 22%);
+      }
+
       .boot-footer-inner {
+        position: relative;
         margin: 0 auto;
         display: grid;
         width: 100%;
@@ -335,7 +410,11 @@
 
         .boot-title {
           min-height: 3.1rem;
-          font-size: 2.35rem;
+          font-size: 2.5rem;
+        }
+
+        .boot-subtitle {
+          font-size: 0.9375rem;
         }
 
         .boot-input-shell {
@@ -381,6 +460,7 @@
       }
     </style>
     <script>
+      document.documentElement.dataset.bgMode = 'plain'
       window.__focamaiSplashStartedAt = performance.now()
     </script>
   </head>
@@ -402,7 +482,7 @@
             <div class="boot-nav" aria-hidden="true">
               <div class="boot-nav-track">
                 <span class="boot-nav-pill is-active">Home</span>
-                <span class="boot-nav-pill">About</span>
+                <span class="boot-nav-pill">Why Focamai</span>
                 <span class="boot-nav-pill">Contact</span>
               </div>
             </div>
@@ -411,11 +491,11 @@
         <div class="boot-main">
           <div class="boot-container">
             <section class="boot-hero">
-              <img class="boot-wordmark" src="./src/assets/wordmark.PNG" alt="Focamai" />
-              <h1 class="boot-title">
-                <span>Less scrolling.</span>
-                <span class="boot-title-emphasis"> Better picks.</span>
-              </h1>
+              <div class="boot-hero-inner">
+                <img class="boot-wordmark" src="./src/assets/wordmark.PNG" alt="Focamai" />
+                <h1 class="boot-title">What are you looking for today?</h1>
+                <p class="boot-subtitle">Tell us what you need. We'll find your six.</p>
+              </div>
             </section>
             <div class="boot-input-shell">
               <div class="boot-input-placeholder"></div>
@@ -433,7 +513,7 @@
             <div class="boot-footer-links">
               <div class="boot-footer-label">Site Links</div>
               <div class="boot-footer-link-row">
-                <span class="boot-footer-link">About</span>
+                <span class="boot-footer-link">Why Focamai</span>
                 <span class="boot-footer-link">Contact</span>
                 <span class="boot-footer-link">Privacy</span>
                 <span class="boot-footer-link">Disclosure</span>

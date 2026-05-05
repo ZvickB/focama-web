@@ -16,6 +16,7 @@
 - Audit modal AI tone and tighten any copy that sounds too promotional or vague.
 - Improve loading states between search, refine, and results so the transitions feel more intentional.
 - Improve low-confidence and weak-result handling instead of quietly showing poor results.
+- Review early tester feedback from the new homepage FAB and decide whether the reveal timing, wording, or question set should change.
 - Decide whether to add a proactive pool-mismatch nudge before the user opens retry.
 - Replace the About page with a `Why Focamai` page, then update nav and add a clear return-home path.
 - Decide how retailer clickouts and affiliate disclosures should appear once outbound linking is treated as launch-ready product behavior.

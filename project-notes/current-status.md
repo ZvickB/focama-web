@@ -8,7 +8,9 @@
 ## Current product state
 - The app is Vite + React + React Router + TanStack Query + Tailwind + Vitest.
 - The homepage at `/` uses the `open` layout: single-column, search-first, calm, and mobile-first.
+- The homepage now ships in the plain white visual mode by default; the temporary homepage background toggle is no longer part of the active UI.
 - The current user path is: search -> short follow-up -> preview or focused shortlist -> modal details -> retailer clickout.
+- A tester-only feedback FAB now opens a lightweight sheet for quick product feedback, optional free text, and optional follow-up email.
 - Shortlists are always 6 items.
 - The PNG wordmark is the active wordmark.
 - A boot splash still lives in `index.html` and fades after React is ready.
@@ -30,6 +32,7 @@
 - `GET /api/geo` intentionally stays on Vercel so the frontend can resolve the user’s country from Vercel headers and send an explicit Amazon domain on guided requests when the store picker is left on `Auto`.
 - Discovery cache and operational history use Supabase when configured, with local file fallback in development.
 - Product details use a separate provider-agnostic per-ASIN cache, also with Supabase preferred and local fallback available.
+- Tester feedback stores to a dedicated `tester_feedback` table in Supabase when configured, with local fallback in development.
 - Rate limiting is currently process-local in-memory on the Render server, not Supabase-backed.
 
 ## Current finalize reality

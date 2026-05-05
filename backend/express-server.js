@@ -5,6 +5,7 @@ import {
   handleCachedSearch,
   handleEnrichmentPoll,
   handleEnrichmentStream,
+  handleFeedbackSubmission,
   handleFinalizeSelection,
   handleRainforestDiscoverySearch,
   handleRefinementPrompt,
@@ -86,6 +87,10 @@ app.post('/api/search/finalize', async (req, res) => {
 // Analytics
 app.post('/api/analytics/track', async (req, res) => {
   await handleAnalyticsTrack(req, res)
+})
+
+app.post('/api/feedback', async (req, res) => {
+  await handleFeedbackSubmission(req, res)
 })
 
 // Health

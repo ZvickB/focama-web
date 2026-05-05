@@ -46,8 +46,8 @@ function ProductBadge({ label }) {
       <div
         className={`inline-flex max-w-[min(220px,calc(100vw-4rem))] items-center gap-2 rounded-[20px] border px-3 py-2 text-xs font-medium leading-4 tracking-[0.01em] shadow-[0_14px_34px_-20px_rgba(15,23,42,0.45)] backdrop-blur ${
           isPrimary
-            ? 'border-primary/60 bg-primary text-primary-foreground'
-            : 'border-stone-200/90 bg-white/92 text-slate-700'
+            ? 'border-primary/60 bg-[linear-gradient(135deg,rgba(15,97,117,0.98),rgba(47,127,138,0.98))] text-primary-foreground'
+            : 'border-[#e6d8c5] bg-[linear-gradient(180deg,rgba(251,246,240,0.98),rgba(255,255,255,0.96))] text-[#80573f]'
         }`}
         style={{ fontFamily: '"Instrument Sans", sans-serif', fontWeight: 500 }}
       >
@@ -78,7 +78,7 @@ function ProductCard({
 
   return (
     <Card
-      className="group h-full overflow-hidden rounded-[22px] border-stone-200/80 bg-white/90 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur transition hover:-translate-y-1 hover:shadow-[0_32px_80px_-40px_rgba(15,23,42,0.6)]"
+      className="group relative h-full overflow-hidden rounded-[24px] border border-[#eadfce] bg-[linear-gradient(180deg,rgba(255,255,255,0.99),rgba(251,247,242,0.97))] shadow-[0_26px_80px_-50px_rgba(120,87,63,0.28)] transition duration-300 hover:-translate-y-1 hover:border-[#dbcbb8] hover:shadow-[0_36px_92px_-44px_rgba(120,87,63,0.34)]"
       role="button"
       tabIndex={0}
       onClick={onSelect}
@@ -89,10 +89,30 @@ function ProductCard({
         }
       }}
     >
-      <div className="relative overflow-hidden border-b border-stone-100 bg-stone-50">
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-4 top-0 h-px bg-[linear-gradient(90deg,rgba(229,155,38,0),rgba(229,155,38,0.68),rgba(15,97,117,0.52),rgba(15,97,117,0))] opacity-70 transition-opacity duration-300 group-hover:opacity-100"
+      />
+      <div className="relative overflow-hidden border-b border-[#f0e7da] bg-[linear-gradient(180deg,rgba(251,246,240,0.92),rgba(248,244,238,0.68))]">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+          style={{
+            background:
+              'linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,0.1) 52%, rgba(15,97,117,0.06) 100%)',
+          }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-24 opacity-80"
+          style={{
+            background:
+              'radial-gradient(circle at 20% 10%, rgba(229,155,38,0.12), transparent 34%), radial-gradient(circle at 82% 0%, rgba(15,97,117,0.1), transparent 30%)',
+          }}
+        />
         <ProductBadge label={badgeLabel} />
         {imgError ? (
-          <div className="flex aspect-square w-full items-center justify-center bg-stone-200/90">
+          <div className="flex aspect-square w-full items-center justify-center bg-stone-200/55">
             <img
               src={logo}
               alt=""
@@ -102,7 +122,7 @@ function ProductCard({
           </div>
         ) : (
           <img
-            className="aspect-square w-full object-contain bg-stone-50 p-4 transition duration-300 group-hover:scale-[1.02]"
+            className="aspect-square w-full object-contain p-5 transition duration-500 group-hover:scale-[1.025]"
             src={image}
             alt={title}
             loading="lazy"
@@ -111,15 +131,15 @@ function ProductCard({
           />
         )}
       </div>
-      <CardContent className="space-y-3 p-4">
-        <div className="space-y-2">
+      <CardContent className="space-y-3.5 p-4 sm:p-5">
+        <div className="space-y-2.5">
           <Badge
             variant="outline"
-            className="hidden rounded-full border-stone-200 bg-stone-50 px-2.5 py-0.5 text-[11px] text-slate-600 hover:bg-stone-50 sm:inline-flex"
+            className="inline-flex rounded-full border-[#e7dac8] bg-[linear-gradient(180deg,rgba(250,245,239,0.98),rgba(255,255,255,0.96))] px-2.5 py-0.5 text-[11px] text-[#80573f] hover:bg-[linear-gradient(180deg,rgba(250,245,239,0.98),rgba(255,255,255,0.96))]"
           >
             {subtitle}
           </Badge>
-          <p className="line-clamp-2 text-sm leading-5 text-slate-900 sm:text-[15px]">
+          <p className="line-clamp-2 text-[15px] leading-6 text-slate-900 sm:text-base">
             {title}
           </p>
           <p className="text-lg font-semibold text-primary">{displayPrice}</p>
@@ -139,17 +159,18 @@ function ProductCard({
           <span className="text-slate-500">({reviewCount} reviews)</span>
         </div>
         {userFacingDescription ? (
-          <p className="line-clamp-2 text-sm leading-5 text-slate-600">
+          <p className="line-clamp-2 text-sm leading-6 text-slate-600">
             {userFacingDescription}
           </p>
         ) : null}
         {primaryReason ? (
-          <p className="line-clamp-2 text-sm leading-5 text-slate-600">
+          <div className="rounded-[20px] border border-[#efe5d8] bg-[linear-gradient(180deg,rgba(250,246,240,0.84),rgba(255,255,255,0.94))] px-3.5 py-3 text-sm leading-6 text-slate-600">
+            <span className="mr-1 font-medium text-[#7a5a44]">Why it stands out:</span>
             {primaryReason}
-          </p>
+          </div>
         ) : null}
       </CardContent>
-      <CardContent className="flex items-center justify-between gap-3 border-t border-stone-100 px-4 py-3 text-sm font-medium text-slate-500">
+      <CardContent className="flex items-center justify-between gap-3 border-t border-[#f0e7da] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,246,240,0.78))] px-4 py-3 text-sm font-medium text-slate-500 sm:px-5">
         <span>
           <span className="sm:hidden">Tap for details</span>
           <span className="hidden sm:inline">Click for details</span>
@@ -159,7 +180,7 @@ function ProductCard({
             href={link}
             target="_blank"
             rel="noreferrer"
-            className="relative z-10 inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-stone-300 hover:text-slate-900"
+            className="relative z-10 inline-flex items-center gap-1 rounded-full border border-[#e8dbc9] bg-white/95 px-3 py-1.5 text-sm font-medium text-slate-700 shadow-[0_12px_28px_-24px_rgba(120,87,63,0.34)] transition hover:border-[#d7cab8] hover:bg-[#fdfaf6] hover:text-slate-900"
             onClick={(event) => {
               event.stopPropagation()
               onRetailerClick?.()

@@ -28,7 +28,7 @@ function SlidingNav({ items, className = '' }) {
           end={item.end}
           className={({ isActive }) =>
             [
-              'group relative rounded-full px-4 py-2.5 text-sm transition-colors duration-300',
+              'group relative rounded-full px-4 py-2 text-sm transition-colors duration-300',
               isActive
                 ? 'text-slate-900'
                 : item.highlight
@@ -134,8 +134,16 @@ function SiteLayout() {
     <div className="min-h-screen">
       <header className="sticky top-0 z-50 border-b border-[var(--site-shell-border)] bg-[var(--site-header-bg)] backdrop-blur transition-all duration-300 ease-out">
         <div
-          className={`mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 transition-all duration-300 ease-out sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8 ${
-            isCompact ? 'py-2.5' : 'py-4'
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-45"
+          style={{
+            background:
+              'radial-gradient(circle at 14% 18%, rgba(229,155,38,0.08), transparent 22%), radial-gradient(circle at 84% 12%, rgba(15,97,117,0.08), transparent 20%), linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0))',
+          }}
+        />
+        <div
+          className={`relative mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 transition-all duration-300 ease-out sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8 ${
+            isCompact ? 'py-2' : 'py-3'
           }`}
         >
           <div className="flex w-full items-start justify-between gap-4 lg:w-auto">
@@ -146,8 +154,8 @@ function SiteLayout() {
                   alt="Focamai logo"
                   width="96"
                   height="96"
-                  className={`rounded-[18px] bg-white/35 object-contain p-0.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)] ring-1 ring-stone-200/35 transition-all duration-300 ease-out ${
-                    isCompact ? 'h-12 w-12 sm:h-14 sm:w-14' : 'h-16 w-16 sm:h-20 sm:w-20'
+                  className={`rounded-[18px] bg-white/28 object-contain p-0.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.2)] ring-1 ring-stone-200/30 transition-all duration-300 ease-out ${
+                    isCompact ? 'h-11 w-11 sm:h-[52px] sm:w-[52px]' : 'h-[60px] w-[60px] sm:h-[72px] sm:w-[72px]'
                   }`}
                 />
                 <img
@@ -190,29 +198,39 @@ function SiteLayout() {
         </div>
         <div
           className={`overflow-hidden border-t border-[var(--site-shell-border)] bg-[var(--site-mobile-menu-bg)] transition-all duration-300 ease-out sm:hidden ${
-            isMobileMenuOpen ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
+            isMobileMenuOpen ? 'max-h-56 opacity-100' : 'max-h-0 opacity-0'
           }`}
         >
-          <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-3">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-4">
             {mobileMenuItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
                   [
-                    'rounded-2xl px-4 py-3 text-sm transition',
+                    'relative overflow-hidden rounded-[24px] border px-4 py-3.5 text-sm transition duration-300',
                     isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-white/80 text-slate-700 hover:bg-white hover:text-slate-900',
+                      ? 'border-[#dccfbe] bg-[linear-gradient(135deg,rgba(251,246,240,0.98),rgba(255,255,255,0.96))] text-slate-900 shadow-[0_18px_44px_-34px_rgba(120,87,63,0.24)]'
+                      : 'border-white/70 bg-white/82 text-slate-700 hover:border-[#e6d8c5] hover:bg-white hover:text-slate-900',
                   ].join(' ')
                 }
               >
-                {item.label}
+                {({ isActive }) => (
+                  <>
+                    <span className="relative z-10">{item.label}</span>
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none absolute bottom-0 left-1/2 h-[2px] -translate-x-1/2 rounded-full bg-[linear-gradient(90deg,#0F6175_0%,#2F7F8A_58%,#E59B26_100%)] transition-all duration-300 ${
+                        isActive ? 'w-[calc(100%-2rem)] opacity-100' : 'w-0 opacity-0'
+                      }`}
+                    />
+                  </>
+                )}
               </NavLink>
             ))}
             {isHomePage ? (
-              <div className="flex items-center gap-2 px-1 pt-1 text-xs text-slate-400">
-                <span>Amazon store:</span>
+              <div className="flex items-center justify-between gap-3 rounded-[22px] border border-white/70 bg-white/72 px-3 py-2.5 text-xs text-slate-500 shadow-[0_14px_34px_-28px_rgba(15,23,42,0.22)]">
+                <span className="font-medium uppercase tracking-[0.12em] text-slate-400">Amazon store</span>
                 <AmazonStorePill variant="header" />
               </div>
             ) : null}
@@ -224,8 +242,16 @@ function SiteLayout() {
         <Outlet />
       </div>
 
-      <footer className="border-t border-[var(--site-shell-border)] bg-[var(--site-footer-bg)] px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto grid w-full max-w-7xl gap-6 text-sm text-slate-600 lg:grid-cols-[1.2fr_0.8fr]">
+      <footer className="relative border-t border-[var(--site-shell-border)] bg-[var(--site-footer-bg)] px-4 py-8 sm:px-6 lg:px-8">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-full opacity-42"
+          style={{
+            background:
+              'radial-gradient(circle at 12% 100%, rgba(229,155,38,0.06), transparent 26%), radial-gradient(circle at 88% 0%, rgba(15,97,117,0.06), transparent 22%)',
+          }}
+        />
+        <div className="relative mx-auto grid w-full max-w-7xl gap-6 text-sm text-slate-600 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-2">
             <p className="text-base font-semibold text-slate-900">Focamai</p>
             <p>
