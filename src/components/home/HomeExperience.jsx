@@ -4,6 +4,7 @@ import { LoaderCircle, Search, Sparkles } from 'lucide-react'
 import { MAX_PRODUCT_QUERY_LENGTH, MAX_DETAILS_LENGTH } from '../../../shared/search-input.js'
 
 import wordmark from '@/assets/wordmark.PNG'
+import { FeedbackFab } from '@/components/home/FeedbackFab.jsx'
 import { ProductDetailModal, ResultsSection, ResultSkeleton } from '@/components/home/HomeShared.jsx'
 import {
   RESULT_CARD_SLOTS,
@@ -13,8 +14,36 @@ import { Button } from '@/components/ui/button.jsx'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
 import { useSearchProgress } from '@/contexts/useSearchProgress.js'
+import { getOrCreateAnalyticsSessionId } from '@/lib/analytics.js'
 
 const HERO_SUBLINE = "Tell us what you need. We'll find your six."
+const BACKGROUND_MODE_STORAGE_KEY = 'focamai_home_background_mode'
+
+function getBackgroundModeStorage() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
+
+function readBackgroundMode() {
+  const storage = getBackgroundModeStorage()
+  const savedMode = storage?.getItem(BACKGROUND_MODE_STORAGE_KEY)
+  return savedMode === 'soft' ? 'soft' : 'plain'
+}
+
+function applyBackgroundMode(mode) {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  document.documentElement.dataset.bgMode = mode
+}
 
 function CharCounter({ current, max }) {
   if (current === 0) return null
@@ -29,6 +58,10 @@ function CharCounter({ current, max }) {
   )
 }
 const MotionParagraph = motion.p
+
+function shouldShowCharCounter(current, max) {
+  return current > 0 && max - current <= 20
+}
 
 function shouldShowTimingPanel() {
   if (import.meta.env.DEV) {
@@ -73,6 +106,30 @@ function handleNewSearchClick(event, resetToNewSearch) {
 
 function formatTimingValue(value) {
   return Number.isFinite(value) ? `${value.toFixed(1)} ms` : 'n/a'
+}
+
+function getFeedbackStage(state) {
+  if (state.selectedProduct) {
+    return 'modal_open'
+  }
+
+  if (state.hasFinalResults) {
+    return 'finalized'
+  }
+
+  if (state.showPreviewResults) {
+    return 'preview'
+  }
+
+  if (state.hasStartedSearch && state.candidatePool) {
+    return 'refine'
+  }
+
+  if (state.hasStartedSearch || state.isLoading) {
+    return 'searching'
+  }
+
+  return 'home'
 }
 
 function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
@@ -265,7 +322,11 @@ function OpenLayout(props) {
     showTimingPanel,
     state,
     submittedQuery,
+    backgroundMode,
+    onToggleBackgroundMode,
   } = props
+
+  const isPlainBackground = backgroundMode === 'plain'
 
   useEffect(() => {
     const revealTimer = window.setTimeout(() => {
@@ -404,6 +465,18 @@ function OpenLayout(props) {
       <div className="mx-auto flex max-w-7xl flex-col items-center gap-8">
         <section className="w-full max-w-4xl space-y-6 text-center">
           <div className="space-y-4">
+            <div className="flex justify-center">
+              <button
+                type="button"
+                aria-pressed={isPlainBackground}
+                aria-label={isPlainBackground ? 'Switch to soft background' : 'Switch to white background'}
+                onClick={onToggleBackgroundMode}
+                className="inline-flex items-center gap-2 rounded-full border border-stone-200/80 bg-white/88 px-3.5 py-2 text-sm font-medium text-slate-600 shadow-[0_12px_30px_-22px_rgba(15,23,42,0.35)] transition hover:border-stone-300 hover:text-slate-900"
+              >
+                <span className="text-slate-400">Background:</span>
+                <span className="text-slate-900">{isPlainBackground ? '#fff' : 'Soft'}</span>
+              </button>
+            </div>
             <div className="space-y-2">
               <img
                 src={wordmark}
@@ -456,7 +529,9 @@ function OpenLayout(props) {
               className={`scroll-mt-28 w-full max-w-3xl rounded-[36px] border p-4 text-left shadow-[0_28px_120px_-72px_rgba(15,23,42,0.45)] backdrop-blur transition-all duration-300 sm:p-5 ${
                 hasStartedSearch
                   ? 'border-primary/25 bg-white/92 shadow-[0_36px_140px_-68px_rgba(15,23,42,0.5)]'
-                  : 'border-white/70 bg-white/80'
+                  : isPlainBackground
+                    ? 'border-stone-200 bg-white'
+                    : 'border-white/70 bg-white/80'
               }`}
             >
               <div className="flex flex-col gap-3 md:flex-row md:items-center">
@@ -478,7 +553,7 @@ function OpenLayout(props) {
                     className="h-16 w-full rounded-[28px] border border-stone-200 bg-white px-5 text-lg text-slate-900 outline-none transition placeholder:text-[15px] placeholder:text-slate-400 sm:placeholder:text-base focus:border-primary/50"
                     disabled={isLoading}
                   />
-                  {state.productQuery.length > 0 ? (
+                  {shouldShowCharCounter(state.productQuery.length, MAX_PRODUCT_QUERY_LENGTH) ? (
                     <div className="mt-1.5 flex justify-end px-2">
                       <CharCounter current={state.productQuery.length} max={MAX_PRODUCT_QUERY_LENGTH} />
                     </div>
@@ -526,12 +601,15 @@ function OpenLayout(props) {
 
                   <div className="space-y-2">
                     <div
-                      className={`rounded-[30px] border bg-[#fffdf9] p-1 transition-all duration-300 ${
+                      className={`rounded-[30px] border bg-white p-1 transition-all duration-300 ${
                         state.isGeneratingPrompt
                           ? 'border-primary/20 shadow-[0_20px_60px_-42px_rgba(37,99,235,0.55)] ring-1 ring-primary/15'
                           : 'border-stone-200 shadow-[0_20px_60px_-36px_rgba(15,23,42,0.25)]'
                       }`}
                     >
+                      <Label htmlFor="open-follow-up-notes" className="sr-only">
+                        Tell us more
+                      </Label>
                       <Textarea
                         id="open-follow-up-notes"
                         value={state.followUpNotes}
@@ -546,7 +624,7 @@ function OpenLayout(props) {
                         placeholder={refinementCopy.placeholder}
                         disabled={state.isFinalizing}
                       />
-                      {state.followUpNotes.length > 0 ? (
+                      {shouldShowCharCounter(state.followUpNotes.length, MAX_DETAILS_LENGTH) ? (
                         <div className="flex justify-end px-4 pb-3">
                           <CharCounter current={state.followUpNotes.length} max={MAX_DETAILS_LENGTH} />
                         </div>
@@ -687,8 +765,32 @@ function OpenLayout(props) {
 export function HomeExperience() {
   const state = useGuidedSearch()
   const showTimingPanel = shouldShowTimingPanel()
+  const [feedbackSessionId] = useState(() => getOrCreateAnalyticsSessionId())
+  const [backgroundMode, setBackgroundMode] = useState(readBackgroundMode)
+  const feedbackStage = getFeedbackStage(state)
+
+  useEffect(() => {
+    applyBackgroundMode(backgroundMode)
+
+    const storage = getBackgroundModeStorage()
+    if (!storage) {
+      return
+    }
+
+    if (backgroundMode === 'soft') {
+      storage.setItem(BACKGROUND_MODE_STORAGE_KEY, backgroundMode)
+      return
+    }
+
+    storage.removeItem(BACKGROUND_MODE_STORAGE_KEY)
+  }, [backgroundMode])
+
+  function handleToggleBackgroundMode() {
+    setBackgroundMode((currentMode) => (currentMode === 'plain' ? 'soft' : 'plain'))
+  }
 
   const layoutProps = {
+    backgroundMode,
     displayedResults: state.displayedResults,
     errorMessage: state.errorMessage,
     hasFinalResults: state.hasFinalResults,
@@ -698,6 +800,7 @@ export function HomeExperience() {
     onRetailerClick: state.handleRetailerClick,
     onSelectProduct: state.handleSelectProduct,
     onShowProductsNow: state.handleShowProductsNow,
+    onToggleBackgroundMode: handleToggleBackgroundMode,
     prompt: state.refinementPrompt,
     previousResults: state.previousResults,
     resetToNewSearch: state.resetToNewSearch,
@@ -720,6 +823,7 @@ export function HomeExperience() {
         {state.selectedProduct ? (
           <ProductDetailModal
             item={state.selectedProduct}
+            isEnrichmentSettled={state.isEnrichmentSettled}
             onRetailerClick={() =>
               state.handleRetailerClick(state.selectedProduct, {
                 position: state.selectedProduct?.analyticsMeta?.position ?? 0,
@@ -730,6 +834,16 @@ export function HomeExperience() {
           />
         ) : null}
       </AnimatePresence>
+      <FeedbackFab
+        finalized={state.hasFinalResults}
+        hasStartedSearch={state.hasStartedSearch}
+        queryText={state.submittedQuery || state.productQuery}
+        resultsSeen={state.displayedResults.length > 0}
+        searchId={state.analyticsSearchId}
+        selectedProductId={state.selectedProduct?.id || ''}
+        sessionId={state.analyticsSessionId || feedbackSessionId}
+        stageReached={feedbackStage}
+      />
     </>
   )
 }

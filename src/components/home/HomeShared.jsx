@@ -98,7 +98,7 @@ function resolveAmazonRetailerLabel(subtitle, selectedAmazonDomain, resolvedAmaz
   return domain.replace(/^amazon\./, 'Amazon.')
 }
 
-export function ProductDetailModal({ item, onClose, onRetailerClick }) {
+export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose, onRetailerClick }) {
   const fitReason = item?.fit_reason || item?.fitReason || ''
   const caveat = item?.caveat || ''
   const featureBullets = Array.isArray(item?.feature_bullets) ? item.feature_bullets.slice(0, 5) : []
@@ -158,11 +158,11 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
         exit={{ opacity: 0, scale: 0.97, y: 8 }}
         transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
         ref={outerRef}
-        className="flex max-h-[94vh] w-full flex-col overflow-hidden rounded-t-[32px] bg-[#fcf8f1] shadow-2xl lg:max-h-[88vh] lg:max-w-4xl lg:rounded-[32px]"
+        className="flex max-h-[94vh] w-full flex-col overflow-hidden rounded-t-[32px] bg-white shadow-2xl lg:max-h-[88vh] lg:max-w-4xl lg:rounded-[32px]"
         onClick={(event) => event.stopPropagation()}
       >
         {/* Minimal close bar — just the X, no title text */}
-        <div className="sticky top-0 z-10 flex justify-end bg-[#fcf8f1]/80 px-4 py-3 backdrop-blur sm:px-5">
+        <div className="sticky top-0 z-10 flex justify-end bg-white/92 px-4 py-3 backdrop-blur sm:px-5">
           <Button
             type="button"
             variant="ghost"
@@ -261,6 +261,10 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
                   </p>
                 ) : null}
               </MotionDiv>
+            ) : isEnrichmentSettled ? (
+              <div className="rounded-2xl border border-stone-200/80 bg-white/70 p-4 text-sm leading-6 text-slate-500">
+                Extra analysis wasn&apos;t available for this pick right now.
+              </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <span className="relative flex h-2 w-2 shrink-0">
@@ -275,13 +279,13 @@ export function ProductDetailModal({ item, onClose, onRetailerClick }) {
             )}
 
             {/* CTA */}
-            <div className="sticky bottom-0 space-y-2 border-t border-stone-200/80 bg-[#fcf8f1]/95 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] backdrop-blur">
+            <div className="sticky bottom-0 space-y-2 border-t border-stone-200/80 bg-white/95 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] backdrop-blur">
               {showScrollHint ? (
                 <div
                   aria-hidden="true"
                   className="pointer-events-none absolute left-1/2 top-0 z-10 flex -translate-x-1/2 -translate-y-[60%] justify-center lg:hidden"
                 >
-                  <div className="rounded-full border border-stone-200/80 bg-[#fcf8f1] p-1 shadow-sm">
+                  <div className="rounded-full border border-stone-200/80 bg-white p-1 shadow-sm">
                     <ChevronDown className="h-5 w-5 animate-bounce text-slate-400" />
                   </div>
                 </div>
@@ -597,7 +601,7 @@ export function ResultsSection({
           </div>
 
           <div className="mt-5 space-y-4">
-            <div className="rounded-[30px] border border-stone-200 bg-[#fffdf9] p-1">
+            <div className="rounded-[30px] border border-stone-200 bg-white p-1 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.16)]">
               <Textarea
                 id="results-retry-feedback"
                 value={retryFeedback}

@@ -58,6 +58,8 @@ function renderHomePage() {
 describe('HomePage', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    window.localStorage.clear()
+    delete document.documentElement.dataset.bgMode
     window.__FOCAMAI_DISABLE_BACKEND_PREWARM__ = true
     window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__ = true
     window.__FOCAMAI_DISABLE_GEO_FETCH__ = true
@@ -79,6 +81,21 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /start search/i }))
 
     expect(screen.getByText('Enter a product topic to get started.')).toBeInTheDocument()
+  })
+
+  it('toggles the homepage background mode and persists the choice', async () => {
+    const user = userEvent.setup()
+
+    renderHomePage()
+
+    const toggle = screen.getByRole('button', { name: /switch to soft background/i })
+    expect(document.documentElement.dataset.bgMode).toBe('plain')
+
+    await user.click(toggle)
+
+    expect(document.documentElement.dataset.bgMode).toBe('soft')
+    expect(window.localStorage.getItem('focamai_home_background_mode')).toBe('soft')
+    expect(screen.getByRole('button', { name: /switch to white background/i })).toBeInTheDocument()
   })
 
   it('shows a validation error for obvious gibberish queries', async () => {
@@ -193,6 +210,91 @@ describe('HomePage', () => {
         expect.stringContaining('/api/search/rainforest-discover'),
         expect.stringContaining('/api/search/refine'),
       ]),
+    )
+  })
+
+  it('sends tester feedback with the current search context', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn((input) => {
+      const url = String(input)
+
+      if (url.includes('/api/search/rainforest-discover')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              discoveryToken: 'opaque-discovery-token',
+              candidatePool: {
+                query: 'stroller',
+                details: '',
+                candidates: [],
+              },
+              previewResults: [createMockResult()],
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/refine')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              prompt: 'What should we optimize for with this stroller?',
+              helperText: 'Pick anything that matters.',
+              followUpPlaceholder: 'Anything else?',
+            }),
+        })
+      }
+
+      if (url.includes('/api/feedback')) {
+        return Promise.resolve({
+          ok: true,
+          text: async () => JSON.stringify({ ok: true }),
+        })
+      }
+
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+    await screen.findByText(/what should we optimize for with this stroller/i)
+
+    await user.click(screen.getByRole('button', { name: /^feedback$/i }))
+    await user.click(screen.getByRole('button', { name: /was it simple to use\?: yes/i }))
+    await user.click(screen.getByRole('button', { name: /did you find what you wanted\?: partly/i }))
+    await user.click(screen.getByRole('button', { name: /did you enjoy the experience\?: yes/i }))
+    await user.type(screen.getByLabelText(/what was confusing or missing/i), 'I wanted the next step to feel a little clearer.')
+    await user.type(
+      screen.getByLabelText(/optional: leave your email if you'd be open to a quick follow-up/i),
+      'tester@example.com',
+    )
+    await user.click(screen.getByRole('button', { name: /^send$/i }))
+
+    await screen.findByText(/thanks\. this helps a lot\./i)
+
+    const feedbackCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/feedback'))
+    expect(feedbackCall).toBeTruthy()
+    expect(JSON.parse(feedbackCall[1].body)).toEqual(
+      expect.objectContaining({
+        sessionId: expect.any(String),
+        searchId: expect.any(String),
+        stageReached: 'refine',
+        wasSimple: 'yes',
+        foundWhatYouWanted: 'partly',
+        enjoyedExperience: 'yes',
+        freeText: 'I wanted the next step to feel a little clearer.',
+        email: 'tester@example.com',
+        queryText: 'stroller',
+        resultsSeen: false,
+        finalized: false,
+      }),
     )
   })
 
@@ -1704,4 +1806,5 @@ expect(screen.queryByText('Travel stroller')).not.toBeInTheDocument()
 
     expect(eventSources[0].closed).toBe(true)
   }, 10000)
+
 })
