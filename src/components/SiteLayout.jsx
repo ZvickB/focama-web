@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import logo from '@/assets/logo_header_mark.svg'
@@ -19,75 +19,58 @@ const HEADER_COLLAPSE_SCROLL_Y = 72
 const HEADER_EXPAND_SCROLL_Y = 20
 
 function SlidingNav({ items, className = '' }) {
-  const location = useLocation()
-  const navRef = useRef(null)
-  const itemRefs = useRef({})
-  const [highlightStyle, setHighlightStyle] = useState(null)
-
-  useEffect(() => {
-    function updateHighlight() {
-      const activeItem = items.find((item) =>
-        item.end ? location.pathname === item.to : location.pathname.startsWith(item.to),
-      )
-
-      if (!activeItem) {
-        setHighlightStyle(null)
-        return
-      }
-
-      const navElement = navRef.current
-      const activeElement = itemRefs.current[activeItem.to]
-
-      if (!navElement || !activeElement) {
-        return
-      }
-
-      setHighlightStyle({
-        width: activeElement.offsetWidth,
-        height: activeElement.offsetHeight,
-        transform: `translate(${activeElement.offsetLeft}px, ${activeElement.offsetTop}px)`,
-      })
-    }
-
-    updateHighlight()
-    window.addEventListener('resize', updateHighlight)
-
-    return () => {
-      window.removeEventListener('resize', updateHighlight)
-    }
-  }, [items, location.pathname])
-
   return (
-    <nav ref={navRef} className={`relative flex flex-wrap items-center gap-2 rounded-full ${className}`}>
-      <span
-        aria-hidden="true"
-        className={`pointer-events-none absolute left-0 top-0 rounded-full border border-primary bg-primary shadow-[0_12px_30px_-18px_rgba(15,23,42,0.55)] transition-all duration-300 ease-out ${
-          highlightStyle ? 'opacity-100' : 'opacity-0'
-        }`}
-        style={highlightStyle ?? undefined}
-      />
+    <nav className={`relative flex flex-wrap items-center gap-1.5 rounded-full ${className}`}>
       {items.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}
           end={item.end}
-          ref={(node) => {
-            itemRefs.current[item.to] = node
-          }}
           className={({ isActive }) =>
             [
-              'relative z-10 rounded-full border border-transparent px-4 py-2 text-sm transition-colors duration-300',
+              'group relative rounded-full px-4 py-2.5 text-sm transition-colors duration-300',
               isActive
-                ? 'text-primary-foreground'
+                ? 'text-slate-900'
                 : item.highlight
-                  ? 'text-primary hover:border-white/80 hover:bg-white/80 hover:text-primary'
-                  : 'text-slate-600 hover:border-white/80 hover:bg-white/80 hover:text-slate-900',
+                  ? 'text-slate-700 hover:text-slate-900'
+                  : 'text-slate-600 hover:text-slate-900',
             ].join(' ')
           }
         >
-          {item.highlight ? (
-            <><span className="font-semibold" style={{ color: '#0F6175' }}>Why Focama</span><span className="font-semibold italic" style={{ color: '#E59B26' }}>i</span></>
-          ) : item.label}
+          {({ isActive }) => (
+            <>
+              <span className="relative z-10">
+                {item.highlight ? (
+                  <>
+                    <span
+                      className={`font-semibold transition-colors duration-300 ${
+                        isActive ? 'text-slate-900' : ''
+                      }`}
+                      style={isActive ? undefined : { color: '#0F6175' }}
+                    >
+                      Why Focama
+                    </span>
+                    <span
+                      className={`font-semibold italic transition-colors duration-300 ${
+                        isActive ? 'text-slate-900' : ''
+                      }`}
+                      style={isActive ? undefined : { color: '#E59B26' }}
+                    >
+                      i
+                    </span>
+                  </>
+                ) : (
+                  item.label
+                )}
+              </span>
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none absolute bottom-[5px] left-1/2 h-[2px] -translate-x-1/2 rounded-full bg-[linear-gradient(90deg,#0F6175_0%,#2F7F8A_58%,#E59B26_100%)] shadow-[0_6px_18px_-12px_rgba(15,97,117,0.8)] transition-all duration-300 ease-out ${
+                  isActive ? 'w-[calc(100%-1.5rem)] scale-x-100 opacity-100' : 'w-[calc(100%-1.5rem)] scale-x-0 opacity-0 group-hover:scale-x-100 group-hover:opacity-70'
+                }`}
+              />
+            </>
+          )}
         </NavLink>
       ))}
     </nav>
@@ -149,7 +132,7 @@ function SiteLayout() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-50 border-b border-white/60 bg-[rgba(252,249,243,0.88)] backdrop-blur transition-all duration-300 ease-out">
+      <header className="sticky top-0 z-50 border-b border-[var(--site-shell-border)] bg-[var(--site-header-bg)] backdrop-blur transition-all duration-300 ease-out">
         <div
           className={`mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 transition-all duration-300 ease-out sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8 ${
             isCompact ? 'py-2.5' : 'py-4'
@@ -206,7 +189,7 @@ function SiteLayout() {
           </div>
         </div>
         <div
-          className={`overflow-hidden border-t border-white/60 bg-[rgba(252,249,243,0.94)] transition-all duration-300 ease-out sm:hidden ${
+          className={`overflow-hidden border-t border-[var(--site-shell-border)] bg-[var(--site-mobile-menu-bg)] transition-all duration-300 ease-out sm:hidden ${
             isMobileMenuOpen ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
           }`}
         >
@@ -241,7 +224,7 @@ function SiteLayout() {
         <Outlet />
       </div>
 
-      <footer className="border-t border-white/60 bg-[rgba(252,249,243,0.72)] px-4 py-8 sm:px-6 lg:px-8">
+      <footer className="border-t border-[var(--site-shell-border)] bg-[var(--site-footer-bg)] px-4 py-8 sm:px-6 lg:px-8">
         <div className="mx-auto grid w-full max-w-7xl gap-6 text-sm text-slate-600 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-2">
             <p className="text-base font-semibold text-slate-900">Focamai</p>
