@@ -1,5 +1,10 @@
 const SESSION_STORAGE_KEY = 'focamai_analytics_session_id'
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
+const ANALYTICS_FLUSH_DELAY_MS = 2000
+
+let queuedEvents = []
+let flushTimerId = null
+let flushListenersBound = false
 
 function isAnalyticsEnabled() {
   if (typeof window === 'undefined') {
@@ -55,11 +60,15 @@ export function createAnalyticsSearchId() {
   return crypto.randomUUID()
 }
 
-export function trackAnalytics(event) {
-  if (!isAnalyticsEnabled()) {
-    return
+function clearScheduledFlush() {
+  if (flushTimerId !== null && typeof window !== 'undefined') {
+    window.clearTimeout(flushTimerId)
   }
 
+  flushTimerId = null
+}
+
+function postAnalyticsEvent(event) {
   const request = fetch(`${BACKEND_URL}/api/analytics/track`, {
     method: 'POST',
     headers: {
@@ -72,4 +81,66 @@ export function trackAnalytics(event) {
   if (request && typeof request.catch === 'function') {
     request.catch(() => {})
   }
+}
+
+function flushAnalyticsQueue() {
+  if (!isAnalyticsEnabled() || queuedEvents.length === 0) {
+    clearScheduledFlush()
+    return
+  }
+
+  clearScheduledFlush()
+  const eventsToFlush = queuedEvents
+  queuedEvents = []
+  eventsToFlush.forEach(postAnalyticsEvent)
+}
+
+function scheduleAnalyticsFlush() {
+  if (typeof window === 'undefined') {
+    flushAnalyticsQueue()
+    return
+  }
+
+  if (flushTimerId !== null) {
+    return
+  }
+
+  flushTimerId = window.setTimeout(() => {
+    flushAnalyticsQueue()
+  }, ANALYTICS_FLUSH_DELAY_MS)
+}
+
+function bindFlushListeners() {
+  if (flushListenersBound || typeof window === 'undefined') {
+    return
+  }
+
+  const flushSoon = () => {
+    flushAnalyticsQueue()
+  }
+
+  window.addEventListener('pagehide', flushSoon)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      flushSoon()
+    }
+  })
+  flushListenersBound = true
+}
+
+export function trackAnalytics(event) {
+  if (!isAnalyticsEnabled()) {
+    return
+  }
+
+  bindFlushListeners()
+  queuedEvents.push(event)
+
+  if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(() => {
+      flushAnalyticsQueue()
+    }, { timeout: ANALYTICS_FLUSH_DELAY_MS })
+  }
+
+  scheduleAnalyticsFlush()
 }

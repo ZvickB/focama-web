@@ -18,6 +18,25 @@ const mobileMenuItems = navItems.filter((item) =>
 const HEADER_COLLAPSE_SCROLL_Y = 72
 const HEADER_EXPAND_SCROLL_Y = 20
 
+function WhyFocamaiLabel({ isActive = false }) {
+  return (
+    <>
+      <span
+        className={`font-semibold transition-colors duration-300 ${isActive ? 'text-slate-900' : ''}`}
+        style={isActive ? undefined : { color: '#0F6175' }}
+      >
+        Why Focama
+      </span>
+      <span
+        className={`font-semibold italic transition-colors duration-300 ${isActive ? 'text-slate-900' : ''}`}
+        style={isActive ? undefined : { color: '#E59B26' }}
+      >
+        i
+      </span>
+    </>
+  )
+}
+
 function SlidingNav({ items, className = '' }) {
   return (
     <nav className={`relative flex flex-wrap items-center gap-1.5 rounded-full ${className}`}>
@@ -41,24 +60,7 @@ function SlidingNav({ items, className = '' }) {
             <>
               <span className="relative z-10">
                 {item.highlight ? (
-                  <>
-                    <span
-                      className={`font-semibold transition-colors duration-300 ${
-                        isActive ? 'text-slate-900' : ''
-                      }`}
-                      style={isActive ? undefined : { color: '#0F6175' }}
-                    >
-                      Why Focama
-                    </span>
-                    <span
-                      className={`font-semibold italic transition-colors duration-300 ${
-                        isActive ? 'text-slate-900' : ''
-                      }`}
-                      style={isActive ? undefined : { color: '#E59B26' }}
-                    >
-                      i
-                    </span>
-                  </>
+                  <WhyFocamaiLabel isActive={isActive} />
                 ) : (
                   item.label
                 )}
@@ -217,7 +219,9 @@ function SiteLayout() {
               >
                 {({ isActive }) => (
                   <>
-                    <span className="relative z-10">{item.label}</span>
+                    <span className="relative z-10">
+                      {item.highlight ? <WhyFocamaiLabel isActive={isActive} /> : item.label}
+                    </span>
                     <span
                       aria-hidden="true"
                       className={`pointer-events-none absolute bottom-0 left-1/2 h-[2px] -translate-x-1/2 rounded-full bg-[linear-gradient(90deg,#0F6175_0%,#2F7F8A_58%,#E59B26_100%)] transition-all duration-300 ${

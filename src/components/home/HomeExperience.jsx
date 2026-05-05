@@ -134,42 +134,7 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     () => buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }),
     [isGeneratingPrompt, prompt, submittedQuery],
   )
-  const [streamedHelper, setStreamedHelper] = useState('')
-  const [streamedHelperTarget, setStreamedHelperTarget] = useState('')
   const helperTarget = `${isGeneratingPrompt ? 'generating' : 'idle'}:${displayedCopy.helper}`
-  const helperCopy =
-    isGeneratingPrompt
-      ? streamedHelperTarget === helperTarget
-        ? streamedHelper
-        : ''
-      : displayedCopy.helper
-
-  useEffect(() => {
-    if (!isGeneratingPrompt) {
-      return undefined
-    }
-
-    const resetTimer = window.setTimeout(() => {
-      setStreamedHelper('')
-      setStreamedHelperTarget(helperTarget)
-    }, 0)
-
-    let characterIndex = 0
-    const intervalId = window.setInterval(() => {
-      characterIndex += 2
-      setStreamedHelper(displayedCopy.helper.slice(0, characterIndex))
-      setStreamedHelperTarget(helperTarget)
-
-      if (characterIndex >= displayedCopy.helper.length) {
-        window.clearInterval(intervalId)
-      }
-    }, 40)
-
-    return () => {
-      window.clearTimeout(resetTimer)
-      window.clearInterval(intervalId)
-    }
-  }, [displayedCopy.helper, helperTarget, isGeneratingPrompt])
 
   return (
     <div className="space-y-2">
@@ -206,12 +171,21 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
             </MotionParagraph>
           ) : null}
         </AnimatePresence>
-        <p className="max-w-2xl text-sm font-medium leading-7 text-slate-600 sm:text-[15px]">
-          {helperCopy}
-          {isGeneratingPrompt ? (
-            <span className="ml-0.5 inline-block h-4 w-px translate-y-0.5 animate-pulse bg-slate-400 align-middle" />
-          ) : null}
-        </p>
+        <AnimatePresence mode="wait">
+          <MotionParagraph
+            key={helperTarget}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.24, ease: 'easeOut' }}
+            className="max-w-2xl text-sm font-medium leading-7 text-slate-600 sm:text-[15px]"
+          >
+            {displayedCopy.helper}
+            {isGeneratingPrompt ? (
+              <span className="ml-0.5 inline-block h-4 w-px translate-y-0.5 animate-pulse bg-slate-400 align-middle" />
+            ) : null}
+          </MotionParagraph>
+        </AnimatePresence>
       </div>
     </div>
   )
@@ -687,7 +661,7 @@ function OpenLayout(props) {
                   </div>
                 </div>
               ) : null}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="mobile-landscape-results-grid grid grid-cols-1 gap-4">
                 {RESULT_CARD_SLOTS.map((index) => (
                   <ResultSkeleton key={index} className="opacity-95" />
                 ))}

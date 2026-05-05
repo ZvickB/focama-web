@@ -9,7 +9,11 @@ function PageShell({ eyebrow, title, description, children, bare = false }) {
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
             {title}
           </h1>
-          <p className="max-w-3xl text-base leading-8 text-slate-600 sm:text-lg">{description}</p>
+          {description ? (
+            <p className="max-w-3xl text-base leading-8 text-slate-600 sm:text-lg">
+              {description}
+            </p>
+          ) : null}
         </div>
         {bare ? (
           <div className="mt-8 space-y-6 text-base leading-8 text-slate-700">{children}</div>

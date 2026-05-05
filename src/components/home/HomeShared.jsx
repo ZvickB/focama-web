@@ -435,7 +435,7 @@ export function ResultsSection({
           </div>
 
           <div>
-            <div className="mx-auto grid max-w-6xl grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 sm:gap-5">
+            <div className="mobile-landscape-results-grid mx-auto grid max-w-6xl grid-cols-1 gap-3 sm:gap-5 xl:grid-cols-3">
               {RESULT_CARD_SLOTS.map((index) => (
                 <div key={index}>
                   <ResultSkeleton />
@@ -501,7 +501,7 @@ export function ResultsSection({
             ) : null}
 
             <div
-              className={`mx-auto grid max-w-6xl grid-cols-1 gap-3 transition-all duration-300 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3 ${
+              className={`mobile-landscape-results-grid mx-auto grid max-w-6xl grid-cols-1 gap-3 transition-all duration-300 sm:gap-5 xl:grid-cols-3 ${
                 isFinalizing && !hasFinalResults ? 'scale-[0.995] opacity-80' : 'opacity-100'
               }`}
             >
@@ -555,7 +555,7 @@ export function ResultsSection({
             </div>
             <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-180" />
           </summary>
-          <div className="mt-4 grid max-w-6xl grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 sm:gap-5">
+          <div className="mobile-landscape-results-grid mt-4 grid max-w-6xl grid-cols-1 gap-3 sm:gap-5 xl:grid-cols-3">
             {orderedPreviousResults.map((item, index) => (
               <div key={`previous-${item.id}`}>
                 <ProductCard

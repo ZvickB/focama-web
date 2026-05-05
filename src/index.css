@@ -4,6 +4,14 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  @media (orientation: landscape) and (max-height: 480px) {
+    .mobile-landscape-results-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+}
+
 @layer base {
   :root {
     --background: 36 33% 96%;
