@@ -18,6 +18,7 @@
 - Product shortlists stay at 6 items.
 - The guided backend path is the real product path; `/api/search/live` is not part of the current user flow.
 - The PNG wordmark is the active wordmark.
+- Public routes now have route-level SEO metadata plus static `robots.txt`, `sitemap.xml`, and `site.webmanifest`.
 - Current behavior is canonical in `project-notes/app_flow.md`.
 
 ## Current guided flow

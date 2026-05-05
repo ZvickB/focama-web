@@ -9,6 +9,7 @@
 - The app is Vite + React + React Router + TanStack Query + Tailwind + Vitest.
 - The homepage at `/` uses the `open` layout: single-column, search-first, calm, and mobile-first.
 - The homepage now ships in the plain white visual mode by default; the temporary homepage background toggle is no longer part of the active UI.
+- Basic SEO plumbing is now in place: route-level metadata, canonicals, OG/Twitter tags, sitemap, robots, and manifest.
 - The current user path is: search -> short follow-up -> preview or focused shortlist -> modal details -> retailer clickout.
 - A tester-only feedback FAB now opens a lightweight sheet for quick product feedback, optional free text, and optional follow-up email.
 - Shortlists are always 6 items.

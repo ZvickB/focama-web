@@ -8,6 +8,8 @@
 - The site uses React Router with a shared shell.
 - Current public pages are Home, About, Contact, Privacy, and Affiliate Disclosure.
 - The homepage is the main product experience and uses the `open` layout.
+- Public routes now set page-level SEO metadata in the client: title, description, canonical URL, Open Graph, Twitter tags, and `noindex` on the 404 page.
+- Static crawl assets now include `robots.txt`, `sitemap.xml`, and `site.webmanifest`.
 
 ## Homepage flow
 - First load shows an HTML boot splash from `index.html`.
