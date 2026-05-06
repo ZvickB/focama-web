@@ -5,7 +5,7 @@ function HomePage() {
   return (
     <>
       <Seo
-        title="Calm product search before the marketplace"
+        title="Focamai"
         description="Describe what you need, answer one short follow-up, and get six focused product picks without getting lost in a marketplace."
         path="/"
         jsonLd={[

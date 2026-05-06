@@ -308,7 +308,7 @@ function buildMiniEnrichmentPrompt({ lockedCandidates, query, details }) {
     'Write a short explanation for each of these selected products. Write like a trusted assistant, not a salesperson.',
     'The shortlist is already decided. Do not change the order or swap any product.',
     'For each product, write two separate fields:',
-    '1. fit_reason: One or two sentences explaining why it was picked for this specific need. Be specific to the user context. Avoid superlatives, hype phrases, and generic positives.',
+    '1. fit_reason: One or two sentences explaining why it was picked for this specific need. If the user provided follow-up context, address that directly in the first sentence — do not bury it or treat it as an afterthought. Avoid superlatives, hype phrases, and generic positives.',
     '2. caveat: One honest drawback or caveat — practical (e.g. exceeds budget, heavier than alternatives) or contextual (e.g. better if X matters more than Y). Do not skip this even if the pick is strong.',
     'Use feature bullets and any richer product description when they are provided. Prefer concrete product attributes over generic praise.',
     'If richer product detail is missing, fall back to the basic title/price/rating context and do not invent attributes.',
