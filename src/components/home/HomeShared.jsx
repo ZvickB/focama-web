@@ -194,11 +194,13 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
                   'radial-gradient(circle at 18% 12%, rgba(229,155,38,0.12), transparent 32%), radial-gradient(circle at 84% 0%, rgba(15,97,117,0.08), transparent 28%), linear-gradient(180deg, rgba(250,246,240,0.86), rgba(255,255,255,0.92))',
               }}
             >
-              <img
-                src={item.image}
-                alt={item.title}
-                className="h-full w-full object-contain"
-              />
+              <div className="flex h-full w-full items-center justify-center rounded-[28px] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(250,246,240,0.98))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_22px_44px_-34px_rgba(120,87,63,0.24)] sm:p-4">
+                <img
+                  src={item.image}
+                  alt={item.title}
+                  className="h-full w-full rounded-[24px] object-contain mix-blend-multiply"
+                />
+              </div>
             </div>
           </div>
 

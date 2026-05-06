@@ -121,14 +121,16 @@ function ProductCard({
             />
           </div>
         ) : (
-          <img
-            className="aspect-square w-full object-contain p-5 transition duration-500 group-hover:scale-[1.025]"
-            src={image}
-            alt={title}
-            loading="lazy"
-            decoding="async"
-            onError={() => setImgError(true)}
-          />
+          <div className="m-3 rounded-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(250,246,240,0.98))] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_18px_38px_-28px_rgba(120,87,63,0.28)] sm:m-4">
+            <img
+              className="aspect-square w-full object-contain rounded-[20px] p-4 mix-blend-multiply transition duration-500 group-hover:scale-[1.025]"
+              src={image}
+              alt={title}
+              loading="lazy"
+              decoding="async"
+              onError={() => setImgError(true)}
+            />
+          </div>
         )}
       </div>
       <CardContent className="space-y-3.5 p-4 sm:p-5">
