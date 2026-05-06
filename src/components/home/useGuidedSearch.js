@@ -234,6 +234,22 @@ function mergeEnrichmentIntoResults(results, enrichmentEntries) {
   })
 }
 
+function entriesNeedFeatureBulletHydration(enrichmentEntries) {
+  if (!Array.isArray(enrichmentEntries) || enrichmentEntries.length === 0) {
+    return false
+  }
+
+  return enrichmentEntries.some((entry) => {
+    const featureBullets = Array.isArray(entry?.feature_bullets)
+      ? entry.feature_bullets
+      : Array.isArray(entry?.featureBullets)
+        ? entry.featureBullets
+        : []
+
+    return featureBullets.length === 0
+  })
+}
+
 function mergeFinalizeResults(results, sourceCandidatePool) {
   if (!Array.isArray(results) || !sourceCandidatePool?.candidates) {
     return Array.isArray(results) ? results : []
@@ -354,6 +370,7 @@ export function useGuidedSearch() {
   const [isEnrichmentSettled, setIsEnrichmentSettled] = useState(false)
   const activeSearchIdRef = useRef(0)
   const enrichmentPollRef = useRef({ source: null, timerId: null, searchId: 0 })
+  const shouldContinueDetailHydrationRef = useRef(false)
   const finalizeAbortControllerRef = useRef(null)
   const analyticsSearchIdRef = useRef('')
   const analyticsSessionIdRef = useRef('')
@@ -387,6 +404,7 @@ export function useGuidedSearch() {
     }
 
     enrichmentPollRef.current.searchId = 0
+    shouldContinueDetailHydrationRef.current = false
   }
 
   function cancelFinalizeRequest() {
@@ -414,6 +432,7 @@ export function useGuidedSearch() {
     if (window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__) return
     stopEnrichmentPolling()
     enrichmentPollRef.current.searchId = searchId
+    shouldContinueDetailHydrationRef.current = false
     const startedAt = performance.now()
 
     function schedulePoll() {
@@ -436,12 +455,19 @@ export function useGuidedSearch() {
           }
 
           if (payload.ready) {
-            stopEnrichmentPolling()
             if (Array.isArray(payload.entries) && payload.entries.length > 0) {
               setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
               setIsEnrichmentReady(true)
+              shouldContinueDetailHydrationRef.current = entriesNeedFeatureBulletHydration(payload.entries)
             }
             setIsEnrichmentSettled(true)
+
+            if (shouldContinueDetailHydrationRef.current) {
+              schedulePoll()
+              return
+            }
+
+            stopEnrichmentPolling()
             return
           }
         } catch {
@@ -474,12 +500,23 @@ export function useGuidedSearch() {
         const payload = JSON.parse(event.data)
 
         if (payload.ready) {
-          stopEnrichmentPolling()
           if (Array.isArray(payload.entries) && payload.entries.length > 0) {
             setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
             setIsEnrichmentReady(true)
+            shouldContinueDetailHydrationRef.current = entriesNeedFeatureBulletHydration(payload.entries)
           }
           setIsEnrichmentSettled(true)
+
+          if (shouldContinueDetailHydrationRef.current) {
+            if (enrichmentPollRef.current.source) {
+              enrichmentPollRef.current.source.close()
+              enrichmentPollRef.current.source = null
+            }
+            schedulePoll()
+            return
+          }
+
+          stopEnrichmentPolling()
         }
       } catch {
         stopEnrichmentPolling()

@@ -85,6 +85,8 @@
 - Search cache and operational history use Supabase when configured, with local fallback in development.
 - Product details have a separate per-ASIN cache shared across detail providers.
 - Async mini enrichment is token-scoped when it writes back into guided discovery cache so older same-query searches cannot leak context-specific `fit_reason` or `caveat` text into newer sessions.
+- Oxylabs product-detail fetches use a fast first pass for finalize enrichment and retry failed ASIN detail calls in the background so cache quality can still improve without holding the modal AI copy back longer.
+- When a background detail retry later succeeds, the stored enrichment payload is updated with the new `feature_bullets` and the frontend keeps polling long enough for the open modal to hydrate those bullets in place.
 - `search_history` is internal telemetry, not user-facing history.
 - Rate limiting is currently a 10-second in-memory rolling window with a limit of 15 requests per IP on the Render process.
 - Guided routes expose `Server-Timing`.

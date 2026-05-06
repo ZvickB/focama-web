@@ -5,6 +5,26 @@ import {
   OXYLABS_ENDPOINT,
 } from './oxylabs-pipeline.js'
 
+async function flushAsyncWork() {
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+async function waitForExpectation(assertion, attempts = 20) {
+  let lastError
+
+  for (let index = 0; index < attempts; index += 1) {
+    try {
+      assertion()
+      return
+    } catch (error) {
+      lastError = error
+      await flushAsyncWork()
+    }
+  }
+
+  throw lastError
+}
+
 describe('oxylabs pipeline', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn())
@@ -177,5 +197,71 @@ describe('oxylabs pipeline', () => {
       feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
       productDescription: 'A compact stroller built for airport travel.',
     })
+  })
+
+  it('returns first-pass details immediately, then retries failed detail fetches into cache in the background', async () => {
+    const writeCache = vi.fn().mockResolvedValue(undefined)
+    const callsByAsin = new Map()
+
+    fetch.mockImplementation(async (_url, requestInit) => {
+      const asin = JSON.parse(requestInit.body).query
+      const callCount = (callsByAsin.get(asin) ?? 0) + 1
+      callsByAsin.set(asin, callCount)
+
+      if (asin === 'B002' && callCount === 1) {
+        throw new Error('detail request timed out')
+      }
+
+      return {
+        ok: true,
+        json: async () => ({
+          results: [{
+            content: {
+              asin,
+              bullet_points: `${asin} bullet one\n${asin} bullet two`,
+              description: `${asin} description`,
+            },
+          }],
+        }),
+      }
+    })
+
+    const result = await fetchOxylabsProductDetailsByAsin({
+      asins: ['B001', 'B002'],
+      oxylabsUsername: 'oxy-user',
+      oxylabsPassword: 'oxy-pass',
+      amazonDomain: 'amazon.com',
+      writeCache,
+    })
+
+    expect(result).toBeInstanceOf(Map)
+    expect(result.get('B001')).toEqual({
+      feature_bullets: ['B001 bullet one', 'B001 bullet two'],
+      productDescription: 'B001 description',
+    })
+    expect(result.has('B002')).toBe(false)
+
+    await waitForExpectation(() => {
+      expect(writeCache).toHaveBeenCalledTimes(2)
+      expect(writeCache.mock.calls).toEqual([
+        [[{
+          asin: 'B001',
+          feature_bullets: ['B001 bullet one', 'B001 bullet two'],
+          productDescription: 'B001 description',
+          source: 'oxylabs',
+          needsUpdating: false,
+          nextUpdateAt: null,
+        }]],
+        [[{
+          asin: 'B002',
+          feature_bullets: ['B002 bullet one', 'B002 bullet two'],
+          productDescription: 'B002 description',
+          source: 'oxylabs',
+          needsUpdating: false,
+          nextUpdateAt: null,
+        }]],
+      ])
+    })
+    expect(callsByAsin.get('B002')).toBe(2)
   })
 })

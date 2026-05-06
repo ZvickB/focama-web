@@ -35,6 +35,7 @@ import {
   recordAnalyticsResultClick,
   recordAnalyticsResultImpressions,
   recordAnalyticsSearchEvent,
+  recordOxylabsProductFailures,
   readProductDetailsCacheEntries,
   upsertAnalyticsSearchRun,
   writeProductDetailsCacheEntries,
@@ -982,6 +983,128 @@ async function runMiniEnrichmentAsync({
   return miniResult
 }
 
+function mergeLateProductDetailsIntoEnrichmentEntries(entries, productDetailsById) {
+  if (!Array.isArray(entries) || !productDetailsById?.size) {
+    return {
+      changed: false,
+      entries,
+    }
+  }
+
+  let changed = false
+  const nextEntries = entries.map((entry) => {
+    const candidateId = String(entry?.candidate_id || entry?.candidateId || '')
+    const productDetails = productDetailsById.get(candidateId)
+
+    if (!productDetails) {
+      return entry
+    }
+
+    const nextFeatureBullets = Array.isArray(productDetails.feature_bullets)
+      ? productDetails.feature_bullets
+      : []
+    const currentFeatureBullets = Array.isArray(entry?.feature_bullets)
+      ? entry.feature_bullets
+      : Array.isArray(entry?.featureBullets)
+        ? entry.featureBullets
+        : []
+
+    if (JSON.stringify(currentFeatureBullets) === JSON.stringify(nextFeatureBullets)) {
+      return entry
+    }
+
+    changed = true
+
+    return {
+      ...entry,
+      feature_bullets: nextFeatureBullets,
+    }
+  })
+
+  return {
+    changed,
+    entries: nextEntries,
+  }
+}
+
+async function applyLateProductDetailsToEnrichment({
+  normalizedQuery,
+  discoveryToken,
+  discoveryScope = CACHE_SCOPE_DISCOVERY,
+  productDetailsById,
+  maxAttempts = 8,
+  retryDelayMs = 250,
+}) {
+  if (!productDetailsById?.size) {
+    return false
+  }
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const resolvedDiscoveryContext = await resolveDiscoveryContext(
+      normalizedQuery,
+      discoveryToken,
+      [discoveryScope],
+    )
+
+    if (!resolvedDiscoveryContext.isValid) {
+      return false
+    }
+
+    const { cachedEntry } = resolvedDiscoveryContext
+    const enrichment = cachedEntry?.selection?.enrichment
+
+    if (Array.isArray(enrichment?.entries) && enrichment.entries.length > 0) {
+      const mergedEnrichment = mergeLateProductDetailsIntoEnrichmentEntries(
+        enrichment.entries,
+        productDetailsById,
+      )
+
+      if (!mergedEnrichment.changed) {
+        return false
+      }
+
+      const updatedSelection = {
+        ...(cachedEntry.selection && typeof cachedEntry.selection === 'object' ? cachedEntry.selection : {}),
+        enrichment: {
+          ...enrichment,
+          entries: mergedEnrichment.entries,
+          generatedAt: new Date().toISOString(),
+        },
+      }
+
+      await writeSearchSnapshot({
+        productQuery: normalizedQuery,
+        details: '',
+        candidatePool: cachedEntry.candidatePool,
+        discoveryToken: discoveryToken || cachedEntry.discoveryToken || '',
+        results: Array.isArray(cachedEntry.results) ? cachedEntry.results : [],
+        selection: updatedSelection,
+        source: 'enrichment_update',
+        scope: discoveryScope,
+      })
+
+      emitEnrichmentReady(
+        discoveryToken || cachedEntry.discoveryToken || '',
+        mergedEnrichment.entries,
+        enrichment.model || '',
+      )
+
+      logSearchFlowEvent('mini_enrichment_detail_retry_hydrated', {
+        query: normalizedQuery,
+        entryCount: mergedEnrichment.entries.length,
+      })
+
+      return true
+    }
+
+    if (attempt < maxAttempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
+    }
+  }
+
+  return false
+}
+
 export async function handleEnrichmentPoll(request, response) {
   const requestUrl = new URL(request.url, 'http://localhost')
   const token = requestUrl.searchParams.get('token') || ''
@@ -1466,6 +1589,7 @@ export async function handleFinalizeSelection(request, response) {
       runInBackground((async () => {
         try {
           const productDetailsStartedAt = nowMs()
+          const detailFailures = []
           const productDetailsById = await fetchOxylabsProductDetailsByAsin({ // TODO: swap back to Rainforest before launch.
             asins: selectedCandidateIds,
             oxylabsUsername,
@@ -1473,7 +1597,21 @@ export async function handleFinalizeSelection(request, response) {
             amazonDomain: sanitizedDiscoveryContext.amazonDomain,
             readCache: readProductDetailsCacheEntries,
             writeCache: writeProductDetailsCacheEntries,
+            onAsinFailure: (asin, failureType, statusCode) => {
+              detailFailures.push({ asin, failureType, statusCode, query: sanitizedDiscoveryContext.normalizedQuery })
+            },
+            onBackgroundRetryResolved: async (retryDetailsById) => {
+              await applyLateProductDetailsToEnrichment({
+                normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
+                discoveryToken: sanitizedDiscoveryContext.discoveryToken,
+                discoveryScope: resolvedDiscoveryContext.discoveryScope,
+                productDetailsById: retryDetailsById,
+              })
+            },
           })
+          if (detailFailures.length > 0) {
+            await recordOxylabsProductFailures(detailFailures)
+          }
           const productDetailsDuration = nowMs() - productDetailsStartedAt
           const enrichedCandidatePool = mergeProductDetailsIntoCandidatePool(nextCandidatePool, productDetailsById)
 

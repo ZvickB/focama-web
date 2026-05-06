@@ -53,6 +53,7 @@ vi.mock('./lib/search-storage.js', () => ({
   isSupabaseConfigured: vi.fn(() => false),
   readProductDetailsCacheEntries: vi.fn().mockResolvedValue(new Map()),
   readStoredSearchCacheEntry: vi.fn(),
+  recordOxylabsProductFailures: vi.fn().mockResolvedValue(undefined),
   recordTesterFeedback: vi.fn().mockResolvedValue(undefined),
   recordSearchHistory: vi.fn(),
   writeProductDetailsCacheEntries: vi.fn().mockResolvedValue(undefined),
@@ -1227,6 +1228,125 @@ describe('server handlers', () => {
       miniEnrichSelectedCandidates.mock.calls[0][0].candidatePool.candidates[1].feature_bullets ?? [],
     ).toEqual([])
     expect(miniEnrichSelectedCandidates.mock.calls[0][0].candidatePool.candidates[1].productDescription ?? '').toBe('')
+  })
+
+  it('hydrates stored enrichment bullets when a background detail retry succeeds later', async () => {
+    mockFinalizeEnv({
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
+    })
+    haikuLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5.4-nano',
+      lockedIds: ['one', 'two'],
+      usage: null,
+    })
+    miniEnrichSelectedCandidates.mockResolvedValue({
+      model: 'gpt-5-mini',
+      enriched: [
+        { candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey', feature_bullets: ['One-hand fold'] },
+        { candidate_id: 'two', fit_reason: 'Good backup', caveat: 'Less storage', feature_bullets: [] },
+      ],
+      enrichedIds: ['one', 'two'],
+      usage: null,
+      preservedOrder: true,
+    })
+
+    let discoveryEntry = createDiscoveryCacheEntry('stroller', [
+      createFinalizeCandidate('one'),
+      createFinalizeCandidate('two'),
+    ], {
+      mode: 'discovery_preview',
+    })
+
+    readStoredSearchCacheEntry.mockImplementation(async () => discoveryEntry)
+    writeStoredSearchCacheEntry.mockImplementation(async (entry) => {
+      discoveryEntry = {
+        ...discoveryEntry,
+        ...entry,
+        selection: entry.selection ?? discoveryEntry.selection,
+      }
+
+      return {
+        cachedAt: '2026-03-17T12:00:01.000Z',
+      }
+    })
+
+    const callsByAsin = new Map()
+    const fetchMock = vi.fn(async (_requestUrl, requestInit) => {
+      const asin = JSON.parse(requestInit.body).query
+      const callCount = (callsByAsin.get(asin) ?? 0) + 1
+      callsByAsin.set(asin, callCount)
+
+      if (asin === 'one') {
+        return {
+          ok: true,
+          json: async () => ({
+            results: [{
+              content: {
+                bullet_points: 'One-hand fold\nCompact enough for overhead bins',
+                description: 'A compact stroller built for airport travel.',
+              },
+            }],
+          }),
+        }
+      }
+
+      if (asin === 'two' && callCount === 1) {
+        throw new Error('detail request timed out')
+      }
+
+      return {
+        ok: true,
+        json: async () => ({
+          results: [{
+            content: {
+              bullet_points: 'Roomier basket\nCup holder included',
+              description: 'A flexible backup stroller for daily errands.',
+            },
+          }],
+        }),
+      }
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          ...createFinalizeDiscoveryBody(),
+          followUpNotes: 'best for city travel',
+          requestMode: 'guided_refined',
+        }),
+        { 'x-forwarded-for': '203.0.113.44' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+
+    await new Promise((resolve) => setTimeout(resolve, 700))
+
+    expect(writeStoredSearchCacheEntry.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({
+        selection: expect.objectContaining({
+          enrichment: expect.objectContaining({
+            entries: [
+              expect.objectContaining({
+                candidate_id: 'one',
+                feature_bullets: ['One-hand fold'],
+              }),
+              expect.objectContaining({
+                candidate_id: 'two',
+                feature_bullets: ['Roomier basket', 'Cup holder included'],
+              }),
+            ],
+          }),
+        }),
+      }),
+    )
+    expect(callsByAsin.get('two')).toBe(2)
   })
 
   it('reports Haiku finalize model metadata for context-added requests', async () => {

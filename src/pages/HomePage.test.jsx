@@ -1650,6 +1650,159 @@ expect(screen.queryByText('Travel stroller')).not.toBeInTheDocument()
     ).toBeInTheDocument()
   }, 10000)
 
+  it('keeps polling for late feature bullets after initial enrichment is already ready', async () => {
+    delete window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__
+    const user = userEvent.setup()
+    const finalizedResult = createMockResult({
+      fit_reason: '',
+      caveat: '',
+      feature_bullets: [],
+    })
+    let enrichmentCallCount = 0
+    const fetchMock = vi.fn((input) => {
+      const url = String(input)
+
+      if (url.includes('/api/search/rainforest-discover')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              discoveryToken: 'opaque-discovery-token',
+              candidatePool: {
+                query: 'stroller',
+                details: '',
+                candidates: [
+                  {
+                    id: 'result-1',
+                    title: 'Travel stroller',
+                    source: 'Target',
+                    price: '$129.99',
+                    rating: 4.4,
+                    reviewCount: 87,
+                    description: 'Lightweight and easy to fold.',
+                    reasons: ['Available from Target'],
+                    image: 'https://example.com/stroller.jpg',
+                    link: 'https://example.com/stroller',
+                  },
+                ],
+              },
+              previewResults: [createMockResult()],
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/refine')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              prompt: 'What should we optimize for with this stroller?',
+              helperText: 'Pick anything that matters.',
+              followUpPlaceholder: 'Anything else?',
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/finalize')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              candidatePool: {
+                query: 'stroller',
+                details: 'Notes: comfort matters most',
+                candidates: [],
+              },
+              results: [finalizedResult],
+              selection: {
+                mode: 'ai',
+              },
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/enrichment')) {
+        enrichmentCallCount += 1
+
+        if (enrichmentCallCount === 1) {
+          return Promise.resolve({
+            ok: true,
+            headers: { get: () => '' },
+            text: async () =>
+              JSON.stringify({
+                ready: true,
+                entries: [
+                  {
+                    candidateId: 'result-1',
+                    fitReason: 'Fits travel days well because it folds quickly and stays easy to carry.',
+                    caveat: 'Storage is tighter than on larger everyday strollers.',
+                    featureBullets: [],
+                  },
+                ],
+              }),
+          })
+        }
+
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              ready: true,
+              entries: [
+                {
+                  candidateId: 'result-1',
+                  fitReason: 'Fits travel days well because it folds quickly and stays easy to carry.',
+                  caveat: 'Storage is tighter than on larger everyday strollers.',
+                  featureBullets: [
+                    'One-hand fold for quick airport transfers.',
+                    'Compact carry strap for travel days.',
+                  ],
+                },
+              ],
+            }),
+        })
+      }
+
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+    await screen.findByText(/what should we optimize for with this stroller/i)
+    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
+    await user.click(screen.getByRole('button', { name: /show focused picks/i }))
+    await screen.findByText('Travel stroller')
+
+    await user.click(screen.getByText('Travel stroller'))
+
+    await waitFor(
+      () => {
+        expect(
+          screen.getByText(/fits travel days well because it folds quickly and stays easy to carry\./i),
+        ).toBeInTheDocument()
+      },
+      { timeout: 4000 },
+    )
+
+    await waitFor(
+      () => {
+        expect(
+          screen.getByText(/one-hand fold for quick airport transfers\./i),
+        ).toBeInTheDocument()
+      },
+      { timeout: 4000 },
+    )
+    expect(enrichmentCallCount).toBeGreaterThanOrEqual(2)
+  }, 10000)
+
   it('falls back to polling when the enrichment EventSource errors', async () => {
     delete window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__
     const user = userEvent.setup()
