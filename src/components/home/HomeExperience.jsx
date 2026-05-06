@@ -594,22 +594,17 @@ function OpenLayout(props) {
                   </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="order-2 hidden flex-col gap-1 sm:order-1">
-                      <Button
+                    <div className="order-2 flex flex-col items-start gap-1 sm:order-1">
+                      <button
                         type="button"
                         disabled={!hasDiscoveryResults || state.isFinalizing}
-                        variant="outline"
-                        className={`h-12 w-full rounded-[24px] border-[#dbcdbb] px-6 text-sm font-medium transition sm:w-auto ${
-                          hasDiscoveryResults && !state.isFinalizing
-                            ? 'bg-white/94 text-slate-700 shadow-[0_14px_34px_-28px_rgba(120,87,63,0.24)] hover:border-[#ccbba5] hover:bg-[#fdfaf6] hover:text-slate-900'
-                            : 'text-slate-400'
-                        }`}
+                        className="text-left text-sm text-slate-500 underline-offset-2 transition-colors hover:text-slate-700 hover:underline disabled:pointer-events-none disabled:opacity-40"
                         onClick={onShowProductsNow}
                       >
                         Just show me results
-                      </Button>
-                      <p className="px-1 text-xs text-slate-400">
-                        No AI refinement — results based on your search only.
+                      </button>
+                      <p className="text-left text-xs text-slate-400">
+                        No AI refinement<br />results based on your search only.
                       </p>
                     </div>
                     <div className="order-1 flex flex-col gap-1 sm:order-2 sm:items-end">
@@ -627,7 +622,7 @@ function OpenLayout(props) {
                         )}
                       </Button>
                       <p className="px-1 text-xs text-slate-400">
-                        Best results — takes ~5 more seconds
+                        Best results — takes ~4 more seconds
                       </p>
                     </div>
                   </div>
