@@ -30,6 +30,14 @@ export function AmazonStorePill({ variant = 'default' }) {
 
   useEffect(() => {
     if (window.__FOCAMAI_DISABLE_GEO_FETCH__) return undefined
+    const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+    if (browserTimeZone === 'America/Toronto' || browserTimeZone === 'America/Montreal') {
+      setDetectedCountryCode('CA')
+      setResolvedAmazonDomain(getAmazonDomainFromCountryCode('CA'))
+      return undefined
+    }
+
     fetch('/api/geo')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
