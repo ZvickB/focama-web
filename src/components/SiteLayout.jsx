@@ -10,6 +10,7 @@ const navItems = [
   { to: '/', label: 'Home', end: true },
   { to: '/why', label: 'Why Focamai', highlight: true },
   { to: '/contact', label: 'Contact' },
+  ...(import.meta.env.DEV ? [{ to: '/admin/analytics', label: 'Analytics' }] : []),
 ]
 
 const mobileMenuItems = navItems.filter((item) =>

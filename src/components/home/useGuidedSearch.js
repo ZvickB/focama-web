@@ -354,6 +354,7 @@ export function useGuidedSearch() {
   const [isEnrichmentSettled, setIsEnrichmentSettled] = useState(false)
   const activeSearchIdRef = useRef(0)
   const enrichmentPollRef = useRef({ source: null, timerId: null, searchId: 0 })
+  const finalizeAbortControllerRef = useRef(null)
   const analyticsSearchIdRef = useRef('')
   const analyticsSessionIdRef = useRef('')
   const retryAdviceRequestIdRef = useRef(0)
@@ -388,8 +389,16 @@ export function useGuidedSearch() {
     enrichmentPollRef.current.searchId = 0
   }
 
+  function cancelFinalizeRequest() {
+    if (finalizeAbortControllerRef.current) {
+      finalizeAbortControllerRef.current.abort()
+      finalizeAbortControllerRef.current = null
+    }
+  }
+
   function expireSearchSession(message = createExpiredSessionMessage()) {
     stopEnrichmentPolling()
+    cancelFinalizeRequest()
     finalizeMutation.reset()
     setDiscoveryToken('')
     setCandidatePool(null)
@@ -495,6 +504,10 @@ export function useGuidedSearch() {
   }
 
   function applyFinalizePayload(payload, variables) {
+    if ((variables?.searchId || 0) !== activeSearchIdRef.current) {
+      return
+    }
+
     const finalizedResults = enrichFinalResultsForDisplay(
       mergeFinalizeResults(payload.results, variables.originalCandidatePool),
     )
@@ -585,7 +598,15 @@ export function useGuidedSearch() {
     }
   }
 
-  function handleFinalizeError(error) {
+  function handleFinalizeError(error, variables) {
+    if ((variables?.searchId || 0) !== activeSearchIdRef.current) {
+      return
+    }
+
+    if (error?.name === 'AbortError') {
+      return
+    }
+
     const message = error instanceof Error ? error.message : 'Unable to finalize the search.'
 
     if (/session expired|start a new search/i.test(message)) {
@@ -597,7 +618,14 @@ export function useGuidedSearch() {
   }
 
   function startFinalizeMutation(variables) {
-    finalizeMutation.mutate(variables)
+    cancelFinalizeRequest()
+    const abortController = new AbortController()
+    finalizeAbortControllerRef.current = abortController
+    finalizeMutation.mutate({
+      ...variables,
+      searchId: activeSearchIdRef.current,
+      signal: abortController.signal,
+    })
   }
 
   const finalizeMutation = useMutation({
@@ -607,6 +635,11 @@ export function useGuidedSearch() {
     },
     onSuccess: applyFinalizePayload,
     onError: handleFinalizeError,
+    onSettled: (_data, _error, variables) => {
+      if ((variables?.searchId || 0) === activeSearchIdRef.current) {
+        finalizeAbortControllerRef.current = null
+      }
+    },
   })
   const retryAdviceMutation = useMutation({
     mutationFn: fetchRetryAdvice,
@@ -673,6 +706,7 @@ export function useGuidedSearch() {
   }, [finalResultsKey, results.length])
 
   useEffect(() => () => {
+    cancelFinalizeRequest()
     stopEnrichmentPolling()
   }, [])
 
@@ -689,6 +723,7 @@ export function useGuidedSearch() {
 
   function resetGuidedState(nextSubmittedQuery, nextSubmittedAmazonDomain = '') {
     stopEnrichmentPolling()
+    cancelFinalizeRequest()
     invalidateRetryAdviceRequests()
     setHasStartedSearch(true)
     setSubmittedQuery(nextSubmittedQuery)
@@ -723,6 +758,7 @@ export function useGuidedSearch() {
   function resetToNewSearch() {
     activeSearchIdRef.current += 1
     invalidateRetryAdviceRequests()
+    cancelFinalizeRequest()
     stopEnrichmentPolling()
     finalizeMutation.reset()
     retryAdviceMutation.reset()

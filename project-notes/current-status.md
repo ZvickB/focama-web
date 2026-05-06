@@ -10,6 +10,7 @@
 - The homepage at `/` uses the `open` layout: single-column, search-first, calm, and mobile-first.
 - The homepage now ships in the plain white visual mode by default; the temporary homepage background toggle is no longer part of the active UI.
 - Basic SEO plumbing is now in place: route-level metadata, canonicals, OG/Twitter tags, sitemap, robots, and manifest.
+- A local-only internal analytics dashboard now lives at `/admin/analytics` during development and reads a backend funnel summary instead of querying Supabase directly from the browser.
 - The current user path is: search -> short follow-up -> preview or focused shortlist -> modal details -> retailer clickout.
 - A tester-only feedback FAB now opens a lightweight sheet for quick product feedback, optional free text, and optional follow-up email.
 - Shortlists are always 6 items.
@@ -30,6 +31,7 @@
 - Backend is deployed on Render through `backend/express-server.js`.
 - `GET /api/search/rainforest-discover` is the primary homepage discovery route.
 - `GET /api/search/refine`, `POST /api/search/finalize`, `GET /api/search/enrichment-stream`, `GET /api/search/enrichment`, and `POST /api/search/retry-advice` are all active in the Render app.
+- `GET /api/analytics/dashboard` is a localhost-only development endpoint for the internal analytics page and returns `404` in production.
 - `GET /api/geo` intentionally stays on Vercel so the frontend can resolve the user’s country from Vercel headers and send an explicit Amazon domain on guided requests when the store picker is left on `Auto`.
 - Discovery cache and operational history use Supabase when configured, with local file fallback in development.
 - Product details use a separate provider-agnostic per-ASIN cache, also with Supabase preferred and local fallback available.
@@ -42,7 +44,7 @@
 - Partial valid Haiku output is treated as recoverable: the backend tops it up from deterministic fallback and returns `selection.strategy: 'haiku_lock_topped_up'`.
 - The current detail helper for shortlisted ASINs is still `fetchOxylabsProductDetailsByAsin`.
 - Product details are cached per ASIN before mini enrichment runs, using the final displayed shortlist IDs.
-- Mini enrichment writes `fit_reason` and `caveat` back into guided cache, then the frontend hydrates the modal via SSE first and polling fallback second.
+- Mini enrichment writes `fit_reason` and `caveat` back into guided cache for the exact active `discoveryToken`, then the frontend hydrates the modal via SSE first and polling fallback second.
 
 ## Active constraints
 - Keep the guided flow as the main product path.

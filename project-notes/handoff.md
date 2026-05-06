@@ -21,7 +21,7 @@
 - Replace the About page with a `Why Focamai` page, then update nav and add a clear return-home path.
 - Decide how retailer clickouts and affiliate disclosures should appear once outbound linking is treated as launch-ready product behavior.
 - Keep trimming `backend/server.js` so route orchestration and flow logic do not keep growing in one file.
-- Write a few practical analytics read queries or a lightweight internal view for search funnel and cache-health inspection.
+- Use the local `/admin/analytics` dashboard during development against live data and decide which weak-query, weak-ranking, or refine-friction fixes to prioritize first.
 
 ## Backend/provider follow-ups
 - The current shortlist-detail helper is still Oxylabs-backed. When ready, switch finalize to `fetchRainforestProductDetailsByAsin` without changing the shared product-details cache layer.

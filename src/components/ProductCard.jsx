@@ -16,7 +16,12 @@ function getUserFacingReasons(reasons = []) {
       return false
     }
 
-    return !/serpapi search route|live product result returned/i.test(normalizedReason)
+    return !(
+      /serpapi search route|live product result returned/i.test(normalizedReason) ||
+      /^available from\b/i.test(normalizedReason) ||
+      /^listed around\b/i.test(normalizedReason) ||
+      /^price details were limited\b/i.test(normalizedReason)
+    )
   })
 }
 

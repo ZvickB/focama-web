@@ -31,6 +31,7 @@ import {
 import { fetchOxylabsArtifacts, fetchOxylabsProductDetailsByAsin } from './lib/oxylabs-pipeline.js'
 import {
   isSupabaseConfigured,
+  readAnalyticsDashboardData,
   recordAnalyticsResultClick,
   recordAnalyticsResultImpressions,
   recordAnalyticsSearchEvent,
@@ -66,6 +67,8 @@ const FEEDBACK_MAX_QUERY_LENGTH = 200
 const FEEDBACK_MAX_FREE_TEXT_LENGTH = 2000
 const FEEDBACK_MAX_EMAIL_LENGTH = 240
 const FEEDBACK_MAX_SELECTED_PRODUCT_ID_LENGTH = 200
+const ANALYTICS_DASHBOARD_MAX_DAYS = 90
+const ANALYTICS_DASHBOARD_DEFAULT_DAYS = 14
 const ENRICHMENT_STREAM_TIMEOUT_MS = 30000
 const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
 const CACHE_SCOPE_RAINFOREST = 'rainforest_discovery'
@@ -112,6 +115,39 @@ function hasContextAddedFinalizeSignals({
 
 function roundTimingDuration(value) {
   return Math.round(value * 10) / 10
+}
+
+function clampInteger(value, { defaultValue, min, max }) {
+  const numericValue = Number(value)
+
+  if (!Number.isFinite(numericValue)) {
+    return defaultValue
+  }
+
+  return Math.min(max, Math.max(min, Math.round(numericValue)))
+}
+
+function readHeaderValue(headers, key) {
+  const rawValue = headers?.[key]
+
+  if (Array.isArray(rawValue)) {
+    return rawValue[0] || ''
+  }
+
+  return typeof rawValue === 'string' ? rawValue : ''
+}
+
+function isLocalhostHost(hostValue = '') {
+  const normalizedHost = hostValue.trim().toLowerCase()
+
+  return (
+    normalizedHost.startsWith('localhost:') ||
+    normalizedHost === 'localhost' ||
+    normalizedHost.startsWith('127.0.0.1:') ||
+    normalizedHost === '127.0.0.1' ||
+    normalizedHost.startsWith('[::1]:') ||
+    normalizedHost === '::1'
+  )
 }
 
 function nowMs() {
@@ -881,7 +917,15 @@ export async function handleSearchDebug(requestUrl, response) {
 }
 
 // Runs mini enrichment after Haiku has locked the shortlist, stores result in discovery cache.
-async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model, normalizedQuery, discoveryScope = CACHE_SCOPE_DISCOVERY }) {
+async function runMiniEnrichmentAsync({
+  lockedIds,
+  candidatePool,
+  apiKey,
+  model,
+  normalizedQuery,
+  discoveryToken,
+  discoveryScope = CACHE_SCOPE_DISCOVERY,
+}) {
   const miniResult = await miniEnrichSelectedCandidates({
     lockedIds,
     candidatePool,
@@ -889,15 +933,17 @@ async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model,
     model,
   })
 
-  const { cachedEntry } = await readCachedSearchSnapshot({
-    productQuery: normalizedQuery,
-    details: '',
-    scope: discoveryScope,
-  })
+  const resolvedDiscoveryContext = await resolveDiscoveryContext(
+    normalizedQuery,
+    discoveryToken,
+    [discoveryScope],
+  )
 
-  if (!cachedEntry) {
+  if (!resolvedDiscoveryContext.isValid) {
     return
   }
+
+  const { cachedEntry } = resolvedDiscoveryContext
 
   const updatedSelection = {
     ...(cachedEntry.selection && typeof cachedEntry.selection === 'object' ? cachedEntry.selection : {}),
@@ -913,7 +959,7 @@ async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model,
     productQuery: normalizedQuery,
     details: '',
     candidatePool: cachedEntry.candidatePool,
-    discoveryToken: cachedEntry.discoveryToken || '',
+    discoveryToken: discoveryToken || cachedEntry.discoveryToken || '',
     results: Array.isArray(cachedEntry.results) ? cachedEntry.results : [],
     selection: updatedSelection,
     source: 'enrichment_update',
@@ -921,7 +967,7 @@ async function runMiniEnrichmentAsync({ lockedIds, candidatePool, apiKey, model,
   })
 
   emitEnrichmentReady(
-    cachedEntry.discoveryToken || '',
+    discoveryToken || cachedEntry.discoveryToken || '',
     miniResult.enriched,
     miniResult.model,
   )
@@ -1437,6 +1483,7 @@ export async function handleFinalizeSelection(request, response) {
             apiKey: openAiApiKey,
             model: miniModel,
             normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
+            discoveryToken: sanitizedDiscoveryContext.discoveryToken,
             discoveryScope: resolvedDiscoveryContext.discoveryScope,
           })
 
@@ -1562,6 +1609,44 @@ export async function handleAnalyticsTrack(request, response) {
   sendJson(response, 202, { ok: true })
 }
 
+export async function handleAnalyticsDashboard(request, response) {
+  if (process.env.NODE_ENV === 'production') {
+    sendJson(response, 404, { error: 'Not found.' })
+    return
+  }
+
+  if (!isSupabaseConfigured()) {
+    sendJson(response, 503, {
+      error: 'Supabase is not configured, so the analytics dashboard cannot read stored funnel data.',
+    })
+    return
+  }
+
+  const host = readHeaderValue(request.headers, 'host')
+
+  if (!isLocalhostHost(host)) {
+    sendJson(response, 403, {
+      error: 'Analytics dashboard is only available from localhost in development.',
+    })
+    return
+  }
+
+  const requestUrl = new URL(request.url || '/', `http://${request.headers.host || '127.0.0.1'}`)
+  const days = clampInteger(requestUrl.searchParams.get('days'), {
+    defaultValue: ANALYTICS_DASHBOARD_DEFAULT_DAYS,
+    min: 1,
+    max: ANALYTICS_DASHBOARD_MAX_DAYS,
+  })
+  const dashboard = await readAnalyticsDashboardData({ sinceDays: days })
+
+  if (!dashboard.available) {
+    sendJson(response, 500, { error: 'Unable to read analytics dashboard data right now.' })
+    return
+  }
+
+  sendJson(response, 200, dashboard)
+}
+
 export function createApiServer() {
   return createServer(async (request, response) => {
     const requestUrl = new URL(request.url || '/', `http://${request.headers.host || '127.0.0.1'}`)
@@ -1619,6 +1704,11 @@ export function createApiServer() {
 
     if (request.method === 'POST' && requestUrl.pathname === '/api/analytics/track') {
       await handleAnalyticsTrack(request, response)
+      return
+    }
+
+    if (request.method === 'GET' && requestUrl.pathname === '/api/analytics/dashboard') {
+      await handleAnalyticsDashboard(request, response)
       return
     }
 

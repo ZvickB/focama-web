@@ -43,9 +43,11 @@
 - `GET /api/search/enrichment-stream`
   - first enrichment path used by the frontend
   - responds cross-origin for the Vercel -> Render setup
+  - only streams enrichment for the exact `discoveryToken` that owns the active search session
   - pushes ready enrichment when the background work finishes
 - `GET /api/search/enrichment`
   - polling fallback for enrichment
+  - only returns enrichment for the exact `discoveryToken` that owns the active search session
 - `POST /api/search/retry-advice`
   - reads the rejected shortlist plus user feedback
   - returns `recommendation`, `suggestedQuery`, and `rationale`
@@ -82,12 +84,17 @@
 - Partial valid haiku output is recoverable, not final: zero picks still use rules fallback, full valid picks stay `haiku_lock`, and partial valid picks are returned as `haiku_lock_topped_up`.
 - Search cache and operational history use Supabase when configured, with local fallback in development.
 - Product details have a separate per-ASIN cache shared across detail providers.
+- Async mini enrichment is token-scoped when it writes back into guided discovery cache so older same-query searches cannot leak context-specific `fit_reason` or `caveat` text into newer sessions.
 - `search_history` is internal telemetry, not user-facing history.
 - Rate limiting is currently a 10-second in-memory rolling window with a limit of 15 requests per IP on the Render process.
 - Guided routes expose `Server-Timing`.
 - The homepage timing panel appears in development or when `?timing=1` is present.
 - The frontend tries SSE enrichment first and falls back to polling if the stream errors.
 - Analytics events post to `/api/analytics/track`.
+- `GET /api/analytics/dashboard`
+  - localhost-only development read endpoint for the `/admin/analytics` page
+  - aggregates search runs, events, impressions, clicks, and tester feedback server-side
+  - not part of the deployed public product surface
 - Tester feedback writes to a dedicated `tester_feedback` table in Supabase when configured, with local file fallback in development.
 
 ## Marketplace direction

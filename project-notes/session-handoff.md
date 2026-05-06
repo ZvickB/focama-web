@@ -25,10 +25,11 @@
 - `GET /api/search/rainforest-discover` is the main discovery route used by the homepage.
 - `GET /api/search/refine` returns one short follow-up question while discovery runs.
 - `POST /api/search/finalize` rebuilds the candidate pool from guided cache, uses Haiku first, tops partial valid Haiku output up from deterministic fallback when needed, returns shortlist cards, and starts async enrichment work for the final displayed IDs.
-- `GET /api/search/enrichment-stream` is the first enrichment path from the frontend; it is cross-origin enabled for the Render backend, and if the stream fails, the frontend falls back to polling.
-- `GET /api/search/enrichment` remains the polling fallback and script-friendly read path.
+- `GET /api/search/enrichment-stream` is the first enrichment path from the frontend; it is cross-origin enabled for the Render backend, token-scoped to the active search session, and if the stream fails, the frontend falls back to polling.
+- `GET /api/search/enrichment` remains the polling fallback and script-friendly read path, and it is also token-scoped to the active search session.
 - `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist.
 - `POST /api/feedback` stores tester feedback from the homepage FAB.
+- `/admin/analytics` is a local-only dev funnel dashboard, backed by localhost `GET /api/analytics/dashboard`.
 
 ## Key files
 - App route shell: `/src/App.jsx`
@@ -42,6 +43,7 @@
 - Core route handlers: `/backend/server.js`
 - Cache/storage helpers: `/backend/lib/search-storage.js`
 - Oxylabs detail helper: `/backend/lib/oxylabs-pipeline.js`
+- Internal analytics page: `/src/pages/AnalyticsPage.jsx`
 
 ## Deployment reality
 - Frontend is on Vercel.

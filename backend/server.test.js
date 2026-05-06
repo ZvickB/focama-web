@@ -1883,6 +1883,71 @@ describe('server handlers', () => {
     })
   })
 
+  it('does not write stale mini enrichment onto a newer discovery token for the same query', async () => {
+    mockFinalizeEnv({
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
+    })
+    haikuLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5.4-nano',
+      lockedIds: ['one'],
+      usage: null,
+    })
+    const { miniEnrichSelectedCandidates } = await import('./lib/ai-selector.js')
+    miniEnrichSelectedCandidates.mockResolvedValue({
+      model: 'gpt-5-mini',
+      enriched: [{ candidate_id: 'one', fit_reason: 'Old context match', caveat: 'Not formal enough' }],
+      enrichedIds: ['one'],
+      usage: null,
+      preservedOrder: true,
+    })
+
+    const staleEntry = createDiscoveryCacheEntry(
+      'stroller',
+      [createFinalizeCandidate('one')],
+      { mode: 'discovery_preview' },
+      'opaque-discovery-token',
+    )
+    const newerEntry = createDiscoveryCacheEntry(
+      'stroller',
+      [createFinalizeCandidate('one')],
+      { mode: 'discovery_preview' },
+      'newer-discovery-token',
+    )
+    const detailFetch = createDeferred()
+
+    readStoredSearchCacheEntry
+      .mockResolvedValueOnce(staleEntry)
+      .mockResolvedValueOnce(newerEntry)
+
+    vi.stubGlobal('fetch', vi.fn(() => detailFetch.promise))
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({ ...createFinalizeDiscoveryBody(), followUpNotes: 'city use' }),
+        { 'x-forwarded-for': '203.0.113.42' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+
+    detailFetch.resolve({
+      ok: true,
+      json: async () => ({
+        results: [{ content: { bullet_points: '', description: '' } }],
+      }),
+    })
+
+    await waitForExpectation(() => {
+      expect(miniEnrichSelectedCandidates).toHaveBeenCalled()
+    })
+
+    expect(writeStoredSearchCacheEntry).not.toHaveBeenCalled()
+  })
+
   it('keeps finalize async while product details and mini enrichment run in the background', async () => {
     mockFinalizeEnv({
       OXYLABS_USERNAME: 'oxy-user',

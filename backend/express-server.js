@@ -1,6 +1,7 @@
 import express from 'express'
 import { getEnv } from './lib/search-data.js'
 import {
+  handleAnalyticsDashboard,
   handleAnalyticsTrack,
   handleCachedSearch,
   handleEnrichmentPoll,
@@ -87,6 +88,10 @@ app.post('/api/search/finalize', async (req, res) => {
 // Analytics
 app.post('/api/analytics/track', async (req, res) => {
   await handleAnalyticsTrack(req, res)
+})
+
+app.get('/api/analytics/dashboard', async (req, res) => {
+  await handleAnalyticsDashboard(req, res)
 })
 
 app.post('/api/feedback', async (req, res) => {

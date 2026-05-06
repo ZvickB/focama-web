@@ -13,6 +13,9 @@ const ContactPage = lazy(() => import('@/pages/ContactPage.jsx'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage.jsx'))
 const PrivacyPage = lazy(() => import('@/pages/PrivacyPage.jsx'))
 const WhyFocamaiPage = lazy(() => import('@/pages/WhyFocamaiPage.jsx'))
+const AnalyticsPage = import.meta.env.DEV
+  ? lazy(() => import('@/pages/AnalyticsPage.jsx'))
+  : null
 
 const SPLASH_MIN_DURATION_MS = 800
 const SPLASH_HIDE_DURATION_MS = 440
@@ -27,6 +30,9 @@ function AppRoutes({ onReady }) {
       <Route element={<SiteLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/about" element={<AboutPage />} />
+        {import.meta.env.DEV && AnalyticsPage ? (
+          <Route path="/admin/analytics" element={<AnalyticsPage />} />
+        ) : null}
         <Route path="/why" element={<WhyFocamaiPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
