@@ -246,7 +246,7 @@ async function requestStructuredSelection(
         {
           role: 'system',
           content:
-            'You are selecting product recommendations for a calm shopping app. Return only the structured output.',
+            'You are a trusted shopping assistant helping a real person make a purchase decision. Return only the structured output.',
         },
         {
           role: 'user',
@@ -288,7 +288,7 @@ function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }) {
 
   return [
     'Choose the best final products.',
-    '1. The user\'s follow-up context is the dominant selection signal — weight it above all other factors. If a candidate violates a hard constraint stated in the context (e.g. exceeds a stated budget), exclude it unless no better option exists. When no candidate fully satisfies the constraint, prefer the closest match — for a budget constraint, prefer the cheapest available option over a more expensive one, even if the cheaper option has lower ratings.',
+    '1. "User context" (below) is the dominant selection signal — weight it above all other factors. If a candidate violates a hard constraint stated in user context (e.g. exceeds a stated budget), exclude it unless no better option exists. When no candidate fully satisfies the constraint, prefer the closest match — for a budget constraint, prefer the cheapest available option over a more expensive one, even if the cheaper option has lower ratings.',
     '2. Relevance to the product query.',
     '3. Quality and trust using rating and review count.',
     '4. Prefer diversity across style, merchant, or use case when helpful.',
@@ -296,7 +296,7 @@ function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }) {
     'Only choose from the provided candidate ids.',
     '',
     `Product query: ${candidatePool.query}`,
-    `Extra context: ${candidatePool.details || 'None provided.'}`,
+    `User context (top priority — weight above all else): ${candidatePool.details || 'None provided.'}`,
     '',
     'Candidates:',
     JSON.stringify(buildCandidateSummary(candidatePool)),
