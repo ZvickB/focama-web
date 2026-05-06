@@ -31,10 +31,10 @@ function CharCounter({ current, max }) {
   const remaining = max - current
   const pct = current / max
   return (
-    <span className={`text-xs tabular-nums transition-colors ${
+    <span className={`text-xs transition-colors ${
       pct >= 0.95 ? 'text-red-500' : pct >= 0.8 ? 'text-amber-500' : 'text-slate-400'
     }`}>
-      {remaining}
+      {remaining} characters left
     </span>
   )
 }
@@ -489,6 +489,7 @@ function OpenLayout(props) {
                     id="open-variant-query"
                     aria-label="Product topic"
                     value={state.productQuery}
+                    maxLength={MAX_PRODUCT_QUERY_LENGTH}
                     onChange={(event) => setProductQuery(event.target.value)}
                     onFocus={() => {
                       if (hasPrewarmedRef.current) return
@@ -559,6 +560,7 @@ function OpenLayout(props) {
                       <Textarea
                         id="open-follow-up-notes"
                         value={state.followUpNotes}
+                        maxLength={MAX_DETAILS_LENGTH}
                         onChange={(event) => setFollowUpNotes(event.target.value)}
                         onKeyDown={(event) =>
                           handleRefinementTextareaKeyDown(event, {
