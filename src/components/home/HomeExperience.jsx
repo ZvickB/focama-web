@@ -605,6 +605,7 @@ function OpenLayout(props) {
                       }}
                       placeholder='Try "travel stroller for airplane", "ergonomic office chair", or "lego botanical set"'
                       className="min-h-[5.25rem] w-full resize-none rounded-[28px] border border-[#e5dacb] bg-white px-5 py-4 text-lg leading-7 text-slate-900 outline-none transition placeholder:text-[15px] placeholder:text-slate-400 focus-visible:border-primary/50 focus-visible:ring-[4px] focus-visible:ring-[rgba(15,97,117,0.08)] sm:placeholder:text-base"
+                      autoFocus
                       disabled={isLoading}
                     />
                     {hasLoadedRetrySuggestion ? (
