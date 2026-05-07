@@ -950,16 +950,17 @@ expect(screen.queryByText('Travel stroller')).not.toBeInTheDocument()
     })
     expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/search/finalize'))).toHaveLength(1)
 
-    const suggestedQueryInput = screen.getByLabelText(/try this search/i)
-    expect(suggestedQueryInput).toHaveValue('compact city stroller under 18 pounds')
-    await user.clear(suggestedQueryInput)
-    await user.type(suggestedQueryInput, 'lightweight umbrella stroller for city travel')
-    await user.click(screen.getByRole('button', { name: /use this search/i }))
+    const productTopicInput = screen.getByLabelText(/product topic/i)
+    expect(productTopicInput).toHaveValue('compact city stroller under 18 pounds')
+    expect(screen.getByRole('button', { name: /try this search/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /back to results/i }).length).toBeGreaterThan(0)
+
+    await user.clear(productTopicInput)
+    await user.type(productTopicInput, 'lightweight umbrella stroller for city travel')
 
     expect(screen.getByLabelText(/product topic/i)).toHaveValue(
       'lightweight umbrella stroller for city travel',
     )
-    expect(screen.getByRole('button', { name: /start search/i })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(4)
     },
     20000,
@@ -1271,8 +1272,9 @@ expect(screen.queryByText('Travel stroller')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /get a suggestion/i }))
 
     expect(await screen.findByText(/a narrower search should help/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/try this search/i)).toHaveValue('')
-    expect(screen.getByRole('button', { name: /use this search/i })).toBeDisabled()
+    expect(screen.getByLabelText(/product topic/i)).toHaveValue('stroller')
+    expect(screen.queryByRole('button', { name: /try this search/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /new search/i })).toBeInTheDocument()
   }, 10000)
 
   it('filters raw live-route reason copy out of the result cards', async () => {
@@ -1507,7 +1509,8 @@ expect(screen.queryByText('Travel stroller')).not.toBeInTheDocument()
     expect(
       await screen.findByText(/a narrower city stroller search should better match that feedback/i),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText(/try this search/i)).toHaveValue('slim city stroller')
+    expect(screen.getByLabelText(/product topic/i)).toHaveValue('slim city stroller')
+    expect(screen.getByRole('button', { name: /try this search/i })).toBeInTheDocument()
   })
 
   it('keeps tradeoffs out of the result grid and shows them only in the modal', async () => {
