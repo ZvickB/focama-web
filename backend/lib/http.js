@@ -1,8 +1,42 @@
 import { getEnv } from './search-data.js'
 
-export const ALLOWED_ORIGIN =
-  getEnv('ALLOWED_ORIGIN') ||
-  (process.env.NODE_ENV === 'production' ? 'https://focama.vercel.app' : 'http://localhost:5173')
+const DEFAULT_ALLOWED_ORIGINS =
+  process.env.NODE_ENV === 'production'
+    ? ['https://focamai.com', 'https://www.focamai.com', 'https://focama.vercel.app']
+    : ['http://localhost:5173']
+
+function parseAllowedOrigins(value) {
+  if (typeof value !== 'string') {
+    return []
+  }
+
+  return value
+    .split(',')
+    .map((entry) => entry.trim().replace(/\/+$/, ''))
+    .filter(Boolean)
+}
+
+export const ALLOWED_ORIGINS = (() => {
+  const configuredOrigins = parseAllowedOrigins(getEnv('ALLOWED_ORIGIN'))
+  return Array.from(new Set([...configuredOrigins, ...DEFAULT_ALLOWED_ORIGINS]))
+})()
+
+export const ALLOWED_ORIGIN = ALLOWED_ORIGINS.length === 1 ? ALLOWED_ORIGINS[0] : '*'
+
+export function resolveCorsOrigin(requestOrigin = '') {
+  const normalizedOrigin =
+    typeof requestOrigin === 'string' ? requestOrigin.trim().replace(/\/+$/, '') : ''
+
+  if (ALLOWED_ORIGINS.includes('*')) {
+    return '*'
+  }
+
+  if (normalizedOrigin && ALLOWED_ORIGINS.includes(normalizedOrigin)) {
+    return normalizedOrigin
+  }
+
+  return ALLOWED_ORIGIN
+}
 
 function roundTimingDuration(value) {
   return Math.round(value * 10) / 10

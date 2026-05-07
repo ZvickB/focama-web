@@ -9,7 +9,7 @@ import {
 } from './lib/ai-selector.js'
 import { createFinalizeFastContract, toFinalizeFastCard } from './lib/layered-contracts.js'
 import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, getCountryCode, takeRateLimitToken } from './lib/rate-limit.js'
-import { ALLOWED_ORIGIN, sendJson, readJsonBody } from './lib/http.js'
+import { ALLOWED_ORIGIN, resolveCorsOrigin, sendJson, readJsonBody } from './lib/http.js'
 import { emitEnrichmentReady, enrichmentBus } from './lib/enrichment-bus.js'
 import {
   sanitizeAnalyticsEventData,
@@ -1184,7 +1184,7 @@ export async function handleEnrichmentStream(request, response) {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     Connection: 'keep-alive',
-    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    'Access-Control-Allow-Origin': resolveCorsOrigin(request.headers?.origin),
     Vary: 'Origin',
   })
   response.flushHeaders()
@@ -1791,7 +1791,7 @@ export function createApiServer() {
 
     if (request.method === 'OPTIONS') {
       response.writeHead(204, {
-        'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+        'Access-Control-Allow-Origin': resolveCorsOrigin(request.headers?.origin),
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
         Vary: 'Origin',

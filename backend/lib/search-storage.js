@@ -1239,6 +1239,11 @@ export async function getSupabaseHealth() {
       checkSupabaseTable(supabase, SEARCH_HISTORY_TABLE, 'id'),
       checkSupabaseTable(supabase, PRODUCT_DETAILS_CACHE_TABLE, 'asin'),
       checkSupabaseTable(supabase, TESTER_FEEDBACK_TABLE, 'id'),
+      checkSupabaseTable(supabase, ANALYTICS_SEARCH_RUNS_TABLE, 'search_id'),
+      checkSupabaseTable(supabase, ANALYTICS_SEARCH_EVENTS_TABLE, 'search_id'),
+      checkSupabaseTable(supabase, ANALYTICS_RESULT_IMPRESSIONS_TABLE, 'search_id'),
+      checkSupabaseTable(supabase, ANALYTICS_RESULT_CLICKS_TABLE, 'search_id'),
+      checkSupabaseTable(supabase, OXYLABS_PRODUCT_FAILURES_TABLE, 'asin'),
     ])
 
     return {

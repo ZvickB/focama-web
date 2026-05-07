@@ -14,7 +14,7 @@
 ## Homepage flow
 - First load shows an HTML boot splash from `index.html`.
 - The active homepage ships in the plain white visual mode; the earlier background toggle is no longer exposed in the production UI.
-- The user starts with a product query in the homepage input.
+- The user starts with a product query in a compact 2-line homepage textarea.
 - After submit:
   - guided discovery starts
   - the follow-up question starts in parallel
@@ -56,6 +56,7 @@
   - accepts quick structured answers, optional free text, optional email, and current journey context
 - `GET /api/search/debug`, `GET /api/search/cache`, and `/api/search/live`
   - debugging/support routes, not the main product flow
+- Render CORS accepts both live custom frontend origins (`focamai.com` and `www.focamai.com`) and still tolerates the older `focama.vercel.app` origin.
 
 ## Amazon store behavior
 - The store picker defaults to `Auto`.

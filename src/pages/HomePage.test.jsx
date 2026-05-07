@@ -106,6 +106,50 @@ describe('HomePage', () => {
     ).toBeInTheDocument()
   })
 
+  it('submits the search when the user presses enter in the main query textarea', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => '' },
+        text: async () =>
+          JSON.stringify({
+            discoveryToken: 'opaque-discovery-token',
+            candidatePool: {
+              query: 'stroller',
+              details: '',
+              candidates: [],
+            },
+            previewResults: [createMockResult()],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => '' },
+        text: async () =>
+          JSON.stringify({
+            prompt: 'What should we optimize for with this stroller?',
+            helperText: 'Pick anything that matters.',
+            followUpPlaceholder: 'Anything else?',
+          }),
+      })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    const productInput = screen.getByLabelText(/product topic/i)
+    expect(productInput.tagName).toBe('TEXTAREA')
+
+    await user.type(productInput, 'stroller')
+    await user.keyboard('{Enter}')
+
+    expect(
+      await screen.findByText(/what should we optimize for with this stroller/i),
+    ).toBeInTheDocument()
+  })
+
   it('starts discovery and shows the AI refinement prompt after submitting a product', async () => {
     const user = userEvent.setup()
     const fetchMock = vi

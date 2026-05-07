@@ -69,6 +69,18 @@ function handleRefinementTextareaKeyDown(event, { canSubmit, onSubmit }) {
   }
 }
 
+function handleProductQueryTextareaKeyDown(event, { canSubmit, onSubmit }) {
+  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) {
+    return
+  }
+
+  event.preventDefault()
+
+  if (canSubmit) {
+    onSubmit()
+  }
+}
+
 function smoothScrollIntoView(element) {
   if (!element || typeof element.scrollIntoView !== 'function') {
     return
@@ -442,6 +454,7 @@ function OpenLayout(props) {
 
   const hasDiscoveryResults = Boolean(state.candidatePool)
   const showLoadingResults = isLoading && displayedResults.length === 0
+  const canSubmitTopQuery = !isLoading && (!hasStartedSearch || hasLoadedRetrySuggestion)
 
   function handleSearchSubmit(event) {
     if (hasLoadedRetrySuggestion) {
@@ -571,20 +584,27 @@ function OpenLayout(props) {
                     <Label htmlFor="open-variant-query" className="sr-only">
                       Product topic
                     </Label>
-                    <input
+                    <Textarea
                       ref={searchInputRef}
                       id="open-variant-query"
                       aria-label="Product topic"
                       value={state.productQuery}
+                      rows={2}
                       maxLength={MAX_PRODUCT_QUERY_LENGTH}
                       onChange={(event) => setProductQuery(event.target.value)}
+                      onKeyDown={(event) =>
+                        handleProductQueryTextareaKeyDown(event, {
+                          canSubmit: canSubmitTopQuery,
+                          onSubmit: () => handleSearchSubmit(event),
+                        })
+                      }
                       onFocus={() => {
                         if (hasPrewarmedRef.current) return
                         hasPrewarmedRef.current = true
                         prewarmBackend()
                       }}
                       placeholder='Try "travel stroller for airplane", "ergonomic office chair", or "lego botanical set"'
-                      className="h-16 w-full rounded-[28px] border border-[#e5dacb] bg-white px-5 text-lg text-slate-900 outline-none transition placeholder:text-[15px] placeholder:text-slate-400 sm:placeholder:text-base focus:border-primary/50 focus:shadow-[0_0_0_4px_rgba(15,97,117,0.08)]"
+                      className="min-h-[5.25rem] w-full resize-none rounded-[28px] border border-[#e5dacb] bg-white px-5 py-4 text-lg leading-7 text-slate-900 outline-none transition placeholder:text-[15px] placeholder:text-slate-400 focus-visible:border-primary/50 focus-visible:ring-[4px] focus-visible:ring-[rgba(15,97,117,0.08)] sm:placeholder:text-base"
                       disabled={isLoading}
                     />
                     {hasLoadedRetrySuggestion ? (

@@ -19,16 +19,18 @@
 
 ## Current search flow
 - The homepage starts with a normal product query, not a long form.
+- The main product query field is now a compact 2-line textarea so longer natural-language searches and AI retry suggestions stay visible without changing the top form layout mid-flow.
 - Discovery and the AI follow-up question run in parallel after submit.
 - `Show products now` reveals the preview set without finalize.
 - `Show focused picks` runs guided finalize and scrolls directly to the results region.
 - Final result cards stay metadata-first on the grid.
 - The product modal shows feature bullets immediately when available, then fills in `fit_reason` and `caveat` when enrichment arrives.
-- Retry is currently suggestion-led: the user explains what felt off, `/api/search/retry-advice` proposes a better next query, and the suggested query can be edited before starting a fresh search.
+- Retry is currently suggestion-led: the user explains what felt off, `/api/search/retry-advice` proposes a better next query, and that suggestion is now loaded back into the top search box instead of being edited inline inside the lower retry panel.
 
 ## Current backend/deployment reality
 - Frontend is deployed on Vercel.
 - Backend is deployed on Render through `backend/express-server.js`.
+- Render CORS now explicitly accepts the current `focamai.com` and `www.focamai.com` frontend origins, while still tolerating the older `focama.vercel.app` origin during transition.
 - `GET /api/search/rainforest-discover` is the primary homepage discovery route.
 - `GET /api/search/refine`, `POST /api/search/finalize`, `GET /api/search/enrichment-stream`, `GET /api/search/enrichment`, and `POST /api/search/retry-advice` are all active in the Render app.
 - `GET /api/analytics/dashboard` is a localhost-only development endpoint for the internal analytics page and returns `404` in production.
@@ -47,6 +49,7 @@
 - Failed shortlisted detail calls now retry once in the background after the fast first pass, so mini enrichment can proceed with partial detail coverage while later cache quality still improves.
 - If that background retry later finds bullets, the active stored enrichment payload is patched and the modal can hydrate those bullets without a fresh finalize run.
 - Mini enrichment writes `fit_reason` and `caveat` back into guided cache for the exact active `discoveryToken`, then the frontend hydrates the modal via SSE first and polling fallback second.
+- AI prompts have been sharpened to weight user context more heavily when selecting and explaining picks.
 
 ## Active constraints
 - Keep the guided flow as the main product path.
@@ -57,7 +60,6 @@
 
 ## Recommended next checks
 - Verify the browser golden path on the live app: fast cards first, modal AI copy later.
-- Check modal AI tone so it reads like a trusted assistant, not marketing copy.
 - Tighten the loading states between search, refine, and results.
 - Improve weak-result and low-confidence handling.
 - Decide how affiliate-ready outbound links and disclosures should appear.

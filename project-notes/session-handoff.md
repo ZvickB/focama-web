@@ -17,6 +17,7 @@
 - The product should stay calm, focused, mobile-first, and not marketplace-shaped.
 - Product shortlists stay at 6 items.
 - The guided backend path is the real product path; `/api/search/live` is not part of the current user flow.
+- The top homepage query field is now a compact 2-line textarea so long natural-language searches and AI-suggested retries fit without truncation.
 - The PNG wordmark is the active wordmark.
 - Public routes now have route-level SEO metadata plus static `robots.txt`, `sitemap.xml`, and `site.webmanifest`.
 - Current behavior is canonical in `project-notes/app_flow.md`.
@@ -51,6 +52,7 @@
 - Frontend is on Vercel.
 - Backend is on Render and starts from `backend/express-server.js`.
 - The frontend calls the Render backend through `VITE_BACKEND_URL`.
+- Render CORS now accepts `https://focamai.com`, `https://www.focamai.com`, and the older `https://focama.vercel.app` origin.
 - `api/geo.js` intentionally stays on Vercel so the UI can read Vercel geolocation headers through a relative `/api/geo` request.
 
 ## If continuing from here

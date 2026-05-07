@@ -1,5 +1,5 @@
 import express from 'express'
-import { getEnv } from './lib/search-data.js'
+import { resolveCorsOrigin } from './lib/http.js'
 import {
   handleAnalyticsDashboard,
   handleAnalyticsTrack,
@@ -16,9 +16,6 @@ import {
 } from './server.js'
 
 const PORT = Number(process.env.PORT || 8787)
-const ALLOWED_ORIGIN =
-  getEnv('ALLOWED_ORIGIN') ||
-  (process.env.NODE_ENV === 'production' ? 'https://focama.vercel.app' : 'http://localhost:5173')
 
 const app = express()
 
@@ -26,7 +23,7 @@ const app = express()
 app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
     res.set({
-      'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+      'Access-Control-Allow-Origin': resolveCorsOrigin(req.headers.origin),
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
       Vary: 'Origin',
@@ -46,7 +43,7 @@ function getRequestUrl(req) {
 
 // Prewarm ping — wakes the Render dyno before the first real request
 app.get('/api/ping', (req, res) => {
-  res.set('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
+  res.set('Access-Control-Allow-Origin', resolveCorsOrigin(req.headers.origin))
   res.json({ ok: true })
 })
 
