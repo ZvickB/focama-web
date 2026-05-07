@@ -8,7 +8,6 @@ import {
   ArrowUpRight,
   ChevronDown,
   Clock3,
-  Search,
   Sparkles,
   Star,
   X,
@@ -20,7 +19,6 @@ import { Badge } from '@/components/ui/badge.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import logo from '@/assets/logo_master_version.svg'
 import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
-import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
 
 function handleRetryFeedbackKeyDown(event, { canSubmit, onSubmit }) {
@@ -358,18 +356,18 @@ export function ResultsSection({
   displayedResults,
   errorMessage,
   hasFinalResults,
+  hasLoadedSuggestionAtTop,
   hasStartedSearch,
   isFinalizing,
   isLoading,
   isRetryReady,
   isRetrying,
   isGeneratingRetryAdvice,
+  onJumpToSearchForm,
   onRetailerClick,
   onSelectProduct,
   onRetryAdviceRequest,
   onRetryFeedbackChange,
-  onSearchSuggestedQuery,
-  onSuggestedRetryQueryChange,
   previousResults = [],
   retryAdvice,
   selectionState,
@@ -671,26 +669,19 @@ export function ResultsSection({
                       {retryAdvice.rationale}
                     </p>
                   ) : null}
-                  <Label htmlFor="retry-suggested-query" className="text-xs font-medium text-slate-500">
-                    Try this search — edit if needed:
-                  </Label>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <input
-                      id="retry-suggested-query"
-                      value={suggestedRetryQuery}
-                      onChange={(event) => onSuggestedRetryQueryChange(event.target.value)}
-                      className="h-11 min-w-0 flex-1 rounded-2xl border border-[#e5dacb] bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-primary/50 focus:shadow-[0_0_0_4px_rgba(15,97,117,0.08)]"
-                    />
-                    <Button
+                  {suggestedRetryQuery.trim() ? (
+                    <button
                       type="button"
-                      disabled={!suggestedRetryQuery.trim()}
-                      className="h-11 shrink-0 rounded-2xl bg-primary px-4 text-sm text-primary-foreground shadow-[0_18px_40px_-24px_rgba(15,97,117,0.35)] hover:bg-primary/90"
-                      onClick={() => onSearchSuggestedQuery(suggestedRetryQuery)}
+                      className="text-sm text-slate-500 underline-offset-2 transition-colors hover:text-slate-700 hover:underline"
+                      onClick={onJumpToSearchForm}
                     >
-                      Use this search
-                      <Search className="ml-2 h-4 w-4" />
-                    </Button>
-                  </div>
+                      {hasLoadedSuggestionAtTop ? 'Go to search form' : 'View suggested search'}
+                    </button>
+                  ) : (
+                    <p className="text-sm leading-6 text-slate-600">
+                      We couldn&apos;t load a suggestion above yet. Try asking again in a moment.
+                    </p>
+                  )}
                 </div>
               </div>
             ) : null}

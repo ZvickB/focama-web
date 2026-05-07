@@ -29,7 +29,7 @@
 - If a background detail retry succeeds later, the stored enrichment entry is patched with those bullets and the frontend keeps polling long enough for the open modal to pick them up.
 - `GET /api/search/enrichment-stream` is the first enrichment path from the frontend; it is cross-origin enabled for the Render backend, token-scoped to the active search session, and if the stream fails, the frontend falls back to polling.
 - `GET /api/search/enrichment` remains the polling fallback and script-friendly read path, and it is also token-scoped to the active search session.
-- `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist.
+- `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist, and the homepage now loads that suggestion back into the top search box instead of keeping an editable duplicate inside the retry panel.
 - `POST /api/feedback` stores tester feedback from the homepage FAB.
 - `/admin/analytics` is a local-only dev funnel dashboard, backed by localhost `GET /api/analytics/dashboard`.
 

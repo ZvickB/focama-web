@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 import { AmazonStoreProvider } from '@/contexts/AmazonStoreContext.jsx'
-import { ProductDetailModal } from './HomeShared.jsx'
+import { ProductDetailModal, ResultsSection } from './HomeShared.jsx'
 
 function createMockItem(overrides = {}) {
   return {
@@ -49,5 +49,54 @@ describe('ProductDetailModal', () => {
 
     expect(screen.getByText(/extra analysis wasn't available for this pick right now/i)).toBeInTheDocument()
     expect(screen.queryByText(/analyzing your pick/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('ResultsSection retry advice', () => {
+  it('shows a simple jump action instead of an inline suggested query editor', () => {
+    const handleJumpToSearchForm = vi.fn()
+
+    render(
+      <ResultsSection
+        displayedResults={[]}
+        errorMessage=""
+        hasFinalResults
+        hasLoadedSuggestionAtTop
+        hasStartedSearch
+        isFinalizing={false}
+        isLoading={false}
+        isRetryReady
+        isRetrying={false}
+        isGeneratingRetryAdvice={false}
+        onJumpToSearchForm={handleJumpToSearchForm}
+        onRetailerClick={vi.fn()}
+        onSelectProduct={vi.fn()}
+        onRetryAdviceRequest={vi.fn()}
+        onRetryFeedbackChange={vi.fn()}
+        previousResults={[]}
+        retryAdvice={{
+          rationale: 'The first search was too broad for the kind of product you described.',
+        }}
+        selectionState={null}
+        retryCount={0}
+        retryFeedback="too broad"
+        showFinalResultBadges={false}
+        showPreviewResults={false}
+        suggestedRetryQuery="compact carry on stroller"
+        submittedQuery="stroller"
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /not quite what you needed/i }))
+
+    expect(screen.getByRole('button', { name: /go to search form/i })).toBeInTheDocument()
+    expect(screen.queryByText(/suggestion loaded above/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/scroll up to edit and try it/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/try this search/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /use this search/i })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /go to search form/i }))
+
+    expect(handleJumpToSearchForm).toHaveBeenCalledTimes(1)
   })
 })

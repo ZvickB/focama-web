@@ -80,6 +80,19 @@ function smoothScrollIntoView(element) {
   })
 }
 
+function scrollElementNearTop(element, offset = 24) {
+  if (!element || typeof window === 'undefined') {
+    return
+  }
+
+  const nextTop = Math.max(0, window.scrollY + element.getBoundingClientRect().top - offset)
+
+  window.scrollTo({
+    top: nextTop,
+    behavior: 'smooth',
+  })
+}
+
 function handleNewSearchClick(event, resetToNewSearch) {
   event.preventDefault()
   resetToNewSearch()
@@ -252,13 +265,16 @@ function prewarmBackend() {
 
 function OpenLayout(props) {
   const refinementRef = useRef(null)
+  const searchInputRef = useRef(null)
   const resultsViewportRef = useRef(null)
   const hasPrewarmedRef = useRef(false)
   const lastRefinementScrollQueryRef = useRef('')
   const lastResultsScrollQueryRef = useRef('')
   const lastPreviewScrollQueryRef = useRef('')
   const lastFinalizeScrollQueryRef = useRef('')
+  const lastAppliedRetrySuggestionRef = useRef('')
   const [showHeroCopy, setShowHeroCopy] = useState(false)
+  const [loadedRetrySuggestion, setLoadedRetrySuggestion] = useState(null)
   const {
     displayedResults,
     errorMessage,
@@ -278,6 +294,8 @@ function OpenLayout(props) {
     state,
     submittedQuery,
   } = props
+  const hasLoadedRetrySuggestion = Boolean(loadedRetrySuggestion)
+  const shouldShowRefinementControls = hasStartedSearch && !hasLoadedRetrySuggestion
 
   useEffect(() => {
     const revealTimer = window.setTimeout(() => {
@@ -383,20 +401,73 @@ function OpenLayout(props) {
     }
   }, [hasFinalResults, submittedQuery])
 
-  const hasDiscoveryResults = Boolean(state.candidatePool)
-  const showLoadingResults = isLoading && displayedResults.length === 0
+  useEffect(() => {
+    const normalizedSuggestion = String(state.suggestedRetryQuery || '').trim()
 
-  function handleSearchSuggestedQuery(query) {
-    const normalizedQuery = String(query || '').trim()
-
-    if (!normalizedQuery) {
+    if (
+      !state.retryAdvice ||
+      !normalizedSuggestion ||
+      !hasStartedSearch ||
+      lastAppliedRetrySuggestionRef.current === normalizedSuggestion
+    ) {
       return
     }
 
-    resetToNewSearch()
-    setProductQuery(normalizedQuery)
+    lastAppliedRetrySuggestionRef.current = normalizedSuggestion
+    setLoadedRetrySuggestion({
+      previousQuery: submittedQuery || state.productQuery,
+    })
+    setProductQuery(normalizedSuggestion)
+
     window.setTimeout(() => {
-      smoothScrollIntoView(refinementRef.current)
+      scrollElementNearTop(refinementRef.current, 20)
+      searchInputRef.current?.focus?.()
+      searchInputRef.current?.select?.()
+    }, 0)
+  }, [
+    hasStartedSearch,
+    setProductQuery,
+    state.productQuery,
+    state.retryAdvice,
+    state.suggestedRetryQuery,
+    submittedQuery,
+  ])
+
+  useEffect(() => {
+    if (!hasStartedSearch) {
+      setLoadedRetrySuggestion(null)
+      lastAppliedRetrySuggestionRef.current = ''
+    }
+  }, [hasStartedSearch])
+
+  const hasDiscoveryResults = Boolean(state.candidatePool)
+  const showLoadingResults = isLoading && displayedResults.length === 0
+
+  function handleSearchSubmit(event) {
+    if (hasLoadedRetrySuggestion) {
+      setLoadedRetrySuggestion(null)
+    }
+
+    state.beginGuidedSearch(event)
+  }
+
+  function handleBackToResults() {
+    if (!loadedRetrySuggestion) {
+      return
+    }
+
+    setProductQuery(loadedRetrySuggestion.previousQuery || submittedQuery)
+    setLoadedRetrySuggestion(null)
+
+    window.setTimeout(() => {
+      scrollElementNearTop(resultsViewportRef.current, 20)
+    }, 0)
+  }
+
+  function handleJumpToSearchForm() {
+    scrollElementNearTop(refinementRef.current, 20)
+    window.setTimeout(() => {
+      searchInputRef.current?.focus?.()
     }, 0)
   }
 
@@ -471,75 +542,100 @@ function OpenLayout(props) {
             </div>
           </div>
 
-          <form className="flex justify-center" onSubmit={state.beginGuidedSearch}>
+          <form className="flex justify-center" onSubmit={handleSearchSubmit}>
             <div
-              ref={refinementRef}
-                  className={`scroll-mt-28 w-full max-w-3xl rounded-[36px] border p-4 text-left shadow-[0_28px_120px_-72px_rgba(15,23,42,0.45)] backdrop-blur transition-all duration-300 sm:p-5 ${
-                hasStartedSearch
-                  ? 'border-[#e4d5c2] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(251,248,244,0.96))] shadow-[0_36px_140px_-68px_rgba(15,23,42,0.5)]'
-                  : 'border-[#e4d7c6] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,246,241,0.94))]'
-              }`}
+              className="w-full max-w-3xl"
             >
-              <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                <div className="flex-1">
-                  <Label htmlFor="open-variant-query" className="sr-only">
-                    Product topic
-                  </Label>
-                  <input
-                    id="open-variant-query"
-                    aria-label="Product topic"
-                    value={state.productQuery}
-                    maxLength={MAX_PRODUCT_QUERY_LENGTH}
-                    onChange={(event) => setProductQuery(event.target.value)}
-                    onFocus={() => {
-                      if (hasPrewarmedRef.current) return
-                      hasPrewarmedRef.current = true
-                      prewarmBackend()
-                    }}
-                    placeholder='Try "travel stroller for airplane", "ergonomic office chair", or "lego botanical set"'
-                    className="h-16 w-full rounded-[28px] border border-[#e5dacb] bg-white px-5 text-lg text-slate-900 outline-none transition placeholder:text-[15px] placeholder:text-slate-400 sm:placeholder:text-base focus:border-primary/50 focus:shadow-[0_0_0_4px_rgba(15,97,117,0.08)]"
-                    disabled={isLoading}
-                  />
-                  {shouldShowCharCounter(state.productQuery.length, MAX_PRODUCT_QUERY_LENGTH) ? (
-                    <div className="mt-1.5 flex justify-end px-2">
-                      <CharCounter current={state.productQuery.length} max={MAX_PRODUCT_QUERY_LENGTH} />
-                    </div>
-                  ) : null}
+              {hasLoadedRetrySuggestion ? (
+                <div className="mb-3 flex justify-start px-2">
+                  <button
+                    type="button"
+                    className="text-left text-sm text-slate-500 underline-offset-2 transition-colors hover:text-slate-700 hover:underline"
+                    onClick={handleBackToResults}
+                  >
+                    <span aria-hidden="true">←</span> Back to results
+                  </button>
                 </div>
-                <Button
-                  type={hasStartedSearch ? 'button' : 'submit'}
-                  disabled={isLoading}
-                  className={`h-16 rounded-[28px] px-6 text-base text-primary-foreground shadow-[0_22px_48px_-28px_rgba(15,97,117,0.38)] transition-transform hover:-translate-y-[1px] ${
-                    hasStartedSearch
-                      ? 'bg-primary/75 hover:bg-primary/85'
-                      : 'bg-primary hover:bg-primary/90'
-                  }`}
-                  onClick={
-                    hasStartedSearch
-                      ? (event) => handleNewSearchClick(event, resetToNewSearch)
-                      : undefined
-                  }
-                >
-                  {isLoading
-                    ? 'Starting your search...'
-                    : hasStartedSearch
-                      ? 'New search'
-                      : 'Start search'}
-                  {isLoading ? (
-                    <LoaderCircle className="ml-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Search className="ml-2 h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-              {!hasStartedSearch ? (
-                <p className="mt-3 px-2 text-sm leading-6 text-slate-500">
-                  Just the product for now — budget, size, and other details come next.
-                </p>
               ) : null}
 
-              {hasStartedSearch ? (
-                <div className="mt-5 space-y-5 border-t border-stone-200/80 pt-5">
+              <div
+                ref={refinementRef}
+                className={`scroll-mt-28 rounded-[36px] border p-4 text-left shadow-[0_28px_120px_-72px_rgba(15,23,42,0.45)] backdrop-blur transition-all duration-300 sm:p-5 ${
+                  hasStartedSearch
+                    ? 'border-[#e4d5c2] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(251,248,244,0.96))] shadow-[0_36px_140px_-68px_rgba(15,23,42,0.5)]'
+                    : 'border-[#e4d7c6] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,246,241,0.94))]'
+                }`}
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                  <div className="flex-1">
+                    <Label htmlFor="open-variant-query" className="sr-only">
+                      Product topic
+                    </Label>
+                    <input
+                      ref={searchInputRef}
+                      id="open-variant-query"
+                      aria-label="Product topic"
+                      value={state.productQuery}
+                      maxLength={MAX_PRODUCT_QUERY_LENGTH}
+                      onChange={(event) => setProductQuery(event.target.value)}
+                      onFocus={() => {
+                        if (hasPrewarmedRef.current) return
+                        hasPrewarmedRef.current = true
+                        prewarmBackend()
+                      }}
+                      placeholder='Try "travel stroller for airplane", "ergonomic office chair", or "lego botanical set"'
+                      className="h-16 w-full rounded-[28px] border border-[#e5dacb] bg-white px-5 text-lg text-slate-900 outline-none transition placeholder:text-[15px] placeholder:text-slate-400 sm:placeholder:text-base focus:border-primary/50 focus:shadow-[0_0_0_4px_rgba(15,97,117,0.08)]"
+                      disabled={isLoading}
+                    />
+                    {hasLoadedRetrySuggestion ? (
+                      <div className="mt-2 px-2">
+                        <p className="text-sm text-slate-600">
+                          Suggested based on your feedback — edit if needed.
+                        </p>
+                      </div>
+                    ) : null}
+                    {shouldShowCharCounter(state.productQuery.length, MAX_PRODUCT_QUERY_LENGTH) ? (
+                      <div className="mt-1.5 flex justify-end px-2">
+                        <CharCounter current={state.productQuery.length} max={MAX_PRODUCT_QUERY_LENGTH} />
+                      </div>
+                    ) : null}
+                  </div>
+                  <Button
+                    type={!hasStartedSearch || hasLoadedRetrySuggestion ? 'submit' : 'button'}
+                    disabled={isLoading}
+                    className={`h-16 rounded-[28px] px-6 text-base text-primary-foreground shadow-[0_22px_48px_-28px_rgba(15,97,117,0.38)] transition-transform hover:-translate-y-[1px] ${
+                      hasStartedSearch && !hasLoadedRetrySuggestion
+                        ? 'bg-primary/75 hover:bg-primary/85'
+                        : 'bg-primary hover:bg-primary/90'
+                    }`}
+                    onClick={
+                      hasStartedSearch && !hasLoadedRetrySuggestion
+                        ? (event) => handleNewSearchClick(event, resetToNewSearch)
+                        : undefined
+                    }
+                  >
+                    {isLoading
+                      ? 'Starting your search...'
+                      : hasLoadedRetrySuggestion
+                        ? 'Try this search'
+                        : hasStartedSearch
+                        ? 'New search'
+                        : 'Start search'}
+                    {isLoading ? (
+                      <LoaderCircle className="ml-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Search className="ml-2 h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                {!hasStartedSearch ? (
+                  <p className="mt-3 px-2 text-sm leading-6 text-slate-500">
+                    Just the product for now — budget, size, and other details come next.
+                  </p>
+                ) : null}
+
+                {shouldShowRefinementControls ? (
+                  <div className="mt-5 space-y-5 border-t border-stone-200/80 pt-5">
                   <RefinementCopy
                     isGeneratingPrompt={state.isGeneratingPrompt}
                     prompt={prompt}
@@ -628,8 +724,9 @@ function OpenLayout(props) {
                       </p>
                     </div>
                   </div>
-                </div>
-              ) : null}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </form>
           </div>
@@ -679,12 +776,12 @@ function OpenLayout(props) {
                 isRetryReady
                 isRetrying={state.isFinalizing}
                 isGeneratingRetryAdvice={state.isGeneratingRetryAdvice}
+                hasLoadedSuggestionAtTop={hasLoadedRetrySuggestion}
                 onRetailerClick={onRetailerClick}
+                onJumpToSearchForm={handleJumpToSearchForm}
                 onSelectProduct={onSelectProduct}
                 onRetryAdviceRequest={state.handleRetryAdviceRequest}
                 onRetryFeedbackChange={state.setRetryFeedback}
-                onSearchSuggestedQuery={handleSearchSuggestedQuery}
-                onSuggestedRetryQueryChange={state.setSuggestedRetryQuery}
                 previousResults={state.previousResults}
                 retryAdvice={state.retryAdvice}
                 selectionState={state.selectionState}

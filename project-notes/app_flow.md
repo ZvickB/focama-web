@@ -75,7 +75,7 @@
 - Retry is not an endless-results flow.
 - The current retry UX asks what felt wrong about the picks.
 - `/api/search/retry-advice` suggests a more specific next query.
-- Clicking the suggestion resets the app to a fresh search with that query prefilled and editable.
+- When retry advice returns a suggested query, the homepage loads it into the main search input, scrolls back to the top search form, hides the previous follow-up textarea, and lets the user either try that new search or jump back down to the existing results without resetting state yet.
 - The same-pool retry path is not part of the active homepage UI right now.
 
 ## Data, cache, and observability
