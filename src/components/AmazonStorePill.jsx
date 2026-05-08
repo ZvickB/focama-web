@@ -3,10 +3,7 @@ import { ChevronDown } from 'lucide-react'
 
 import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
-import {
-  AMAZON_MARKETPLACES,
-  getAmazonDomainFromCountryCode,
-} from '../../shared/amazon-marketplaces.js'
+import { AMAZON_MARKETPLACES } from '../../shared/amazon-marketplaces.js'
 
 function countryCodeToFlag(code) {
   return [...code.toUpperCase()]
@@ -18,38 +15,14 @@ function countryCodeToFlag(code) {
 // variant='default' — standard full-size pill (fallback)
 export function AmazonStorePill({ variant = 'default' }) {
   const {
+    detectedCountryCode,
     selectedAmazonDomain,
     setSelectedAmazonDomain,
-    setResolvedAmazonDomain,
   } = useAmazonStore()
   const [isOpen, setIsOpen] = useState(false)
   const [isMoreRegionsOpen, setIsMoreRegionsOpen] = useState(false)
-  const [detectedCountryCode, setDetectedCountryCode] = useState(null)
   const containerRef = useRef(null)
   const popoverId = useId()
-
-  useEffect(() => {
-    if (window.__FOCAMAI_DISABLE_GEO_FETCH__) return undefined
-    const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
-
-    if (browserTimeZone === 'America/Toronto' || browserTimeZone === 'America/Montreal') {
-      setDetectedCountryCode('CA')
-      setResolvedAmazonDomain(getAmazonDomainFromCountryCode('CA'))
-      return undefined
-    }
-
-    fetch('/api/geo')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.countryCode) {
-          setDetectedCountryCode(data.countryCode)
-          setResolvedAmazonDomain(getAmazonDomainFromCountryCode(data.countryCode))
-        }
-      })
-      .catch(() => {
-        setResolvedAmazonDomain('')
-      })
-  }, [setResolvedAmazonDomain])
 
   useEffect(() => {
     if (!isOpen) return undefined

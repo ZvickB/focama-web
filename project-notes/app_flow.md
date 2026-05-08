@@ -61,7 +61,12 @@
 ## Amazon store behavior
 - The store picker defaults to `Auto`.
 - `api/geo.js` returns a country code from Vercel headers.
-- The frontend resolves that country code to an explicit Amazon domain and sends it on guided requests when `Auto` is selected.
+- The marketplace context now persists the user's marketplace choice in localStorage under `focamai_marketplace`.
+- The one-time marketplace prompt state is tracked separately in localStorage under `focamai_marketplace_asked`.
+- If a saved marketplace preference exists, the frontend skips geo detection on load and uses that saved value immediately.
+- If there is no saved preference, the frontend resolves the geo country code to an explicit Amazon domain, sends it on guided requests when `Auto` is selected, and saves confident detections for future loads.
+- After the first search starts, the homepage shows a lightweight one-time inline marketplace prompt inside the search card until the user chooses a store or dismisses it.
+- If the marketplace changes during an active search, the frontend restarts discovery/refine for the same submitted query and ignores stale in-flight responses from the older marketplace request.
 - Manual store overrides still win over the auto-resolved domain.
 
 ## Final result behavior

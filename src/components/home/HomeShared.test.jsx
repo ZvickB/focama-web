@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 import { AmazonStoreProvider } from '@/contexts/AmazonStoreContext.jsx'
+import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { ProductDetailModal, ResultsSection } from './HomeShared.jsx'
 
 function createMockItem(overrides = {}) {
@@ -33,6 +34,19 @@ function renderModal(props = {}) {
         {...props}
       />
     </AmazonStoreProvider>,
+  )
+}
+
+function MarketplacePreferenceHarness() {
+  const { clearMarketplacePreference, selectedAmazonDomain } = useAmazonStore()
+
+  return (
+    <>
+      <button type="button" onClick={clearMarketplacePreference}>
+        Clear marketplace preference
+      </button>
+      <span>{selectedAmazonDomain}</span>
+    </>
   )
 }
 
@@ -98,5 +112,28 @@ describe('ResultsSection retry advice', () => {
     fireEvent.click(screen.getByRole('button', { name: /go to search form/i }))
 
     expect(handleJumpToSearchForm).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('AmazonStoreProvider', () => {
+  it('clears the saved marketplace preference and resets back to auto', () => {
+    window.__FOCAMAI_DISABLE_GEO_FETCH__ = true
+    window.localStorage.setItem('focamai_marketplace', 'amazon.ca')
+
+    render(
+      <AmazonStoreProvider>
+        <MarketplacePreferenceHarness />
+      </AmazonStoreProvider>,
+    )
+
+    expect(screen.getByText('amazon.ca')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /clear marketplace preference/i }))
+
+    expect(window.localStorage.getItem('focamai_marketplace')).toBeNull()
+    expect(window.localStorage.getItem('focamai_marketplace_asked')).toBeNull()
+    expect(screen.getByText('auto')).toBeInTheDocument()
+
+    delete window.__FOCAMAI_DISABLE_GEO_FETCH__
   })
 })

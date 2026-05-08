@@ -194,6 +194,66 @@ describe('HomePage', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows the marketplace prompt after search starts and remembers dismissal once', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn((input) => {
+      const url = String(input)
+
+      if (url.includes('/api/search/rainforest-discover')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              discoveryToken: 'opaque-discovery-token',
+              candidatePool: {
+                query: 'stroller',
+                details: '',
+                candidates: [],
+              },
+              previewResults: [createMockResult()],
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/refine')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              prompt: 'What should we optimize for with this stroller?',
+              helperText: 'Pick anything that matters.',
+              followUpPlaceholder: 'Anything else?',
+            }),
+        })
+      }
+
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+
+    expect(
+      await screen.findByText(/which amazon do you usually shop on\?/i),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /not now/i }))
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem('focamai_marketplace_asked')).toBe('true')
+    })
+
+    expect(
+      screen.queryByText(/which amazon do you usually shop on\?/i),
+    ).not.toBeInTheDocument()
+  })
+
   it('starts discovery and question-fast as separate requests', async () => {
     const user = userEvent.setup()
     const fetchMock = vi.fn((input) => {
@@ -249,6 +309,107 @@ describe('HomePage', () => {
         expect.stringContaining('/api/search/refine'),
       ]),
     )
+  })
+
+  it('restarts discovery with the new marketplace and ignores the stale response', async () => {
+    const user = userEvent.setup()
+    let resolveFirstDiscovery
+    let resolveSecondDiscovery
+
+    const firstDiscovery = new Promise((resolve) => {
+      resolveFirstDiscovery = resolve
+    })
+    const secondDiscovery = new Promise((resolve) => {
+      resolveSecondDiscovery = resolve
+    })
+
+    const fetchMock = vi.fn((input, init) => {
+      const url = String(input)
+
+      if (url.includes('/api/search/refine')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              prompt: 'What should we optimize for with this stroller?',
+              helperText: 'Pick anything that matters.',
+              followUpPlaceholder: 'Anything else?',
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/rainforest-discover?query=stroller&amazonDomain=amazon.ca')) {
+        return secondDiscovery
+      }
+
+      if (url.includes('/api/search/rainforest-discover?query=stroller')) {
+        init?.signal?.addEventListener?.('abort', () => {
+          resolveFirstDiscovery?.({
+            ok: true,
+            headers: { get: () => '' },
+            text: async () =>
+              JSON.stringify({
+                discoveryToken: 'stale-discovery-token',
+                candidatePool: {
+                  query: 'stroller',
+                  details: '',
+                  candidates: [],
+                },
+                previewResults: [createMockResult({ title: 'Stale stroller result' })],
+              }),
+            aborted: true,
+          })
+        })
+
+        return firstDiscovery
+      }
+
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+    await screen.findByText(/which amazon do you usually shop on\?/i)
+
+    await user.click(screen.getByRole('button', { name: /^canada$/i }))
+
+    resolveSecondDiscovery({
+      ok: true,
+      headers: { get: () => '' },
+      text: async () =>
+        JSON.stringify({
+          amazonDomain: 'amazon.ca',
+          discoveryToken: 'fresh-discovery-token',
+          candidatePool: {
+            query: 'stroller',
+            details: '',
+            amazonDomain: 'amazon.ca',
+            candidates: [],
+          },
+          previewResults: [createMockResult({ title: 'Canada stroller result' })],
+        }),
+    })
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('/api/search/rainforest-discover?query=stroller'),
+          expect.stringContaining('/api/search/rainforest-discover?query=stroller&amazonDomain=amazon.ca'),
+        ]),
+      )
+    })
+
+    await user.click(screen.getAllByRole('button', { name: /just show me results/i })[0])
+
+    expect(await screen.findByText('Canada stroller result')).toBeInTheDocument()
+    expect(screen.queryByText('Stale stroller result')).not.toBeInTheDocument()
+    expect(window.localStorage.getItem('focamai_marketplace')).toBe('amazon.ca')
+    expect(window.localStorage.getItem('focamai_marketplace_asked')).toBe('true')
   })
 
   it('sends tester feedback with the current search context', async () => {
@@ -418,6 +579,7 @@ describe('HomePage', () => {
         followUpNotes: 'comfort matters most',
       }),
     )
+    expect(window.localStorage.getItem('focamai_marketplace')).toBe('amazon.ca')
   })
 
   it('uses the geo-resolved Amazon domain when the store stays on Auto', async () => {
@@ -481,6 +643,73 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
 
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(
+          '/api/search/rainforest-discover?query=stroller&amazonDomain=amazon.ca',
+        ),
+      ]),
+    )
+    expect(window.localStorage.getItem('focamai_marketplace')).toBe('amazon.ca')
+  })
+
+  it('reuses a saved marketplace preference and skips the geo request on load', async () => {
+    window.localStorage.setItem('focamai_marketplace', 'amazon.ca')
+
+    const user = userEvent.setup()
+    const fetchMock = vi.fn((input) => {
+      const url = String(input)
+
+      if (url === '/api/geo') {
+        throw new Error('Geo request should be skipped when a marketplace preference is saved.')
+      }
+
+      if (url.includes('/api/search/rainforest-discover')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              amazonDomain: 'amazon.ca',
+              discoveryToken: 'opaque-discovery-token',
+              candidatePool: {
+                query: 'stroller',
+                details: '',
+                amazonDomain: 'amazon.ca',
+                candidates: [],
+              },
+              previewResults: [createMockResult({ subtitle: 'Amazon', link: 'https://www.amazon.ca/dp/B001' })],
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/refine')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              prompt: 'What should we optimize for with this stroller?',
+              helperText: 'Pick anything that matters.',
+              followUpPlaceholder: 'Anything else?',
+            }),
+        })
+      }
+
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    expect(screen.getAllByRole('button', { name: /change amazon store/i })[0]).toHaveTextContent('CA')
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+    await screen.findByText(/what should we optimize for with this stroller/i)
+
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).not.toContain('/api/geo')
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(
       expect.arrayContaining([
         expect.stringContaining(

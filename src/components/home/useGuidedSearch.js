@@ -121,18 +121,22 @@ async function readJsonResponse(response, requestStartedAt) {
   }
 }
 
-async function fetchDiscoveryResults(query, amazonDomain = AMAZON_MARKETPLACE_AUTO) {
+async function fetchDiscoveryResults(query, amazonDomain = AMAZON_MARKETPLACE_AUTO, signal) {
   const searchParams = new URLSearchParams({ query })
   appendAmazonDomain(searchParams, amazonDomain)
   const requestStartedAt = performance.now()
-  const response = await fetch(`${BACKEND_URL}/api/search/rainforest-discover?${searchParams.toString()}`)
+  const response = await fetch(`${BACKEND_URL}/api/search/rainforest-discover?${searchParams.toString()}`, {
+    signal,
+  })
   return readJsonResponse(response, requestStartedAt)
 }
 
-async function fetchRefinementPrompt(query) {
+async function fetchRefinementPrompt(query, signal) {
   const searchParams = new URLSearchParams({ query })
   const requestStartedAt = performance.now()
-  const response = await fetch(`${BACKEND_URL}/api/search/refine?${searchParams.toString()}`)
+  const response = await fetch(`${BACKEND_URL}/api/search/refine?${searchParams.toString()}`, {
+    signal,
+  })
   return readJsonResponse(response, requestStartedAt)
 }
 
@@ -334,6 +338,9 @@ export function resolveSelectedProductForDisplay({
 export function useGuidedSearch() {
   const [productQuery, setProductQuery] = useState('')
   const {
+    detectedCountryCode,
+    hasAskedMarketplacePreference,
+    markMarketplacePromptHandled,
     selectedAmazonDomain,
     resolvedAmazonDomain,
     setSelectedAmazonDomain,
@@ -371,12 +378,15 @@ export function useGuidedSearch() {
   const activeSearchIdRef = useRef(0)
   const enrichmentPollRef = useRef({ source: null, timerId: null, searchId: 0 })
   const shouldContinueDetailHydrationRef = useRef(false)
+  const discoveryAbortControllerRef = useRef(null)
   const finalizeAbortControllerRef = useRef(null)
+  const refineAbortControllerRef = useRef(null)
   const analyticsSearchIdRef = useRef('')
   const analyticsSessionIdRef = useRef('')
   const retryAdviceRequestIdRef = useRef(0)
   const hasTrackedRefinementViewRef = useRef(false)
   const hasTrackedPreviewImpressionsRef = useRef(false)
+  const startGuidedSearchRef = useRef(null)
 
   function trackSearchEvent(name, eventData = {}) {
     if (!analyticsSearchIdRef.current || !analyticsSessionIdRef.current) {
@@ -407,10 +417,24 @@ export function useGuidedSearch() {
     shouldContinueDetailHydrationRef.current = false
   }
 
+  function cancelDiscoveryRequest() {
+    if (discoveryAbortControllerRef.current) {
+      discoveryAbortControllerRef.current.abort()
+      discoveryAbortControllerRef.current = null
+    }
+  }
+
   function cancelFinalizeRequest() {
     if (finalizeAbortControllerRef.current) {
       finalizeAbortControllerRef.current.abort()
       finalizeAbortControllerRef.current = null
+    }
+  }
+
+  function cancelRefinementRequest() {
+    if (refineAbortControllerRef.current) {
+      refineAbortControllerRef.current.abort()
+      refineAbortControllerRef.current = null
     }
   }
 
@@ -743,9 +767,35 @@ export function useGuidedSearch() {
   }, [finalResultsKey, results.length])
 
   useEffect(() => () => {
+    cancelDiscoveryRequest()
     cancelFinalizeRequest()
+    cancelRefinementRequest()
     stopEnrichmentPolling()
   }, [])
+
+  useEffect(() => {
+    if (!hasStartedSearch || !submittedQuery) {
+      return
+    }
+
+    const nextAmazonDomain = resolveAmazonDomainForRequest(selectedAmazonDomain, resolvedAmazonDomain)
+
+    if (!nextAmazonDomain || nextAmazonDomain === submittedAmazonDomain) {
+      return
+    }
+
+    startGuidedSearchRef.current?.(submittedQuery, {
+      preserveFollowUpNotes: true,
+      reuseAnalytics: true,
+      searchEventName: 'marketplace_search_restarted',
+    })
+  }, [
+    hasStartedSearch,
+    resolvedAmazonDomain,
+    selectedAmazonDomain,
+    submittedAmazonDomain,
+    submittedQuery,
+  ])
 
   const isFinalizing = finalizeMutation.isPending
   const isLoading = isDiscovering || isGeneratingPrompt || isFinalizing
@@ -758,9 +808,15 @@ export function useGuidedSearch() {
     selectedProduct: selectedProductState,
   })
 
-  function resetGuidedState(nextSubmittedQuery, nextSubmittedAmazonDomain = '') {
+  function resetGuidedState(
+    nextSubmittedQuery,
+    nextSubmittedAmazonDomain = '',
+    { preserveFollowUpNotes = false } = {},
+  ) {
+    cancelDiscoveryRequest()
     stopEnrichmentPolling()
     cancelFinalizeRequest()
+    cancelRefinementRequest()
     invalidateRetryAdviceRequests()
     setHasStartedSearch(true)
     setSubmittedQuery(nextSubmittedQuery)
@@ -772,7 +828,7 @@ export function useGuidedSearch() {
     setPreviewResults([])
     setResults([])
     setPreviousResults([])
-    setFollowUpNotes('')
+    setFollowUpNotes((current) => (preserveFollowUpNotes ? current : ''))
     setRetryFeedback('')
     setRetryAdvice(null)
     setSuggestedRetryQuery('')
@@ -795,7 +851,9 @@ export function useGuidedSearch() {
   function resetToNewSearch() {
     activeSearchIdRef.current += 1
     invalidateRetryAdviceRequests()
+    cancelDiscoveryRequest()
     cancelFinalizeRequest()
+    cancelRefinementRequest()
     stopEnrichmentPolling()
     finalizeMutation.reset()
     retryAdviceMutation.reset()
@@ -835,27 +893,32 @@ export function useGuidedSearch() {
     hasTrackedPreviewImpressionsRef.current = false
   }
 
-  function beginGuidedSearch(event) {
-    event.preventDefault()
-
-    const { error, isValid, normalizedQuery } = validateSearchInput(productQuery, '')
-
-    if (!isValid) {
-      setErrorMessage(error)
-      return
-    }
-
+  function startGuidedSearch(
+    normalizedQuery,
+    {
+      preserveFollowUpNotes = false,
+      reuseAnalytics = false,
+      searchEventName = 'search_started',
+    } = {},
+  ) {
     const nextSearchId = activeSearchIdRef.current + 1
     activeSearchIdRef.current = nextSearchId
-    const analyticsSearchId = createAnalyticsSearchId()
-    const analyticsSessionId = getOrCreateAnalyticsSessionId()
     const nextAmazonDomain = resolveAmazonDomainForRequest(selectedAmazonDomain, resolvedAmazonDomain)
+    const analyticsSearchId =
+      reuseAnalytics && analyticsSearchIdRef.current
+        ? analyticsSearchIdRef.current
+        : createAnalyticsSearchId()
+    const analyticsSessionId =
+      reuseAnalytics && analyticsSessionIdRef.current
+        ? analyticsSessionIdRef.current
+        : getOrCreateAnalyticsSessionId()
+
     analyticsSearchIdRef.current = analyticsSearchId
     analyticsSessionIdRef.current = analyticsSessionId
     setAnalyticsSearchId(analyticsSearchId)
     setAnalyticsSessionId(analyticsSessionId)
 
-    resetGuidedState(normalizedQuery, nextAmazonDomain)
+    resetGuidedState(normalizedQuery, nextAmazonDomain, { preserveFollowUpNotes })
     setIsDiscovering(true)
     setIsGeneratingPrompt(true)
 
@@ -864,8 +927,8 @@ export function useGuidedSearch() {
       searchId: analyticsSearchId,
       sessionId: analyticsSessionId,
       productQuery: normalizedQuery,
-      details: '',
-      enteredAiRefinement: false,
+      details: preserveFollowUpNotes ? followUpNotes : '',
+      enteredAiRefinement: preserveFollowUpNotes ? Boolean(followUpNotes.trim()) : false,
       usedShowProductsNow: false,
       completedFinalize: false,
       retryRound: 0,
@@ -874,13 +937,18 @@ export function useGuidedSearch() {
       eventType: 'search_event',
       searchId: analyticsSearchId,
       sessionId: analyticsSessionId,
-      name: 'search_started',
+      name: searchEventName,
       eventData: {
         query: normalizedQuery,
+        amazonDomain: nextAmazonDomain,
       },
     })
 
-    fetchDiscoveryResults(normalizedQuery, nextAmazonDomain)
+    cancelDiscoveryRequest()
+    const discoveryAbortController = new AbortController()
+    discoveryAbortControllerRef.current = discoveryAbortController
+
+    fetchDiscoveryResults(normalizedQuery, nextAmazonDomain, discoveryAbortController.signal)
       .then((payload) => {
         if (activeSearchIdRef.current !== nextSearchId) {
           return
@@ -917,19 +985,27 @@ export function useGuidedSearch() {
         })
       })
       .catch((error) => {
-        if (activeSearchIdRef.current !== nextSearchId) {
+        if (activeSearchIdRef.current !== nextSearchId || error?.name === 'AbortError') {
           return
         }
 
         setErrorMessage(error instanceof Error ? error.message : 'Unable to start the search.')
       })
       .finally(() => {
+        if (discoveryAbortControllerRef.current === discoveryAbortController) {
+          discoveryAbortControllerRef.current = null
+        }
+
         if (activeSearchIdRef.current === nextSearchId) {
           setIsDiscovering(false)
         }
       })
 
-    fetchRefinementPrompt(normalizedQuery)
+    cancelRefinementRequest()
+    const refineAbortController = new AbortController()
+    refineAbortControllerRef.current = refineAbortController
+
+    fetchRefinementPrompt(normalizedQuery, refineAbortController.signal)
       .then((payload) => {
         if (activeSearchIdRef.current !== nextSearchId) {
           return
@@ -954,30 +1030,50 @@ export function useGuidedSearch() {
           })
         }
       })
-      .catch(() => {
-        if (activeSearchIdRef.current === nextSearchId) {
-          setRefinementPrompt(createFallbackRefinementPrompt(normalizedQuery))
+      .catch((error) => {
+        if (activeSearchIdRef.current !== nextSearchId || error?.name === 'AbortError') {
+          return
+        }
 
-          if (!hasTrackedRefinementViewRef.current) {
-            hasTrackedRefinementViewRef.current = true
-            trackAnalytics({
-              eventType: 'search_event',
-              searchId: analyticsSearchId,
-              sessionId: analyticsSessionId,
-              name: 'refine_viewed',
-              eventData: {
-                usedFallback: true,
-              },
-            })
-          }
+        setRefinementPrompt(createFallbackRefinementPrompt(normalizedQuery))
+
+        if (!hasTrackedRefinementViewRef.current) {
+          hasTrackedRefinementViewRef.current = true
+          trackAnalytics({
+            eventType: 'search_event',
+            searchId: analyticsSearchId,
+            sessionId: analyticsSessionId,
+            name: 'refine_viewed',
+            eventData: {
+              usedFallback: true,
+            },
+          })
         }
       })
       .finally(() => {
+        if (refineAbortControllerRef.current === refineAbortController) {
+          refineAbortControllerRef.current = null
+        }
+
         if (activeSearchIdRef.current === nextSearchId) {
           setIsGeneratingPrompt(false)
         }
       })
+  }
 
+  startGuidedSearchRef.current = startGuidedSearch
+
+  function beginGuidedSearch(event) {
+    event.preventDefault()
+
+    const { error, isValid, normalizedQuery } = validateSearchInput(productQuery, '')
+
+    if (!isValid) {
+      setErrorMessage(error)
+      return
+    }
+
+    startGuidedSearch(normalizedQuery)
   }
 
   function handleFinalizeRefinement() {
@@ -1186,10 +1282,12 @@ export function useGuidedSearch() {
     analyticsSearchId,
     analyticsSessionId,
     candidatePool,
+    detectedCountryCode,
     displayedResults,
     errorMessage,
     followUpNotes,
     hasFinalResults,
+    hasAskedMarketplacePreference,
     hasStartedSearch,
     handleRetailerClick,
     handleSelectProduct,
@@ -1204,7 +1302,9 @@ export function useGuidedSearch() {
     productQuery,
     requestTiming,
     refinementPrompt,
+    resolvedAmazonDomain,
     retryAdvice,
+    markMarketplacePromptHandled,
     selectedAmazonDomain,
     selectionState,
     retryCount,

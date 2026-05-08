@@ -15,6 +15,7 @@
 - Verify the live golden path in the browser and confirm cards arrive quickly while modal AI copy hydrates later.
 - Audit modal AI tone and tighten any copy that sounds too promotional or vague.
 - Improve loading states between search, refine, and results so the transitions feel more intentional.
+- Watch whether the new inline marketplace prompt feels helpful or distracting, and adjust its timing/copy if testers treat it as friction.
 - Improve low-confidence and weak-result handling instead of quietly showing poor results.
 - Review early tester feedback from the new homepage FAB and decide whether the reveal timing, wording, or question set should change.
 - Decide whether to add a proactive pool-mismatch nudge before the user opens retry.

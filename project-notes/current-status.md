@@ -21,6 +21,7 @@
 - The homepage starts with a normal product query, not a long form.
 - The main product query field is now a compact 2-line textarea so longer natural-language searches and AI retry suggestions stay visible without changing the top form layout mid-flow.
 - Discovery and the AI follow-up question run in parallel after submit.
+- A one-time inline marketplace prompt now appears after search starts until the user chooses an Amazon store or dismisses it.
 - `Show products now` reveals the preview set without finalize.
 - `Show focused picks` runs guided finalize and scrolls directly to the results region.
 - Final result cards stay metadata-first on the grid.
@@ -35,6 +36,8 @@
 - `GET /api/search/refine`, `POST /api/search/finalize`, `GET /api/search/enrichment-stream`, `GET /api/search/enrichment`, and `POST /api/search/retry-advice` are all active in the Render app.
 - `GET /api/analytics/dashboard` is a localhost-only development endpoint for the internal analytics page and returns `404` in production.
 - `GET /api/geo` intentionally stays on Vercel so the frontend can resolve the user’s country from Vercel headers and send an explicit Amazon domain on guided requests when the store picker is left on `Auto`.
+- The Amazon marketplace context now remembers the last saved marketplace in localStorage (`focamai_marketplace`) so repeat visits skip geo lookup when a preference or confident detection already exists.
+- If the effective marketplace changes while a search is in flight or already active, discovery/refine restart for the current submitted query and stale older responses are ignored.
 - Discovery cache and operational history use Supabase when configured, with local file fallback in development.
 - Product details use a separate provider-agnostic per-ASIN cache, also with Supabase preferred and local fallback available.
 - Tester feedback stores to a dedicated `tester_feedback` table in Supabase when configured, with local fallback in development.
