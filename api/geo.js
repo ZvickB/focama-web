@@ -14,7 +14,7 @@ function countryFromAcceptLanguage(header) {
 export async function GET(request) {
   const langCountry = countryFromAcceptLanguage(request.headers.get('accept-language'))
   const ipCountry = request.headers.get('x-vercel-ip-country')
-  const raw = langCountry || ipCountry
+  const raw = ipCountry || langCountry
   const countryCode =
     typeof raw === 'string' && /^[A-Z]{2}$/.test(raw.trim()) ? raw.trim() : 'US'
 
