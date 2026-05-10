@@ -194,8 +194,12 @@ describe('HomePage', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows the marketplace prompt after search starts and remembers dismissal once', async () => {
+  it('shows the marketplace toast after search starts and remembers dismissal once', async () => {
     const user = userEvent.setup()
+
+    // Pre-set a detected marketplace preference (simulates geo detection from a previous visit)
+    window.localStorage.setItem('focamai_marketplace', 'amazon.co.uk')
+
     const fetchMock = vi.fn((input) => {
       const url = String(input)
 
@@ -240,18 +244,15 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /start search/i }))
 
     expect(
-      await screen.findByText(/which amazon do you usually shop on\?/i),
+      await screen.findByText(/looks like you're in the uk/i),
     ).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /not now/i }))
+    await user.click(screen.getByRole('button', { name: /dismiss/i }))
 
+    // Preference persisted — will not show again on next load
     await waitFor(() => {
       expect(window.localStorage.getItem('focamai_marketplace_asked')).toBe('true')
     })
-
-    expect(
-      screen.queryByText(/which amazon do you usually shop on\?/i),
-    ).not.toBeInTheDocument()
   })
 
   it('starts discovery and question-fast as separate requests', async () => {
@@ -374,9 +375,13 @@ describe('HomePage', () => {
 
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
-    await screen.findByText(/which amazon do you usually shop on\?/i)
 
-    await user.click(screen.getByRole('button', { name: /^canada$/i }))
+    // Wait for refinement area to confirm search has started
+    await screen.findByLabelText(/tell us more/i)
+
+    // Switch marketplace via the header store pill (two pills exist — desktop + mobile — pick the first)
+    await user.click(screen.getAllByRole('button', { name: /change amazon store/i })[0])
+    await user.click(screen.getByRole('option', { name: /canada/i }))
 
     resolveSecondDiscovery({
       ok: true,

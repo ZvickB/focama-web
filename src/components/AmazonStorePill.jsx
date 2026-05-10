@@ -25,6 +25,14 @@ export function AmazonStorePill({ variant = 'default' }) {
   const popoverId = useId()
 
   useEffect(() => {
+    function handleOpenRequest() {
+      setIsOpen(true)
+    }
+    window.addEventListener('focamai:open-store-picker', handleOpenRequest)
+    return () => window.removeEventListener('focamai:open-store-picker', handleOpenRequest)
+  }, [])
+
+  useEffect(() => {
     if (!isOpen) return undefined
     function handleOutsideClick(event) {
       if (containerRef.current && !containerRef.current.contains(event.target)) {
@@ -132,6 +140,7 @@ export function AmazonStorePill({ variant = 'default' }) {
           onKeyDown={handlePopoverKeyDown}
           className="absolute right-0 top-full z-50 mt-1.5 w-64 max-w-[calc(100vw-2rem)] rounded-[20px] border border-stone-200 bg-white py-1.5 shadow-[0_8px_32px_-8px_rgba(15,23,42,0.18)]"
         >
+          <div className="relative">
           <div className="max-h-72 overflow-y-auto">
             <button
               type="button"
@@ -180,6 +189,13 @@ export function AmazonStorePill({ variant = 'default' }) {
                 {isMoreRegionsOpen ? additionalMarketplaces.map(renderMarketplaceOption) : null}
               </>
             ) : null}
+          </div>
+          {isMoreRegionsOpen ? (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-[20px] bg-gradient-to-t from-white to-transparent"
+            />
+          ) : null}
           </div>
         </div>
       ) : null}

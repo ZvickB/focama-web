@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { LoaderCircle, Search, Sparkles } from 'lucide-react'
+import { LoaderCircle, Search, Sparkles, X } from 'lucide-react'
 import { MAX_PRODUCT_QUERY_LENGTH, MAX_DETAILS_LENGTH } from '../../../shared/search-input.js'
 
 import wordmark from '@/assets/wordmark.PNG'
@@ -16,7 +16,6 @@ import { Textarea } from '@/components/ui/textarea.jsx'
 import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
 import { useSearchProgress } from '@/contexts/useSearchProgress.js'
 import { getOrCreateAnalyticsSessionId } from '@/lib/analytics.js'
-import { AMAZON_MARKETPLACES } from '../../../shared/amazon-marketplaces.js'
 
 const HERO_SUBLINE = "Tell us what you need. We'll find your six."
 
@@ -265,71 +264,76 @@ function TimingPanel({ requestTiming }) {
   )
 }
 
-function MarketplacePreferencePrompt({
-  currentMarketplaceDomain,
-  detectedCountryCode,
-  hasDetectedMarketplace,
-  onChooseMarketplace,
-  onDismiss,
-}) {
-  const quickDomains = ['amazon.com', 'amazon.ca', 'amazon.co.uk']
-  const quickMarketplaces = quickDomains
-    .map((domain) => AMAZON_MARKETPLACES.find((marketplace) => marketplace.domain === domain))
-    .filter(Boolean)
+const MARKETPLACE_DISPLAY = {
+  'amazon.com': { location: 'the US', storeLabel: 'Amazon US' },
+  'amazon.ca': { location: 'Canada', storeLabel: 'Amazon Canada' },
+  'amazon.co.uk': { location: 'the UK', storeLabel: 'Amazon UK' },
+}
 
-  const detectedMarketplaceLabel =
-    AMAZON_MARKETPLACES.find((marketplace) => marketplace.countryCode === detectedCountryCode)?.label ||
-    detectedCountryCode
+function MarketplaceToast({ domain, onConfirm, onChooseStore, onDismiss }) {
+  const timerRef = useRef(null)
+  const onDismissRef = useRef(onDismiss)
+  onDismissRef.current = onDismiss
+
+  function clearTimer() {
+    clearTimeout(timerRef.current)
+    timerRef.current = null
+  }
+
+  function startTimer() {
+    clearTimer()
+    timerRef.current = setTimeout(() => onDismissRef.current(), 8000)
+  }
+
+  useEffect(() => {
+    startTimer()
+    return clearTimer
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const display = MARKETPLACE_DISPLAY[domain]
+  if (!display) return null
 
   return (
-    <div className="rounded-[28px] border border-[#e6d8c5] bg-[linear-gradient(180deg,rgba(250,246,240,0.88),rgba(255,255,255,0.98))] px-4 py-4 shadow-[0_20px_56px_-44px_rgba(120,87,63,0.34)] sm:px-5">
-      <div className="space-y-2">
-        <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-primary/70">
-          Amazon store
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+      onMouseEnter={clearTimer}
+      onMouseLeave={startTimer}
+      className="fixed right-4 top-24 z-40 w-72 rounded-2xl border border-stone-200 bg-white px-4 py-3.5 shadow-[0_8px_32px_-8px_rgba(15,23,42,0.18)]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm text-slate-700">
+          Looks like you&apos;re in {display.location}
         </p>
-        <p className="text-base font-medium text-slate-900">
-          Which Amazon do you usually shop on?
-        </p>
-        <p className="text-sm leading-6 text-slate-600">
-          We&apos;ll keep using that store for future searches. If you switch it now, we&apos;ll refresh these results for the new marketplace.
-        </p>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2.5">
-        {hasDetectedMarketplace ? (
-          <button
-            type="button"
-            className="rounded-full border border-primary/15 bg-primary px-4 py-2 text-sm font-medium text-white shadow-[0_16px_34px_-24px_rgba(15,97,117,0.45)] transition hover:bg-primary/90"
-            onClick={() => onChooseMarketplace(currentMarketplaceDomain)}
-          >
-            Yes, keep {detectedMarketplaceLabel}
-          </button>
-        ) : null}
-
-        {quickMarketplaces.map((marketplace) => (
-          <button
-            key={marketplace.domain}
-            type="button"
-            className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-              currentMarketplaceDomain === marketplace.domain
-                ? 'border-primary/20 bg-primary/8 text-primary'
-                : 'border-[#ded0c0] bg-white text-slate-700 hover:border-[#ccb79f] hover:text-slate-900'
-            }`}
-            onClick={() => onChooseMarketplace(marketplace.domain)}
-          >
-            {marketplace.label}
-          </button>
-        ))}
-
         <button
           type="button"
-          className="rounded-full border border-transparent px-3 py-2 text-sm text-slate-500 transition hover:text-slate-700"
           onClick={onDismiss}
+          aria-label="Dismiss"
+          className="shrink-0 text-slate-400 transition hover:text-slate-600"
         >
-          Not now
+          <X className="h-4 w-4" />
         </button>
       </div>
-    </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="rounded-full bg-primary px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-primary/90"
+        >
+          Use {display.storeLabel}
+        </button>
+        <button
+          type="button"
+          onClick={onChooseStore}
+          className="rounded-full border border-stone-200 px-3.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-stone-300 hover:text-slate-800"
+        >
+          Choose store
+        </button>
+      </div>
+    </motion.div>
   )
 }
 
@@ -378,16 +382,11 @@ function OpenLayout(props) {
   } = props
   const hasLoadedRetrySuggestion = Boolean(loadedRetrySuggestion)
   const shouldShowRefinementControls = hasStartedSearch && !hasLoadedRetrySuggestion
-  const promptMarketplaceDomain =
-    state.selectedAmazonDomain !== AMAZON_MARKETPLACE_AUTO
-      ? state.selectedAmazonDomain
-      : state.resolvedAmazonDomain
-  const shouldShowMarketplacePrompt =
-    hasStartedSearch && !hasLoadedRetrySuggestion && !state.hasAskedMarketplacePreference
 
-  useEffect(() => {
-    prewarmBackend()
-  }, [])
+  // Retained for quick re-enable if Render sleep behavior ever matters again.
+  // useEffect(() => {
+  //   prewarmBackend()
+  // }, [])
 
   useEffect(() => {
     const revealTimer = window.setTimeout(() => {
@@ -564,15 +563,6 @@ function OpenLayout(props) {
     }, 0)
   }
 
-  function handleMarketplacePromptSelection(domain) {
-    if (!domain) {
-      state.markMarketplacePromptHandled()
-      return
-    }
-
-    state.setSelectedAmazonDomain(domain)
-  }
-
   const { setProgress } = useSearchProgress()
   useEffect(() => {
     setProgress({ hasStartedSearch, hasDiscoveryResults, hasFinalResults })
@@ -739,26 +729,8 @@ function OpenLayout(props) {
                   </p>
                 ) : null}
 
-                {shouldShowMarketplacePrompt ? (
-                  <div className="mt-5 border-t border-stone-200/80 pt-5">
-                    <MarketplacePreferencePrompt
-                      currentMarketplaceDomain={promptMarketplaceDomain}
-                      detectedCountryCode={state.detectedCountryCode}
-                      hasDetectedMarketplace={Boolean(promptMarketplaceDomain)}
-                      onChooseMarketplace={handleMarketplacePromptSelection}
-                      onDismiss={state.markMarketplacePromptHandled}
-                    />
-                  </div>
-                ) : null}
-
                 {shouldShowRefinementControls ? (
-                  <div
-                    className={`space-y-5 ${
-                      shouldShowMarketplacePrompt
-                        ? 'mt-5'
-                        : 'mt-5 border-t border-stone-200/80 pt-5'
-                    }`}
-                  >
+                  <div className="mt-5 space-y-5 border-t border-stone-200/80 pt-5">
                   <RefinementCopy
                     isGeneratingPrompt={state.isGeneratingPrompt}
                     prompt={prompt}
@@ -932,6 +904,20 @@ export function HomeExperience() {
   const [feedbackSessionId] = useState(() => getOrCreateAnalyticsSessionId())
   const feedbackStage = getFeedbackStage(state)
 
+  const showMarketplaceToast = state.hasStartedSearch && !state.hasAskedMarketplacePreference
+  const toastDomain = state.selectedAmazonDomain !== AMAZON_MARKETPLACE_AUTO
+    ? state.selectedAmazonDomain
+    : state.resolvedAmazonDomain
+
+  function handleToastConfirm() {
+    state.setSelectedAmazonDomain(toastDomain)
+  }
+
+  function handleToastChooseStore() {
+    state.markMarketplacePromptHandled()
+    window.dispatchEvent(new CustomEvent('focamai:open-store-picker'))
+  }
+
   useEffect(() => {
     applyPlainBackgroundMode()
   }, [])
@@ -976,6 +962,17 @@ export function HomeExperience() {
               })
             }
             onClose={() => state.setSelectedProduct(null)}
+          />
+        ) : null}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showMarketplaceToast && toastDomain && MARKETPLACE_DISPLAY[toastDomain] ? (
+          <MarketplaceToast
+            key="marketplace-toast"
+            domain={toastDomain}
+            onConfirm={handleToastConfirm}
+            onChooseStore={handleToastChooseStore}
+            onDismiss={state.markMarketplacePromptHandled}
           />
         ) : null}
       </AnimatePresence>
