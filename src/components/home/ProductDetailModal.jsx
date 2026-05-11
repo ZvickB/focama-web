@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { ArrowUpRight, ChevronDown, Star, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 import { resolveAmazonDomainForRequest } from '@/components/home/useGuidedSearch.js'
 import { Button } from '@/components/ui/button.jsx'
@@ -114,34 +115,41 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
         >
           <div className="flex min-h-0 flex-col gap-4 lg:h-full">
             <div
-              className="flex flex-1 min-h-0 overflow-hidden rounded-[24px] border border-[#eee5da] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,246,240,0.94))] shadow-[0_22px_70px_-34px_rgba(120,87,63,0.24)]"
+              className="flex min-h-[16rem] overflow-hidden rounded-[24px] border border-[#eee5da] shadow-[0_22px_70px_-34px_rgba(120,87,63,0.24)] sm:min-h-[20rem] lg:min-h-0 lg:flex-1"
+              style={{
+                background:
+                  'radial-gradient(circle at 18% 12%, rgba(229,155,38,0.12), transparent 32%), radial-gradient(circle at 84% 0%, rgba(15,97,117,0.08), transparent 28%), linear-gradient(180deg, rgba(250,246,240,0.86), rgba(255,255,255,0.92))',
+              }}
             >
-              <div
-                className="flex min-h-[16rem] flex-1 items-center justify-center p-4 sm:min-h-[20rem] sm:p-6 lg:min-h-0 lg:flex-1"
-                style={{
-                  background:
-                    'radial-gradient(circle at 18% 12%, rgba(229,155,38,0.12), transparent 32%), radial-gradient(circle at 84% 0%, rgba(15,97,117,0.08), transparent 28%), linear-gradient(180deg, rgba(250,246,240,0.86), rgba(255,255,255,0.92))',
-                }}
-              >
-                <div className="flex h-full w-full min-h-0 items-center justify-center rounded-[28px] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(250,246,240,0.98))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_22px_44px_-34px_rgba(120,87,63,0.24)] sm:p-4">
-                  <img
-                    src={item.image}
-                    alt={item.title}
-                    className="h-full w-full rounded-[24px] object-contain mix-blend-multiply"
-                  />
-                </div>
-              </div>
+              <img
+                src={item.image}
+                alt={item.title}
+                className="h-full w-full object-contain mix-blend-multiply"
+              />
             </div>
             {item.link ? (
-              <Button
-                asChild
-                className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
-              >
-                <a href={item.link} target="_blank" rel="noreferrer" onClick={onRetailerClick}>
-                  {retailerLabel ? `View on ${retailerLabel}` : 'View on retailer site'}
-                  <ArrowUpRight className="h-4 w-4" />
-                </a>
-              </Button>
+              <div className="space-y-2.5">
+                <Button
+                  asChild
+                  className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
+                >
+                  <a href={item.link} target="_blank" rel="noreferrer" onClick={onRetailerClick}>
+                    {retailerLabel ? `View on ${retailerLabel}` : 'View on retailer site'}
+                    <ArrowUpRight className="h-4 w-4" />
+                  </a>
+                </Button>
+                <p className="text-center text-xs leading-5 text-slate-500">
+                  Retailer links may be affiliate links, which can support Focamai at no extra cost
+                  to you.{' '}
+                  <Link
+                    to="/affiliate-disclosure"
+                    className="font-medium text-slate-600 underline underline-offset-2 hover:text-slate-800"
+                  >
+                    Learn more
+                  </Link>
+                  .
+                </p>
+              </div>
             ) : (
               <Button
                 type="button"
