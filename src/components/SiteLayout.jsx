@@ -157,9 +157,9 @@ function SlidingNav({ items, className = '' }) {
   )
 }
 
-function SearchStepIndicator({ progress }) {
+function SearchStepIndicator({ progress, isCompact }) {
   const { hasStartedSearch, hasDiscoveryResults, hasFinalResults } = progress
-  if (!hasStartedSearch) return null
+  if (!hasStartedSearch || !isCompact) return null
 
   return (
     <div
@@ -290,7 +290,7 @@ function SiteLayout() {
             </button>
           </div>
           <div className="hidden flex-1 items-center justify-center lg:flex">
-            <SearchStepIndicator progress={progress} />
+            <SearchStepIndicator progress={progress} isCompact={isCompact} />
           </div>
           <div className="hidden sm:flex sm:items-center sm:gap-3">
             {isHomePage ? (
