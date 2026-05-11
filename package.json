@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
+    "@sentry/node": "^10.52.0",
     "@supabase/supabase-js": "^2.99.3",
     "@tanstack/react-query": "^5.94.5",
     "@vercel/analytics": "^2.0.1",
@@ -24,6 +25,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "express": "^5.2.1",
+    "helmet": "^8.1.0",
     "lucide-react": "^0.577.0",
     "motion": "^12.38.0",
     "react": "^19.2.0",

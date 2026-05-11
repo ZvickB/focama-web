@@ -1,5 +1,7 @@
 import express from 'express'
-import { resolveCorsOrigin } from './lib/http.js'
+import helmet from 'helmet'
+import { attachCorsOrigin, buildInternalErrorPayload, resolveCorsOrigin, sendJson } from './lib/http.js'
+import { initObservability, registerProcessErrorHandlers, reportBackendError } from './lib/observability.js'
 import {
   handleAnalyticsDashboard,
   handleAnalyticsTrack,
@@ -17,10 +19,16 @@ import {
 
 const PORT = Number(process.env.PORT || 8787)
 
+initObservability()
+registerProcessErrorHandlers()
+
 const app = express()
+app.use(helmet())
 
 // CORS preflight — must come before routes
 app.use((req, res, next) => {
+  attachCorsOrigin(res, req.headers.origin)
+
   if (req.method === 'OPTIONS') {
     res.set({
       'Access-Control-Allow-Origin': resolveCorsOrigin(req.headers.origin),
@@ -98,6 +106,22 @@ app.post('/api/feedback', async (req, res) => {
 // Health
 app.get('/api/health/supabase', async (req, res) => {
   await handleSupabaseHealth(res)
+})
+
+app.use((error, req, res, next) => {
+  reportBackendError(error, {
+    method: req.method,
+    route: req.path,
+    source: 'express_server',
+  })
+
+  if (res.headersSent) {
+    next(error)
+    return
+  }
+
+  attachCorsOrigin(res, req.headers.origin)
+  sendJson(res, 500, buildInternalErrorPayload('Something went wrong on the server.', error))
 })
 
 app.listen(PORT, () => {

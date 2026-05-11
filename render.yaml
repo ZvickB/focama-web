@@ -13,6 +13,12 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: CLAUDE_API_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SECRET_KEY

@@ -1,13 +1,14 @@
 import { getClientIpAddress, takeRateLimitToken } from '../rate-limit.js'
 import { getEnv, validateSearchInput } from '../search-data.js'
 import { generateRetryAdvice } from '../retry-advice.js'
-import { readJsonBody, sendJson } from '../http.js'
+import { buildInternalErrorPayload, readJsonBody, sendJson } from '../http.js'
 import { sanitizeRetryAdviceShortlist, truncateText } from '../text-sanitizers.js'
 
 export function createRetryAdviceHandler({
   getRefinementModel,
   logSearchFlowEvent,
   nowMs,
+  reportBackendError,
   rateLimitConfig,
   bodyLimitBytes,
   maxNoteLength,
@@ -114,10 +115,13 @@ export function createRetryAdviceHandler({
         totalMs: Math.round((nowMs() - requestStartedAt) * 10) / 10,
         error: error instanceof Error ? error.message : 'Unknown error',
       })
-      sendJson(response, 500, {
-        error: 'Unable to suggest a better search direction.',
-        details: error instanceof Error ? error.message : 'Unknown error',
+      reportBackendError?.(error, {
+        query: normalizedQuery,
+        route: '/api/search/retry-advice',
+        source: 'retry_advice',
+        totalMs: Math.round((nowMs() - requestStartedAt) * 10) / 10,
       })
+      sendJson(response, 500, buildInternalErrorPayload('Unable to suggest a better search direction.', error))
     }
   }
 }

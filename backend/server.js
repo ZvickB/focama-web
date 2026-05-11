@@ -9,7 +9,7 @@ import {
 } from './lib/ai-selector.js'
 import { createFinalizeFastContract, toFinalizeFastCard } from './lib/layered-contracts.js'
 import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, getCountryCode, takeRateLimitToken } from './lib/rate-limit.js'
-import { ALLOWED_ORIGIN, resolveCorsOrigin, sendJson, readJsonBody } from './lib/http.js'
+import { ALLOWED_ORIGIN, attachCorsOrigin, buildInternalErrorPayload, resolveCorsOrigin, sendJson, readJsonBody } from './lib/http.js'
 import { emitEnrichmentReady, enrichmentBus } from './lib/enrichment-bus.js'
 import {
   sanitizeAnalyticsEventData,
@@ -17,6 +17,7 @@ import {
   sanitizeStringList,
   truncateText,
 } from './lib/text-sanitizers.js'
+import { initObservability, registerProcessErrorHandlers, reportBackendError } from './lib/observability.js'
 import { createRetryAdviceHandler } from './lib/handlers/retry-advice-handler.js'
 import { createFeedbackHandler } from './lib/handlers/feedback-handler.js'
 import { createSupabaseHealthHandler } from './lib/handlers/supabase-health-handler.js'
@@ -155,8 +156,15 @@ function nowMs() {
   return performance.now()
 }
 
-function runInBackground(task) {
-  Promise.resolve(task).catch(() => {})
+function runInBackground(task, context = {}) {
+  Promise.resolve()
+    .then(() => (typeof task === 'function' ? task() : task))
+    .catch((error) => {
+      reportBackendError(error, {
+        ...context,
+        source: context.source || 'background_task',
+      })
+    })
 }
 
 function logSearchFlowEvent(eventName, details = {}) {
@@ -704,6 +712,12 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
         source: 'rainforest_discovery',
         scope: rainforestScope,
       }),
+      {
+        amazonDomain,
+        label: 'write_guided_discovery_snapshot',
+        query: normalizedQuery,
+        route: '/api/search/rainforest-discover',
+      },
     )
 
     await recordSearchCacheEvent({
@@ -754,10 +768,14 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
       error: error instanceof Error ? error.message : 'Unknown error',
     })
-    sendJson(response, 500, {
-      error: 'Unable to reach Rainforest API.',
-      details: error instanceof Error ? error.message : 'Unknown error',
+    reportBackendError(error, {
+      amazonDomain,
+      query: normalizedQuery,
+      route: '/api/search/rainforest-discover',
+      source: 'rainforest_discovery',
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
+    sendJson(response, 500, buildInternalErrorPayload('Unable to reach Rainforest API.', error))
   }
 }
 
@@ -828,10 +846,13 @@ export async function handleRefinementPrompt(requestUrl, response) {
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
       error: error instanceof Error ? error.message : 'Unknown error',
     })
-    sendJson(response, 500, {
-      error: 'Unable to generate the refinement prompt.',
-      details: error instanceof Error ? error.message : 'Unknown error',
+    reportBackendError(error, {
+      query: normalizedQuery,
+      route: '/api/search/refine',
+      source: 'guided_refine',
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
+    sendJson(response, 500, buildInternalErrorPayload('Unable to generate the refinement prompt.', error))
   }
 }
 
@@ -840,6 +861,7 @@ export const handleRetryAdvice = createRetryAdviceHandler({
   getRefinementModel,
   logSearchFlowEvent,
   nowMs,
+  reportBackendError,
   rateLimitConfig: DEFAULT_RATE_LIMIT_CONFIG,
   bodyLimitBytes: RETRY_ADVICE_BODY_LIMIT_BYTES,
   maxNoteLength: FINALIZE_MAX_NOTE_LENGTH,
@@ -1647,8 +1669,18 @@ export async function handleFinalizeSelection(request, response) {
             error: error instanceof Error ? error.message : 'Unknown error',
             mode: 'async',
           })
+          reportBackendError(error, {
+            label: 'mini_enrichment_async',
+            query: sanitizedDiscoveryContext.normalizedQuery,
+            route: '/api/search/finalize',
+            source: 'guided_finalize_background',
+          })
         }
-      })())
+      })(), {
+        label: 'guided_finalize_async_enrichment',
+        query: sanitizedDiscoveryContext.normalizedQuery,
+        route: '/api/search/finalize',
+      })
     }
   } catch (error) {
     logSearchFlowEvent('guided_finalize_failed', {
@@ -1660,10 +1692,16 @@ export async function handleFinalizeSelection(request, response) {
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
       error: error instanceof Error ? error.message : 'Unknown error',
     })
-    sendJson(response, 500, {
-      error: 'Unable to finalize the product selection.',
-      details: error instanceof Error ? error.message : 'Unknown error',
+    reportBackendError(error, {
+      candidateCount: nextCandidatePool.candidates.length,
+      query: sanitizedDiscoveryContext.normalizedQuery,
+      requestMode,
+      retryCount,
+      route: '/api/search/finalize',
+      source: 'guided_finalize',
+      totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
+    sendJson(response, 500, buildInternalErrorPayload('Unable to finalize the product selection.', error))
   }
 }
 
@@ -1797,87 +1835,108 @@ export async function handleAnalyticsDashboard(request, response) {
 }
 
 export function createApiServer() {
+  initObservability()
+  registerProcessErrorHandlers()
+
   return createServer(async (request, response) => {
+    attachCorsOrigin(response, request.headers?.origin)
     const requestUrl = new URL(request.url || '/', `http://${request.headers.host || '127.0.0.1'}`)
 
-    if (request.method === 'OPTIONS') {
-      response.writeHead(204, {
-        'Access-Control-Allow-Origin': resolveCorsOrigin(request.headers?.origin),
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        Vary: 'Origin',
+    try {
+      if (request.method === 'OPTIONS') {
+        response.writeHead(204, {
+          'Access-Control-Allow-Origin': resolveCorsOrigin(request.headers?.origin),
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          Vary: 'Origin',
+        })
+        response.end()
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/search/rainforest-discover') {
+        await handleRainforestDiscoverySearch(requestUrl, response, request)
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/search/refine') {
+        await handleRefinementPrompt(requestUrl, response)
+        return
+      }
+
+      if (request.method === 'POST' && requestUrl.pathname === '/api/search/retry-advice') {
+        await handleRetryAdvice(request, response)
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/health/supabase') {
+        await handleSupabaseHealth(response)
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/search/debug') {
+        await handleSearchDebug(requestUrl, response)
+        return
+      }
+
+      if (request.method === 'POST' && requestUrl.pathname === '/api/search/finalize') {
+        await handleFinalizeSelection(request, response)
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/search/enrichment') {
+        await handleEnrichmentPoll(request, response)
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/search/enrichment-stream') {
+        await handleEnrichmentStream(request, response)
+        return
+      }
+
+      if (request.method === 'POST' && requestUrl.pathname === '/api/analytics/track') {
+        await handleAnalyticsTrack(request, response)
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/analytics/dashboard') {
+        await handleAnalyticsDashboard(request, response)
+        return
+      }
+
+      if (request.method === 'POST' && requestUrl.pathname === '/api/feedback') {
+        await handleFeedbackSubmission(request, response)
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/search/cache') {
+        await handleCachedSearch(requestUrl, response)
+        return
+      }
+
+      sendJson(response, 404, { error: 'Not found.' })
+    } catch (error) {
+      reportBackendError(error, {
+        method: request.method,
+        route: requestUrl.pathname,
+        source: 'node_http_server',
       })
+
+      if (!response.headersSent) {
+        sendJson(response, 500, buildInternalErrorPayload('Something went wrong on the server.', error))
+        return
+      }
+
       response.end()
-      return
     }
-
-    if (request.method === 'GET' && requestUrl.pathname === '/api/search/rainforest-discover') {
-      await handleRainforestDiscoverySearch(requestUrl, response, request)
-      return
-    }
-
-    if (request.method === 'GET' && requestUrl.pathname === '/api/search/refine') {
-      await handleRefinementPrompt(requestUrl, response)
-      return
-    }
-
-    if (request.method === 'POST' && requestUrl.pathname === '/api/search/retry-advice') {
-      await handleRetryAdvice(request, response)
-      return
-    }
-
-    if (request.method === 'GET' && requestUrl.pathname === '/api/health/supabase') {
-      await handleSupabaseHealth(response)
-      return
-    }
-
-    if (request.method === 'GET' && requestUrl.pathname === '/api/search/debug') {
-      await handleSearchDebug(requestUrl, response)
-      return
-    }
-
-    if (request.method === 'POST' && requestUrl.pathname === '/api/search/finalize') {
-      await handleFinalizeSelection(request, response)
-      return
-    }
-
-    if (request.method === 'GET' && requestUrl.pathname === '/api/search/enrichment') {
-      await handleEnrichmentPoll(request, response)
-      return
-    }
-
-    if (request.method === 'GET' && requestUrl.pathname === '/api/search/enrichment-stream') {
-      await handleEnrichmentStream(request, response)
-      return
-    }
-
-    if (request.method === 'POST' && requestUrl.pathname === '/api/analytics/track') {
-      await handleAnalyticsTrack(request, response)
-      return
-    }
-
-    if (request.method === 'GET' && requestUrl.pathname === '/api/analytics/dashboard') {
-      await handleAnalyticsDashboard(request, response)
-      return
-    }
-
-    if (request.method === 'POST' && requestUrl.pathname === '/api/feedback') {
-      await handleFeedbackSubmission(request, response)
-      return
-    }
-
-    if (request.method === 'GET' && requestUrl.pathname === '/api/search/cache') {
-      await handleCachedSearch(requestUrl, response)
-      return
-    }
-
-    sendJson(response, 404, { error: 'Not found.' })
   })
 }
 
 const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]
 
 if (isDirectRun) {
+  initObservability()
+  registerProcessErrorHandlers()
   const server = createApiServer()
 
   server.listen(PORT, () => {

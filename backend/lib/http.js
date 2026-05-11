@@ -38,6 +38,22 @@ export function resolveCorsOrigin(requestOrigin = '') {
   return ALLOWED_ORIGIN
 }
 
+export function attachCorsOrigin(response, requestOrigin = '') {
+  if (response && typeof response === 'object') {
+    response.__focamaiRequestOrigin = requestOrigin
+  }
+}
+
+export function buildInternalErrorPayload(message, error) {
+  const payload = { error: message }
+
+  if (process.env.NODE_ENV !== 'production') {
+    payload.details = error instanceof Error ? error.message : 'Unknown error'
+  }
+
+  return payload
+}
+
 function roundTimingDuration(value) {
   return Math.round(value * 10) / 10
 }
@@ -51,13 +67,18 @@ function formatServerTiming(metrics = []) {
 
 export function sendJson(response, statusCode, payload, headers = {}) {
   const serverTiming = formatServerTiming(headers.serverTiming)
+  const requestOrigin =
+    typeof headers.requestOrigin === 'string'
+      ? headers.requestOrigin
+      : response?.__focamaiRequestOrigin || ''
   const responseHeaders = {
     ...headers,
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    'Access-Control-Allow-Origin': resolveCorsOrigin(requestOrigin),
     Vary: 'Origin',
   }
 
+  delete responseHeaders.requestOrigin
   delete responseHeaders.serverTiming
 
   if (serverTiming) {
