@@ -7,7 +7,6 @@ import { AmazonStoreProvider } from '@/contexts/AmazonStoreContext.jsx'
 import { SearchProgressProvider } from '@/contexts/SearchProgressContext.jsx'
 
 const HomePage = lazy(() => import('@/pages/HomePage.jsx'))
-const AboutPage = lazy(() => import('@/pages/AboutPage.jsx'))
 const AffiliateDisclosurePage = lazy(() => import('@/pages/AffiliateDisclosurePage.jsx'))
 const ContactPage = lazy(() => import('@/pages/ContactPage.jsx'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage.jsx'))
@@ -29,7 +28,6 @@ function AppRoutes({ onReady }) {
     <Routes>
       <Route element={<SiteLayout />}>
         <Route path="/" element={<HomePage />} />
-        <Route path="/about" element={<AboutPage />} />
         {import.meta.env.DEV && AnalyticsPage ? (
           <Route path="/admin/analytics" element={<AnalyticsPage />} />
         ) : null}
