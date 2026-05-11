@@ -17,7 +17,7 @@ const AnalyticsPage = import.meta.env.DEV
   ? lazy(() => import('@/pages/AnalyticsPage.jsx'))
   : null
 
-const SPLASH_MIN_DURATION_MS = 800
+const SPLASH_MIN_DURATION_MS = 0 // was 800; zeroed out while splash is disabled
 const SPLASH_HIDE_DURATION_MS = 440
 
 function AppRoutes({ onReady }) {

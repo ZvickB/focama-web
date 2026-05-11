@@ -27,7 +27,7 @@ function MarketplacePillToast({ domain, onConfirm, onChooseStore, onDismiss }) {
 
   function startTimer() {
     clearTimer()
-    timerRef.current = setTimeout(() => onDismissRef.current(), 8000)
+    timerRef.current = setTimeout(() => onDismissRef.current(), 6000)
   }
 
   useEffect(() => {
@@ -41,9 +41,9 @@ function MarketplacePillToast({ domain, onConfirm, onChooseStore, onDismiss }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: -6, scale: 0.97 }}
+      initial={{ opacity: 0, y: -12, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -6, scale: 0.97 }}
+      exit={{ opacity: 0, y: -12, scale: 0.97 }}
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
       style={{ transformOrigin: 'top right' }}
       onMouseEnter={clearTimer}
