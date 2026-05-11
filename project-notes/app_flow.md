@@ -13,7 +13,8 @@
 
 ## Homepage flow
 - First load shows an HTML boot splash from `index.html`.
-- While that splash is up, the route loads a lightweight `HomeShell` first; the guided homepage experience is lazy-loaded only after the user starts a search.
+- `index.html` now preconnects Google Fonts, preloads the PNG wordmark, and keeps that hero image at high fetch priority for the initial homepage view.
+- While the route is idle on first load, it renders a lightweight `HomeShell`, preconnects the configured backend origin, and warms the guided homepage experience chunk in the background; the guided experience still only becomes active after the user starts a search.
 - The active homepage ships in the plain white visual mode; the earlier background toggle is no longer exposed in the production UI.
 - The user starts with a product query in a compact 2-line homepage textarea.
 - After submit:
@@ -25,6 +26,7 @@
 - `Show focused picks` runs guided finalize and narrows to the final 6.
 - `Start a new search` clears the guided state and returns to a fresh search box.
 - After final results appear, the user can open the retry panel and ask for a better search direction.
+- As soon as `HomeExperience` mounts, it prefetches the lazy `ResultsSection` and `ProductDetailModal` chunks so those UI steps are more likely to be ready before the user needs them.
 - A tester-facing `Feedback` FAB appears after search starts, or after a short delay on the homepage, and opens a lightweight feedback sheet.
 
 ## Guided backend flow

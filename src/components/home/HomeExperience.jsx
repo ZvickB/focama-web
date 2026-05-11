@@ -16,8 +16,16 @@ import { useSearchProgress } from '@/contexts/useSearchProgress.js'
 import { getOrCreateAnalyticsSessionId } from '@/lib/analytics.js'
 
 const HERO_SUBLINE = "Tell us what you need. We'll find your six."
-const ResultsSection = lazy(() => import('@/components/home/ResultsSection.jsx'))
-const ProductDetailModal = lazy(() => import('@/components/home/ProductDetailModal.jsx'))
+function loadResultsSection() {
+  return import('@/components/home/ResultsSection.jsx')
+}
+
+function loadProductDetailModal() {
+  return import('@/components/home/ProductDetailModal.jsx')
+}
+
+const ResultsSection = lazy(() => loadResultsSection())
+const ProductDetailModal = lazy(() => loadProductDetailModal())
 
 function applyPlainBackgroundMode() {
   if (typeof document === 'undefined') {
@@ -251,9 +259,9 @@ function ResultsSectionFallback({ isFinalizing = false }) {
               <span className="relative h-2.5 w-2.5 rounded-full bg-primary/70" />
             </span>
             <div className="space-y-1">
-              <p className="text-sm font-medium text-slate-900">Taking a closer look at the options.</p>
-              <p className="text-sm leading-6 text-slate-600">
-                We&apos;re narrowing the shortlist and locking the final picks.
+              <p className="text-sm leading-6 text-slate-900">
+                Selecting your picks — open any result to see why it fits <em>your</em> needs and
+                what to watch for.
               </p>
             </div>
           </div>
@@ -518,6 +526,9 @@ function OpenLayout(props) {
               <img
                 src={wordmark}
                 alt="Focamai"
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
                 className="mx-auto h-auto w-full max-w-[240px] sm:max-w-[340px] lg:max-w-[420px]"
               />
             </div>
@@ -818,6 +829,11 @@ export function HomeExperience({ initialSearchQuery = '' } = {}) {
 
   useEffect(() => {
     applyPlainBackgroundMode()
+  }, [])
+
+  useEffect(() => {
+    void loadResultsSection()
+    void loadProductDetailModal()
   }, [])
 
   useEffect(() => {

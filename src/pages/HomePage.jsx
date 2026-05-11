@@ -1,16 +1,37 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import Seo from '@/components/Seo.jsx'
 import { HomeShell } from '@/components/home/HomeShell.jsx'
+import { preconnectToUrl, scheduleIdleTask } from '@/lib/resourceHints.js'
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
+
+function loadHomeExperience() {
+  return import('@/components/home/HomeExperience.jsx').then((module) => ({
+    default: module.HomeExperience,
+  }))
+}
 
 const HomeExperience = lazy(() =>
-  import('@/components/home/HomeExperience.jsx').then((module) => ({
-    default: module.HomeExperience,
-  })),
+  loadHomeExperience(),
 )
 
 function HomePage() {
   const [initialSearchQuery, setInitialSearchQuery] = useState('')
   const hasStartedSearch = Boolean(initialSearchQuery)
+
+  useEffect(() => {
+    preconnectToUrl(BACKEND_URL)
+  }, [])
+
+  useEffect(() => {
+    if (hasStartedSearch) {
+      return undefined
+    }
+
+    return scheduleIdleTask(() => {
+      void loadHomeExperience()
+    })
+  }, [hasStartedSearch])
 
   return (
     <>

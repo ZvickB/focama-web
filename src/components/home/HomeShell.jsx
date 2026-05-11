@@ -110,6 +110,9 @@ export function HomeShell({
                 <img
                   src={wordmark}
                   alt="Focamai"
+                  loading="eager"
+                  fetchPriority="high"
+                  decoding="async"
                   className="mx-auto h-auto w-full max-w-[240px] sm:max-w-[340px] lg:max-w-[420px]"
                 />
               </div>

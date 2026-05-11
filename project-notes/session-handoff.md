@@ -18,10 +18,11 @@
 - Product shortlists stay at 6 items.
 - The guided backend path is the real product path; `/api/search/live` is not part of the current user flow.
 - The top homepage query field is now a compact 2-line textarea so long natural-language searches and AI-suggested retries fit without truncation.
-- Homepage boot is now shell-first: `/` loads a lightweight `HomeShell` under the existing splash, and the guided search app lazy-loads only after submit.
+- Homepage boot is now shell-first: `/` loads a lightweight `HomeShell` under the existing splash, warms the guided `HomeExperience` chunk during idle time, and only swaps into that guided app after submit.
 - The Amazon marketplace context now persists the last saved marketplace locally, and confident geo detections are cached so later loads can skip `GET /api/geo`.
 - The homepage now includes a one-time inline marketplace prompt after search starts, and active searches restart cleanly if the marketplace changes mid-flight.
 - The PNG wordmark is the active wordmark.
+- The homepage now gives the hero wordmark higher fetch priority, preconnects Google Fonts plus the configured Render backend origin, and prefetches `ResultsSection` plus `ProductDetailModal` as soon as `HomeExperience` mounts.
 - Public routes now have route-level SEO metadata plus static `robots.txt`, `sitemap.xml`, and `site.webmanifest`.
 - Current behavior is canonical in `project-notes/app_flow.md`.
 
