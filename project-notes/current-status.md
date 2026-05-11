@@ -14,6 +14,7 @@
 - The homepage now preconnects Google Fonts in `index.html`, preconnects the configured backend origin from `VITE_BACKEND_URL`, gives the hero wordmark higher fetch priority, and prefetches the results plus modal chunks immediately after `HomeExperience` mounts.
 - A local-only internal analytics dashboard now lives at `/admin/analytics` during development and reads a backend funnel summary instead of querying Supabase directly from the browser.
 - The current user path is: search -> short follow-up -> preview or focused shortlist -> modal details -> retailer clickout.
+- The modal clickout step now includes a short inline affiliate disclosure directly under the retailer CTA.
 - A tester-only feedback FAB now opens a lightweight sheet for quick product feedback, optional free text, and optional follow-up email.
 - Shortlists are always 6 items.
 - The PNG wordmark is the active wordmark.
@@ -44,7 +45,8 @@
 - Discovery cache and operational history use Supabase when configured, with local file fallback in development.
 - Product details use a separate provider-agnostic per-ASIN cache, also with Supabase preferred and local fallback available.
 - Tester feedback stores to a dedicated `tester_feedback` table in Supabase when configured, with local fallback in development.
-- Rate limiting is currently process-local in-memory on the Render server, not Supabase-backed.
+- Backend production observability is now wired for opt-in Sentry via `SENTRY_DSN`, with sanitized context and explicit reporting for background async failures plus unhandled server errors.
+- Rate limiting now uses a Supabase-backed `rate_limit_events` event log when Supabase is configured, with process-local memory fallback for local/test or table outages.
 - Marketplace listings without a known positive price are now treated as invalid inventory and filtered out deterministically before discovery preview, cached candidate reuse, or finalize/AI selection.
 
 ## Current finalize reality
@@ -67,6 +69,6 @@
 
 ## Recommended next checks
 - Verify the browser golden path on the live app: fast cards first, modal AI copy later.
-- Tighten the loading states between search, refine, and results.
+- Verify the browser golden path after the new route-loading fallback and chunk-load recovery copy.
 - Improve weak-result and low-confidence handling.
 - Decide how affiliate-ready outbound links and disclosures should appear.

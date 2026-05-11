@@ -19,6 +19,24 @@ const AnalyticsPage = import.meta.env.DEV
 const SPLASH_MIN_DURATION_MS = 0 // was 800; zeroed out while splash is disabled
 const SPLASH_HIDE_DURATION_MS = 440
 
+export function RouteLoadingFallback() {
+  return (
+    <div
+      aria-live="polite"
+      className="flex min-h-screen items-center justify-center bg-white px-6 py-12 text-center text-stone-900"
+      role="status"
+    >
+      <div className="w-full max-w-sm space-y-4">
+        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-stone-200 border-t-stone-900" />
+        <div className="space-y-1">
+          <p className="text-sm font-semibold">Loading Focamai</p>
+          <p className="text-sm leading-6 text-stone-500">Getting the next screen ready.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AppRoutes({ onReady }) {
   useEffect(() => {
     return onReady()
@@ -73,7 +91,7 @@ function App() {
   return (
     <AmazonStoreProvider>
       <SearchProgressProvider>
-        <Suspense fallback={null}>
+        <Suspense fallback={<RouteLoadingFallback />}>
           <AppRoutes onReady={handleRoutesReady} />
         </Suspense>
         <Analytics />

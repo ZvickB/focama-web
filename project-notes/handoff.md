@@ -14,20 +14,21 @@
 ## Real remaining work
 - Verify the live golden path in the browser and confirm cards arrive quickly while modal AI copy hydrates later.
 - Audit modal AI tone and tighten any copy that sounds too promotional or vague.
-- Improve loading states between search, refine, and results so the transitions feel more intentional.
+- Verify route chunk-load recovery and the guided search transition states in the live browser once the next frontend deploy is available.
 - Watch whether the new inline marketplace prompt feels helpful or distracting, and adjust its timing/copy if testers treat it as friction.
 - Improve low-confidence and weak-result handling instead of quietly showing poor results.
 - Review early tester feedback from the new homepage FAB and decide whether the reveal timing, wording, or question set should change.
 - Decide whether to add a proactive pool-mismatch nudge before the user opens retry.
 - Replace the About page with a `Why Focamai` page, then update nav and add a clear return-home path.
-- Decide how retailer clickouts and affiliate disclosures should appear once outbound linking is treated as launch-ready product behavior.
+- Watch whether the new inline clickout disclosure feels clear and trust-building, and adjust the wording if testers read it as friction or legal copy.
 - Keep trimming `backend/server.js` so route orchestration and flow logic do not keep growing in one file.
 - Use the local `/admin/analytics` dashboard during development against live data and decide which weak-query, weak-ranking, or refine-friction fixes to prioritize first.
 
 ## Backend/provider follow-ups
 - The current shortlist-detail helper is still Oxylabs-backed. When ready, switch finalize to `fetchRainforestProductDetailsByAsin` without changing the shared product-details cache layer.
 - Keep the SerpApi route inactive unless there is a deliberate reason to reactivate multi-retailer discovery.
-- Decide whether in-memory Render rate limiting is good enough before broader sharing or whether a stronger trusted-server approach is needed.
+- Create the `rate_limit_events` table in Supabase before public traffic so Render instances share the same rate-limit bucket; the app falls back to process-local limiting if the table is unavailable.
+- Add the real `SENTRY_DSN` and confirm events arrive in production once the Render environment is updated.
 
 ## Product guardrails
 - Keep the guided flow as the main experience.

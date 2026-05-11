@@ -34,17 +34,21 @@
 - Stores lightweight tester feedback from the homepage FAB.
 - Holds quick structured answers, optional written comments, optional follow-up email, and basic session/search context.
 
+### `rate_limit_events`
+- Stores short-lived hashed client keys for shared backend rate limiting.
+- Lets multiple Render instances count against the same 10-second request window.
+- Does not store raw IP addresses.
+
 ## Not used now
-- `rate_limit_events`
 - user accounts tables
 - saved search tables
 - saved item tables
 - preference-learning tables
 
-Rate limiting is currently in-memory on the Render process, so there is no active Supabase rate-limit table in the current architecture.
+Rate limiting falls back to in-memory storage when Supabase is not configured or the table is unavailable, but production should create this table before public traffic.
 
 ## Current recommendation
-- Create the eight tables above if you want full Supabase-backed storage and analytics plus tester feedback.
+- Create the nine tables above if you want full Supabase-backed storage, analytics, tester feedback, and shared rate limiting.
 - Keep user-facing memory features separate from `search_history`.
 
 ## Environment variables
@@ -56,12 +60,16 @@ OXYLABS_PASSWORD=your-oxylabs-password
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SECRET_KEY=your-supabase-secret-key
 SEARCH_CACHE_TTL_MINUTES=1440
+RATE_LIMIT_STORAGE=auto
+RATE_LIMIT_HASH_SALT=your-stable-random-salt
 ```
 
 Notes:
 - `SUPABASE_SECRET_KEY` is the preferred server-side key.
 - Legacy `SUPABASE_SERVICE_ROLE_KEY` is still accepted.
 - Do not expose either server-side key to the browser.
+- `RATE_LIMIT_STORAGE=auto` uses Supabase when configured and memory otherwise; set `memory` only for local/debug fallback.
+- `RATE_LIMIT_HASH_SALT` is optional but recommended so rate-limit keys remain stable without relying on the Supabase secret as the hash salt.
 
 ## SQL to run
 
@@ -142,6 +150,24 @@ create table if not exists public.tester_feedback (
 
 create index if not exists tester_feedback_created_at_idx
   on public.tester_feedback (created_at desc);
+```
+
+### Rate limiting table
+```sql
+create table if not exists public.rate_limit_events (
+  id bigint generated always as identity primary key,
+  rate_key text not null,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+alter table public.rate_limit_events
+  add column if not exists rate_key text;
+
+alter table public.rate_limit_events
+  add column if not exists created_at timestamptz not null default timezone('utc', now());
+
+create index if not exists rate_limit_events_key_created_at_idx
+  on public.rate_limit_events (rate_key, created_at desc);
 ```
 
 ## Related notes

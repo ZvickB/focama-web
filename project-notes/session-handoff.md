@@ -24,6 +24,7 @@
 - The PNG wordmark is the active wordmark.
 - The homepage now gives the hero wordmark higher fetch priority, preconnects Google Fonts plus the configured Render backend origin, and prefetches `ResultsSection` plus `ProductDetailModal` as soon as `HomeExperience` mounts.
 - Public routes now have route-level SEO metadata plus static `robots.txt`, `sitemap.xml`, and `site.webmanifest`.
+- Route-level lazy loading now shows visible loading UI, and chunk-load crashes get a reload-focused fallback in the top-level error boundary.
 - Current behavior is canonical in `project-notes/app_flow.md`.
 
 ## Current guided flow
@@ -33,10 +34,13 @@
 - Marketplace listings without a known positive price are now stripped out before guided preview caching, cached-result reuse, and finalize candidate selection so unavailable products do not reach AI or the UI shortlist.
 - The shortlisted detail helper now keeps a fast first pass for enrichment and retries failed ASIN detail calls in the background so later cache reads can improve without delaying AI copy further.
 - If a background detail retry succeeds later, the stored enrichment entry is patched with those bullets and the frontend keeps polling long enough for the open modal to pick them up.
+- Backend failures can now report to Sentry when `SENTRY_DSN` is configured, and background async errors are logged/reported instead of being swallowed.
+- Backend rate limiting now uses Supabase `rate_limit_events` when configured, with memory fallback for local/test or storage outages.
 - `GET /api/search/enrichment-stream` is the first enrichment path from the frontend; it is cross-origin enabled for the Render backend, token-scoped to the active search session, and if the stream fails, the frontend falls back to polling.
 - `GET /api/search/enrichment` remains the polling fallback and script-friendly read path, and it is also token-scoped to the active search session.
 - `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist, and the homepage now loads that suggestion back into the top search box instead of keeping an editable duplicate inside the retry panel.
 - `POST /api/feedback` stores tester feedback from the homepage FAB.
+- The product modal now includes an inline affiliate disclosure beside the retailer clickout flow, while the full disclosure still lives at `/affiliate-disclosure`.
 - `/admin/analytics` is a local-only dev funnel dashboard, backed by localhost `GET /api/analytics/dashboard`.
 
 ## Key files

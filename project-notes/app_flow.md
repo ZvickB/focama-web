@@ -27,6 +27,7 @@
 - `Start a new search` clears the guided state and returns to a fresh search box.
 - After final results appear, the user can open the retry panel and ask for a better search direction.
 - As soon as `HomeExperience` mounts, it prefetches the lazy `ResultsSection` and `ProductDetailModal` chunks so those UI steps are more likely to be ready before the user needs them.
+- Route-level lazy loading shows a visible loading fallback, and chunk-load crashes get a reload-focused recovery message in the top-level error boundary.
 - A tester-facing `Feedback` FAB appears after search starts, or after a short delay on the homepage, and opens a lightweight feedback sheet.
 
 ## Guided backend flow
@@ -80,6 +81,7 @@
 - The modal shows `feature_bullets` immediately when available.
 - The modal later hydrates `fit_reason` and `caveat` from enrichment.
 - Retailer clicks happen from the modal CTA.
+- The modal now shows a short inline affiliate disclosure directly under the retailer CTA, with a link to the fuller `/affiliate-disclosure` page.
 
 ## Retry behavior
 - Retry is not an endless-results flow.
@@ -98,8 +100,9 @@
 - Async mini enrichment is token-scoped when it writes back into guided discovery cache so older same-query searches cannot leak context-specific `fit_reason` or `caveat` text into newer sessions.
 - Oxylabs product-detail fetches use a fast first pass for finalize enrichment and retry failed ASIN detail calls in the background so cache quality can still improve without holding the modal AI copy back longer.
 - When a background detail retry later succeeds, the stored enrichment payload is updated with the new `feature_bullets` and the frontend keeps polling long enough for the open modal to hydrate those bullets in place.
+- Backend observability is now opt-in through Sentry (`SENTRY_DSN`) with sanitized error context, and background async failures are logged/reported instead of disappearing silently.
 - `search_history` is internal telemetry, not user-facing history.
-- Rate limiting is currently a 10-second in-memory rolling window with a limit of 15 requests per IP on the Render process.
+- Rate limiting is a 10-second rolling window with a limit of 15 requests per client IP. In production it uses a shared Supabase `rate_limit_events` event log keyed by a hashed IP value, and falls back to the process-local memory limiter when Supabase is unavailable.
 - Guided routes expose `Server-Timing`.
 - The homepage timing panel appears in development or when `?timing=1` is present.
 - The frontend tries SSE enrichment first and falls back to polling if the stream errors.

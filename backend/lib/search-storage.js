@@ -19,6 +19,7 @@ const ANALYTICS_RESULT_IMPRESSIONS_TABLE = 'analytics_result_impressions'
 const ANALYTICS_RESULT_CLICKS_TABLE = 'analytics_result_clicks'
 const TESTER_FEEDBACK_TABLE = 'tester_feedback'
 const OXYLABS_PRODUCT_FAILURES_TABLE = 'oxylabs_product_failures'
+const RATE_LIMIT_EVENTS_TABLE = 'rate_limit_events'
 const DEFAULT_CACHE_TTL_MINUTES = 1440
 const PRODUCT_DETAILS_CACHE_PATH = resolve(process.cwd(), 'temp-data', 'product-details-cache.json')
 const TESTER_FEEDBACK_PATH = resolve(process.cwd(), 'temp-data', 'tester-feedback.json')
@@ -1244,6 +1245,7 @@ export async function getSupabaseHealth() {
       checkSupabaseTable(supabase, ANALYTICS_RESULT_IMPRESSIONS_TABLE, 'search_id'),
       checkSupabaseTable(supabase, ANALYTICS_RESULT_CLICKS_TABLE, 'search_id'),
       checkSupabaseTable(supabase, OXYLABS_PRODUCT_FAILURES_TABLE, 'asin'),
+      checkSupabaseTable(supabase, RATE_LIMIT_EVENTS_TABLE, 'rate_key'),
     ])
 
     return {
