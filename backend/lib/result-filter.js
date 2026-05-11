@@ -132,6 +132,40 @@ export function hasKnownNonPositivePrice(item) {
   return parsedTextPrice !== null ? parsedTextPrice <= 0 : false
 }
 
+export function lacksKnownPositivePrice(item) {
+  if (!item || typeof item !== 'object') {
+    return true
+  }
+
+  const numericCandidates = [
+    item.extracted_price,
+    item.numericPrice,
+    item.price?.value,
+  ]
+
+  for (const candidate of numericCandidates) {
+    const numericValue = Number(candidate)
+
+    if (Number.isFinite(numericValue)) {
+      return numericValue <= 0
+    }
+  }
+
+  const parsedTextPrice = parsePriceText(
+    typeof item.price === 'string'
+      ? item.price
+      : typeof item.price?.raw === 'string'
+        ? item.price.raw
+        : '',
+  )
+
+  if (parsedTextPrice !== null) {
+    return parsedTextPrice <= 0
+  }
+
+  return true
+}
+
 function uniqueTokens(value) {
   return [...new Set(tokenize(value))]
 }
@@ -162,7 +196,7 @@ function countTokenMatches(targetTokens, candidateText) {
 }
 
 function hasWeakMetadata(item) {
-  const hasPrice = !hasKnownNonPositivePrice(item) && (
+  const hasPrice = !lacksKnownPositivePrice(item) && (
     Number.isFinite(Number(item.extracted_price)) ||
     Number.isFinite(Number(item.numericPrice)) ||
     Boolean(item.price)
@@ -472,7 +506,7 @@ export function getFilteredSearchArtifacts(
   }
 
   const dedupedCandidates = [...dedupedByProductId.values()]
-    .filter((item) => !hasKnownNonPositivePrice(item))
+    .filter((item) => !lacksKnownPositivePrice(item))
   const hardFilteredCandidates = skipHardFilter
     ? dedupedCandidates
     : dedupedCandidates.filter((item) => passHardFilters(item, queryTokens))

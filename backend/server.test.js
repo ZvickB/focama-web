@@ -234,7 +234,15 @@ describe('server handlers', () => {
   it('returns cached search results and slices them to six items', async () => {
     readStoredSearchCacheEntry.mockResolvedValue({
       cachedAt: '2026-03-17T12:00:00.000Z',
-      results: [{ id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }, { id: '5' }, { id: '6' }, { id: '7' }],
+      results: [
+        { id: '1', price: '$10.00' },
+        { id: '2', price: '$11.00' },
+        { id: '3', price: '$12.00' },
+        { id: '4', price: '$13.00' },
+        { id: '5', price: '$14.00' },
+        { id: '6', price: '$15.00' },
+        { id: '7', price: '$16.00' },
+      ],
     })
 
     const response = createResponseRecorder()
@@ -244,12 +252,12 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(200)
     expect(JSON.parse(response.body)).toEqual({
       results: [
-        { id: '1', badgeLabel: 'Best match' },
-        { id: '2', badgeLabel: '' },
-        { id: '3', badgeLabel: '' },
-        { id: '4', badgeLabel: '' },
-        { id: '5', badgeLabel: '' },
-        { id: '6', badgeLabel: '' },
+        { id: '1', price: '$10.00', badgeLabel: 'Best match' },
+        { id: '2', price: '$11.00', badgeLabel: '' },
+        { id: '3', price: '$12.00', badgeLabel: '' },
+        { id: '4', price: '$13.00', badgeLabel: '' },
+        { id: '5', price: '$14.00', badgeLabel: '' },
+        { id: '6', price: '$15.00', badgeLabel: '' },
       ],
       source: 'cache',
       cachedAt: '2026-03-17T12:00:00.000Z',
@@ -261,6 +269,29 @@ describe('server handlers', () => {
       cachedAt: '2026-03-17T12:00:00.000Z',
       results: [
         { id: 'zero', title: 'Unavailable Listing', price: '$0.00' },
+        { id: 'live', title: 'Travel Stroller', price: '$129.99' },
+      ],
+    })
+
+    const response = createResponseRecorder()
+
+    await handleCachedSearch(new URL('http://localhost/api/search/cache?query=stroller&details='), response)
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({
+      results: [
+        { id: 'live', title: 'Travel Stroller', price: '$129.99', badgeLabel: 'Best match' },
+      ],
+      source: 'cache',
+      cachedAt: '2026-03-17T12:00:00.000Z',
+    })
+  })
+
+  it('filters missing-price cached preview results before returning them', async () => {
+    readStoredSearchCacheEntry.mockResolvedValue({
+      cachedAt: '2026-03-17T12:00:00.000Z',
+      results: [
+        { id: 'missing', title: 'No Price Listing' },
         { id: 'live', title: 'Travel Stroller', price: '$129.99' },
       ],
     })
@@ -596,9 +627,9 @@ describe('server handlers', () => {
         combinedSearchText: 'thermos',
         searchState: 'Cached search results',
         similarQueries: [],
-        candidates: [{ id: 'cached-1', title: 'Thermos bottle' }],
+        candidates: [{ id: 'cached-1', title: 'Thermos bottle', price: '$34.99', numericPrice: 34.99 }],
       },
-      results: [{ id: 'cached-1', title: 'Thermos bottle' }],
+      results: [{ id: 'cached-1', title: 'Thermos bottle', price: '$34.99' }],
     })
 
     const response = createResponseRecorder()
@@ -866,6 +897,44 @@ describe('server handlers', () => {
           candidates: [expect.objectContaining({ id: 'live' })],
         }),
         finalResultLimit: 6,
+      }),
+    )
+
+    const payload = JSON.parse(response.body)
+    expect(payload.results.map((item) => item.id)).toEqual(['live'])
+  })
+
+  it('filters missing-price cached candidates before sending the pool to Haiku', async () => {
+    mockFinalizeEnv()
+    readStoredSearchCacheEntry.mockResolvedValue(
+      createDiscoveryCacheEntry('stroller', [
+        {
+          ...createFinalizeCandidate('missing'),
+          price: '',
+          numericPrice: null,
+        },
+        createFinalizeCandidate('live'),
+      ]),
+    )
+    haikuLockWinnersAndBadges.mockResolvedValue({
+      lockedIds: ['live'],
+      model: 'claude-haiku-4-5-20251001',
+      usage: null,
+    })
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(JSON.stringify(createFinalizeDiscoveryBody())),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(haikuLockWinnersAndBadges).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidatePool: expect.objectContaining({
+          candidates: [expect.objectContaining({ id: 'live' })],
+        }),
       }),
     )
 

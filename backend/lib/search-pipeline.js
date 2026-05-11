@@ -1,4 +1,4 @@
-import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts, hasKnownNonPositivePrice } from './result-filter.js'
+import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts, lacksKnownPositivePrice } from './result-filter.js'
 import { SERPAPI_ENDPOINT, buildCacheKey, buildQuery, validateSearchInput } from './search-data.js'
 import { readStoredSearchCacheEntry, recordSearchHistory, writeStoredSearchCacheEntry } from './search-storage.js'
 
@@ -46,12 +46,12 @@ export async function readCachedSearchSnapshot({ productQuery, details, scope = 
           ? {
               ...storedEntry.candidatePool,
               candidates: Array.isArray(storedEntry.candidatePool.candidates)
-                ? storedEntry.candidatePool.candidates.filter((candidate) => !hasKnownNonPositivePrice(candidate))
+                ? storedEntry.candidatePool.candidates.filter((candidate) => !lacksKnownPositivePrice(candidate))
                 : [],
             }
           : storedEntry.candidatePool,
         results: Array.isArray(storedEntry.results)
-          ? storedEntry.results.filter((result) => !hasKnownNonPositivePrice(result))
+          ? storedEntry.results.filter((result) => !lacksKnownPositivePrice(result))
           : [],
       }
     : storedEntry

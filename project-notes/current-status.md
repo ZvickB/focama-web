@@ -44,7 +44,7 @@
 - Product details use a separate provider-agnostic per-ASIN cache, also with Supabase preferred and local fallback available.
 - Tester feedback stores to a dedicated `tester_feedback` table in Supabase when configured, with local fallback in development.
 - Rate limiting is currently process-local in-memory on the Render server, not Supabase-backed.
-- Explicit `$0.00` marketplace listings are now treated as invalid inventory and filtered out deterministically before discovery preview, cached candidate reuse, or finalize/AI selection.
+- Marketplace listings without a known positive price are now treated as invalid inventory and filtered out deterministically before discovery preview, cached candidate reuse, or finalize/AI selection.
 
 ## Current finalize reality
 - Finalize rebuilds the candidate pool from guided discovery cache instead of trusting a browser-posted rich pool.
