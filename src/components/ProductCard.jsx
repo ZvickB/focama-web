@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { ChevronRight, Star } from 'lucide-react'
-import { Badge } from '@/components/ui/badge.jsx'
 import {
   Card,
   CardContent,
@@ -110,12 +109,7 @@ function ProductCard({
       </div>
       <CardContent className="space-y-3.5 p-4 sm:p-5">
         <div className="space-y-2.5">
-          <Badge
-            variant="outline"
-            className="inline-flex rounded-full border-[#e7dac8] bg-[linear-gradient(180deg,rgba(250,245,239,0.98),rgba(255,255,255,0.96))] px-2.5 py-0.5 text-[11px] text-[#80573f] hover:bg-[linear-gradient(180deg,rgba(250,245,239,0.98),rgba(255,255,255,0.96))]"
-          >
-            {subtitle}
-          </Badge>
+          {/* TODO (multi-retailer): restore retailer badge here — show subtitle as a pill above the title */}
           <p className="line-clamp-2 text-[15px] leading-6 text-slate-900 sm:text-base">
             {title}
           </p>
