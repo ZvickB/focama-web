@@ -21,7 +21,7 @@ import { createRetryAdviceHandler } from './lib/handlers/retry-advice-handler.js
 import { createFeedbackHandler } from './lib/handlers/feedback-handler.js'
 import { createSupabaseHealthHandler } from './lib/handlers/supabase-health-handler.js'
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
-import { DEFAULT_FILTER_CONFIG } from './lib/result-filter.js'
+import { DEFAULT_FILTER_CONFIG, hasKnownNonPositivePrice } from './lib/result-filter.js'
 import {
   getValidatedSearchRequest,
   readCachedSearchSnapshot,
@@ -366,7 +366,18 @@ function sanitizeFinalizeCandidatePool(candidatePool) {
       return sanitized
     }
 
+    if (hasKnownNonPositivePrice(sanitized.candidate)) {
+      continue
+    }
+
     candidates.push(sanitized.candidate)
+  }
+
+  if (candidates.length === 0) {
+    return {
+      error: 'Candidate pool must include at least one eligible candidate.',
+      isValid: false,
+    }
   }
 
   return {

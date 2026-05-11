@@ -81,6 +81,57 @@ function tokenize(value) {
   return (value.toLowerCase().match(/[a-z0-9]+/g) || []).filter((token) => !STOP_WORDS.has(token))
 }
 
+function parsePriceText(value) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const normalized = value.trim().replace(/,/g, '')
+
+  if (!normalized) {
+    return null
+  }
+
+  const match = normalized.match(/-?\d+(?:\.\d+)?/)
+
+  if (!match) {
+    return null
+  }
+
+  const parsed = Number(match[0])
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+export function hasKnownNonPositivePrice(item) {
+  if (!item || typeof item !== 'object') {
+    return false
+  }
+
+  const numericCandidates = [
+    item.extracted_price,
+    item.numericPrice,
+    item.price?.value,
+  ]
+
+  for (const candidate of numericCandidates) {
+    const numericValue = Number(candidate)
+
+    if (Number.isFinite(numericValue)) {
+      return numericValue <= 0
+    }
+  }
+
+  const parsedTextPrice = parsePriceText(
+    typeof item.price === 'string'
+      ? item.price
+      : typeof item.price?.raw === 'string'
+        ? item.price.raw
+        : '',
+  )
+
+  return parsedTextPrice !== null ? parsedTextPrice <= 0 : false
+}
+
 function uniqueTokens(value) {
   return [...new Set(tokenize(value))]
 }
@@ -111,7 +162,11 @@ function countTokenMatches(targetTokens, candidateText) {
 }
 
 function hasWeakMetadata(item) {
-  const hasPrice = Number.isFinite(Number(item.extracted_price)) || Boolean(item.price)
+  const hasPrice = !hasKnownNonPositivePrice(item) && (
+    Number.isFinite(Number(item.extracted_price)) ||
+    Number.isFinite(Number(item.numericPrice)) ||
+    Boolean(item.price)
+  )
   const hasImage = Boolean(
     item.thumbnail || item.thumbnail_hd || item.serpapi_thumbnail || item.product_link,
   )
@@ -417,6 +472,7 @@ export function getFilteredSearchArtifacts(
   }
 
   const dedupedCandidates = [...dedupedByProductId.values()]
+    .filter((item) => !hasKnownNonPositivePrice(item))
   const hardFilteredCandidates = skipHardFilter
     ? dedupedCandidates
     : dedupedCandidates.filter((item) => passHardFilters(item, queryTokens))

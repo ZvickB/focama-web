@@ -243,6 +243,42 @@ describe('result filter', () => {
     expect(artifacts.results.map((result) => result.title)).toContain('Apple Pencil')
   })
 
+  it('drops zero-priced products before they reach preview results or the AI candidate pool', () => {
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: [
+          createShoppingResult({
+            product_id: 'prod-zero',
+            title: 'Unavailable Listing',
+            source: 'Amazon',
+            extracted_price: 0,
+            price: '$0.00',
+          }),
+          createShoppingResult({
+            position: 2,
+            product_id: 'prod-live',
+            title: 'Travel Stroller',
+            source: 'Amazon',
+            extracted_price: 129.99,
+            price: '$129.99',
+          }),
+        ],
+      },
+      {
+        productQuery: 'travel stroller',
+        details: '',
+        candidatePoolSize: 20,
+        finalResultLimit: 4,
+        diversifyBySource: false,
+        skipHardFilter: true,
+        reasonFallback: 'Returned by the Rainforest API search route',
+      },
+    )
+
+    expect(artifacts.candidatePool.candidates.map((candidate) => candidate.id)).toEqual(['prod-live'])
+    expect(artifacts.results.map((result) => result.id)).toEqual(['prod-live'])
+  })
+
   it('falls back to the first 20 deduped Serp-style results when too few items pass hard filters', () => {
     const matchingResults = Array.from({ length: 14 }, (_, index) => (
       createShoppingResult({

@@ -256,6 +256,29 @@ describe('server handlers', () => {
     })
   })
 
+  it('filters zero-priced cached preview results before returning them', async () => {
+    readStoredSearchCacheEntry.mockResolvedValue({
+      cachedAt: '2026-03-17T12:00:00.000Z',
+      results: [
+        { id: 'zero', title: 'Unavailable Listing', price: '$0.00' },
+        { id: 'live', title: 'Travel Stroller', price: '$129.99' },
+      ],
+    })
+
+    const response = createResponseRecorder()
+
+    await handleCachedSearch(new URL('http://localhost/api/search/cache?query=stroller&details='), response)
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({
+      results: [
+        { id: 'live', title: 'Travel Stroller', price: '$129.99', badgeLabel: 'Best match' },
+      ],
+      source: 'cache',
+      cachedAt: '2026-03-17T12:00:00.000Z',
+    })
+  })
+
 
 
 
@@ -808,6 +831,46 @@ describe('server handlers', () => {
       error: 'Your search session expired. Start a new search.',
     })
     expect(haikuLockWinnersAndBadges).not.toHaveBeenCalled()
+  })
+
+  it('filters zero-priced cached candidates before sending the pool to Haiku', async () => {
+    mockFinalizeEnv()
+    readStoredSearchCacheEntry.mockResolvedValue(
+      createDiscoveryCacheEntry('stroller', [
+        {
+          ...createFinalizeCandidate('zero'),
+          price: '$0.00',
+          numericPrice: 0,
+        },
+        createFinalizeCandidate('live'),
+      ]),
+    )
+    haikuLockWinnersAndBadges.mockResolvedValue({
+      lockedIds: ['live'],
+      model: 'claude-haiku-4-5-20251001',
+      usage: null,
+    })
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(JSON.stringify(createFinalizeDiscoveryBody())),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(haikuLockWinnersAndBadges).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: 'claude-key',
+        candidatePool: expect.objectContaining({
+          candidates: [expect.objectContaining({ id: 'live' })],
+        }),
+        finalResultLimit: 6,
+      }),
+    )
+
+    const payload = JSON.parse(response.body)
+    expect(payload.results.map((item) => item.id)).toEqual(['live'])
   })
 
   it('haiku locks the shortlist for empty-note finalize and returns a fast response', async () => {

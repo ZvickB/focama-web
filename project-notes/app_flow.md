@@ -32,6 +32,7 @@
   - primary homepage discovery route
   - currently uses the Oxylabs-backed Amazon path under the Rainforest-named route
   - writes guided discovery cache plus a `discoveryToken`
+  - zero-priced marketplace items are treated as invalid and are removed before preview results or AI candidate-pool caching
 - `GET /api/search/refine`
   - returns one short follow-up question plus helper copy
 - `POST /api/search/finalize`
@@ -88,6 +89,7 @@
 ## Data, cache, and observability
 - Guided discovery is the reusable persistent cache layer.
 - Finalize remains request-specific and rebuilds from discovery cache.
+- Cached preview results and cached candidate pools are sanitized on read so stale `$0.00` marketplace entries do not reappear or reach finalize AI selection.
 - Partial valid haiku output is recoverable, not final: zero picks still use rules fallback, full valid picks stay `haiku_lock`, and partial valid picks are returned as `haiku_lock_topped_up`.
 - Search cache and operational history use Supabase when configured, with local fallback in development.
 - Product details have a separate per-ASIN cache shared across detail providers.

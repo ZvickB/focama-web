@@ -1,4 +1,4 @@
-import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './result-filter.js'
+import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts, hasKnownNonPositivePrice } from './result-filter.js'
 import { SERPAPI_ENDPOINT, buildCacheKey, buildQuery, validateSearchInput } from './search-data.js'
 import { readStoredSearchCacheEntry, recordSearchHistory, writeStoredSearchCacheEntry } from './search-storage.js'
 
@@ -34,11 +34,27 @@ export function getValidatedSearchRequest(requestUrl, { includeDetails = true } 
 }
 
 export async function readCachedSearchSnapshot({ productQuery, details, scope = 'default' }) {
-  const cachedEntry = await readStoredSearchCacheEntry({
+  const storedEntry = await readStoredSearchCacheEntry({
     productQuery,
     details,
     scope,
   })
+  const cachedEntry = storedEntry
+    ? {
+        ...storedEntry,
+        candidatePool: storedEntry.candidatePool && typeof storedEntry.candidatePool === 'object'
+          ? {
+              ...storedEntry.candidatePool,
+              candidates: Array.isArray(storedEntry.candidatePool.candidates)
+                ? storedEntry.candidatePool.candidates.filter((candidate) => !hasKnownNonPositivePrice(candidate))
+                : [],
+            }
+          : storedEntry.candidatePool,
+        results: Array.isArray(storedEntry.results)
+          ? storedEntry.results.filter((result) => !hasKnownNonPositivePrice(result))
+          : [],
+      }
+    : storedEntry
   const normalizedCachedResults = ensureBadges(cachedEntry?.results || [])
 
   return {
