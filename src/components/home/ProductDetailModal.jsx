@@ -20,12 +20,13 @@ function resolveAmazonRetailerLabel(subtitle, selectedAmazonDomain, resolvedAmaz
 export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose, onRetailerClick }) {
   const fitReason = item?.fit_reason || item?.fitReason || ''
   const caveat = item?.caveat || ''
-  const featureBullets = Array.isArray(item?.feature_bullets) ? item.feature_bullets.slice(0, 5) : []
+  const featureBullets = Array.isArray(item?.feature_bullets) ? item.feature_bullets : []
   const enrichmentReady = Boolean(fitReason)
   const { selectedAmazonDomain, resolvedAmazonDomain } = useAmazonStore()
   const retailerLabel = resolveAmazonRetailerLabel(item?.subtitle, selectedAmazonDomain, resolvedAmazonDomain)
   const contentRef = useRef(null)
   const [showScrollHint, setShowScrollHint] = useState(true)
+  const [bulletsExpanded, setBulletsExpanded] = useState(false)
 
   useEffect(() => {
     const el = contentRef.current
@@ -56,12 +57,19 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
     }
   }, [onClose])
 
+  useEffect(() => {
+    setBulletsExpanded(false)
+  }, [item?.id])
+
   if (!item) {
     return null
   }
 
   const userFacingDescription = getUserFacingDescription(item.description)
   const displayPrice = formatDisplayPrice(item.price)
+  const shouldCollapseBullets = featureBullets.length >= 5
+  const displayedBullets =
+    shouldCollapseBullets && !bulletsExpanded ? featureBullets.slice(0, 3) : featureBullets
 
   return (
     <MotionDiv
@@ -101,25 +109,51 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
 
         <div
           ref={contentRef}
-          className="grid flex-1 gap-6 overflow-y-auto px-4 pb-0 sm:gap-8 sm:px-6 lg:min-h-0 lg:grid-cols-[2fr_3fr] lg:gap-8 lg:overflow-hidden lg:px-8"
+          className="relative grid flex-1 gap-6 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] sm:gap-8 sm:px-6 lg:min-h-0 lg:grid-cols-[2fr_3fr] lg:gap-8 lg:overflow-hidden lg:px-8"
           style={{ scrollbarGutter: 'stable' }}
         >
-          <div className="overflow-hidden rounded-[24px] border border-[#eee5da] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,246,240,0.94))] shadow-[0_22px_70px_-34px_rgba(120,87,63,0.24)] lg:h-full">
+          <div className="flex min-h-0 flex-col gap-4 lg:h-full">
             <div
-              className="flex h-60 items-center justify-center p-4 sm:h-[300px] sm:p-6 lg:h-full"
-              style={{
-                background:
-                  'radial-gradient(circle at 18% 12%, rgba(229,155,38,0.12), transparent 32%), radial-gradient(circle at 84% 0%, rgba(15,97,117,0.08), transparent 28%), linear-gradient(180deg, rgba(250,246,240,0.86), rgba(255,255,255,0.92))',
-              }}
+              className="flex flex-1 min-h-0 overflow-hidden rounded-[24px] border border-[#eee5da] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,246,240,0.94))] shadow-[0_22px_70px_-34px_rgba(120,87,63,0.24)]"
             >
-              <div className="flex h-full w-full items-center justify-center rounded-[28px] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(250,246,240,0.98))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_22px_44px_-34px_rgba(120,87,63,0.24)] sm:p-4">
-                <img
-                  src={item.image}
-                  alt={item.title}
-                  className="h-full w-full rounded-[24px] object-contain mix-blend-multiply"
-                />
+              <div
+                className="flex min-h-[16rem] flex-1 items-center justify-center p-4 sm:min-h-[20rem] sm:p-6 lg:min-h-0 lg:flex-1"
+                style={{
+                  background:
+                    'radial-gradient(circle at 18% 12%, rgba(229,155,38,0.12), transparent 32%), radial-gradient(circle at 84% 0%, rgba(15,97,117,0.08), transparent 28%), linear-gradient(180deg, rgba(250,246,240,0.86), rgba(255,255,255,0.92))',
+                }}
+              >
+                <div className="flex h-full w-full min-h-0 items-center justify-center rounded-[28px] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(250,246,240,0.98))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_22px_44px_-34px_rgba(120,87,63,0.24)] sm:p-4">
+                  <img
+                    src={item.image}
+                    alt={item.title}
+                    className="h-full w-full rounded-[24px] object-contain mix-blend-multiply"
+                  />
+                </div>
               </div>
             </div>
+            {item.link ? (
+              <Button
+                asChild
+                className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
+              >
+                <a href={item.link} target="_blank" rel="noreferrer" onClick={onRetailerClick}>
+                  {retailerLabel ? `View on ${retailerLabel}` : 'View on retailer site'}
+                  <ArrowUpRight className="h-4 w-4" />
+                </a>
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                disabled
+                className="h-12 w-full gap-2 rounded-2xl bg-[#ede3d6] text-slate-500"
+              >
+                Retailer link unavailable
+              </Button>
+            )}
+            <p className="text-center text-xs leading-5 text-slate-400">
+              Prices and availability can change after you leave Focamai.
+            </p>
           </div>
 
           <div
@@ -161,17 +195,28 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
             </div>
 
             {featureBullets.length > 0 ? (
-              <ul className="space-y-1.5">
-                {featureBullets.map((bullet, index) => (
-                  <li
-                    key={`${item.id}-feature-bullet-${index}`}
-                    className="flex items-start gap-2 text-sm leading-6 text-slate-600"
+              <div className="space-y-2">
+                <ul className="space-y-1.5">
+                  {displayedBullets.map((bullet, index) => (
+                    <li
+                      key={`${item.id}-feature-bullet-${index}`}
+                      className="flex items-start gap-2 text-sm leading-6 text-slate-600"
+                    >
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#b18c6f]" />
+                      <span>{bullet}</span>
+                    </li>
+                  ))}
+                </ul>
+                {shouldCollapseBullets && !bulletsExpanded ? (
+                  <button
+                    type="button"
+                    className="py-1 text-sm text-slate-500 transition-colors hover:text-slate-700"
+                    onClick={() => setBulletsExpanded(true)}
                   >
-                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#b18c6f]" />
-                    <span>{bullet}</span>
-                  </li>
-                ))}
-              </ul>
+                    Show all details
+                  </button>
+                ) : null}
+              </div>
             ) : userFacingDescription ? (
               <p className="text-sm leading-6 text-slate-600">{userFacingDescription}</p>
             ) : null}
@@ -210,56 +255,28 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
                 </span>
               </div>
             )}
+          </div>
 
-            <div className="sticky bottom-0 space-y-2 border-t border-[#eadfd2] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,246,240,0.94))] pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] shadow-[0_-14px_30px_-26px_rgba(120,87,63,0.28)]">
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 top-[-18px] h-[18px]"
-                style={{
-                  background:
-                    'linear-gradient(180deg, rgba(250,246,240,0) 0%, rgba(250,246,240,0.78) 62%, rgba(250,246,240,0.94) 100%)',
-                }}
-              />
-              {showScrollHint ? (
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute left-1/2 top-0 z-10 flex -translate-x-1/2 -translate-y-[60%] justify-center lg:hidden"
-                >
-                  <div className="rounded-full border border-stone-200/80 bg-white p-1 shadow-sm">
-                    <ChevronDown className="h-5 w-5 animate-bounce text-[#9f7f66]" />
-                  </div>
-                </div>
-              ) : null}
-              {item.link ? (
-                <Button
-                  asChild
-                  className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
-                >
-                  <a href={item.link} target="_blank" rel="noreferrer" onClick={onRetailerClick}>
-                    {retailerLabel ? `View on ${retailerLabel}` : 'View on retailer site'}
-                    <ArrowUpRight className="h-4 w-4" />
-                  </a>
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  disabled
-                  className="h-12 w-full gap-2 rounded-2xl bg-[#ede3d6] text-slate-500"
-                >
-                  Retailer link unavailable
-                </Button>
-              )}
-              <p className="text-center text-xs leading-5 text-slate-400">
-                Prices and availability can change after you leave Focamai.
-              </p>
-              <button
-                type="button"
-                className="w-full py-1.5 text-sm text-slate-500 transition-colors hover:text-slate-700"
-                onClick={onClose}
-              >
-                Back to results
-              </button>
+          {showScrollHint ? (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute left-1/2 top-[calc(100%-1.25rem)] z-10 flex -translate-x-1/2 justify-center lg:hidden"
+            >
+              <div className="rounded-full border border-stone-200/80 bg-white p-1 shadow-sm">
+                <ChevronDown className="h-5 w-5 animate-bounce text-[#9f7f66]" />
+              </div>
             </div>
+          ) : null}
+        </div>
+        <div className="border-t border-[#eadfd2] px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex justify-center">
+            <button
+              type="button"
+              className="w-full py-1.5 text-center text-sm text-slate-500 transition-colors hover:text-slate-700 lg:w-auto lg:min-w-[180px]"
+              onClick={onClose}
+            >
+              Back to results
+            </button>
           </div>
         </div>
       </MotionDiv>
