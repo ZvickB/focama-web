@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'motion/react'
-import { LoaderCircle, Search, Sparkles, X } from 'lucide-react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { LoaderCircle, Search, Sparkles } from 'lucide-react'
 import { MAX_PRODUCT_QUERY_LENGTH, MAX_DETAILS_LENGTH } from '../../../shared/search-input.js'
 
 import wordmark from '@/assets/wordmark.PNG'
 import { FeedbackFab } from '@/components/home/FeedbackFab.jsx'
-import { ProductDetailModal, ResultsSection, ResultSkeleton } from '@/components/home/HomeShared.jsx'
+import { ResultSkeleton } from '@/components/home/ResultSkeleton.jsx'
 import {
   RESULT_CARD_SLOTS,
   useGuidedSearch,
@@ -13,11 +12,12 @@ import {
 import { Button } from '@/components/ui/button.jsx'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
-import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
 import { useSearchProgress } from '@/contexts/useSearchProgress.js'
 import { getOrCreateAnalyticsSessionId } from '@/lib/analytics.js'
 
 const HERO_SUBLINE = "Tell us what you need. We'll find your six."
+const ResultsSection = lazy(() => import('@/components/home/ResultsSection.jsx'))
+const ProductDetailModal = lazy(() => import('@/components/home/ProductDetailModal.jsx'))
 
 function applyPlainBackgroundMode() {
   if (typeof document === 'undefined') {
@@ -39,8 +39,6 @@ function CharCounter({ current, max }) {
     </span>
   )
 }
-const MotionParagraph = motion.p
-
 function shouldShowCharCounter(current, max) {
   return current > 0 && max - current <= 20
 }
@@ -156,11 +154,7 @@ function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
 }
 
 function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
-  const displayedCopy = useMemo(
-    () => buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }),
-    [isGeneratingPrompt, prompt, submittedQuery],
-  )
-  const helperTarget = `${isGeneratingPrompt ? 'generating' : 'idle'}:${displayedCopy.helper}`
+  const displayedCopy = buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery })
 
   return (
     <div className="space-y-2">
@@ -169,49 +163,26 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
         The more you share, the better the picks
       </div>
       <div className="space-y-3">
-        <AnimatePresence mode="wait">
-          <MotionParagraph
-            key={displayedCopy.titleEyebrow}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="text-[13px] font-semibold uppercase tracking-[0.14em] text-primary/70 sm:text-sm"
-            style={{ fontFamily: '"Instrument Sans", sans-serif' }}
+        <p
+          className="text-[13px] font-semibold uppercase tracking-[0.14em] text-primary/70 transition-opacity duration-300 sm:text-sm"
+          style={{ fontFamily: '"Instrument Sans", sans-serif' }}
+        >
+          {displayedCopy.titleEyebrow}
+        </p>
+        {displayedCopy.titleQuestion ? (
+          <p
+            className="max-w-2xl text-lg font-normal leading-7 text-[#8f4e2f] transition-opacity duration-500 sm:text-xl"
+            style={{ fontFamily: '"Manrope", sans-serif' }}
           >
-            {displayedCopy.titleEyebrow}
-          </MotionParagraph>
-        </AnimatePresence>
-        <AnimatePresence mode="wait">
-          {displayedCopy.titleQuestion ? (
-            <MotionParagraph
-              key={displayedCopy.titleQuestion}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.5, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              className="max-w-2xl text-lg font-normal leading-7 text-[#8f4e2f] sm:text-xl"
-              style={{ fontFamily: '"Manrope", sans-serif' }}
-            >
-              {displayedCopy.titleQuestion}
-            </MotionParagraph>
+            {displayedCopy.titleQuestion}
+          </p>
+        ) : null}
+        <p className="max-w-2xl text-sm font-medium leading-7 text-slate-600 transition-opacity duration-300 sm:text-[15px]">
+          {displayedCopy.helper}
+          {isGeneratingPrompt ? (
+            <span className="ml-0.5 inline-block h-4 w-px translate-y-0.5 animate-pulse bg-slate-400 align-middle" />
           ) : null}
-        </AnimatePresence>
-        <AnimatePresence mode="wait">
-          <MotionParagraph
-            key={helperTarget}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.24, ease: 'easeOut' }}
-            className="max-w-2xl text-sm font-medium leading-7 text-slate-600 sm:text-[15px]"
-          >
-            {displayedCopy.helper}
-            {isGeneratingPrompt ? (
-              <span className="ml-0.5 inline-block h-4 w-px translate-y-0.5 animate-pulse bg-slate-400 align-middle" />
-            ) : null}
-          </MotionParagraph>
-        </AnimatePresence>
+        </p>
       </div>
     </div>
   )
@@ -264,89 +235,47 @@ function TimingPanel({ requestTiming }) {
   )
 }
 
-const MARKETPLACE_DISPLAY = {
-  'amazon.com': { location: 'the US', storeLabel: 'Amazon US' },
-  'amazon.ca': { location: 'Canada', storeLabel: 'Amazon Canada' },
-  'amazon.co.uk': { location: 'the UK', storeLabel: 'Amazon UK' },
-}
 
-function MarketplaceToast({ domain, onConfirm, onChooseStore, onDismiss }) {
-  const timerRef = useRef(null)
-  const onDismissRef = useRef(onDismiss)
-  onDismissRef.current = onDismiss
-
-  function clearTimer() {
-    clearTimeout(timerRef.current)
-    timerRef.current = null
-  }
-
-  function startTimer() {
-    clearTimer()
-    timerRef.current = setTimeout(() => onDismissRef.current(), 8000)
-  }
-
-  useEffect(() => {
-    startTimer()
-    return clearTimer
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const display = MARKETPLACE_DISPLAY[domain]
-  if (!display) return null
-
+function ResultsSectionFallback({ isFinalizing = false }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      onMouseEnter={clearTimer}
-      onMouseLeave={startTimer}
-      className="fixed right-4 top-24 z-40 w-72 rounded-2xl border border-stone-200 bg-white px-4 py-3.5 shadow-[0_8px_32px_-8px_rgba(15,23,42,0.18)]"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm text-slate-700">
-          Looks like you&apos;re in {display.location}
-        </p>
-        <button
-          type="button"
-          onClick={onDismiss}
-          aria-label="Dismiss"
-          className="shrink-0 text-slate-400 transition hover:text-slate-600"
+    <div className="space-y-4">
+      {isFinalizing ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-[24px] border border-[#e6dacc] bg-[linear-gradient(180deg,rgba(250,246,240,0.9),rgba(255,255,255,0.96))] px-4 py-4 text-left text-slate-600 shadow-[0_22px_58px_-42px_rgba(120,87,63,0.22)] sm:px-5"
         >
-          <X className="h-4 w-4" />
-        </button>
+          <div className="flex items-start gap-3">
+            <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
+              <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
+              <span className="relative h-2.5 w-2.5 rounded-full bg-primary/70" />
+            </span>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-slate-900">Taking a closer look at the options.</p>
+              <p className="text-sm leading-6 text-slate-600">
+                We&apos;re narrowing the shortlist and locking the final picks.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <div className="mobile-landscape-results-grid grid grid-cols-1 gap-4">
+        {RESULT_CARD_SLOTS.map((index) => (
+          <ResultSkeleton key={index} className="opacity-95" />
+        ))}
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={onConfirm}
-          className="rounded-full bg-primary px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-primary/90"
-        >
-          Use {display.storeLabel}
-        </button>
-        <button
-          type="button"
-          onClick={onChooseStore}
-          className="rounded-full border border-stone-200 px-3.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-stone-300 hover:text-slate-800"
-        >
-          Choose store
-        </button>
-      </div>
-    </motion.div>
+    </div>
   )
 }
 
-function prewarmBackend() {
-  if (
-    typeof window !== 'undefined' &&
-    window.__FOCAMAI_DISABLE_BACKEND_PREWARM__ === true
-  ) {
-    return
-  }
-
-  const base = import.meta.env.VITE_BACKEND_URL || ''
-  fetch(`${base}/api/ping`).catch(() => {})
+function ProductDetailModalFallback() {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(51,39,30,0.22)] backdrop-blur-[2px]">
+      <div className="rounded-full border border-[#e7dac8] bg-white/96 px-4 py-3 text-sm text-slate-600 shadow-[0_16px_42px_-34px_rgba(120,87,63,0.32)]">
+        Loading details...
+      </div>
+    </div>
+  )
 }
 
 function OpenLayout(props) {
@@ -382,11 +311,6 @@ function OpenLayout(props) {
   } = props
   const hasLoadedRetrySuggestion = Boolean(loadedRetrySuggestion)
   const shouldShowRefinementControls = hasStartedSearch && !hasLoadedRetrySuggestion
-
-  // Retained for quick re-enable if Render sleep behavior ever matters again.
-  // useEffect(() => {
-  //   prewarmBackend()
-  // }, [])
 
   useEffect(() => {
     const revealTimer = window.setTimeout(() => {
@@ -533,6 +457,8 @@ function OpenLayout(props) {
 
   const hasDiscoveryResults = Boolean(state.candidatePool)
   const showLoadingResults = isLoading && displayedResults.length === 0
+  const shouldLoadResultsSection =
+    hasStartedSearch || displayedResults.length > 0 || Boolean(errorMessage)
   const canSubmitTopQuery = !isLoading && (!hasStartedSearch || hasLoadedRetrySuggestion)
 
   function handleSearchSubmit(event) {
@@ -830,65 +756,43 @@ function OpenLayout(props) {
         <section className="w-full max-w-[1100px] space-y-4">
           {showLoadingResults ? (
             <div ref={resultsViewportRef} className="max-h-[360px] scroll-mt-28 overflow-hidden">
-              {state.isFinalizing ? (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  className="mb-4 rounded-[24px] border border-[#e6dacc] bg-[linear-gradient(180deg,rgba(250,246,240,0.9),rgba(255,255,255,0.96))] px-4 py-4 text-left text-slate-600 shadow-[0_22px_58px_-42px_rgba(120,87,63,0.22)] sm:px-5"
-                >
-                  <div className="flex items-start gap-3">
-                    <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
-                      <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
-                      <span className="relative h-2.5 w-2.5 rounded-full bg-primary/70" />
-                    </span>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-slate-900">Taking a closer look at the options.</p>
-                      <p className="text-sm leading-6 text-slate-600">
-                        We&apos;re narrowing the shortlist and locking the final picks.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-              <div className="mobile-landscape-results-grid grid grid-cols-1 gap-4">
-                {RESULT_CARD_SLOTS.map((index) => (
-                  <ResultSkeleton key={index} className="opacity-95" />
-                ))}
-              </div>
+              <ResultsSectionFallback isFinalizing={state.isFinalizing} />
             </div>
-          ) : (
+          ) : shouldLoadResultsSection ? (
             <div
               ref={resultsViewportRef}
               className="scroll-mt-28"
             >
-              <ResultsSection
-                displayedResults={displayedResults}
-                errorMessage={errorMessage}
-                hasFinalResults={hasFinalResults}
-                hasStartedSearch={hasStartedSearch}
-                isFinalizing={state.isFinalizing}
-                isLoading={isLoading}
-                isRetryReady
-                isRetrying={state.isFinalizing}
-                isGeneratingRetryAdvice={state.isGeneratingRetryAdvice}
-                hasLoadedSuggestionAtTop={hasLoadedRetrySuggestion}
-                onRetailerClick={onRetailerClick}
-                onJumpToSearchForm={handleJumpToSearchForm}
-                onSelectProduct={onSelectProduct}
-                onRetryAdviceRequest={state.handleRetryAdviceRequest}
-                onRetryFeedbackChange={state.setRetryFeedback}
-                previousResults={state.previousResults}
-                retryAdvice={state.retryAdvice}
-                selectionState={state.selectionState}
-                retryCount={state.retryCount}
-                retryFeedback={state.retryFeedback}
-                showFinalResultBadges={state.showFinalResultBadges}
-                showPreviewResults={showPreviewResults}
-                suggestedRetryQuery={state.suggestedRetryQuery}
-                submittedQuery={submittedQuery}
-              />
+              <Suspense fallback={<ResultsSectionFallback isFinalizing={state.isFinalizing} />}>
+                <ResultsSection
+                  displayedResults={displayedResults}
+                  errorMessage={errorMessage}
+                  hasFinalResults={hasFinalResults}
+                  hasStartedSearch={hasStartedSearch}
+                  isFinalizing={state.isFinalizing}
+                  isLoading={isLoading}
+                  isRetryReady
+                  isRetrying={state.isFinalizing}
+                  isGeneratingRetryAdvice={state.isGeneratingRetryAdvice}
+                  hasLoadedSuggestionAtTop={hasLoadedRetrySuggestion}
+                  onRetailerClick={onRetailerClick}
+                  onJumpToSearchForm={handleJumpToSearchForm}
+                  onSelectProduct={onSelectProduct}
+                  onRetryAdviceRequest={state.handleRetryAdviceRequest}
+                  onRetryFeedbackChange={state.setRetryFeedback}
+                  previousResults={state.previousResults}
+                  retryAdvice={state.retryAdvice}
+                  selectionState={state.selectionState}
+                  retryCount={state.retryCount}
+                  retryFeedback={state.retryFeedback}
+                  showFinalResultBadges={state.showFinalResultBadges}
+                  showPreviewResults={showPreviewResults}
+                  suggestedRetryQuery={state.suggestedRetryQuery}
+                  submittedQuery={submittedQuery}
+                />
+              </Suspense>
             </div>
-          )}
+          ) : null}
         </section>
 
         {showTimingPanel ? <TimingPanel requestTiming={state.requestTiming} /> : null}
@@ -898,29 +802,63 @@ function OpenLayout(props) {
   )
 }
 
-export function HomeExperience() {
+export function HomeExperience({ initialSearchQuery = '' } = {}) {
   const state = useGuidedSearch()
+  const {
+    beginGuidedSearch,
+    hasStartedSearch,
+    productQuery,
+    setProductQuery,
+  } = state
+  const initialSearchQueryText = String(initialSearchQuery || '').trim()
+  const initialSearchRef = useRef({ query: '', status: 'idle' })
   const showTimingPanel = shouldShowTimingPanel()
   const [feedbackSessionId] = useState(() => getOrCreateAnalyticsSessionId())
   const feedbackStage = getFeedbackStage(state)
 
-  const showMarketplaceToast = state.hasStartedSearch && !state.hasAskedMarketplacePreference
-  const toastDomain = state.selectedAmazonDomain !== AMAZON_MARKETPLACE_AUTO
-    ? state.selectedAmazonDomain
-    : state.resolvedAmazonDomain
-
-  function handleToastConfirm() {
-    state.setSelectedAmazonDomain(toastDomain)
-  }
-
-  function handleToastChooseStore() {
-    state.markMarketplacePromptHandled()
-    window.dispatchEvent(new CustomEvent('focamai:open-store-picker'))
-  }
-
   useEffect(() => {
     applyPlainBackgroundMode()
   }, [])
+
+  useEffect(() => {
+    if (
+      !initialSearchQueryText ||
+      initialSearchRef.current.query === initialSearchQueryText
+    ) {
+      return
+    }
+
+    initialSearchRef.current = { query: initialSearchQueryText, status: 'set-query' }
+    setProductQuery(initialSearchQueryText)
+  }, [initialSearchQueryText, setProductQuery])
+
+  useEffect(() => {
+    const initialSearch = initialSearchRef.current
+
+    if (
+      !initialSearchQueryText ||
+      initialSearch.query !== initialSearchQueryText ||
+      initialSearch.status !== 'set-query' ||
+      hasStartedSearch ||
+      productQuery !== initialSearchQueryText
+    ) {
+      return
+    }
+
+    const startTimer = window.setTimeout(() => {
+      initialSearchRef.current = { query: initialSearchQueryText, status: 'started' }
+      beginGuidedSearch({ preventDefault() {} })
+    }, 0)
+
+    return () => {
+      window.clearTimeout(startTimer)
+    }
+  }, [
+    beginGuidedSearch,
+    hasStartedSearch,
+    initialSearchQueryText,
+    productQuery,
+  ])
 
   const layoutProps = {
     displayedResults: state.displayedResults,
@@ -950,8 +888,8 @@ export function HomeExperience() {
   return (
     <>
       <OpenLayout {...layoutProps} />
-      <AnimatePresence>
-        {state.selectedProduct ? (
+      {state.selectedProduct ? (
+        <Suspense fallback={<ProductDetailModalFallback />}>
           <ProductDetailModal
             item={state.selectedProduct}
             isEnrichmentSettled={state.isEnrichmentSettled}
@@ -963,19 +901,8 @@ export function HomeExperience() {
             }
             onClose={() => state.setSelectedProduct(null)}
           />
-        ) : null}
-      </AnimatePresence>
-      <AnimatePresence>
-        {showMarketplaceToast && toastDomain && MARKETPLACE_DISPLAY[toastDomain] ? (
-          <MarketplaceToast
-            key="marketplace-toast"
-            domain={toastDomain}
-            onConfirm={handleToastConfirm}
-            onChooseStore={handleToastChooseStore}
-            onDismiss={state.markMarketplacePromptHandled}
-          />
-        ) : null}
-      </AnimatePresence>
+        </Suspense>
+      ) : null}
       <FeedbackFab
         finalized={state.hasFinalResults}
         hasStartedSearch={state.hasStartedSearch}

@@ -1,7 +1,17 @@
+import { lazy, Suspense, useState } from 'react'
 import Seo from '@/components/Seo.jsx'
-import { HomeExperience } from '@/components/home/HomeExperience.jsx'
+import { HomeShell } from '@/components/home/HomeShell.jsx'
+
+const HomeExperience = lazy(() =>
+  import('@/components/home/HomeExperience.jsx').then((module) => ({
+    default: module.HomeExperience,
+  })),
+)
 
 function HomePage() {
+  const [initialSearchQuery, setInitialSearchQuery] = useState('')
+  const hasStartedSearch = Boolean(initialSearchQuery)
+
   return (
     <>
       <Seo
@@ -26,7 +36,20 @@ function HomePage() {
           },
         ]}
       />
-      <HomeExperience />
+      {hasStartedSearch ? (
+        <Suspense
+          fallback={
+            <HomeShell
+              initialQuery={initialSearchQuery}
+              isStarting
+            />
+          }
+        >
+          <HomeExperience initialSearchQuery={initialSearchQuery} />
+        </Suspense>
+      ) : (
+        <HomeShell onSearchStart={setInitialSearchQuery} />
+      )}
     </>
   )
 }

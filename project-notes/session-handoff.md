@@ -18,6 +18,7 @@
 - Product shortlists stay at 6 items.
 - The guided backend path is the real product path; `/api/search/live` is not part of the current user flow.
 - The top homepage query field is now a compact 2-line textarea so long natural-language searches and AI-suggested retries fit without truncation.
+- Homepage boot is now shell-first: `/` loads a lightweight `HomeShell` under the existing splash, and the guided search app lazy-loads only after submit.
 - The Amazon marketplace context now persists the last saved marketplace locally, and confident geo detections are cached so later loads can skip `GET /api/geo`.
 - The homepage now includes a one-time inline marketplace prompt after search starts, and active searches restart cleanly if the marketplace changes mid-flight.
 - The PNG wordmark is the active wordmark.
@@ -39,8 +40,10 @@
 ## Key files
 - App route shell: `/src/App.jsx`
 - Homepage entry: `/src/pages/HomePage.jsx`
-- Active homepage UI: `/src/components/home/HomeExperience.jsx`
-- Result and modal UI: `/src/components/home/HomeShared.jsx`
+- First-load homepage shell: `/src/components/home/HomeShell.jsx`
+- Guided homepage experience: `/src/components/home/HomeExperience.jsx`
+- Result UI: `/src/components/home/ResultsSection.jsx`
+- Product modal UI: `/src/components/home/ProductDetailModal.jsx`
 - Guided search state/requests: `/src/components/home/useGuidedSearch.js`
 - Amazon store context and geo-resolved domain state: `/src/contexts/AmazonStoreContext.jsx`
 - Amazon auto-store UI: `/src/components/AmazonStorePill.jsx`

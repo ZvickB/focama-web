@@ -60,13 +60,11 @@ describe('HomePage', () => {
     vi.restoreAllMocks()
     window.localStorage.clear()
     delete document.documentElement.dataset.bgMode
-    window.__FOCAMAI_DISABLE_BACKEND_PREWARM__ = true
     window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__ = true
     window.__FOCAMAI_DISABLE_GEO_FETCH__ = true
   })
 
   afterEach(() => {
-    delete window.__FOCAMAI_DISABLE_BACKEND_PREWARM__
     delete window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__
     delete window.__FOCAMAI_DISABLE_GEO_FETCH__
     vi.useRealTimers()
@@ -190,7 +188,7 @@ describe('HomePage', () => {
     expect(screen.getByRole('button', { name: /show focused picks/i })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /just show me results/i })[0]).toBeInTheDocument()
     expect(
-      screen.getByText(/your shortlist is taking shape\./i),
+      await screen.findByText(/your shortlist is taking shape\./i),
     ).toBeInTheDocument()
   })
 

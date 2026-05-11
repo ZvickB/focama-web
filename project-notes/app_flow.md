@@ -13,6 +13,7 @@
 
 ## Homepage flow
 - First load shows an HTML boot splash from `index.html`.
+- While that splash is up, the route loads a lightweight `HomeShell` first; the guided homepage experience is lazy-loaded only after the user starts a search.
 - The active homepage ships in the plain white visual mode; the earlier background toggle is no longer exposed in the production UI.
 - The user starts with a product query in a compact 2-line homepage textarea.
 - After submit:

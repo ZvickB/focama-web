@@ -9,6 +9,7 @@
 - The app is Vite + React + React Router + TanStack Query + Tailwind + Vitest.
 - The homepage at `/` uses the `open` layout: single-column, search-first, calm, and mobile-first.
 - The homepage now ships in the plain white visual mode by default; the temporary homepage background toggle is no longer part of the active UI.
+- Homepage first load is now split: `HomePage` boots a lightweight `HomeShell`, and the heavier guided search experience only lazy-loads after the user starts a search.
 - Basic SEO plumbing is now in place: route-level metadata, canonicals, OG/Twitter tags, sitemap, robots, and manifest.
 - A local-only internal analytics dashboard now lives at `/admin/analytics` during development and reads a backend funnel summary instead of querying Supabase directly from the browser.
 - The current user path is: search -> short follow-up -> preview or focused shortlist -> modal details -> retailer clickout.
@@ -20,6 +21,7 @@
 ## Current search flow
 - The homepage starts with a normal product query, not a long form.
 - The main product query field is now a compact 2-line textarea so longer natural-language searches and AI retry suggestions stay visible without changing the top form layout mid-flow.
+- The existing splash timing is unchanged; the homepage cleanup work reduced boot-path coupling underneath it instead of changing the splash itself.
 - Discovery and the AI follow-up question run in parallel after submit.
 - A one-time inline marketplace prompt now appears after search starts until the user chooses an Amazon store or dismisses it.
 - `Show products now` reveals the preview set without finalize.

@@ -5,39 +5,9 @@ import {
   Card,
   CardContent,
 } from '@/components/ui/card.jsx'
+import { getUserFacingDescription, getUserFacingReasons } from '@/components/home/homeContentUtils.js'
 import logo from '@/assets/logo_master_version.svg'
 import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
-
-function getUserFacingReasons(reasons = []) {
-  return reasons.filter((reason) => {
-    const normalizedReason = String(reason || '').trim()
-
-    if (!normalizedReason) {
-      return false
-    }
-
-    return !(
-      /serpapi search route|live product result returned/i.test(normalizedReason) ||
-      /^available from\b/i.test(normalizedReason) ||
-      /^listed around\b/i.test(normalizedReason) ||
-      /^price details were limited\b/i.test(normalizedReason)
-    )
-  })
-}
-
-function getUserFacingDescription(description) {
-  const normalizedDescription = String(description || '').trim()
-
-  if (!normalizedDescription) {
-    return ''
-  }
-
-  if (/serpapi search route|live product result returned/i.test(normalizedDescription)) {
-    return ''
-  }
-
-  return normalizedDescription
-}
 
 function ProductBadge({ label }) {
   if (!label) {

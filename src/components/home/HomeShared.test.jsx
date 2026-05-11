@@ -3,7 +3,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 import { AmazonStoreProvider } from '@/contexts/AmazonStoreContext.jsx'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
-import { ProductDetailModal, ResultsSection } from './HomeShared.jsx'
+import { ProductDetailModal } from './ProductDetailModal.jsx'
+import { ResultsSection } from './ResultsSection.jsx'
 
 function createMockItem(overrides = {}) {
   return {

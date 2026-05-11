@@ -1,10 +1,87 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { Menu, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import logo from '@/assets/logo_header_mark.svg'
 import wordmark from '@/assets/wordmark.PNG'
 import { AmazonStorePill } from '@/components/AmazonStorePill.jsx'
+import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
+import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { useSearchProgress } from '@/contexts/useSearchProgress.js'
+
+const MARKETPLACE_DISPLAY = {
+  'amazon.com': { location: 'the US', storeLabel: 'Amazon US' },
+  'amazon.ca': { location: 'Canada', storeLabel: 'Amazon Canada' },
+  'amazon.co.uk': { location: 'the UK', storeLabel: 'Amazon UK' },
+}
+
+function MarketplacePillToast({ domain, onConfirm, onChooseStore, onDismiss }) {
+  const timerRef = useRef(null)
+  const onDismissRef = useRef(onDismiss)
+  onDismissRef.current = onDismiss
+
+  function clearTimer() {
+    clearTimeout(timerRef.current)
+    timerRef.current = null
+  }
+
+  function startTimer() {
+    clearTimer()
+    timerRef.current = setTimeout(() => onDismissRef.current(), 8000)
+  }
+
+  useEffect(() => {
+    startTimer()
+    return clearTimer
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const display = MARKETPLACE_DISPLAY[domain]
+  if (!display) return null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -6, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -6, scale: 0.97 }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+      style={{ transformOrigin: 'top right' }}
+      onMouseEnter={clearTimer}
+      onMouseLeave={startTimer}
+      className="absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-stone-200 bg-white px-4 py-3.5 shadow-[0_8px_32px_-8px_rgba(15,23,42,0.18)]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm text-slate-700">
+          Looks like you&apos;re in {display.location}
+        </p>
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss"
+          className="shrink-0 text-slate-400 transition hover:text-slate-600"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="rounded-full bg-primary px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-primary/90"
+        >
+          Use {display.storeLabel}
+        </button>
+        <button
+          type="button"
+          onClick={onChooseStore}
+          className="rounded-full border border-stone-200 px-3.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-stone-300 hover:text-slate-800"
+        >
+          Choose store
+        </button>
+      </div>
+    </motion.div>
+  )
+}
 
 const navItems = [
   { to: '/', label: 'Home', end: true },
@@ -111,6 +188,27 @@ function SiteLayout() {
   const isMobileMenuOpen = mobileMenuOpenPath === location.pathname
   const isHomePage = location.pathname === '/'
   const { progress } = useSearchProgress()
+  const {
+    hasAskedMarketplacePreference,
+    markMarketplacePromptHandled,
+    selectedAmazonDomain,
+    resolvedAmazonDomain,
+    setSelectedAmazonDomain,
+  } = useAmazonStore()
+
+  const showMarketplaceToast =
+    isHomePage && progress.hasStartedSearch && !hasAskedMarketplacePreference
+  const toastDomain =
+    selectedAmazonDomain !== AMAZON_MARKETPLACE_AUTO ? selectedAmazonDomain : resolvedAmazonDomain
+
+  function handleToastConfirm() {
+    setSelectedAmazonDomain(toastDomain)
+  }
+
+  function handleToastChooseStore() {
+    markMarketplacePromptHandled()
+    window.dispatchEvent(new CustomEvent('focamai:open-store-picker'))
+  }
 
   useEffect(() => {
     function handleScroll() {
@@ -195,7 +293,22 @@ function SiteLayout() {
             <SearchStepIndicator progress={progress} />
           </div>
           <div className="hidden sm:flex sm:items-center sm:gap-3">
-            {isHomePage ? <AmazonStorePill variant="header" /> : null}
+            {isHomePage ? (
+              <div className="relative">
+                <AmazonStorePill variant="header" />
+                <AnimatePresence>
+                  {showMarketplaceToast && toastDomain && MARKETPLACE_DISPLAY[toastDomain] ? (
+                    <MarketplacePillToast
+                      key="marketplace-pill-toast"
+                      domain={toastDomain}
+                      onConfirm={handleToastConfirm}
+                      onChooseStore={handleToastChooseStore}
+                      onDismiss={markMarketplacePromptHandled}
+                    />
+                  ) : null}
+                </AnimatePresence>
+              </div>
+            ) : null}
             <SlidingNav items={navItems} />
           </div>
         </div>
