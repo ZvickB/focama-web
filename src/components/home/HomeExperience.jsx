@@ -244,34 +244,12 @@ function TimingPanel({ requestTiming }) {
 }
 
 
-function ResultsSectionFallback({ isFinalizing = false }) {
+function ResultsSectionFallback() {
   return (
-    <div className="space-y-4">
-      {isFinalizing ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="rounded-[24px] border border-[#e6dacc] bg-[linear-gradient(180deg,rgba(250,246,240,0.9),rgba(255,255,255,0.96))] px-4 py-4 text-left text-slate-600 shadow-[0_22px_58px_-42px_rgba(120,87,63,0.22)] sm:px-5"
-        >
-          <div className="flex items-start gap-3">
-            <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
-              <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
-              <span className="relative h-2.5 w-2.5 rounded-full bg-primary/70" />
-            </span>
-            <div className="space-y-1">
-              <p className="text-sm leading-6 text-slate-900">
-                Selecting your picks — open any result to see why it fits <em>your</em> needs and
-                what to watch for.
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      <div className="mobile-landscape-results-grid grid grid-cols-1 gap-4">
-        {RESULT_CARD_SLOTS.map((index) => (
-          <ResultSkeleton key={index} className="opacity-95" />
-        ))}
-      </div>
+    <div className="mobile-landscape-results-grid grid grid-cols-1 gap-4">
+      {RESULT_CARD_SLOTS.map((index) => (
+        <ResultSkeleton key={index} className="opacity-95" />
+      ))}
     </div>
   )
 }
@@ -298,6 +276,7 @@ function OpenLayout(props) {
   const lastAppliedRetrySuggestionRef = useRef('')
   const [showHeroCopy, setShowHeroCopy] = useState(false)
   const [loadedRetrySuggestion, setLoadedRetrySuggestion] = useState(null)
+  const [hasOpenedModal, setHasOpenedModal] = useState(false)
   const {
     displayedResults,
     errorMessage,
@@ -329,6 +308,17 @@ function OpenLayout(props) {
       window.clearTimeout(revealTimer)
     }
   }, [])
+
+  useEffect(() => {
+    if (!hasFinalResults) {
+      setHasOpenedModal(false)
+    }
+  }, [hasFinalResults])
+
+  function handleSelectProduct(product) {
+    setHasOpenedModal(true)
+    onSelectProduct(product)
+  }
 
   useEffect(() => {
     if (
@@ -765,16 +755,33 @@ function OpenLayout(props) {
         </section>
 
         <section className="w-full max-w-[1100px] space-y-4">
+          {hasFinalResults && !hasOpenedModal ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className="rounded-[24px] border border-[#e6dacc] bg-[linear-gradient(180deg,rgba(250,246,240,0.9),rgba(255,255,255,0.96))] px-4 py-4 text-left text-slate-600 shadow-[0_22px_58px_-42px_rgba(120,87,63,0.22)] sm:px-5"
+            >
+              <div className="flex items-start gap-3">
+                <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
+                  <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
+                  <span className="relative h-2.5 w-2.5 rounded-full bg-primary/70" />
+                </span>
+                <p className="text-sm leading-6 text-slate-900">
+                  Open any result to see why it fits <em>your</em> needs and what to watch for.
+                </p>
+              </div>
+            </div>
+          ) : null}
           {showLoadingResults ? (
             <div ref={resultsViewportRef} className="max-h-[360px] scroll-mt-28 overflow-hidden">
-              <ResultsSectionFallback isFinalizing={state.isFinalizing} />
+              <ResultsSectionFallback />
             </div>
           ) : shouldLoadResultsSection ? (
             <div
               ref={resultsViewportRef}
               className="scroll-mt-28"
             >
-              <Suspense fallback={<ResultsSectionFallback isFinalizing={state.isFinalizing} />}>
+              <Suspense fallback={<ResultsSectionFallback />}>
                 <ResultsSection
                   displayedResults={displayedResults}
                   errorMessage={errorMessage}
@@ -788,7 +795,7 @@ function OpenLayout(props) {
                   hasLoadedSuggestionAtTop={hasLoadedRetrySuggestion}
                   onRetailerClick={onRetailerClick}
                   onJumpToSearchForm={handleJumpToSearchForm}
-                  onSelectProduct={onSelectProduct}
+                  onSelectProduct={handleSelectProduct}
                   onRetryAdviceRequest={state.handleRetryAdviceRequest}
                   onRetryFeedbackChange={state.setRetryFeedback}
                   previousResults={state.previousResults}
