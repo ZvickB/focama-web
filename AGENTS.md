@@ -9,25 +9,18 @@ Read this file first at the start of every chat.
 
 ## First reads
 - Read `project-notes/session-handoff.md` first for the fastest current reset.
-- Read `project-notes/active-experiment-override.md` immediately after `session-handoff.md` when the task touches the current prewarm/finalize experiment.
-- Read `project-notes/finalize-strategy.md` before finalize or latency-architecture changes; use it for active finalize/AI strategy and hard guardrails.
 - Read `project-notes/current-status.md` next for the immediate snapshot and active constraints.
 - Read `project-notes/app_flow.md` for current implemented behavior.
 - Read `project-notes/handoff.md` for medium-term work and open product questions.
 - Read `project-notes/doc_briefs.md` for product intent, UX direction, and broader decisions.
 - Read `project-notes/db-needs.md` when you need the plain-language summary of which Supabase tables the current app uses now.
-- Read `project-notes/db-cache-setup.md` only when working on cache, Supabase, or storage behavior.
-- Read `project-notes/cleanup-backlog.md` only when the task is specifically cleanup or when the user asks to work a section from it.
 
 ## Source of truth
-- `project-notes/active-experiment-override.md`: highest-priority note for the current prewarm/finalize experiment when it conflicts with older finalize guidance.
-- `project-notes/finalize-strategy.md`: active finalize/AI strategy and hard guardrails for future finalize or latency-architecture changes.
 - `project-notes/app_flow.md`: what the app does now.
 - `project-notes/current-status.md`: short snapshot for the next chat.
 - `project-notes/handoff.md`: durable remaining work and open questions.
 - `project-notes/doc_briefs.md`: product intent and longer-term direction.
 - `project-notes/db-needs.md`: plain-language summary of the current required Supabase tables.
-- `project-notes/cleanup-backlog.md`: cleanup debt only, one section at a time.
 
 ## Working rules
 - Treat implemented behavior and planned work as different things.
@@ -76,7 +69,6 @@ Read this file first at the start of every chat.
   - `project-notes/current-status.md`
   - `project-notes/session-handoff.md` if a fresh chat would otherwise be misled
 - After finishing a meaningful chunk of work, update `project-notes/handoff.md` if remaining work or priorities changed.
-- Update `project-notes/cleanup-backlog.md` only when a cleanup item is actually completed, split, or blocked.
 - When a provider path is intentionally deferred or temporarily not wired, record the exact re-entry points in active project notes so future chats know what must be switched later.
 - Keep note updates small and accurate. Do not rewrite history just to make notes look cleaner.
 - Prefer concise, de-duplicated active notes, but do not enforce a hard line-count limit.
@@ -95,11 +87,6 @@ Read this file first at the start of every chat.
 - Retired images, logos, or brand experiments: an `archive/` folder inside `src/assets/`
 - Temporary research artifacts or one-off evaluation data that still needs to be kept: `temp-data/archive/`
 - Do not move active files just to be tidy. Archive only items that are clearly no longer part of the current product direction.
-
-## Cleanup workflow
-- If the user asks to work from `project-notes/cleanup-backlog.md`, work only on the next requested or clearly next reasonable section.
-- After finishing that item or section, change its status from `pending` to `done`.
-- If the task grows, split it into a new item instead of widening the original one.
 
 ## Communication preferences
 - The user is stronger in React/frontend than backend architecture.
