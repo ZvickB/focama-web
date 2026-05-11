@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 
 import { AmazonStoreProvider } from '@/contexts/AmazonStoreContext.jsx'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
@@ -26,15 +27,17 @@ function createMockItem(overrides = {}) {
 
 function renderModal(props = {}) {
   return render(
-    <AmazonStoreProvider>
-      <ProductDetailModal
-        item={createMockItem()}
-        isEnrichmentSettled={false}
-        onClose={vi.fn()}
-        onRetailerClick={vi.fn()}
-        {...props}
-      />
-    </AmazonStoreProvider>,
+    <MemoryRouter>
+      <AmazonStoreProvider>
+        <ProductDetailModal
+          item={createMockItem()}
+          isEnrichmentSettled={false}
+          onClose={vi.fn()}
+          onRetailerClick={vi.fn()}
+          {...props}
+        />
+      </AmazonStoreProvider>
+    </MemoryRouter>,
   )
 }
 
@@ -64,6 +67,18 @@ describe('ProductDetailModal', () => {
 
     expect(screen.getByText(/extra analysis wasn't available for this pick right now/i)).toBeInTheDocument()
     expect(screen.queryByText(/analyzing your pick/i)).not.toBeInTheDocument()
+  })
+
+  it('shows an inline affiliate disclosure next to the retailer CTA', () => {
+    renderModal()
+
+    expect(
+      screen.getByText(/retailer links may be affiliate links, which can support focamai at no extra cost to you/i),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /learn more/i })).toHaveAttribute(
+      'href',
+      '/affiliate-disclosure',
+    )
   })
 })
 
