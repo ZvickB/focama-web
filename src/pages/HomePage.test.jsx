@@ -186,7 +186,7 @@ describe('HomePage', () => {
       await screen.findByText(/what should we optimize for with this stroller/i),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /show focused picks/i })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /just show me results/i })[0]).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /skip the question and show results/i })[0]).toBeInTheDocument()
     expect(
       await screen.findByText(/your shortlist is taking shape\./i),
     ).toBeInTheDocument()
@@ -407,7 +407,7 @@ describe('HomePage', () => {
       )
     })
 
-    await user.click(screen.getAllByRole('button', { name: /just show me results/i })[0])
+    await user.click(screen.getAllByRole('button', { name: /skip the question and show results/i })[0])
 
     expect(await screen.findByText('Canada stroller result')).toBeInTheDocument()
     expect(screen.queryByText('Stale stroller result')).not.toBeInTheDocument()
@@ -989,7 +989,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.click(screen.getAllByRole('button', { name: /just show me results/i })[0])
+    await user.click(screen.getAllByRole('button', { name: /skip the question and show results/i })[0])
 
     expect(await screen.findByText('Travel stroller')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /show focused picks/i })).toBeInTheDocument()
@@ -1042,7 +1042,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.click(screen.getAllByRole('button', { name: /just show me results/i })[0])
+    await user.click(screen.getAllByRole('button', { name: /skip the question and show results/i })[0])
     expect(await screen.findByText('Travel stroller')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /new search/i }))
@@ -1567,7 +1567,7 @@ expect(screen.queryByText('Travel stroller')).not.toBeInTheDocument()
     await user.type(screen.getByLabelText(/product topic/i), 'thermos')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this thermos/i)
-    await user.click(screen.getAllByRole('button', { name: /just show me results/i })[0])
+    await user.click(screen.getAllByRole('button', { name: /skip the question and show results/i })[0])
 
     expect(
       screen.queryByText(/live product result returned for "thermos stainless king/i),
@@ -1792,7 +1792,7 @@ expect(screen.queryByText('Travel stroller')).not.toBeInTheDocument()
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.click(screen.getAllByRole('button', { name: /just show me results/i })[0])
+    await user.click(screen.getAllByRole('button', { name: /skip the question and show results/i })[0])
 
     expect(screen.queryByText(/pricier than the smallest umbrella stroller options\./i)).not.toBeInTheDocument()
 

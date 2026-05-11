@@ -721,10 +721,10 @@ function OpenLayout(props) {
                         className="text-left text-sm text-slate-500 underline-offset-2 transition-colors hover:text-slate-700 hover:underline disabled:pointer-events-none disabled:opacity-40"
                         onClick={onShowProductsNow}
                       >
-                        Just show me results
+                        Skip the question and show results →
                       </button>
                       <p className="text-left text-xs text-slate-400">
-                        No AI refinement<br />results based on your search only.
+                        Uses your original search only. Results may be less focused.
                       </p>
                     </div>
                     <div className="order-1 flex flex-col gap-1 sm:order-2 sm:items-end">
