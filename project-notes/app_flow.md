@@ -36,6 +36,9 @@
   - currently uses the Oxylabs-backed Amazon path under the Rainforest-named route
   - writes reusable guided discovery cache and creates a separate token-scoped session snapshot for finalize/enrichment
   - marketplace items without a known positive price are treated as invalid and are removed before preview results or AI candidate-pool caching
+  - after the normal response is sent, starts a background query-quality review when OpenAI is configured and stores `selection.queryQuality` on the token-scoped session snapshot
+  - query-quality review is checked by the frontend through polling; if a high-confidence suggestion is ready, the homepage shows an optional small prompt without replacing the original results
+  - there is still no query-quality SSE or suggested-query prewarm path
 - `GET /api/search/refine`
   - returns one short follow-up question plus helper copy
 - `POST /api/search/finalize`
@@ -53,6 +56,11 @@
 - `GET /api/search/enrichment`
   - polling fallback for enrichment
   - only returns enrichment for the exact `discoveryToken` that owns the active search session
+- `GET /api/search/query-quality`
+  - polling endpoint for the background query-quality review
+  - returns `ready: false` while the review is pending
+  - returns a minimal suggestion payload only when the stored review is high-confidence and user-visible
+  - returns `shouldSuggest: false` for quiet no-op reviews, ambiguous language, failures, or skipped reviews
 - `POST /api/search/retry-advice`
   - reads the rejected shortlist plus user feedback
   - returns `recommendation`, `suggestedQuery`, and `rationale`
@@ -90,6 +98,19 @@
 - When retry advice returns a suggested query, the homepage loads it into the main search input, scrolls back to the top search form, hides the previous follow-up textarea, and lets the user either try that new search or jump back down to the existing results without resetting state yet.
 - The same-pool retry path is not part of the active homepage UI right now.
 
+## Query-quality suggestion behavior
+- After discovery returns, the frontend polls `/api/search/query-quality` for the active `discoveryToken`, query, and marketplace.
+- The first discovery response and refinement flow remain uninterrupted while the review runs.
+- If the stored review says to suggest a better query, the homepage shows a small inline prompt near the refine/results region:
+  - `We searched for "[original query]".`
+  - `Try "[suggested query]" instead?`
+  - `Try suggested search`
+  - `Keep these results`
+- `Try suggested search` starts a normal new guided search for the suggested query and updates the top search input.
+- `Keep these results` hides the prompt and keeps the original discovery token/results active.
+- Stale query-quality poll responses are ignored after a new search or marketplace restart.
+- There is no automatic query replacement, warmed-token reuse, SSE, or suggested-query prewarm in the current MVP.
+
 ## Data, cache, and observability
 - Guided discovery is the reusable persistent cache layer.
 - Finalize remains request-specific and rebuilds from discovery cache.
@@ -104,6 +125,8 @@
 - `search_history` is internal telemetry, not user-facing history.
 - Rate limiting is a 10-second rolling window with a limit of 15 requests per client IP. In production it uses a shared Supabase `rate_limit_events` event log keyed by a hashed IP value, and falls back to the process-local memory limiter when Supabase is unavailable.
 - Guided routes expose `Server-Timing`.
+- Discovery query-quality review is now a background pass plus frontend polling. It can mark the token-scoped snapshot as pending, skipped, ready, or failed under `selection.queryQuality`, while preserving any existing `selection.enrichment`.
+- Query-quality suggestion analytics track shown, accepted, and rejected events with bounded metadata such as query lengths, classification, and confidence.
 - The homepage timing panel appears in development or when `?timing=1` is present.
 - The frontend tries SSE enrichment first and falls back to polling if the stream errors.
 - Analytics events post to `/api/analytics/track`.

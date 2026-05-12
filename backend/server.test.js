@@ -34,6 +34,10 @@ vi.mock('./lib/retry-advice.js', async () => {
   }
 })
 
+vi.mock('./lib/query-quality-review.js', () => ({
+  generateQueryQualityReview: vi.fn(),
+}))
+
 vi.mock('./lib/search-data.js', async () => {
   const actual = await vi.importActual('./lib/search-data.js')
 
@@ -67,6 +71,7 @@ import {
   handleEnrichmentStream,
   handleFeedbackSubmission,
   handleFinalizeSelection,
+  handleQueryQualityPoll,
   handleRainforestDiscoverySearch,
   handleRetryAdvice,
   handleSearchDebug,
@@ -75,7 +80,9 @@ import {
 import { ALLOWED_ORIGIN } from './lib/http.js'
 import { resetRateLimitStore } from './lib/rate-limit.js'
 import { haikuLockWinnersAndBadges, miniEnrichSelectedCandidates } from './lib/ai-selector.js'
+import { generateQueryQualityReview } from './lib/query-quality-review.js'
 import { generateRetryAdvice } from './lib/retry-advice.js'
+import { getFilteredSearchArtifacts } from './lib/result-filter.js'
 import { getSupabaseHealth, readStoredSearchCacheEntry, recordTesterFeedback, writeStoredSearchCacheEntry } from './lib/search-storage.js'
 import {
   getEnv,
@@ -221,6 +228,8 @@ describe('server handlers', () => {
     vi.unstubAllGlobals()
     resetRateLimitStore()
     haikuLockWinnersAndBadges.mockReset()
+    generateQueryQualityReview.mockReset()
+    getFilteredSearchArtifacts.mockReset()
     miniEnrichSelectedCandidates.mockReset()
     miniEnrichSelectedCandidates.mockResolvedValue({
       model: 'gpt-5-mini',
@@ -228,6 +237,15 @@ describe('server handlers', () => {
       enrichedIds: [],
       usage: null,
       preservedOrder: true,
+    })
+    generateQueryQualityReview.mockResolvedValue({
+      classification: 'ok',
+      suggestedQuery: '',
+      confidence: 'high',
+      reason: 'The returned pool matches the query.',
+      shouldSuggest: false,
+      usage: null,
+      generatedAt: '2026-03-17T12:00:02.000Z',
     })
     readStoredSearchCacheEntry.mockResolvedValue(null)
   })
@@ -737,6 +755,167 @@ describe('server handlers', () => {
         }),
       }),
     )
+  })
+
+  it('returns live discovery before the background query-quality review resolves', async () => {
+    const reviewDeferred = createDeferred()
+
+    getEnv.mockImplementation((name) => ({
+      OPENAI_API_KEY: 'openai-key',
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
+    })[name] || '')
+    generateQueryQualityReview.mockReturnValue(reviewDeferred.promise)
+    getFilteredSearchArtifacts.mockReturnValue({
+      candidatePool: {
+        query: 'celcius drink',
+        details: '',
+        combinedSearchText: 'celcius drink',
+        searchState: 'Results for exact spelling',
+        similarQueries: ['celsius drink'],
+        candidates: [createFinalizeCandidate('one')],
+      },
+      results: [{ id: 'one', title: 'Generic Energy Drink', price: '$24.99' }],
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        results: [{ content: { results: { organic: [{}] } } }],
+      }),
+    })))
+
+    const response = createResponseRecorder()
+
+    await handleRainforestDiscoverySearch(
+      new URL('http://localhost/api/search/rainforest-discover?query=celcius%20drink&amazonDomain=amazon.com'),
+      response,
+      { headers: { 'x-forwarded-for': '203.0.113.19' } },
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        amazonDomain: 'amazon.com',
+        previewResults: [
+          expect.objectContaining({
+            id: 'one',
+          }),
+        ],
+      }),
+    )
+
+    await waitForExpectation(() => {
+      expect(generateQueryQualityReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          originalQuery: 'celcius drink',
+          amazonDomain: 'amazon.com',
+          apiKey: 'openai-key',
+          similarQueries: ['celsius drink'],
+        }),
+      )
+    })
+
+    reviewDeferred.resolve({
+      classification: 'likely_typo',
+      suggestedQuery: 'celsius drink',
+      confidence: 'high',
+      reason: 'Celsius appears to be the intended energy drink brand.',
+      shouldSuggest: true,
+      usage: null,
+      generatedAt: '2026-03-17T12:00:02.000Z',
+    })
+    await flushAsyncWork()
+  })
+
+  it('stores query-quality review state on the token-scoped discovery snapshot', async () => {
+    let sessionEntry = null
+
+    getEnv.mockImplementation((name) => ({
+      OPENAI_API_KEY: 'openai-key',
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
+    })[name] || '')
+    generateQueryQualityReview.mockResolvedValue({
+      classification: 'likely_typo',
+      suggestedQuery: 'celsius drink',
+      confidence: 'high',
+      reason: 'Celsius appears to be the intended energy drink brand.',
+      shouldSuggest: true,
+      usage: null,
+      generatedAt: '2026-03-17T12:00:02.000Z',
+    })
+    readStoredSearchCacheEntry.mockImplementation(async ({ scope }) => {
+      if (scope === 'rainforest_discovery:amazon.com') {
+        const cacheEntry = createDiscoveryCacheEntry('celcius drink', [createFinalizeCandidate('one')], {
+          mode: 'discovery_preview',
+        }, 'old-token')
+
+        return {
+          ...cacheEntry,
+          results: cacheEntry.results.map((result) => ({
+            ...result,
+            price: '$24.99',
+            numericPrice: 24.99,
+          })),
+        }
+      }
+
+      if (scope?.startsWith('guided_discovery_session:')) {
+        return sessionEntry
+      }
+
+      return null
+    })
+    writeStoredSearchCacheEntry.mockImplementation(async (entry) => {
+      if (entry.scope?.startsWith('guided_discovery_session:')) {
+        sessionEntry = {
+          ...sessionEntry,
+          ...entry,
+          selection: {
+            ...(entry.selection || {}),
+            enrichment: entry.selection?.enrichment || { entries: [{ candidate_id: 'one' }], model: 'gpt-5-mini' },
+          },
+        }
+      }
+
+      return {
+        cachedAt: '2026-03-17T12:00:01.000Z',
+        expiresAt: '2026-03-17T18:00:00.000Z',
+      }
+    })
+
+    const response = createResponseRecorder()
+
+    await handleRainforestDiscoverySearch(
+      new URL('http://localhost/api/search/rainforest-discover?query=celcius%20drink&amazonDomain=amazon.com'),
+      response,
+      { headers: { 'x-forwarded-for': '203.0.113.21' } },
+    )
+
+    const payload = JSON.parse(response.body)
+
+    await waitForExpectation(() => {
+      expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          productQuery: 'celcius drink',
+          discoveryToken: payload.discoveryToken,
+          scope: `guided_discovery_session:${payload.discoveryToken}`,
+          selection: expect.objectContaining({
+            enrichment: { entries: [{ candidate_id: 'one' }], model: 'gpt-5-mini' },
+            queryQuality: expect.objectContaining({
+              status: 'ready',
+              classification: 'likely_typo',
+              originalQuery: 'celcius drink',
+              suggestedQuery: 'celsius drink',
+              confidence: 'high',
+              reason: 'Celsius appears to be the intended energy drink brand.',
+              shouldSuggest: true,
+              reviewedAt: '2026-03-17T12:00:02.000Z',
+            }),
+          }),
+        }),
+      )
+    })
   })
 
   it('reports optional Supabase health when local fallback is active', async () => {
@@ -2086,6 +2265,129 @@ describe('server handlers', () => {
       ready: true,
       entries: [{ candidate_id: 'one', fit_reason: 'Good city stroller', caveat: 'Slightly pricey' }],
       model: 'gpt-5-mini',
+    })
+  })
+
+  it('returns ready:false from query-quality poll when review is not yet stored', async () => {
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('celcius drink', [createFinalizeCandidate('one')], { mode: 'discovery_preview' }),
+    )
+
+    const response = createResponseRecorder()
+    const url = new URL('http://localhost/api/search/query-quality')
+    url.searchParams.set('token', 'opaque-discovery-token')
+    url.searchParams.set('query', 'celcius drink')
+
+    await handleQueryQualityPoll({ url: url.toString() }, response)
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({ ready: false })
+  })
+
+  it('returns a minimal suggestion from query-quality poll when review is ready', async () => {
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('celcius drink', [createFinalizeCandidate('one')], {
+        mode: 'discovery_preview',
+        queryQuality: {
+          status: 'ready',
+          classification: 'likely_typo',
+          originalQuery: 'celcius drink',
+          suggestedQuery: 'celsius drink',
+          confidence: 'high',
+          reason: 'Celsius appears to be the intended energy drink brand.',
+          shouldSuggest: true,
+          reviewedAt: '2026-04-14T12:00:00.000Z',
+        },
+      }),
+    )
+
+    const response = createResponseRecorder()
+    const url = new URL('http://localhost/api/search/query-quality')
+    url.searchParams.set('token', 'opaque-discovery-token')
+    url.searchParams.set('query', 'celcius drink')
+
+    await handleQueryQualityPoll({ url: url.toString() }, response)
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({
+      ready: true,
+      shouldSuggest: true,
+      originalQuery: 'celcius drink',
+      suggestedQuery: 'celsius drink',
+      reason: 'Celsius appears to be the intended energy drink brand.',
+      classification: 'likely_typo',
+      confidence: 'high',
+    })
+  })
+
+  it('returns no suggestion UI data from query-quality poll when review skipped', async () => {
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('shabbos art', [createFinalizeCandidate('one')], {
+        mode: 'discovery_preview',
+        queryQuality: {
+          status: 'skipped',
+          classification: 'ambiguous_language',
+          originalQuery: 'shabbos art',
+          suggestedQuery: '',
+          confidence: 'medium',
+          reason: 'Original wording may be intentional.',
+          shouldSuggest: false,
+          reviewedAt: '2026-04-14T12:00:00.000Z',
+        },
+      }),
+    )
+
+    const response = createResponseRecorder()
+    const url = new URL('http://localhost/api/search/query-quality')
+    url.searchParams.set('token', 'opaque-discovery-token')
+    url.searchParams.set('query', 'shabbos art')
+
+    await handleQueryQualityPoll({ url: url.toString() }, response)
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({
+      ready: true,
+      shouldSuggest: false,
+    })
+  })
+
+  it('rejects query-quality poll with missing token or query', async () => {
+    const response = createResponseRecorder()
+
+    await handleQueryQualityPoll({ url: 'http://localhost/api/search/query-quality' }, response)
+
+    expect(response.statusCode).toBe(400)
+    expect(JSON.parse(response.body)).toEqual({ error: 'token and query are required.' })
+  })
+
+  it('rejects query-quality poll with invalid query', async () => {
+    const response = createResponseRecorder()
+    const url = new URL('http://localhost/api/search/query-quality')
+    url.searchParams.set('token', 'opaque-discovery-token')
+    url.searchParams.set('query', 'x')
+
+    await handleQueryQualityPoll({ url: url.toString() }, response)
+
+    expect(response.statusCode).toBe(400)
+    expect(JSON.parse(response.body)).toEqual({ error: 'Invalid query.' })
+  })
+
+  it('rejects query-quality poll when the token does not match the stored discovery session', async () => {
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('celcius drink', [createFinalizeCandidate('one')]),
+    )
+    readStoredSearchCacheEntry.mockResolvedValueOnce(null)
+
+    const response = createResponseRecorder()
+    const url = new URL('http://localhost/api/search/query-quality')
+    url.searchParams.set('token', 'wrong-opaque-token')
+    url.searchParams.set('query', 'celcius drink')
+
+    await handleQueryQualityPoll({ url: url.toString() }, response)
+
+    expect(response.statusCode).toBe(409)
+    expect(JSON.parse(response.body)).toEqual({
+      error: 'Your search session expired. Start a new search.',
     })
   })
 

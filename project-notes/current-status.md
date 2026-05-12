@@ -37,7 +37,9 @@
 - Backend is deployed on Render through `backend/express-server.js`.
 - Render CORS now explicitly accepts the current `focamai.com` and `www.focamai.com` frontend origins, while still tolerating the older `focama.vercel.app` origin during transition.
 - `GET /api/search/rainforest-discover` is the primary homepage discovery route.
-- `GET /api/search/refine`, `POST /api/search/finalize`, `GET /api/search/enrichment-stream`, `GET /api/search/enrichment`, and `POST /api/search/retry-advice` are all active in the Render app.
+- `GET /api/search/rainforest-discover` now starts a background query-quality review after the normal discovery response when OpenAI is configured, and stores the review state under `selection.queryQuality` on the token-scoped session snapshot.
+- `GET /api/search/query-quality` exposes the stored query-quality review through simple polling. The homepage uses it to show an optional suggested-query prompt only when the backend review says to suggest one.
+- `GET /api/search/refine`, `POST /api/search/finalize`, `GET /api/search/enrichment-stream`, `GET /api/search/enrichment`, `GET /api/search/query-quality`, and `POST /api/search/retry-advice` are all active in the Render app.
 - `GET /api/analytics/dashboard` is a localhost-only development endpoint for the internal analytics page and returns `404` in production.
 - `GET /api/geo` intentionally stays on Vercel so the frontend can resolve the user’s country from Vercel headers and send an explicit Amazon domain on guided requests when the store picker is left on `Auto`.
 - The Amazon marketplace context now remembers the last saved marketplace in localStorage (`focamai_marketplace`) so repeat visits skip geo lookup when a preference or confident detection already exists.
@@ -48,6 +50,7 @@
 - Backend production observability is now wired for opt-in Sentry via `SENTRY_DSN`, with sanitized context and explicit reporting for background async failures plus unhandled server errors.
 - Rate limiting now uses a Supabase-backed `rate_limit_events` event log when Supabase is configured, with process-local memory fallback for local/test or table outages.
 - Marketplace listings without a known positive price are now treated as invalid inventory and filtered out deterministically before discovery preview, cached candidate reuse, or finalize/AI selection.
+- Query-quality review now has a polling-based frontend MVP: original results/refinement stay active, a small inline prompt can suggest a better query, accepting it starts a normal new guided search, and rejecting it keeps the original results. There is still no query-quality SSE or prewarm path.
 
 ## Current finalize reality
 - Finalize rebuilds the candidate pool from guided discovery cache instead of trusting a browser-posted rich pool.
@@ -72,6 +75,6 @@
 - Verify the browser golden path on the live app: fast cards first, modal AI copy later.
 - Verify the browser golden path after the new route-loading fallback and chunk-load recovery copy.
 - Improve weak-result and low-confidence handling.
-- Watch for weak discovery pools caused by obvious misspellings or brand-query drift. Current known example: `celcius drink` can come back as a generic energy-drink pool where Celsius never makes it into the candidates, so Haiku cannot recover it downstream.
-- If this continues to show up in live testing, prefer a conservative discovery-side recovery pass driven by provider `similarQueries` plus existing candidate match signals, rather than a giant manual typo dictionary.
+- Watch the polling-based query-quality MVP on weak discovery pools caused by obvious misspellings or brand-query drift. Current known example: `celcius drink` should be able to offer `celsius drink` when the backend review is high-confidence, while meaning-bearing language such as `shabbos art` should stay quiet unless the returned pool is clearly mismatched.
+- Do not add query-quality prewarm unless the MVP proves useful and the user explicitly chooses that next step.
 - Decide how affiliate-ready outbound links and disclosures should appear.

@@ -29,10 +29,13 @@
 
 ## Current guided flow
 - `GET /api/search/rainforest-discover` is the main discovery route used by the homepage.
+- Discovery now runs a background query-quality review after the normal response when OpenAI is configured, storing review state at `selection.queryQuality` on the token-scoped session snapshot.
+- `GET /api/search/query-quality` is the polling endpoint for that stored review, and the homepage can show a small optional suggested-query prompt when the review is ready and high-confidence.
 - `GET /api/search/refine` returns one short follow-up question while discovery runs.
 - `POST /api/search/finalize` rebuilds the candidate pool from guided cache, uses Haiku first, tops partial valid Haiku output up from deterministic fallback when needed, returns shortlist cards, and starts async enrichment work for the final displayed IDs.
 - Repeated same-query searches now reuse shared discovery candidates but get a fresh token-scoped session snapshot for finalize/enrichment, so older context-specific caveats cannot bleed into a new run.
 - Marketplace listings without a known positive price are now stripped out before guided preview caching, cached-result reuse, and finalize candidate selection so unavailable products do not reach AI or the UI shortlist.
+- Query-quality suggestions are now user-visible through polling only: accepting starts a normal new guided search for the suggested query, rejecting keeps the original results, and there is still no SSE or prewarm path.
 - The shortlisted detail helper now keeps a fast first pass for enrichment and retries failed ASIN detail calls in the background so later cache reads can improve without delaying AI copy further.
 - If a background detail retry succeeds later, the stored enrichment entry is patched with those bullets and the frontend keeps polling long enough for the open modal to pick them up.
 - Backend failures can now report to Sentry when `SENTRY_DSN` is configured, and background async errors are logged/reported instead of being swallowed.

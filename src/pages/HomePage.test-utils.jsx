@@ -60,11 +60,13 @@ export function setupHomePageTest() {
     window.localStorage.clear()
     delete document.documentElement.dataset.bgMode
     window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__ = true
+    window.__FOCAMAI_DISABLE_QUERY_QUALITY_POLLING__ = true
     window.__FOCAMAI_DISABLE_GEO_FETCH__ = true
   })
 
   afterEach(() => {
     delete window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__
+    delete window.__FOCAMAI_DISABLE_QUERY_QUALITY_POLLING__
     delete window.__FOCAMAI_DISABLE_GEO_FETCH__
     vi.useRealTimers()
     cleanup()

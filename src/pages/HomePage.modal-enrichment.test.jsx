@@ -57,7 +57,7 @@ describe('HomePage modal enrichment', () => {
 
     expect(screen.queryByText(/pricier than the smallest umbrella stroller options\./i)).not.toBeInTheDocument()
 
-    await user.click(screen.getByText('Travel stroller'))
+    await user.click(await screen.findByText('Travel stroller'))
 
     expect(await screen.findByText(/worth knowing/i)).toBeInTheDocument()
     expect(screen.getByText(/pricier than the smallest umbrella stroller options\./i)).toBeInTheDocument()

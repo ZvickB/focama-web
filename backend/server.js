@@ -22,6 +22,7 @@ import { createRetryAdviceHandler } from './lib/handlers/retry-advice-handler.js
 import { createFeedbackHandler } from './lib/handlers/feedback-handler.js'
 import { createSupabaseHealthHandler } from './lib/handlers/supabase-health-handler.js'
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
+import { generateQueryQualityReview } from './lib/query-quality-review.js'
 import { DEFAULT_FILTER_CONFIG, lacksKnownPositivePrice } from './lib/result-filter.js'
 import {
   getValidatedSearchRequest,
@@ -196,6 +197,50 @@ function buildDiscoveryPreviewSelection(results, extraSelection = {}) {
     selectedCandidateIds: results.map((item) => item.id),
     details: 'Discovery preview results were cached for the guided search flow. Finalized picks stay request-specific.',
     ...extraSelection,
+  }
+}
+
+function buildStoredQueryQualityReview({
+  status,
+  originalQuery,
+  review = null,
+  error = '',
+} = {}) {
+  const now = new Date().toISOString()
+
+  if (status === 'failed') {
+    return {
+      status: 'failed',
+      classification: 'ok',
+      originalQuery: truncateText(originalQuery, 200),
+      suggestedQuery: '',
+      confidence: 'low',
+      reason: '',
+      shouldSuggest: false,
+      error: truncateText(error, 160),
+      reviewedAt: now,
+    }
+  }
+
+  if (status === 'pending') {
+    return {
+      status: 'pending',
+      originalQuery: truncateText(originalQuery, 200),
+      suggestedQuery: '',
+      shouldSuggest: false,
+      reviewedAt: now,
+    }
+  }
+
+  return {
+    status: review?.shouldSuggest ? 'ready' : 'skipped',
+    classification: truncateText(review?.classification, 40) || 'ok',
+    originalQuery: truncateText(originalQuery, 200),
+    suggestedQuery: truncateText(review?.suggestedQuery, 100),
+    confidence: truncateText(review?.confidence, 20) || 'low',
+    reason: truncateText(review?.reason, 180),
+    shouldSuggest: Boolean(review?.shouldSuggest),
+    reviewedAt: review?.generatedAt || now,
   }
 }
 
@@ -528,6 +573,167 @@ async function ensureDiscoverySnapshotToken({
   }
 }
 
+async function writeQueryQualityState({
+  normalizedQuery,
+  discoveryToken,
+  discoveryScope,
+  queryQuality,
+}) {
+  const resolvedDiscoveryContext = await resolveDiscoveryContext(
+    normalizedQuery,
+    discoveryToken,
+    [discoveryScope],
+  )
+
+  if (!resolvedDiscoveryContext.isValid) {
+    return false
+  }
+
+  const { cachedEntry } = resolvedDiscoveryContext
+  const updatedSelection = {
+    ...(cachedEntry.selection && typeof cachedEntry.selection === 'object' ? cachedEntry.selection : {}),
+    queryQuality,
+  }
+
+  await writeSearchSnapshot({
+    productQuery: normalizedQuery,
+    details: '',
+    candidatePool: cachedEntry.candidatePool,
+    discoveryToken: discoveryToken || cachedEntry.discoveryToken || '',
+    results: Array.isArray(cachedEntry.results) ? cachedEntry.results : [],
+    selection: updatedSelection,
+    source: 'query_quality_review_update',
+    scope: discoveryScope,
+  })
+
+  return true
+}
+
+async function runQueryQualityReviewAsync({
+  normalizedQuery,
+  amazonDomain,
+  candidatePool,
+  previewResults,
+  discoveryToken,
+  discoveryScope,
+  apiKey,
+  model,
+}) {
+  const reviewStartedAt = nowMs()
+
+  logSearchFlowEvent('query_quality_review_started', {
+    route: '/api/search/rainforest-discover',
+    query: normalizedQuery,
+    candidateCount: Array.isArray(candidatePool?.candidates) ? candidatePool.candidates.length : 0,
+    previewCount: Array.isArray(previewResults) ? previewResults.length : 0,
+  })
+
+  await writeQueryQualityState({
+    normalizedQuery,
+    discoveryToken,
+    discoveryScope,
+    queryQuality: buildStoredQueryQualityReview({
+      status: 'pending',
+      originalQuery: normalizedQuery,
+    }),
+  })
+
+  try {
+    const review = await generateQueryQualityReview({
+      originalQuery: normalizedQuery,
+      amazonDomain,
+      candidatePool,
+      previewResultTitles: Array.isArray(previewResults) ? previewResults.map((item) => item?.title || '') : [],
+      similarQueries: Array.isArray(candidatePool?.similarQueries) ? candidatePool.similarQueries : [],
+      apiKey,
+      model,
+    })
+    const queryQuality = buildStoredQueryQualityReview({
+      originalQuery: normalizedQuery,
+      review,
+    })
+
+    await writeQueryQualityState({
+      normalizedQuery,
+      discoveryToken,
+      discoveryScope,
+      queryQuality,
+    })
+
+    logSearchFlowEvent(review?.shouldSuggest ? 'query_quality_review_ready' : 'query_quality_review_skipped', {
+      route: '/api/search/rainforest-discover',
+      query: normalizedQuery,
+      suggestedQuery: review?.shouldSuggest ? review.suggestedQuery : '',
+      classification: review?.classification || 'ok',
+      confidence: review?.confidence || 'low',
+      reviewMs: roundTimingDuration(nowMs() - reviewStartedAt),
+    })
+  } catch (error) {
+    await writeQueryQualityState({
+      normalizedQuery,
+      discoveryToken,
+      discoveryScope,
+      queryQuality: buildStoredQueryQualityReview({
+        status: 'failed',
+        originalQuery: normalizedQuery,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }),
+    })
+
+    logSearchFlowEvent('query_quality_review_failed', {
+      route: '/api/search/rainforest-discover',
+      query: normalizedQuery,
+      reviewMs: roundTimingDuration(nowMs() - reviewStartedAt),
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+
+    throw error
+  }
+}
+
+function startQueryQualityReview({
+  normalizedQuery,
+  amazonDomain,
+  candidatePool,
+  previewResults,
+  discoveryToken,
+  discoveryScope,
+}) {
+  if (!discoveryToken || !normalizedQuery) {
+    return
+  }
+
+  const apiKey = getEnv('OPENAI_API_KEY')
+
+  if (!apiKey) {
+    logSearchFlowEvent('query_quality_review_skipped', {
+      route: '/api/search/rainforest-discover',
+      query: normalizedQuery,
+      reason: 'missing_openai_api_key',
+    })
+    return
+  }
+
+  runInBackground(
+    () => runQueryQualityReviewAsync({
+      normalizedQuery,
+      amazonDomain,
+      candidatePool,
+      previewResults,
+      discoveryToken,
+      discoveryScope,
+      apiKey,
+      model: getRefinementModel(),
+    }),
+    {
+      amazonDomain,
+      label: 'query_quality_review_async',
+      query: normalizedQuery,
+      route: '/api/search/rainforest-discover',
+    },
+  )
+}
+
 function buildFinalizeFallbackResults(candidatePool) {
   return candidatePool.candidates
     .slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit)
@@ -693,6 +899,15 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
         { name: 'total', duration: nowMs() - requestStartedAt },
       ],
     })
+
+    startQueryQualityReview({
+      normalizedQuery,
+      amazonDomain,
+      candidatePool: tokenizedDiscovery.cachedEntry.candidatePool,
+      previewResults: normalizedCachedResults,
+      discoveryToken: tokenizedDiscovery.discoveryToken,
+      discoveryScope: getDiscoverySessionScope(tokenizedDiscovery.discoveryToken),
+    })
     return
   }
 
@@ -794,6 +1009,18 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
         { name: 'rainforest', duration: rainforestDuration },
         { name: 'total', duration: nowMs() - requestStartedAt },
       ],
+    })
+
+    startQueryQualityReview({
+      normalizedQuery,
+      amazonDomain,
+      candidatePool: {
+        ...artifacts.candidatePool,
+        amazonDomain,
+      },
+      previewResults: artifacts.results,
+      discoveryToken,
+      discoveryScope: discoverySessionScope,
     })
   } catch (error) {
     logSearchFlowEvent('rainforest_discovery_failed', {
@@ -1213,6 +1440,60 @@ export async function handleEnrichmentPoll(request, response) {
     ready: true,
     entries: enrichment.entries,
     model: enrichment.model || '',
+  })
+}
+
+export async function handleQueryQualityPoll(request, response) {
+  const requestUrl = new URL(request.url, 'http://localhost')
+  const token = requestUrl.searchParams.get('token') || ''
+  const query = requestUrl.searchParams.get('query') || ''
+  const amazonDomain = getRequestedAmazonDomain(requestUrl.searchParams.get('amazonDomain') || '')
+
+  if (!token || !query) {
+    sendJson(response, 400, { error: 'token and query are required.' })
+    return
+  }
+
+  const { isValid, normalizedQuery } = validateSearchInput(query, '')
+
+  if (!isValid) {
+    sendJson(response, 400, { error: 'Invalid query.' })
+    return
+  }
+
+  const queryQualityScopes = amazonDomain
+    ? [getAmazonMarketplaceScope(CACHE_SCOPE_RAINFOREST, amazonDomain)]
+    : [CACHE_SCOPE_DISCOVERY, CACHE_SCOPE_RAINFOREST]
+  const resolvedDiscoveryContext = await resolveDiscoveryContext(normalizedQuery, token, queryQualityScopes)
+
+  if (!resolvedDiscoveryContext.isValid) {
+    sendJson(response, resolvedDiscoveryContext.statusCode, { error: resolvedDiscoveryContext.error })
+    return
+  }
+
+  const queryQuality = resolvedDiscoveryContext.cachedEntry?.selection?.queryQuality
+
+  if (!queryQuality || queryQuality.status === 'pending') {
+    sendJson(response, 200, { ready: false })
+    return
+  }
+
+  if (queryQuality.status !== 'ready' || !queryQuality.shouldSuggest) {
+    sendJson(response, 200, {
+      ready: true,
+      shouldSuggest: false,
+    })
+    return
+  }
+
+  sendJson(response, 200, {
+    ready: true,
+    shouldSuggest: true,
+    originalQuery: queryQuality.originalQuery || normalizedQuery,
+    suggestedQuery: queryQuality.suggestedQuery || '',
+    reason: queryQuality.reason || '',
+    classification: queryQuality.classification || '',
+    confidence: queryQuality.confidence || '',
   })
 }
 
@@ -1920,6 +2201,11 @@ export function createApiServer() {
 
       if (request.method === 'GET' && requestUrl.pathname === '/api/search/enrichment') {
         await handleEnrichmentPoll(request, response)
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/search/query-quality') {
+        await handleQueryQualityPoll(request, response)
         return
       }
 

@@ -19,6 +19,8 @@ export const MAX_REFINEMENT_RETRIES = 2
 const FINAL_RESULT_BADGE_REVEAL_DELAY_MS = 240
 const ENRICHMENT_POLL_INTERVAL_MS = 1500
 const ENRICHMENT_POLL_TIMEOUT_MS = 30000
+const QUERY_QUALITY_POLL_INTERVAL_MS = 1500
+const QUERY_QUALITY_POLL_TIMEOUT_MS = 20000
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const FINALIZE_REQUEST_MODE_REFINED = 'guided_refined'
@@ -204,6 +206,14 @@ async function fetchEnrichment({ token, query, amazonDomain }) {
   return readJsonResponse(response, requestStartedAt)
 }
 
+async function fetchQueryQualitySuggestion({ token, query, amazonDomain }) {
+  const searchParams = new URLSearchParams({ token, query })
+  appendAmazonDomain(searchParams, amazonDomain)
+  const requestStartedAt = performance.now()
+  const response = await fetch(`${BACKEND_URL}/api/search/query-quality?${searchParams.toString()}`)
+  return readJsonResponse(response, requestStartedAt)
+}
+
 function mergeEnrichmentIntoResults(results, enrichmentEntries) {
   if (!Array.isArray(results) || !Array.isArray(enrichmentEntries) || enrichmentEntries.length === 0) {
     return results
@@ -292,6 +302,18 @@ function buildResultAnalyticsItems(results) {
   }))
 }
 
+function buildQuerySuggestionAnalyticsData(suggestion = {}) {
+  const originalQuery = String(suggestion.originalQuery || suggestion.query || '')
+  const suggestedQuery = String(suggestion.suggestedQuery || '')
+
+  return {
+    originalQueryLength: originalQuery.length,
+    suggestedQueryLength: suggestedQuery.length,
+    classification: suggestion.classification || '',
+    confidence: suggestion.confidence || '',
+  }
+}
+
 function findResultById(results, id) {
   if (!Array.isArray(results) || !id) {
     return null
@@ -375,8 +397,18 @@ export function useGuidedSearch() {
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false)
   const [isEnrichmentReady, setIsEnrichmentReady] = useState(false)
   const [isEnrichmentSettled, setIsEnrichmentSettled] = useState(false)
+  const [querySuggestion, setQuerySuggestion] = useState(null)
+  const [isCheckingQueryQuality, setIsCheckingQueryQuality] = useState(false)
+  const [isApplyingQuerySuggestion, setIsApplyingQuerySuggestion] = useState(false)
   const activeSearchIdRef = useRef(0)
   const enrichmentPollRef = useRef({ source: null, timerId: null, searchId: 0 })
+  const queryQualityPollRef = useRef({
+    timerId: null,
+    searchId: 0,
+    token: '',
+    query: '',
+    amazonDomain: '',
+  })
   const shouldContinueDetailHydrationRef = useRef(false)
   const discoveryAbortControllerRef = useRef(null)
   const finalizeAbortControllerRef = useRef(null)
@@ -417,6 +449,27 @@ export function useGuidedSearch() {
     shouldContinueDetailHydrationRef.current = false
   }
 
+  function stopQueryQualityPolling({ clearSuggestion = false } = {}) {
+    if (queryQualityPollRef.current.timerId !== null) {
+      window.clearTimeout(queryQualityPollRef.current.timerId)
+      queryQualityPollRef.current.timerId = null
+    }
+
+    queryQualityPollRef.current = {
+      timerId: null,
+      searchId: 0,
+      token: '',
+      query: '',
+      amazonDomain: '',
+    }
+    setIsCheckingQueryQuality(false)
+
+    if (clearSuggestion) {
+      setQuerySuggestion(null)
+      setIsApplyingQuerySuggestion(false)
+    }
+  }
+
   function cancelDiscoveryRequest() {
     if (discoveryAbortControllerRef.current) {
       discoveryAbortControllerRef.current.abort()
@@ -440,6 +493,7 @@ export function useGuidedSearch() {
 
   function expireSearchSession(message = createExpiredSessionMessage()) {
     stopEnrichmentPolling()
+    stopQueryQualityPolling({ clearSuggestion: true })
     cancelFinalizeRequest()
     finalizeMutation.reset()
     setDiscoveryToken('')
@@ -562,6 +616,94 @@ export function useGuidedSearch() {
 
       schedulePoll()
     }
+  }
+
+  function startQueryQualityPolling({ token, query, searchId, amazonDomain }) {
+    if (window.__FOCAMAI_DISABLE_QUERY_QUALITY_POLLING__) return
+    stopQueryQualityPolling({ clearSuggestion: true })
+
+    if (!token || !query) {
+      return
+    }
+
+    const startedAt = performance.now()
+    queryQualityPollRef.current = {
+      timerId: null,
+      searchId,
+      token,
+      query,
+      amazonDomain,
+    }
+    setIsCheckingQueryQuality(true)
+
+    async function poll() {
+      const currentPoll = queryQualityPollRef.current
+
+      if (
+        currentPoll.searchId !== searchId ||
+        currentPoll.token !== token ||
+        currentPoll.query !== query ||
+        currentPoll.amazonDomain !== amazonDomain
+      ) {
+        return
+      }
+
+      if (performance.now() - startedAt > QUERY_QUALITY_POLL_TIMEOUT_MS) {
+        stopQueryQualityPolling()
+        return
+      }
+
+      try {
+        const payload = await fetchQueryQualitySuggestion({ token, query, amazonDomain })
+        const latestPoll = queryQualityPollRef.current
+
+        if (
+          latestPoll.searchId !== searchId ||
+          latestPoll.token !== token ||
+          latestPoll.query !== query ||
+          latestPoll.amazonDomain !== amazonDomain ||
+          activeSearchIdRef.current !== searchId
+        ) {
+          return
+        }
+
+        if (payload.ready) {
+          if (payload.shouldSuggest && payload.suggestedQuery) {
+            const nextSuggestion = {
+              originalQuery: payload.originalQuery || query,
+              suggestedQuery: payload.suggestedQuery,
+              reason: payload.reason || '',
+              classification: payload.classification || '',
+              confidence: payload.confidence || '',
+              token,
+              query,
+              amazonDomain,
+              searchId,
+            }
+
+            setQuerySuggestion(nextSuggestion)
+            trackSearchEvent(
+              'query_quality_suggestion_shown',
+              buildQuerySuggestionAnalyticsData(nextSuggestion),
+            )
+          }
+
+          stopQueryQualityPolling()
+          return
+        }
+      } catch {
+        // Query-quality recovery is optional; keep the original results uninterrupted.
+      }
+
+      if (queryQualityPollRef.current.searchId === searchId) {
+        queryQualityPollRef.current.timerId = window.setTimeout(
+          poll,
+          QUERY_QUALITY_POLL_INTERVAL_MS,
+        )
+      }
+    }
+
+    void poll()
   }
 
   function applyFinalizePayload(payload, variables) {
@@ -771,6 +913,7 @@ export function useGuidedSearch() {
     cancelFinalizeRequest()
     cancelRefinementRequest()
     stopEnrichmentPolling()
+    stopQueryQualityPolling()
   }, [])
 
   useEffect(() => {
@@ -815,6 +958,7 @@ export function useGuidedSearch() {
   ) {
     cancelDiscoveryRequest()
     stopEnrichmentPolling()
+    stopQueryQualityPolling({ clearSuggestion: true })
     cancelFinalizeRequest()
     cancelRefinementRequest()
     invalidateRetryAdviceRequests()
@@ -844,6 +988,8 @@ export function useGuidedSearch() {
     setRefinementPrompt(null)
     setIsEnrichmentReady(false)
     setIsEnrichmentSettled(false)
+    setQuerySuggestion(null)
+    setIsApplyingQuerySuggestion(false)
     hasTrackedRefinementViewRef.current = false
     hasTrackedPreviewImpressionsRef.current = false
   }
@@ -855,6 +1001,7 @@ export function useGuidedSearch() {
     cancelFinalizeRequest()
     cancelRefinementRequest()
     stopEnrichmentPolling()
+    stopQueryQualityPolling({ clearSuggestion: true })
     finalizeMutation.reset()
     retryAdviceMutation.reset()
     setProductQuery('')
@@ -886,6 +1033,8 @@ export function useGuidedSearch() {
     setIsGeneratingPrompt(false)
     setIsEnrichmentReady(false)
     setIsEnrichmentSettled(false)
+    setQuerySuggestion(null)
+    setIsApplyingQuerySuggestion(false)
     analyticsSearchIdRef.current = ''
     setAnalyticsSearchId('')
     setAnalyticsSessionId('')
@@ -961,10 +1110,18 @@ export function useGuidedSearch() {
           return
         }
 
+        const responseAmazonDomain = payload.amazonDomain || nextAmazonDomain
+
         setDiscoveryToken(payload.discoveryToken || '')
-        setSubmittedAmazonDomain(payload.amazonDomain || nextAmazonDomain)
+        setSubmittedAmazonDomain(responseAmazonDomain)
         setCandidatePool(payload.candidatePool || null)
         setPreviewResults(payload.previewResults || [])
+        startQueryQualityPolling({
+          token: payload.discoveryToken,
+          query: normalizedQuery,
+          searchId: nextSearchId,
+          amazonDomain: responseAmazonDomain,
+        })
         setRequestTiming((current) => ({
           ...current,
           discover: payload.timing || null,
@@ -1183,6 +1340,46 @@ export function useGuidedSearch() {
     }
   }
 
+  function handleRejectQuerySuggestion() {
+    if (querySuggestion) {
+      trackSearchEvent(
+        'query_quality_suggestion_rejected',
+        buildQuerySuggestionAnalyticsData(querySuggestion),
+      )
+    }
+
+    setQuerySuggestion(null)
+    setIsApplyingQuerySuggestion(false)
+  }
+
+  function handleTryQuerySuggestion() {
+    const nextQuery = String(querySuggestion?.suggestedQuery || '').trim()
+
+    if (!nextQuery) {
+      setQuerySuggestion(null)
+      setIsApplyingQuerySuggestion(false)
+      return
+    }
+
+    const { error, isValid, normalizedQuery } = validateSearchInput(nextQuery, '')
+
+    if (!isValid) {
+      setErrorMessage(error)
+      setQuerySuggestion(null)
+      setIsApplyingQuerySuggestion(false)
+      return
+    }
+
+    trackSearchEvent(
+      'query_quality_suggestion_accepted',
+      buildQuerySuggestionAnalyticsData(querySuggestion),
+    )
+    setIsApplyingQuerySuggestion(true)
+    setProductQuery(normalizedQuery)
+    setQuerySuggestion(null)
+    startGuidedSearch(normalizedQuery)
+  }
+
   function invalidateRetryAdviceRequests() {
     retryAdviceRequestIdRef.current += 1
   }
@@ -1295,11 +1492,14 @@ export function useGuidedSearch() {
     isEnrichmentReady,
     isEnrichmentSettled,
     isFinalizing,
+    isApplyingQuerySuggestion,
+    isCheckingQueryQuality,
     isGeneratingRetryAdvice: retryAdviceMutation.isPending,
     isGeneratingPrompt,
     isLoading,
     previousResults,
     productQuery,
+    querySuggestion,
     requestTiming,
     refinementPrompt,
     resolvedAmazonDomain,
@@ -1316,8 +1516,10 @@ export function useGuidedSearch() {
     submittedQuery,
     beginGuidedSearch,
     handleFinalizeRefinement,
+    handleRejectQuerySuggestion,
     handleRetryAdviceRequest,
     handleShowProductsNow,
+    handleTryQuerySuggestion,
     resetToNewSearch,
     setRetryFeedback: updateRetryFeedback,
     setFollowUpNotes,

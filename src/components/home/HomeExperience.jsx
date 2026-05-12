@@ -243,6 +243,51 @@ function TimingPanel({ requestTiming }) {
   )
 }
 
+function QuerySuggestionPrompt({
+  isApplying,
+  onKeepResults,
+  onTrySuggestedSearch,
+  suggestion,
+}) {
+  if (!suggestion?.suggestedQuery) {
+    return null
+  }
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="rounded-[24px] border border-[#d9e6e8] bg-[linear-gradient(180deg,rgba(248,253,253,0.98),rgba(255,255,255,0.96))] p-4 shadow-[0_18px_56px_-42px_rgba(15,97,117,0.34)] sm:flex sm:items-center sm:justify-between sm:gap-4"
+    >
+      <div className="min-w-0 space-y-1 text-left">
+        <p className="text-sm font-medium text-slate-600">
+          We searched for &quot;{suggestion.originalQuery || suggestion.query}&quot;.
+        </p>
+        <p className="break-words text-base font-semibold text-[#155f70]">
+          Try &quot;{suggestion.suggestedQuery}&quot; instead?
+        </p>
+      </div>
+      <div className="mt-3 flex flex-col gap-2 sm:mt-0 sm:flex-row sm:items-center">
+        <Button
+          type="button"
+          disabled={isApplying}
+          className="h-11 w-full rounded-[18px] bg-primary px-4 text-sm text-primary-foreground shadow-[0_18px_42px_-28px_rgba(15,97,117,0.38)] hover:bg-primary/90 sm:w-auto"
+          onClick={onTrySuggestedSearch}
+        >
+          {isApplying ? 'Starting...' : 'Try suggested search'}
+        </Button>
+        <button
+          type="button"
+          className="h-11 w-full rounded-[18px] px-4 text-sm font-medium text-slate-500 transition-colors hover:text-slate-800 sm:w-auto"
+          onClick={onKeepResults}
+        >
+          Keep these results
+        </button>
+      </div>
+    </div>
+  )
+}
+
 
 function ResultsSectionFallback() {
   return (
@@ -755,6 +800,12 @@ function OpenLayout(props) {
         </section>
 
         <section className="w-full max-w-[1100px] space-y-4">
+          <QuerySuggestionPrompt
+            isApplying={state.isApplyingQuerySuggestion}
+            onKeepResults={state.handleRejectQuerySuggestion}
+            onTrySuggestedSearch={state.handleTryQuerySuggestion}
+            suggestion={state.querySuggestion}
+          />
           {hasFinalResults && !hasOpenedModal ? (
             <p role="status" aria-live="polite" className="text-center text-sm text-slate-400">
               ✦&nbsp; Open any result to see why it fits you and what to watch out for.
