@@ -756,21 +756,9 @@ function OpenLayout(props) {
 
         <section className="w-full max-w-[1100px] space-y-4">
           {hasFinalResults && !hasOpenedModal ? (
-            <div
-              role="status"
-              aria-live="polite"
-              className="rounded-[24px] border border-[#e6dacc] bg-[linear-gradient(180deg,rgba(250,246,240,0.9),rgba(255,255,255,0.96))] px-4 py-4 text-left text-slate-600 shadow-[0_22px_58px_-42px_rgba(120,87,63,0.22)] sm:px-5"
-            >
-              <div className="flex items-start gap-3">
-                <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
-                  <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
-                  <span className="relative h-2.5 w-2.5 rounded-full bg-primary/70" />
-                </span>
-                <p className="text-sm leading-6 text-slate-900">
-                  Open any result to see why it fits <em>your</em> needs and what to watch for.
-                </p>
-              </div>
-            </div>
+            <p role="status" aria-live="polite" className="text-center text-sm text-slate-400">
+              ✦&nbsp; Open any result to see why it fits you and what to watch out for.
+            </p>
           ) : null}
           {showLoadingResults ? (
             <div ref={resultsViewportRef} className="max-h-[360px] scroll-mt-28 overflow-hidden">

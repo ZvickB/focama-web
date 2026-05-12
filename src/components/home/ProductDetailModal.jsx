@@ -18,6 +18,48 @@ function resolveAmazonRetailerLabel(subtitle, selectedAmazonDomain, resolvedAmaz
   return domain.replace(/^amazon\./, 'Amazon.')
 }
 
+function RetailerActions({ className = '', item, onRetailerClick, retailerLabel }) {
+  return (
+    <div className={`space-y-2.5 ${className}`}>
+      {item.link ? (
+        <>
+          <Button
+            asChild
+            className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
+          >
+            <a href={item.link} target="_blank" rel="noreferrer" onClick={onRetailerClick}>
+              {retailerLabel ? `View on ${retailerLabel}` : 'View on retailer site'}
+              <ArrowUpRight className="h-4 w-4" />
+            </a>
+          </Button>
+          <p className="text-center text-xs leading-5 text-slate-500">
+            Retailer links may be affiliate links, which can support Focamai at no extra cost to
+            you.{' '}
+            <Link
+              to="/affiliate-disclosure"
+              className="font-medium text-slate-600 underline underline-offset-2 hover:text-slate-800"
+            >
+              Learn more
+            </Link>
+            .
+          </p>
+        </>
+      ) : (
+        <Button
+          type="button"
+          disabled
+          className="h-12 w-full gap-2 rounded-2xl bg-[#ede3d6] text-slate-500"
+        >
+          Retailer link unavailable
+        </Button>
+      )}
+      <p className="text-center text-xs leading-5 text-slate-400">
+        Prices and availability can change after you leave Focamai.
+      </p>
+    </div>
+  )
+}
+
 export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose, onRetailerClick }) {
   const fitReason = item?.fit_reason || item?.fitReason || ''
   const caveat = item?.caveat || ''
@@ -110,62 +152,25 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
 
         <div
           ref={contentRef}
-          className="relative grid flex-1 gap-6 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] sm:gap-8 sm:px-6 lg:min-h-0 lg:grid-cols-[2fr_3fr] lg:gap-8 lg:overflow-hidden lg:px-8"
+          className="relative grid flex-1 gap-6 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] sm:gap-8 sm:px-6 lg:min-h-0 lg:grid-cols-[2fr_3fr] lg:grid-rows-[minmax(0,1fr)_auto] lg:gap-8 lg:overflow-hidden lg:px-8"
           style={{ scrollbarGutter: 'stable' }}
         >
-          <div className="flex min-h-0 flex-col gap-4 lg:h-full">
-            <div
-              className="flex min-h-[16rem] overflow-hidden rounded-[24px] border border-[#eee5da] shadow-[0_22px_70px_-34px_rgba(120,87,63,0.24)] sm:min-h-[20rem] lg:min-h-0 lg:flex-1"
-              style={{
-                background:
-                  'radial-gradient(circle at 18% 12%, rgba(229,155,38,0.12), transparent 32%), radial-gradient(circle at 84% 0%, rgba(15,97,117,0.08), transparent 28%), linear-gradient(180deg, rgba(250,246,240,0.86), rgba(255,255,255,0.92))',
-              }}
-            >
-              <img
-                src={item.image}
-                alt={item.title}
-                className="h-full w-full object-contain mix-blend-multiply"
-              />
-            </div>
-            {item.link ? (
-              <div className="space-y-2.5">
-                <Button
-                  asChild
-                  className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
-                >
-                  <a href={item.link} target="_blank" rel="noreferrer" onClick={onRetailerClick}>
-                    {retailerLabel ? `View on ${retailerLabel}` : 'View on retailer site'}
-                    <ArrowUpRight className="h-4 w-4" />
-                  </a>
-                </Button>
-                <p className="text-center text-xs leading-5 text-slate-500">
-                  Retailer links may be affiliate links, which can support Focamai at no extra cost
-                  to you.{' '}
-                  <Link
-                    to="/affiliate-disclosure"
-                    className="font-medium text-slate-600 underline underline-offset-2 hover:text-slate-800"
-                  >
-                    Learn more
-                  </Link>
-                  .
-                </p>
-              </div>
-            ) : (
-              <Button
-                type="button"
-                disabled
-                className="h-12 w-full gap-2 rounded-2xl bg-[#ede3d6] text-slate-500"
-              >
-                Retailer link unavailable
-              </Button>
-            )}
-            <p className="text-center text-xs leading-5 text-slate-400">
-              Prices and availability can change after you leave Focamai.
-            </p>
+          <div
+            className="flex min-h-[16rem] overflow-hidden rounded-[24px] border border-[#eee5da] shadow-[0_22px_70px_-34px_rgba(120,87,63,0.24)] sm:min-h-[20rem] lg:col-start-1 lg:row-start-1 lg:min-h-0"
+            style={{
+              background:
+                'radial-gradient(circle at 18% 12%, rgba(229,155,38,0.12), transparent 32%), radial-gradient(circle at 84% 0%, rgba(15,97,117,0.08), transparent 28%), linear-gradient(180deg, rgba(250,246,240,0.86), rgba(255,255,255,0.92))',
+            }}
+          >
+            <img
+              src={item.image}
+              alt={item.title}
+              className="h-full w-full object-contain mix-blend-multiply"
+            />
           </div>
 
           <div
-            className="flex flex-col gap-4 pr-2 sm:pr-3 lg:min-h-0 lg:overflow-y-auto lg:pr-4"
+            className="flex flex-col gap-4 pr-2 sm:pr-3 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:min-h-0 lg:overflow-y-auto lg:pr-4"
             style={{ scrollbarGutter: 'stable' }}
           >
             <div className="space-y-1.5">
@@ -263,7 +268,15 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
                 </span>
               </div>
             )}
+
           </div>
+
+          <RetailerActions
+            className="lg:col-start-1 lg:row-start-2"
+            item={item}
+            onRetailerClick={onRetailerClick}
+            retailerLabel={retailerLabel}
+          />
 
           {showScrollHint ? (
             <div
@@ -277,15 +290,14 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
           ) : null}
         </div>
         <div className="border-t border-[#eadfd2] px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex justify-center">
-            <button
-              type="button"
-              className="w-full py-1.5 text-center text-sm text-slate-500 transition-colors hover:text-slate-700 lg:w-auto lg:min-w-[180px]"
-              onClick={onClose}
-            >
-              Back to results
-            </button>
-          </div>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 py-1.5 text-sm text-slate-500 transition-colors hover:text-slate-700"
+            onClick={onClose}
+          >
+            <span aria-hidden="true">←</span>
+            Back to results
+          </button>
         </div>
       </MotionDiv>
     </MotionDiv>
