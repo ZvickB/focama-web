@@ -288,7 +288,7 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
           {showScrollHint ? (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute left-1/2 top-[calc(100%-1.25rem)] z-10 flex -translate-x-1/2 justify-center lg:hidden"
+              className="pointer-events-none absolute left-1/2 top-[calc(100%-1.25rem)] z-10 flex -translate-x-1/2 justify-center"
             >
               <div className="rounded-full border border-stone-200/80 bg-white p-1 shadow-sm">
                 <ChevronDown className="h-5 w-5 animate-bounce text-[#9f7f66]" />
