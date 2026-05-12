@@ -17,6 +17,8 @@
 - Verify route chunk-load recovery and the guided search transition states in the live browser once the next frontend deploy is available.
 - Watch whether the new inline marketplace prompt feels helpful or distracting, and adjust its timing/copy if testers treat it as friction.
 - Improve low-confidence and weak-result handling instead of quietly showing poor results.
+- Add a conservative weak-pool recovery pass for discovery. Current problem: obvious misspellings such as `celcius drink` can produce a generic energy-drink candidate pool, and Haiku cannot repair that because it is forced to choose only from the provided candidate ids.
+- Proposed recovery shape: after the first discovery pass, inspect candidate match signals plus upstream `similarQueries`; when the pool looks weak for the original query and a strong recovery hint exists, run one retry with the recovered query, compare the pools, and keep the stronger one. Keep this to one retry max, log both original and recovered query, and avoid broad always-on typo rewriting.
 - Review early tester feedback from the new homepage FAB and decide whether the reveal timing, wording, or question set should change.
 - Decide whether to add a proactive pool-mismatch nudge before the user opens retry.
 - Replace the About page with a `Why Focamai` page, then update nav and add a clear return-home path.

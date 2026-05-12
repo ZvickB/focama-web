@@ -27,3 +27,5 @@ dist-ssr
 
 .env
 temp-data/
+.screenshots
+project-notes/untracked/

@@ -72,4 +72,6 @@
 - Verify the browser golden path on the live app: fast cards first, modal AI copy later.
 - Verify the browser golden path after the new route-loading fallback and chunk-load recovery copy.
 - Improve weak-result and low-confidence handling.
+- Watch for weak discovery pools caused by obvious misspellings or brand-query drift. Current known example: `celcius drink` can come back as a generic energy-drink pool where Celsius never makes it into the candidates, so Haiku cannot recover it downstream.
+- If this continues to show up in live testing, prefer a conservative discovery-side recovery pass driven by provider `similarQueries` plus existing candidate match signals, rather than a giant manual typo dictionary.
 - Decide how affiliate-ready outbound links and disclosures should appear.
