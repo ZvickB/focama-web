@@ -3,6 +3,7 @@ import { motion } from 'motion/react'
 import { ArrowUpRight, ChevronDown, Star, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
+import logo from '@/assets/logo_master_version.svg'
 import { resolveAmazonDomainForRequest } from '@/components/home/useGuidedSearch.js'
 import { Button } from '@/components/ui/button.jsx'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
@@ -32,9 +33,6 @@ function RetailerActions({ className = '', item, onRetailerClick, retailerLabel 
               <ArrowUpRight className="h-4 w-4" />
             </a>
           </Button>
-          <p className="text-center text-xs leading-5 text-slate-500">
-            As an Amazon Associate I earn from qualifying purchases.
-          </p>
         </>
       ) : (
         <Button
@@ -45,9 +43,6 @@ function RetailerActions({ className = '', item, onRetailerClick, retailerLabel 
           Retailer link unavailable
         </Button>
       )}
-      <p className="text-center text-xs leading-5 text-slate-400">
-        Prices and availability can change after you leave Focamai.
-      </p>
     </div>
   )
 }
@@ -62,6 +57,7 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
   const contentRef = useRef(null)
   const [showScrollHint, setShowScrollHint] = useState(true)
   const [bulletsExpanded, setBulletsExpanded] = useState(false)
+  const [imgError, setImgError] = useState(false)
 
   useEffect(() => {
     const el = contentRef.current
@@ -94,6 +90,7 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
 
   useEffect(() => {
     setBulletsExpanded(false)
+    setImgError(false)
   }, [item?.id])
 
   if (!item) {
@@ -154,11 +151,23 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
                 'radial-gradient(circle at 18% 12%, rgba(229,155,38,0.12), transparent 32%), radial-gradient(circle at 84% 0%, rgba(15,97,117,0.08), transparent 28%), linear-gradient(180deg, rgba(250,246,240,0.86), rgba(255,255,255,0.92))',
             }}
           >
-            <img
-              src={item.image}
-              alt={item.title}
-              className="h-full w-full object-contain mix-blend-multiply"
-            />
+            {imgError ? (
+              <div className="flex h-full w-full items-center justify-center bg-stone-200/55">
+                <img
+                  src={logo}
+                  alt=""
+                  aria-hidden="true"
+                  className="h-20 w-20 object-contain opacity-[0.14] sm:h-24 sm:w-24"
+                />
+              </div>
+            ) : (
+              <img
+                src={item.image}
+                alt={item.title}
+                className="h-full w-full object-contain mix-blend-multiply"
+                onError={() => setImgError(true)}
+              />
+            )}
           </div>
 
           <div
@@ -281,15 +290,27 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
             </div>
           ) : null}
         </div>
-        <div className="border-t border-[#eadfd2] px-4 py-4 sm:px-6 lg:px-8">
-          <button
-            type="button"
-            className="flex items-center gap-1.5 py-1.5 text-sm text-slate-500 transition-colors hover:text-slate-700"
-            onClick={onClose}
-          >
-            <span aria-hidden="true">←</span>
-            Back to results
-          </button>
+        <div className="border-t border-[#eadfd2] px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
+            <button
+              type="button"
+              className="flex items-center gap-1.5 py-1 text-sm text-slate-500 transition-colors hover:text-slate-700"
+              onClick={onClose}
+            >
+              <span aria-hidden="true">←</span>
+              Back to results
+            </button>
+            <div className="flex flex-col items-end gap-0.5 text-right">
+              {item.link ? (
+                <p className="text-xs leading-5 text-slate-400">
+                  As an Amazon Associate I earn from qualifying purchases.
+                </p>
+              ) : null}
+              <p className="text-xs leading-5 text-slate-400">
+                Prices and availability may change after you leave Focamai.
+              </p>
+            </div>
+          </div>
         </div>
       </MotionDiv>
     </MotionDiv>

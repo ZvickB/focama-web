@@ -1,6 +1,6 @@
 import { DEFAULT_REFINEMENT_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
 
-const MAX_QUERY_LENGTH = 80
+const MAX_QUERY_LENGTH = 100
 const MAX_SHORTLIST_ITEMS = 6
 const MAX_TITLE_LENGTH = 160
 const MAX_RATIONALE_LENGTH = 120
@@ -106,7 +106,7 @@ function buildRetryAdviceInput({
     'A shopper rejected a set of product picks. Suggest a better fresh search they can try next.',
     'Always return recommendation as new_search.',
     'Always provide a concise suggested_query that can be pasted into a normal shopping search box.',
-    'The suggested_query must be 80 characters or fewer — write a tight, complete phrase.',
+    'The suggested_query must be 100 characters or fewer — write a tight, complete phrase.',
     'Rewrite the search more specifically around the feedback while keeping the shopper intent.',
     'Write rationale as exactly 1 sentence of natural UI copy.',
     'Keep rationale concise, usually 10 to 20 words, and ideally under 120 characters.',

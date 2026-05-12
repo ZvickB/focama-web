@@ -61,7 +61,9 @@ describe('retry advice', () => {
       'suggested_query',
       'rationale',
     ])
+    expect(parsedBody.text.format.schema.properties.suggested_query.maxLength).toBe(100)
     expect(parsedBody.input[1].content).toContain('Always return recommendation as new_search.')
+    expect(parsedBody.input[1].content).toContain('The suggested_query must be 100 characters or fewer')
     expect(parsedBody.input[1].content).toContain('Write rationale as exactly 1 sentence of natural UI copy.')
     expect(parsedBody.input[1].content).toContain('User feedback: Still too bulky for city travel.')
     expect(parsedBody.input[1].content).toContain('1. Full-size stroller')
