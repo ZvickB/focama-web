@@ -1,6 +1,20 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { miniEnrichSelectedCandidates } from './ai-selector.js'
+const anthropicMocks = vi.hoisted(() => ({
+  create: vi.fn(),
+}))
+
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: vi.fn(function Anthropic() {
+    return {
+      messages: {
+        create: anthropicMocks.create,
+      },
+    }
+  }),
+}))
+
+import { haikuLockWinnersAndBadges, miniEnrichSelectedCandidates } from './ai-selector.js'
 
 function createCandidate(overrides = {}) {
   return {
@@ -33,7 +47,121 @@ function createCandidate(overrides = {}) {
   }
 }
 
+function createCandidatePool(candidateCount = 4) {
+  return {
+    query: 'travel stroller',
+    details: 'compact enough for flights',
+    candidates: Array.from({ length: candidateCount }, (_entry, index) => createCandidate({
+      id: `prod-${index + 1}`,
+      title: `Travel stroller ${index + 1}`,
+      price: `$${199 + index}.99`,
+      rating: 4.7 - (index * 0.1),
+    })),
+  }
+}
+
+function mockHaikuResponse(text, usage = { input_tokens: 12, output_tokens: 4 }) {
+  anthropicMocks.create.mockResolvedValue({
+    content: [{ type: 'text', text }],
+    usage,
+  })
+}
+
 describe('ai selector', () => {
+  beforeEach(() => {
+    anthropicMocks.create.mockReset()
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('returns no Haiku picks without calling the model when the pool is empty', async () => {
+    const result = await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 6,
+      candidatePool: {
+        query: 'stroller',
+        details: '',
+        candidates: [],
+      },
+    })
+
+    expect(anthropicMocks.create).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      model: 'claude-haiku-4-5-20251001',
+      lockedIds: [],
+      usage: null,
+    })
+  })
+
+  it('parses Haiku JSON from a text response and caps picks to the requested count', async () => {
+    mockHaikuResponse('Sure:\n{"picks":[{"candidate_id":"prod-3"},{"candidate_id":"prod-1"},{"candidate_id":"prod-2"}]}')
+
+    const result = await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 2,
+      candidatePool: createCandidatePool(3),
+    })
+
+    expect(anthropicMocks.create).toHaveBeenCalledTimes(1)
+    expect(result.lockedIds).toEqual(['prod-3', 'prod-1'])
+    expect(result.usage).toEqual({
+      inputTokens: 12,
+      outputTokens: 4,
+    })
+  })
+
+  it('rejects duplicate and out-of-pool Haiku ids while keeping valid ids in order', async () => {
+    mockHaikuResponse(JSON.stringify({
+      picks: [
+        { candidate_id: 'prod-1' },
+        { candidate_id: 'prod-1' },
+        { candidate_id: 'not-in-pool' },
+        { candidate_id: 'prod-2' },
+      ],
+    }))
+
+    const result = await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 4,
+      candidatePool: createCandidatePool(3),
+    })
+
+    expect(result.lockedIds).toEqual(['prod-1', 'prod-2'])
+  })
+
+  it('returns an empty Haiku lock instead of throwing on malformed model text', async () => {
+    mockHaikuResponse('this is not JSON')
+
+    const result = await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 3,
+      candidatePool: createCandidatePool(3),
+    })
+
+    expect(result.lockedIds).toEqual([])
+    expect(result.usage).toEqual({
+      inputTokens: 12,
+      outputTokens: 4,
+    })
+  })
+
+  it('returns partial Haiku selections without inventing fallback ids in the selector layer', async () => {
+    mockHaikuResponse(JSON.stringify({
+      picks: [{ candidate_id: 'prod-2' }],
+    }))
+
+    const result = await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 3,
+      candidatePool: createCandidatePool(4),
+    })
+
+    expect(result.lockedIds).toEqual(['prod-2'])
+  })
+
   it('passes feature bullets into mini enrichment and preserves them in the stored entries', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -83,4 +211,59 @@ describe('ai selector', () => {
     ])
   })
 
+  it('reports whether mini enrichment preserved the locked shortlist order', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          enriched: [
+            {
+              candidate_id: 'prod-2',
+              fit_reason: 'Second product was explained first.',
+              caveat: 'It is not the first locked pick.',
+            },
+            {
+              candidate_id: 'prod-1',
+              fit_reason: 'First product was explained second.',
+              caveat: 'The model changed the intended order.',
+            },
+          ],
+        }),
+      }),
+    })
+
+    const result = await miniEnrichSelectedCandidates(
+      {
+        apiKey: 'test-key',
+        lockedIds: ['prod-1', 'prod-2'],
+        candidatePool: createCandidatePool(2),
+      },
+      fetchMock,
+    )
+
+    expect(result.enrichedIds).toEqual(['prod-2', 'prod-1'])
+    expect(result.preservedOrder).toBe(false)
+  })
+
+  it('skips mini enrichment when there are no locked ids', async () => {
+    const fetchMock = vi.fn()
+
+    const result = await miniEnrichSelectedCandidates(
+      {
+        apiKey: 'test-key',
+        lockedIds: [],
+        candidatePool: createCandidatePool(2),
+      },
+      fetchMock,
+    )
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      model: 'gpt-5-mini',
+      enriched: [],
+      enrichedIds: [],
+      usage: null,
+      preservedOrder: true,
+    })
+  })
 })

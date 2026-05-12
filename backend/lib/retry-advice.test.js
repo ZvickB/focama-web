@@ -66,4 +66,185 @@ describe('retry advice', () => {
     expect(parsedBody.input[1].content).toContain('User feedback: Still too bulky for city travel.')
     expect(parsedBody.input[1].content).toContain('1. Full-size stroller')
   })
+
+  it('throws a useful error when OpenAI rejects the request', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      text: async () => 'rate limit exceeded',
+    })
+
+    await expect(generateRetryAdvice(
+      {
+        productQuery: 'stroller',
+        rejectionFeedback: 'Too bulky.',
+        apiKey: 'test-key',
+      },
+      fetchMock,
+    )).rejects.toThrow('OpenAI retry_advice failed: rate limit exceeded')
+  })
+
+  it('throws when OpenAI returns malformed structured output', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: '{not valid json',
+      }),
+    })
+
+    await expect(generateRetryAdvice(
+      {
+        productQuery: 'stroller',
+        rejectionFeedback: 'Too bulky.',
+        apiKey: 'test-key',
+      },
+      fetchMock,
+    )).rejects.toThrow()
+  })
+
+  it('throws when OpenAI returns no structured output', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: '   ',
+        output: [
+          {
+            content: [
+              { text: '   ' },
+            ],
+          },
+        ],
+      }),
+    })
+
+    await expect(generateRetryAdvice(
+      {
+        productQuery: 'stroller',
+        rejectionFeedback: 'Too bulky.',
+        apiKey: 'test-key',
+      },
+      fetchMock,
+    )).rejects.toThrow('OpenAI retry_advice returned no structured output.')
+  })
+
+  it('normalizes model output from response content chunks', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        usage: {
+          input_tokens: 'invalid',
+          output_tokens: 12,
+          total_tokens: 34,
+          output_tokens_details: {
+            reasoning_tokens: 2,
+          },
+        },
+        output: [
+          {
+            content: [
+              {
+                text: JSON.stringify({
+                  recommendation: 'new_search',
+                  suggested_query: '  lightweight   stroller   for   city  travel  ',
+                  rationale: '  Narrows   the search to lighter strollers for daily city trips.  ',
+                }),
+              },
+            ],
+          },
+        ],
+      }),
+    })
+
+    const result = await generateRetryAdvice(
+      {
+        productQuery: '  stroller  ',
+        rejectionFeedback: 'Too bulky.',
+        apiKey: 'test-key',
+      },
+      fetchMock,
+    )
+
+    expect(result).toMatchObject({
+      recommendation: 'new_search',
+      suggestedQuery: 'lightweight stroller for city travel',
+      rationale: 'Narrows the search to lighter strollers for daily city trips.',
+      usage: {
+        inputTokens: 0,
+        outputTokens: 12,
+        totalTokens: 34,
+        reasoningTokens: 2,
+      },
+    })
+  })
+
+  it('falls back to the original query and default rationale when model fields are empty', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          recommendation: 'new_search',
+          suggested_query: '   ',
+          rationale: '   ',
+        }),
+      }),
+    })
+
+    const result = await generateRetryAdvice(
+      {
+        productQuery: '  travel   stroller  ',
+        rejectionFeedback: 'Too bulky.',
+        apiKey: 'test-key',
+      },
+      fetchMock,
+    )
+
+    expect(result).toMatchObject({
+      recommendation: 'new_search',
+      suggestedQuery: 'travel stroller',
+      rationale: 'Focuses the search more closely on what you want.',
+      usage: null,
+    })
+  })
+
+  it('normalizes shortlist context before sending it to OpenAI', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          recommendation: 'new_search',
+          suggested_query: 'compact stroller',
+          rationale: 'Focuses on compact options.',
+        }),
+      }),
+    })
+
+    await generateRetryAdvice(
+      {
+        productQuery: 'stroller',
+        followUpNotes: '  folds   fast  ',
+        rejectionFeedback: '  too   bulky  ',
+        shortlist: [
+          { title: '  First   stroller  ' },
+          { title: '' },
+          { title: 'Second stroller'.repeat(20) },
+          { title: 'Third stroller' },
+          { title: 'Fourth stroller' },
+          { title: 'Fifth stroller' },
+          { title: 'Sixth stroller' },
+          { title: 'Seventh stroller should not be included' },
+        ],
+        apiKey: 'test-key',
+      },
+      fetchMock,
+    )
+
+    const [, request] = fetchMock.mock.calls[0]
+    const prompt = JSON.parse(request.body).input[1].content
+
+    expect(prompt).toContain('Follow-up notes: folds fast')
+    expect(prompt).toContain('User feedback: too bulky')
+    expect(prompt).toContain('1. First stroller')
+    expect(prompt).toContain('6. Sixth stroller')
+    expect(prompt).not.toContain('Seventh stroller should not be included')
+    expect(prompt).not.toContain('2. \n')
+  })
 })
