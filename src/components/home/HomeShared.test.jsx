@@ -73,12 +73,8 @@ describe('ProductDetailModal', () => {
     renderModal()
 
     expect(
-      screen.getByText(/retailer links may be affiliate links, which can support focamai at no extra cost to you/i),
+      screen.getByText(/as an amazon associate i earn from qualifying purchases/i),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /learn more/i })).toHaveAttribute(
-      'href',
-      '/affiliate-disclosure',
-    )
   })
 })
 

@@ -74,6 +74,7 @@ const ANALYTICS_DASHBOARD_DEFAULT_DAYS = 14
 const ENRICHMENT_STREAM_TIMEOUT_MS = 30000
 const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
 const CACHE_SCOPE_RAINFOREST = 'rainforest_discovery'
+const CACHE_SCOPE_DISCOVERY_SESSION = 'guided_discovery_session'
 const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
@@ -86,6 +87,11 @@ function getRequestedAmazonDomain(value = '') {
 function getAmazonMarketplaceScope(scope, amazonDomain = '') {
   const normalizedAmazonDomain = getRequestedAmazonDomain(amazonDomain)
   return normalizedAmazonDomain ? `${scope}:${normalizedAmazonDomain}` : scope
+}
+
+function getDiscoverySessionScope(discoveryToken = '') {
+  const truncatedToken = truncateText(discoveryToken, 300)
+  return truncatedToken ? `${CACHE_SCOPE_DISCOVERY_SESSION}:${truncatedToken}` : CACHE_SCOPE_DISCOVERY_SESSION
 }
 
 function resolveAmazonDomain({ requestUrl = null, body = null, countryCode = 'US' } = {}) {
@@ -442,6 +448,21 @@ async function resolveDiscoveryContext(normalizedQuery, discoveryToken, scopes =
     }
   }
 
+  const sessionScope = getDiscoverySessionScope(truncatedToken)
+  const { cachedEntry: sessionEntry } = await readCachedSearchSnapshot({
+    productQuery: normalizedQuery,
+    details: '',
+    scope: sessionScope,
+  })
+
+  if (sessionEntry && truncateText(sessionEntry.discoveryToken, 300) === truncatedToken) {
+    return {
+      cachedEntry: sessionEntry,
+      discoveryScope: sessionScope,
+      isValid: true,
+    }
+  }
+
   for (const scope of scopes) {
     const { cachedEntry } = await readCachedSearchSnapshot({
       productQuery: normalizedQuery,
@@ -475,33 +496,31 @@ async function ensureDiscoverySnapshotToken({
   normalizedQuery,
   normalizedDetails = '',
   cachedEntry,
-  scope,
+  source = 'guided_discovery',
 }) {
-  const storedToken = truncateText(cachedEntry?.discoveryToken, 300)
-
-  if (storedToken) {
-    return {
-      cachedEntry,
-      discoveryToken: storedToken,
-    }
-  }
-
   const discoveryToken = createDiscoveryToken()
+  const selectionWithoutEnrichment =
+    cachedEntry?.selection && typeof cachedEntry.selection === 'object' && !Array.isArray(cachedEntry.selection)
+      ? { ...cachedEntry.selection, enrichment: null }
+      : cachedEntry?.selection ?? null
+  const sessionScope = getDiscoverySessionScope(discoveryToken)
+
   const updatedEntry = await writeSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
     candidatePool: cachedEntry?.candidatePool ?? null,
     discoveryToken,
     results: Array.isArray(cachedEntry?.results) ? cachedEntry.results : [],
-    selection: cachedEntry?.selection ?? null,
-    source: cachedEntry?.source || 'guided_discovery',
-    scope,
+    selection: selectionWithoutEnrichment,
+    source,
+    scope: sessionScope,
   })
 
   return {
     cachedEntry: {
       ...cachedEntry,
       discoveryToken,
+      selection: selectionWithoutEnrichment,
       cachedAt: updatedEntry?.cachedAt || cachedEntry?.cachedAt,
       expiresAt: updatedEntry?.expiresAt || cachedEntry?.expiresAt,
     },
@@ -635,7 +654,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       normalizedQuery,
       normalizedDetails,
       cachedEntry,
-      scope: rainforestScope,
+      source: cachedEntry?.source || 'guided_discovery',
     })
     await recordSearchCacheEvent({
       cacheKey: discoveryCacheKey,
@@ -679,6 +698,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
 
   try {
     const discoveryToken = createDiscoveryToken()
+    const discoverySessionScope = getDiscoverySessionScope(discoveryToken)
     const rainforestStartedAt = nowMs()
     const { artifacts, error: artifactsError } = await fetchOxylabsArtifacts({ // TODO: swap back to Rainforest before launch.
       filterConfig: LIVE_RESULT_FILTER_CONFIG,
@@ -706,7 +726,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
           ...artifacts.candidatePool,
           amazonDomain,
         },
-        discoveryToken,
+        discoveryToken: '',
         results: artifacts.results,
         selection: buildDiscoveryPreviewSelection(artifacts.results),
         source: 'rainforest_discovery',
@@ -719,6 +739,20 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
         route: '/api/search/rainforest-discover',
       },
     )
+
+    await writeSearchSnapshot({
+      productQuery: normalizedQuery,
+      details: normalizedDetails,
+      candidatePool: {
+        ...artifacts.candidatePool,
+        amazonDomain,
+      },
+      discoveryToken,
+      results: artifacts.results,
+      selection: buildDiscoveryPreviewSelection(artifacts.results),
+      source: 'rainforest_discovery_session',
+      scope: discoverySessionScope,
+    })
 
     await recordSearchCacheEvent({
       cacheKey: discoveryCacheKey,
@@ -950,7 +984,7 @@ export async function handleSearchDebug(requestUrl, response) {
   })
 }
 
-// Runs mini enrichment after Haiku has locked the shortlist, stores result in discovery cache.
+// Runs mini enrichment after Haiku has locked the shortlist, stores result in the token-scoped session snapshot.
 async function runMiniEnrichmentAsync({
   lockedIds,
   candidatePool,

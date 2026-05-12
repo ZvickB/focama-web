@@ -67,6 +67,7 @@ import {
   handleEnrichmentStream,
   handleFeedbackSubmission,
   handleFinalizeSelection,
+  handleRainforestDiscoverySearch,
   handleRetryAdvice,
   handleSearchDebug,
   handleSupabaseHealth,
@@ -682,6 +683,62 @@ describe('server handlers', () => {
     })
   })
 
+  it('creates a fresh token-scoped session snapshot on discovery cache hits', async () => {
+    getEnv.mockImplementation((name) => ({
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
+    })[name] || '')
+
+    readStoredSearchCacheEntry.mockResolvedValueOnce({
+      cachedAt: '2026-03-17T12:00:00.000Z',
+      expiresAt: '2026-03-17T18:00:00.000Z',
+      source: 'rainforest_discovery',
+      selection: {
+        mode: 'discovery_preview',
+        enrichment: {
+          entries: [{ candidate_id: 'cached-1', fit_reason: 'Old context', caveat: 'Old caveat' }],
+          model: 'gpt-5-mini',
+        },
+      },
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Cached search results',
+        similarQueries: [],
+        candidates: [{ id: 'cached-1', title: 'Thermos bottle', price: '$34.99', numericPrice: 34.99 }],
+      },
+      results: [{ id: 'cached-1', title: 'Thermos bottle', price: '$34.99' }],
+      discoveryToken: 'old-token',
+    })
+
+    const response = createResponseRecorder()
+
+    await handleRainforestDiscoverySearch(
+      new URL('http://localhost/api/search/rainforest-discover?query=thermos&amazonDomain=amazon.com'),
+      response,
+      { headers: { 'x-forwarded-for': '203.0.113.18' } },
+    )
+
+    expect(response.statusCode).toBe(200)
+
+    const payload = JSON.parse(response.body)
+    expect(payload.discoveryToken).toBeTruthy()
+    expect(payload.discoveryToken).not.toBe('old-token')
+
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productQuery: 'thermos',
+        discoveryToken: payload.discoveryToken,
+        scope: `guided_discovery_session:${payload.discoveryToken}`,
+        selection: expect.objectContaining({
+          mode: 'discovery_preview',
+          enrichment: null,
+        }),
+      }),
+    )
+  })
+
   it('reports optional Supabase health when local fallback is active', async () => {
     getSupabaseHealth.mockResolvedValue({
       configured: false,
@@ -1226,7 +1283,7 @@ describe('server handlers', () => {
       expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
         expect.objectContaining({
           productQuery: 'stroller',
-          scope: 'guided_discovery',
+          scope: 'guided_discovery_session:opaque-discovery-token',
           selection: expect.objectContaining({
             enrichment: expect.objectContaining({
               entries: [
@@ -2122,7 +2179,7 @@ describe('server handlers', () => {
       expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
         expect.objectContaining({
           productQuery: 'stroller',
-          scope: 'guided_discovery',
+          scope: 'guided_discovery_session:opaque-discovery-token',
           selection: expect.objectContaining({
             enrichment: expect.objectContaining({
               entries: [{ candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey' }],
@@ -2261,7 +2318,7 @@ describe('server handlers', () => {
       expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
         expect.objectContaining({
           productQuery: 'stroller',
-          scope: 'guided_discovery',
+          scope: 'guided_discovery_session:opaque-discovery-token',
           selection: expect.objectContaining({
             enrichment: expect.objectContaining({
               entries: [{ candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey' }],

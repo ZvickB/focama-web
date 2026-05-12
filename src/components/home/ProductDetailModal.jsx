@@ -33,15 +33,7 @@ function RetailerActions({ className = '', item, onRetailerClick, retailerLabel 
             </a>
           </Button>
           <p className="text-center text-xs leading-5 text-slate-500">
-            Retailer links may be affiliate links, which can support Focamai at no extra cost to
-            you.{' '}
-            <Link
-              to="/affiliate-disclosure"
-              className="font-medium text-slate-600 underline underline-offset-2 hover:text-slate-800"
-            >
-              Learn more
-            </Link>
-            .
+            As an Amazon Associate I earn from qualifying purchases.
           </p>
         </>
       ) : (

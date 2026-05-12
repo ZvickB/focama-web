@@ -51,13 +51,14 @@
 
 ## Current finalize reality
 - Finalize rebuilds the candidate pool from guided discovery cache instead of trusting a browser-posted rich pool.
+- Discovery cache is now split from session state: repeated same-query searches reuse the shared candidate pool, but each run gets its own token-scoped session snapshot for finalize/enrichment.
 - Haiku locks the shortlist first.
 - Partial valid Haiku output is treated as recoverable: the backend tops it up from deterministic fallback and returns `selection.strategy: 'haiku_lock_topped_up'`.
 - The current detail helper for shortlisted ASINs is still `fetchOxylabsProductDetailsByAsin`.
 - Product details are cached per ASIN before mini enrichment runs, using the final displayed shortlist IDs.
 - Failed shortlisted detail calls now retry once in the background after the fast first pass, so mini enrichment can proceed with partial detail coverage while later cache quality still improves.
 - If that background retry later finds bullets, the active stored enrichment payload is patched and the modal can hydrate those bullets without a fresh finalize run.
-- Mini enrichment writes `fit_reason` and `caveat` back into guided cache for the exact active `discoveryToken`, then the frontend hydrates the modal via SSE first and polling fallback second.
+- Mini enrichment writes `fit_reason` and `caveat` back into the token-scoped session snapshot for the exact active `discoveryToken`, then the frontend hydrates the modal via SSE first and polling fallback second.
 - AI prompts have been sharpened to weight user context more heavily when selecting and explaining picks.
 
 ## Active constraints
