@@ -24,6 +24,7 @@
 - The PNG wordmark is the active wordmark.
 - The homepage now gives the hero wordmark higher fetch priority, preconnects Google Fonts plus the configured Render backend origin, and prefetches `ResultsSection` plus `ProductDetailModal` as soon as `HomeExperience` mounts.
 - Public routes now have route-level SEO metadata plus static `robots.txt`, `sitemap.xml`, and `site.webmanifest`.
+- `/install` now gives mobile testers practical add-to-home-screen instructions, and the mobile drawer shows that link only on mobile browsers when the app is not already standalone.
 - Route-level lazy loading now shows visible loading UI, and chunk-load crashes get a reload-focused fallback in the top-level error boundary.
 - Current behavior is canonical in `project-notes/app_flow.md`.
 

@@ -420,6 +420,10 @@ export function useGuidedSearch() {
   const hasTrackedPreviewImpressionsRef = useRef(false)
   const startGuidedSearchRef = useRef(null)
 
+  function invalidateRetryAdviceRequests() {
+    retryAdviceRequestIdRef.current += 1
+  }
+
   function trackSearchEvent(name, eventData = {}) {
     if (!analyticsSearchIdRef.current || !analyticsSessionIdRef.current) {
       return
@@ -916,30 +920,6 @@ export function useGuidedSearch() {
     stopQueryQualityPolling()
   }, [])
 
-  useEffect(() => {
-    if (!hasStartedSearch || !submittedQuery) {
-      return
-    }
-
-    const nextAmazonDomain = resolveAmazonDomainForRequest(selectedAmazonDomain, resolvedAmazonDomain)
-
-    if (!nextAmazonDomain || nextAmazonDomain === submittedAmazonDomain) {
-      return
-    }
-
-    startGuidedSearchRef.current?.(submittedQuery, {
-      preserveFollowUpNotes: true,
-      reuseAnalytics: true,
-      searchEventName: 'marketplace_search_restarted',
-    })
-  }, [
-    hasStartedSearch,
-    resolvedAmazonDomain,
-    selectedAmazonDomain,
-    submittedAmazonDomain,
-    submittedQuery,
-  ])
-
   const isFinalizing = finalizeMutation.isPending
   const isLoading = isDiscovering || isGeneratingPrompt || isFinalizing
   const hasFinalResults = results.length > 0
@@ -1218,7 +1198,33 @@ export function useGuidedSearch() {
       })
   }
 
-  startGuidedSearchRef.current = startGuidedSearch
+  useEffect(() => {
+    startGuidedSearchRef.current = startGuidedSearch
+  })
+
+  useEffect(() => {
+    if (!hasStartedSearch || !submittedQuery) {
+      return
+    }
+
+    const nextAmazonDomain = resolveAmazonDomainForRequest(selectedAmazonDomain, resolvedAmazonDomain)
+
+    if (!nextAmazonDomain || nextAmazonDomain === submittedAmazonDomain) {
+      return
+    }
+
+    startGuidedSearchRef.current?.(submittedQuery, {
+      preserveFollowUpNotes: true,
+      reuseAnalytics: true,
+      searchEventName: 'marketplace_search_restarted',
+    })
+  }, [
+    hasStartedSearch,
+    resolvedAmazonDomain,
+    selectedAmazonDomain,
+    submittedAmazonDomain,
+    submittedQuery,
+  ])
 
   function beginGuidedSearch(event) {
     event.preventDefault()
@@ -1378,10 +1384,6 @@ export function useGuidedSearch() {
     setProductQuery(normalizedQuery)
     setQuerySuggestion(null)
     startGuidedSearch(normalizedQuery)
-  }
-
-  function invalidateRetryAdviceRequests() {
-    retryAdviceRequestIdRef.current += 1
   }
 
   function handleRetryAdviceRequest() {

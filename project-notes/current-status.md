@@ -11,6 +11,7 @@
 - The homepage now ships in the plain white visual mode by default; the temporary homepage background toggle is no longer part of the active UI.
 - Homepage first load is now split: `HomePage` boots a lightweight `HomeShell`, warms the heavier guided search experience during idle time, and only swaps into that guided experience after the user starts a search.
 - Basic SEO plumbing is now in place: route-level metadata, canonicals, OG/Twitter tags, sitemap, robots, and manifest.
+- A mobile-tester install helper now lives at `/install`; mobile users who are not already running standalone can reach it from the mobile drawer.
 - The homepage now preconnects Google Fonts in `index.html`, preconnects the configured backend origin from `VITE_BACKEND_URL`, gives the hero wordmark higher fetch priority, and prefetches the results plus modal chunks immediately after `HomeExperience` mounts.
 - A local-only internal analytics dashboard now lives at `/admin/analytics` during development and reads a backend funnel summary instead of querying Supabase directly from the browser.
 - The current user path is: search -> short follow-up -> preview or focused shortlist -> modal details -> retailer clickout.

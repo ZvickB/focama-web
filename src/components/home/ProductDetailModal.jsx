@@ -89,8 +89,14 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
   }, [onClose])
 
   useEffect(() => {
-    setBulletsExpanded(false)
-    setImgError(false)
+    const resetTimer = window.setTimeout(() => {
+      setBulletsExpanded(false)
+      setImgError(false)
+    }, 0)
+
+    return () => {
+      window.clearTimeout(resetTimer)
+    }
   }, [item?.id])
 
   if (!item) {

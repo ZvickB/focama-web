@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import PageShell from '@/components/PageShell.jsx'
 import Seo from '@/components/Seo.jsx'
@@ -93,11 +93,7 @@ function SimpleTable({ columns, rows, emptyMessage }) {
 
 function AnalyticsPage() {
   const [days, setDays] = useState(14)
-  const [hasHydrated, setHasHydrated] = useState(false)
-
-  useEffect(() => {
-    setHasHydrated(true)
-  }, [])
+  const hasHydrated = typeof window !== 'undefined'
 
   const dashboardQuery = useQuery({
     queryKey: ['analytics-dashboard', days],

@@ -9,6 +9,7 @@ import { SearchProgressProvider } from '@/contexts/SearchProgressContext.jsx'
 const HomePage = lazy(() => import('@/pages/HomePage.jsx'))
 const AffiliateDisclosurePage = lazy(() => import('@/pages/AffiliateDisclosurePage.jsx'))
 const ContactPage = lazy(() => import('@/pages/ContactPage.jsx'))
+const InstallPage = lazy(() => import('@/pages/InstallPage.jsx'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage.jsx'))
 const PrivacyPage = lazy(() => import('@/pages/PrivacyPage.jsx'))
 const WhyFocamaiPage = lazy(() => import('@/pages/WhyFocamaiPage.jsx'))
@@ -51,6 +52,7 @@ function AppRoutes({ onReady }) {
         ) : null}
         <Route path="/why" element={<WhyFocamaiPage />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/install" element={<InstallPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/affiliate-disclosure" element={<AffiliateDisclosurePage />} />
         <Route path="*" element={<NotFoundPage />} />

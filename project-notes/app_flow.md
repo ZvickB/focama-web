@@ -6,8 +6,9 @@
 
 ## Current app structure
 - The site uses React Router with a shared shell.
-- Current public pages are Home, About, Contact, Privacy, and Affiliate Disclosure.
+- Current public pages are Home, Why Focamai, Contact, Install, Privacy, and Affiliate Disclosure.
 - The homepage is the main product experience and uses the `open` layout.
+- `/install` is a tester-friendly PWA helper page with Android install prompt support when available and manual Safari steps for iOS.
 - Public routes now set page-level SEO metadata in the client: title, description, canonical URL, Open Graph, Twitter tags, and `noindex` on the 404 page.
 - Static crawl assets now include `robots.txt`, `sitemap.xml`, and `site.webmanifest`.
 

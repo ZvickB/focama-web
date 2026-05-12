@@ -356,8 +356,16 @@ function OpenLayout(props) {
 
   useEffect(() => {
     if (!hasFinalResults) {
-      setHasOpenedModal(false)
+      const resetTimer = window.setTimeout(() => {
+        setHasOpenedModal(false)
+      }, 0)
+
+      return () => {
+        window.clearTimeout(resetTimer)
+      }
     }
+
+    return undefined
   }, [hasFinalResults])
 
   function handleSelectProduct(product) {
@@ -471,17 +479,20 @@ function OpenLayout(props) {
       return
     }
 
-    lastAppliedRetrySuggestionRef.current = normalizedSuggestion
-    setLoadedRetrySuggestion({
-      previousQuery: submittedQuery || state.productQuery,
-    })
-    setProductQuery(normalizedSuggestion)
-
-    window.setTimeout(() => {
+    const applyTimer = window.setTimeout(() => {
+      lastAppliedRetrySuggestionRef.current = normalizedSuggestion
+      setLoadedRetrySuggestion({
+        previousQuery: submittedQuery || state.productQuery,
+      })
+      setProductQuery(normalizedSuggestion)
       scrollElementNearTop(refinementRef.current, 20)
       searchInputRef.current?.focus?.()
       searchInputRef.current?.select?.()
     }, 0)
+
+    return () => {
+      window.clearTimeout(applyTimer)
+    }
   }, [
     hasStartedSearch,
     setProductQuery,
@@ -493,9 +504,17 @@ function OpenLayout(props) {
 
   useEffect(() => {
     if (!hasStartedSearch) {
-      setLoadedRetrySuggestion(null)
-      lastAppliedRetrySuggestionRef.current = ''
+      const resetTimer = window.setTimeout(() => {
+        setLoadedRetrySuggestion(null)
+        lastAppliedRetrySuggestionRef.current = ''
+      }, 0)
+
+      return () => {
+        window.clearTimeout(resetTimer)
+      }
     }
+
+    return undefined
   }, [hasStartedSearch])
 
   const hasDiscoveryResults = Boolean(state.candidatePool)

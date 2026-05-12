@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Menu, X } from 'lucide-react'
+import { Menu, Smartphone, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import logo from '@/assets/logo_header_mark.svg'
 import wordmark from '@/assets/wordmark.PNG'
@@ -8,12 +8,14 @@ import { AmazonStorePill } from '@/components/AmazonStorePill.jsx'
 import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { useSearchProgress } from '@/contexts/useSearchProgress.js'
+import { usePWAInstall } from '@/hooks/usePWAInstall.js'
 
 const MARKETPLACE_DISPLAY = {
   'amazon.com': { location: 'the US', storeLabel: 'Amazon US' },
   'amazon.ca': { location: 'Canada', storeLabel: 'Amazon Canada' },
   'amazon.co.uk': { location: 'the UK', storeLabel: 'Amazon UK' },
 }
+const MotionDiv = motion.div
 
 function MarketplacePillToast({ domain, onConfirm, onChooseStore, onDismiss }) {
   const timerRef = useRef(null)
@@ -40,7 +42,7 @@ function MarketplacePillToast({ domain, onConfirm, onChooseStore, onDismiss }) {
   if (!display) return null
 
   return (
-    <motion.div
+    <MotionDiv
       initial={{ opacity: 0, y: -12, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -12, scale: 0.97 }}
@@ -79,7 +81,7 @@ function MarketplacePillToast({ domain, onConfirm, onChooseStore, onDismiss }) {
           Choose store
         </button>
       </div>
-    </motion.div>
+    </MotionDiv>
   )
 }
 
@@ -95,6 +97,9 @@ const mobileMenuItems = navItems.filter((item) =>
 )
 const HEADER_COLLAPSE_SCROLL_Y = 72
 const HEADER_EXPAND_SCROLL_Y = 20
+const isMobile =
+  typeof navigator !== 'undefined' &&
+  /android|iphone|ipad|ipod/i.test(navigator.userAgent || '')
 
 function WhyFocamaiLabel({ isActive = false }) {
   return (
@@ -188,6 +193,7 @@ function SiteLayout() {
   const isMobileMenuOpen = mobileMenuOpenPath === location.pathname
   const isHomePage = location.pathname === '/'
   const { progress } = useSearchProgress()
+  const { isInstalled } = usePWAInstall()
   const {
     hasAskedMarketplacePreference,
     markMarketplacePromptHandled,
@@ -314,7 +320,7 @@ function SiteLayout() {
         </div>
         <div
           className={`overflow-hidden border-t border-[var(--site-shell-border)] bg-[var(--site-mobile-menu-bg)] transition-all duration-300 ease-out sm:hidden ${
-            isMobileMenuOpen ? 'max-h-56 opacity-100' : 'max-h-0 opacity-0'
+            isMobileMenuOpen ? 'max-h-80 opacity-100' : 'max-h-0 opacity-0'
           }`}
         >
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-4">
@@ -346,6 +352,34 @@ function SiteLayout() {
                 )}
               </NavLink>
             ))}
+            {isMobile && !isInstalled ? (
+              <NavLink
+                to="/install"
+                className={({ isActive }) =>
+                  [
+                    'relative overflow-hidden rounded-[24px] border px-4 py-3.5 text-sm transition duration-300',
+                    isActive
+                      ? 'border-[#dccfbe] bg-[linear-gradient(135deg,rgba(251,246,240,0.98),rgba(255,255,255,0.96))] text-slate-900 shadow-[0_18px_44px_-34px_rgba(120,87,63,0.24)]'
+                      : 'border-white/70 bg-white/82 text-slate-700 hover:border-[#e6d8c5] hover:bg-white hover:text-slate-900',
+                  ].join(' ')
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <span className="relative z-10 inline-flex items-center gap-2">
+                      <Smartphone className="h-4 w-4" />
+                      Add to Home Screen
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none absolute bottom-0 left-1/2 h-[2px] -translate-x-1/2 rounded-full bg-[linear-gradient(90deg,#0F6175_0%,#2F7F8A_58%,#E59B26_100%)] transition-all duration-300 ${
+                        isActive ? 'w-[calc(100%-2rem)] opacity-100' : 'w-0 opacity-0'
+                      }`}
+                    />
+                  </>
+                )}
+              </NavLink>
+            ) : null}
             {isHomePage ? (
               <div className="flex items-center justify-between gap-3 rounded-[22px] border border-white/70 bg-white/72 px-3 py-2.5 text-xs text-slate-500 shadow-[0_14px_34px_-28px_rgba(15,23,42,0.22)]">
                 <span className="font-medium uppercase tracking-[0.12em] text-slate-400">Amazon store</span>
