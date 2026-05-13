@@ -55,20 +55,27 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
   const { selectedAmazonDomain, resolvedAmazonDomain } = useAmazonStore()
   const retailerLabel = resolveAmazonRetailerLabel(item?.subtitle, selectedAmazonDomain, resolvedAmazonDomain)
   const contentRef = useRef(null)
+  const rightColumnRef = useRef(null)
   const [showScrollHint, setShowScrollHint] = useState(true)
   const [bulletsExpanded, setBulletsExpanded] = useState(false)
   const [imgError, setImgError] = useState(false)
 
   useEffect(() => {
-    const el = contentRef.current
-    if (!el) return
-
-    function handleScroll() {
+    function handleScroll(el) {
       if (el.scrollTop > 40) setShowScrollHint(false)
     }
 
-    el.addEventListener('scroll', handleScroll, { passive: true })
-    return () => el.removeEventListener('scroll', handleScroll)
+    const mobile = contentRef.current
+    const desktop = rightColumnRef.current
+    const onMobile = () => handleScroll(mobile)
+    const onDesktop = () => handleScroll(desktop)
+
+    mobile?.addEventListener('scroll', onMobile, { passive: true })
+    desktop?.addEventListener('scroll', onDesktop, { passive: true })
+    return () => {
+      mobile?.removeEventListener('scroll', onMobile)
+      desktop?.removeEventListener('scroll', onDesktop)
+    }
   }, [])
 
   useEffect(() => {
@@ -177,7 +184,8 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
           </div>
 
           <div
-            className="flex flex-col gap-4 pr-2 sm:pr-3 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:min-h-0 lg:overflow-y-auto lg:pr-4"
+            ref={rightColumnRef}
+            className="relative flex flex-col gap-4 pr-2 sm:pr-3 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:min-h-0 lg:overflow-y-auto lg:pr-4"
             style={{ scrollbarGutter: 'stable' }}
           >
             <div className="space-y-1.5">
@@ -276,15 +284,6 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
               </div>
             )}
 
-          </div>
-
-          <RetailerActions
-            className="lg:col-start-1 lg:row-start-2"
-            item={item}
-            onRetailerClick={onRetailerClick}
-            retailerLabel={retailerLabel}
-          />
-
           {showScrollHint ? (
             <div
               aria-hidden="true"
@@ -295,6 +294,14 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
               </div>
             </div>
           ) : null}
+          </div>
+
+          <RetailerActions
+            className="lg:col-start-1 lg:row-start-2"
+            item={item}
+            onRetailerClick={onRetailerClick}
+            retailerLabel={retailerLabel}
+          />
         </div>
         <div className="border-t border-[#eadfd2] px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
