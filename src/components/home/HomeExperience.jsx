@@ -673,16 +673,18 @@ function OpenLayout(props) {
                       autoFocus={isDesktop}
                       disabled={isLoading}
                     />
-                    {hasLoadedRetrySuggestion ? (
-                      <div className="mt-2 px-2">
-                        <p className="text-sm text-slate-600">
-                          Suggested based on your feedback — edit if needed.
-                        </p>
-                      </div>
-                    ) : null}
-                    {shouldShowCharCounter(state.productQuery.length, MAX_PRODUCT_QUERY_LENGTH) ? (
-                      <div className="mt-1.5 flex justify-end px-2">
-                        <CharCounter current={state.productQuery.length} max={MAX_PRODUCT_QUERY_LENGTH} />
+                    {(hasLoadedRetrySuggestion || shouldShowCharCounter(state.productQuery.length, MAX_PRODUCT_QUERY_LENGTH)) ? (
+                      <div className="mt-2 flex items-center justify-between gap-3 px-2">
+                        {hasLoadedRetrySuggestion ? (
+                          <p className="min-w-0 text-sm text-slate-600">
+                            Suggested based on your feedback — edit if needed.
+                          </p>
+                        ) : <span />}
+                        {shouldShowCharCounter(state.productQuery.length, MAX_PRODUCT_QUERY_LENGTH) ? (
+                          <span className="shrink-0">
+                            <CharCounter current={state.productQuery.length} max={MAX_PRODUCT_QUERY_LENGTH} />
+                          </span>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>

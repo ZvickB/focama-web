@@ -175,11 +175,6 @@ export function HomeShell({
                       {errorMessage ? (
                         <p className="mt-2 px-2 text-sm text-red-500">{errorMessage}</p>
                       ) : null}
-                      {shouldShowCharCounter(productQuery.length, MAX_PRODUCT_QUERY_LENGTH) ? (
-                        <div className="mt-1.5 flex justify-end px-2">
-                          <CharCounter current={productQuery.length} max={MAX_PRODUCT_QUERY_LENGTH} />
-                        </div>
-                      ) : null}
                     </div>
                     <Button
                       type="submit"
@@ -194,9 +189,16 @@ export function HomeShell({
                       )}
                     </Button>
                   </div>
-                  <p className="mt-3 px-2 text-sm leading-6 text-slate-500">
-                    Just the product for now — budget, size, and other details come next.
-                  </p>
+                  <div className="mt-3 flex items-center justify-between gap-3 px-2">
+                    <p className="min-w-0 text-sm leading-6 text-slate-500">
+                      Just the product for now — budget, size, and other details come next.
+                    </p>
+                    {shouldShowCharCounter(productQuery.length, MAX_PRODUCT_QUERY_LENGTH) ? (
+                      <span className="shrink-0">
+                        <CharCounter current={productQuery.length} max={MAX_PRODUCT_QUERY_LENGTH} />
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </form>
