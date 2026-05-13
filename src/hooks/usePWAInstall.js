@@ -42,10 +42,10 @@ if (typeof window !== 'undefined') {
 }
 
 export function usePWAInstall() {
-  const [snapshot, setSnapshot] = useState(() => ({
-    isInstalled: isRunningStandalone(),
-    platform: getPlatform(),
-  }))
+  // Start null so we don't call matchMedia synchronously during first render.
+  // We treat unknown-state as "installed" so the install button stays hidden
+  // until useEffect confirms otherwise — no flash, no first-paint cost.
+  const [snapshot, setSnapshot] = useState(null)
 
   const refreshSnapshot = useCallback(() => {
     setSnapshot({
@@ -57,6 +57,9 @@ export function usePWAInstall() {
   useEffect(() => {
     const browserWindow = getWindow()
     if (!browserWindow) return undefined
+
+    // Initialize after mount — keeps matchMedia off the first-render critical path.
+    refreshSnapshot()
 
     const standaloneQuery = browserWindow.matchMedia?.('(display-mode: standalone)')
 
@@ -84,13 +87,15 @@ export function usePWAInstall() {
     return choice
   }, [refreshSnapshot])
 
-  const isInstalled = snapshot.isInstalled
+  // Default to "installed" (true) while snapshot is null so the install button
+  // stays hidden until we know for sure the app isn't already installed.
+  const isInstalled = snapshot?.isInstalled ?? true
 
   return {
     isInstalled,
     canInstall: Boolean(_deferredPrompt && !isInstalled),
     install,
-    platform: snapshot.platform,
+    platform: snapshot?.platform ?? 'other',
   }
 }
 
