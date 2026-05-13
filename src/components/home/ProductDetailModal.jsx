@@ -56,6 +56,7 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
   const retailerLabel = resolveAmazonRetailerLabel(item?.subtitle, selectedAmazonDomain, resolvedAmazonDomain)
   const contentRef = useRef(null)
   const rightColumnRef = useRef(null)
+  const whyWePickedItRef = useRef(null)
   const [showScrollHint, setShowScrollHint] = useState(true)
   const [bulletsExpanded, setBulletsExpanded] = useState(false)
   const [imgError, setImgError] = useState(false)
@@ -251,6 +252,7 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
 
             {enrichmentReady ? (
               <MotionDiv
+                ref={whyWePickedItRef}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
@@ -285,14 +287,16 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
             )}
 
           {showScrollHint ? (
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute left-1/2 top-[calc(100%-1.25rem)] z-10 flex -translate-x-1/2 justify-center"
+            <button
+              type="button"
+              aria-label="Scroll to why we picked it"
+              onClick={() => whyWePickedItRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}
+              className="absolute left-1/2 top-[calc(100%-1.25rem)] z-10 flex -translate-x-1/2 justify-center"
             >
-              <div className="rounded-full border border-stone-200/80 bg-white p-1 shadow-sm">
+              <div className="rounded-full border border-stone-200/80 bg-white p-1 shadow-sm transition-shadow hover:shadow-md">
                 <ChevronDown className="h-5 w-5 animate-bounce text-[#9f7f66]" />
               </div>
-            </div>
+            </button>
           ) : null}
           </div>
 
