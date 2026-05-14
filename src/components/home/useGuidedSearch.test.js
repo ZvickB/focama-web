@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
+import {
+  clearSearchDebugEvents,
+  getSearchDebugEvents,
+  recordSearchDebugEvent,
+} from './searchDebugEvents.js'
 import { resolveSelectedProductForDisplay } from './useGuidedSearch.js'
 
 describe('resolveSelectedProductForDisplay', () => {
@@ -58,5 +63,61 @@ describe('resolveSelectedProductForDisplay', () => {
         selectedProduct,
       }),
     ).toBe(selectedProduct)
+  })
+})
+
+describe('search debug events', () => {
+  it('stores bounded sanitized context without raw queries or tokens', () => {
+    clearSearchDebugEvents()
+
+    recordSearchDebugEvent('discovery', 'success', {
+      activeSearchId: 12,
+      amazonDomain: 'amazon.ca',
+      candidateCount: 20,
+      discoveryToken: 'secret-token',
+      error: new Error('Provider failed'),
+      previewCount: 6,
+      query: 'travel stroller for airplane',
+    })
+
+    expect(getSearchDebugEvents()).toEqual([
+      expect.objectContaining({
+        phase: 'discovery',
+        status: 'success',
+        activeSearchId: 12,
+        queryLength: 28,
+        amazonDomain: 'amazon.ca',
+        hasDiscoveryToken: true,
+        candidateCount: 20,
+        previewCount: 6,
+        errorName: 'Error',
+        errorMessage: 'Provider failed',
+      }),
+    ])
+    expect(getSearchDebugEvents()[0]).not.toHaveProperty('query')
+    expect(getSearchDebugEvents()[0]).not.toHaveProperty('discoveryToken')
+  })
+
+  it('keeps only the most recent 100 debug events', () => {
+    clearSearchDebugEvents()
+
+    for (let index = 0; index < 105; index += 1) {
+      recordSearchDebugEvent('query-quality', 'quiet', {
+        activeSearchId: index,
+        queryLength: index,
+      })
+    }
+
+    const events = getSearchDebugEvents()
+
+    expect(events).toHaveLength(100)
+    expect(events[0]).toMatchObject({
+      activeSearchId: 5,
+      queryLength: 5,
+    })
+    expect(events.at(-1)).toMatchObject({
+      activeSearchId: 104,
+      queryLength: 104,
+    })
   })
 })

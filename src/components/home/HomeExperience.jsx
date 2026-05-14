@@ -121,24 +121,24 @@ function formatTimingValue(value) {
   return Number.isFinite(value) ? `${value.toFixed(1)} ms` : 'n/a'
 }
 
-function getFeedbackStage(state) {
-  if (state.selectedProduct) {
+function getFeedbackStage(guidedSearch) {
+  if (guidedSearch.results.selectedProduct) {
     return 'modal_open'
   }
 
-  if (state.hasFinalResults) {
+  if (guidedSearch.results.hasFinalResults) {
     return 'finalized'
   }
 
-  if (state.showPreviewResults) {
+  if (guidedSearch.results.showPreview) {
     return 'preview'
   }
 
-  if (state.hasStartedSearch && state.candidatePool) {
+  if (guidedSearch.status.hasStartedSearch && guidedSearch.results.candidatePool) {
     return 'refine'
   }
 
-  if (state.hasStartedSearch || state.isLoading) {
+  if (guidedSearch.status.hasStartedSearch || guidedSearch.status.isLoading) {
     return 'searching'
   }
 
@@ -195,7 +195,6 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
     </div>
   )
 }
-
 function TimingPanel({ requestTiming }) {
   const entries = [
     ['Discover', requestTiming?.discover],
@@ -321,24 +320,18 @@ function OpenLayout(props) {
   const [showHeroCopy, setShowHeroCopy] = useState(false)
   const [hasOpenedModal, setHasOpenedModal] = useState(false)
   const {
-    displayedResults,
-    errorMessage,
-    hasFinalResults,
-    hasStartedSearch,
-    isLoading,
-    onFinalize,
-    onRetailerClick,
-    onSelectProduct,
-    onShowProductsNow,
-    prompt,
-    resetToNewSearch,
-    setFollowUpNotes,
-    setProductQuery,
-    showPreviewResults,
+    guided,
     showTimingPanel,
-    state,
-    submittedQuery,
   } = props
+  const { actions, query, querySuggestion, results, retry, status } = guided
+  const displayedResults = results.displayed
+  const errorMessage = status.errorMessage
+  const hasFinalResults = results.hasFinalResults
+  const hasStartedSearch = status.hasStartedSearch
+  const isLoading = status.isLoading
+  const prompt = query.refinementPrompt
+  const showPreviewResults = results.showPreview
+  const submittedQuery = query.submittedQuery
   const shouldShowRefinementControls = hasStartedSearch
 
   useEffect(() => {
@@ -367,7 +360,7 @@ function OpenLayout(props) {
 
   function handleSelectProduct(product) {
     setHasOpenedModal(true)
-    onSelectProduct(product)
+    actions.selectProduct(product)
   }
 
   useEffect(() => {
@@ -424,7 +417,7 @@ function OpenLayout(props) {
 
   useEffect(() => {
     if (
-      !state.isFinalizing ||
+      !status.isFinalizing ||
       !submittedQuery ||
       lastFinalizeScrollQueryRef.current === submittedQuery ||
       !resultsViewportRef.current
@@ -436,7 +429,7 @@ function OpenLayout(props) {
 
     smoothScrollIntoView(resultsElement)
     lastFinalizeScrollQueryRef.current = submittedQuery
-  }, [state.isFinalizing, submittedQuery])
+  }, [status.isFinalizing, submittedQuery])
 
   useEffect(() => {
     if (
@@ -464,18 +457,18 @@ function OpenLayout(props) {
     }
   }, [hasFinalResults, submittedQuery])
 
-  const hasDiscoveryResults = Boolean(state.candidatePool)
+  const hasDiscoveryResults = Boolean(results.candidatePool)
   const showLoadingResults = isLoading && displayedResults.length === 0
   const shouldLoadResultsSection =
     hasStartedSearch || displayedResults.length > 0 || Boolean(errorMessage)
   const canSubmitTopQuery = !isLoading && !hasStartedSearch
 
   function handleSearchSubmit(event) {
-    state.beginGuidedSearch(event)
+    actions.beginGuidedSearch(event)
   }
 
   function handleRetrySearch(query) {
-    const didStart = state.handleTryRetrySuggestion(query)
+    const didStart = retry.trySuggestion(query)
 
     if (didStart) {
       window.setTimeout(() => {
@@ -489,7 +482,7 @@ function OpenLayout(props) {
     setProgress({ hasStartedSearch, hasDiscoveryResults, hasFinalResults })
   }, [hasStartedSearch, hasDiscoveryResults, hasFinalResults, setProgress])
   const refinementCopy = buildRefinementCopy({
-    isGeneratingPrompt: state.isGeneratingPrompt,
+    isGeneratingPrompt: status.isGeneratingPrompt,
     prompt,
     submittedQuery,
   })
@@ -545,13 +538,13 @@ function OpenLayout(props) {
                 <span className="px-2 text-slate-300">·</span>
                 <span
                   className={
-                    hasDiscoveryResults && !state.hasFinalResults ? 'text-primary' : 'text-slate-400'
+                    hasDiscoveryResults && !results.hasFinalResults ? 'text-primary' : 'text-slate-400'
                   }
                 >
                   Refine
                 </span>
                 <span className="px-2 text-slate-300">·</span>
-                <span className={state.hasFinalResults ? 'text-primary' : 'text-slate-400'}>
+                <span className={results.hasFinalResults ? 'text-primary' : 'text-slate-400'}>
                   Get 6 picks
                 </span>
               </div>
@@ -579,10 +572,10 @@ function OpenLayout(props) {
                       ref={searchInputRef}
                       id="open-variant-query"
                       aria-label="Product topic"
-                      value={state.productQuery}
+                      value={query.productQuery}
                       rows={2}
                       maxLength={MAX_PRODUCT_QUERY_LENGTH}
-                      onChange={(event) => setProductQuery(event.target.value)}
+                      onChange={(event) => query.setProductQuery(event.target.value)}
                       onKeyDown={(event) =>
                         handleProductQueryTextareaKeyDown(event, {
                           canSubmit: canSubmitTopQuery,
@@ -594,11 +587,11 @@ function OpenLayout(props) {
                       autoFocus={isDesktop}
                       disabled={isLoading}
                     />
-                    {shouldShowCharCounter(state.productQuery.length, MAX_PRODUCT_QUERY_LENGTH) ? (
+                    {shouldShowCharCounter(query.productQuery.length, MAX_PRODUCT_QUERY_LENGTH) ? (
                       <div className="mt-2 flex items-center justify-between gap-3 px-2">
-                        {shouldShowCharCounter(state.productQuery.length, MAX_PRODUCT_QUERY_LENGTH) ? (
+                        {shouldShowCharCounter(query.productQuery.length, MAX_PRODUCT_QUERY_LENGTH) ? (
                           <span className="shrink-0">
-                            <CharCounter current={state.productQuery.length} max={MAX_PRODUCT_QUERY_LENGTH} />
+                            <CharCounter current={query.productQuery.length} max={MAX_PRODUCT_QUERY_LENGTH} />
                           </span>
                         ) : null}
                       </div>
@@ -614,7 +607,7 @@ function OpenLayout(props) {
                     }`}
                     onClick={
                       hasStartedSearch
-                        ? (event) => handleNewSearchClick(event, resetToNewSearch)
+                        ? (event) => handleNewSearchClick(event, actions.resetToNewSearch)
                         : undefined
                     }
                   >
@@ -639,7 +632,7 @@ function OpenLayout(props) {
                 {shouldShowRefinementControls ? (
                   <div className="mt-5 space-y-5 border-t border-stone-200/80 pt-5">
                   <RefinementCopy
-                    isGeneratingPrompt={state.isGeneratingPrompt}
+                    isGeneratingPrompt={status.isGeneratingPrompt}
                     prompt={prompt}
                     submittedQuery={submittedQuery}
                   />
@@ -647,7 +640,7 @@ function OpenLayout(props) {
                   <div className="space-y-2">
                     <div
                       className={`rounded-[30px] border bg-white p-1 transition-all duration-300 ${
-                        state.isGeneratingPrompt
+                        status.isGeneratingPrompt
                           ? 'border-primary/20 shadow-[0_24px_64px_-42px_rgba(15,97,117,0.34)] ring-1 ring-primary/15'
                           : 'border-[#e5dacb] shadow-[0_22px_64px_-42px_rgba(120,87,63,0.24)]'
                       }`}
@@ -657,26 +650,26 @@ function OpenLayout(props) {
                       </Label>
                       <Textarea
                         id="open-follow-up-notes"
-                        value={state.followUpNotes}
+                        value={query.followUpNotes}
                         maxLength={MAX_DETAILS_LENGTH}
-                        onChange={(event) => setFollowUpNotes(event.target.value)}
+                        onChange={(event) => query.setFollowUpNotes(event.target.value)}
                         onKeyDown={(event) =>
                           handleRefinementTextareaKeyDown(event, {
-                            canSubmit: hasDiscoveryResults && !state.isFinalizing,
-                            onSubmit: onFinalize,
+                            canSubmit: hasDiscoveryResults && !status.isFinalizing,
+                            onSubmit: actions.finalizeRefinement,
                           })
                         }
                         className="min-h-36 resize-none rounded-[28px] border-0 bg-transparent px-5 py-4 text-base leading-7 shadow-none placeholder:text-slate-400 focus-visible:ring-0"
                         placeholder={refinementCopy.placeholder}
-                        disabled={state.isFinalizing}
+                        disabled={status.isFinalizing}
                       />
-                      {shouldShowCharCounter(state.followUpNotes.length, MAX_DETAILS_LENGTH) ? (
+                      {shouldShowCharCounter(query.followUpNotes.length, MAX_DETAILS_LENGTH) ? (
                         <div className="flex justify-end px-4 pb-3">
-                          <CharCounter current={state.followUpNotes.length} max={MAX_DETAILS_LENGTH} />
+                          <CharCounter current={query.followUpNotes.length} max={MAX_DETAILS_LENGTH} />
                         </div>
                       ) : null}
                     </div>
-                    {state.isGeneratingPrompt ? (
+                    {status.isGeneratingPrompt ? (
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-xs font-medium tracking-[0.02em] text-slate-500">
                           <span className="relative flex h-2.5 w-2.5">
@@ -697,9 +690,9 @@ function OpenLayout(props) {
                     <div className="order-2 flex flex-col items-start gap-1 sm:order-1">
                       <button
                         type="button"
-                        disabled={!hasDiscoveryResults || state.isFinalizing}
+                        disabled={!hasDiscoveryResults || status.isFinalizing}
                         className="text-left text-sm text-slate-500 underline-offset-2 transition-colors hover:text-slate-700 hover:underline disabled:pointer-events-none disabled:opacity-40"
-                        onClick={onShowProductsNow}
+                        onClick={actions.showProductsNow}
                       >
                         Skip the question and show results →
                       </button>
@@ -710,12 +703,12 @@ function OpenLayout(props) {
                     <div className="order-1 flex flex-col gap-1 sm:order-2 sm:items-end">
                       <Button
                         type="button"
-                        disabled={!hasDiscoveryResults || state.isFinalizing}
+                        disabled={!hasDiscoveryResults || status.isFinalizing}
                         className="h-14 w-full rounded-[24px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_24px_52px_-28px_rgba(15,97,117,0.42)] hover:bg-primary/90 sm:w-auto sm:min-w-[220px]"
-                        onClick={onFinalize}
+                        onClick={actions.finalizeRefinement}
                       >
-                        {state.isFinalizing ? 'Narrowing your picks...' : 'Show focused picks'}
-                        {state.isFinalizing ? (
+                        {status.isFinalizing ? 'Narrowing your picks...' : 'Show focused picks'}
+                        {status.isFinalizing ? (
                           <LoaderCircle className="ml-2 h-4 w-4 animate-spin" />
                         ) : (
                           <Sparkles className="ml-2 h-4 w-4" />
@@ -736,10 +729,10 @@ function OpenLayout(props) {
 
         <section className="w-full max-w-[1100px] space-y-4">
           <QuerySuggestionPrompt
-            isApplying={state.isApplyingQuerySuggestion}
-            onKeepResults={state.handleRejectQuerySuggestion}
-            onTrySuggestedSearch={state.handleTryQuerySuggestion}
-            suggestion={state.querySuggestion}
+            isApplying={querySuggestion.isApplying}
+            onKeepResults={querySuggestion.reject}
+            onTrySuggestedSearch={querySuggestion.trySuggestedSearch}
+            suggestion={querySuggestion.suggestion}
           />
           {hasFinalResults && !hasOpenedModal ? (
             <p role="status" aria-live="polite" className="text-center text-sm text-slate-400">
@@ -761,25 +754,25 @@ function OpenLayout(props) {
                   errorMessage={errorMessage}
                   hasFinalResults={hasFinalResults}
                   hasStartedSearch={hasStartedSearch}
-                  isFinalizing={state.isFinalizing}
+                  isFinalizing={status.isFinalizing}
                   isLoading={isLoading}
                   isRetryReady
-                  isRetrying={state.isFinalizing}
-                  isGeneratingRetryAdvice={state.isGeneratingRetryAdvice}
-                  onRetailerClick={onRetailerClick}
+                  isRetrying={status.isFinalizing}
+                  isGeneratingRetryAdvice={retry.isGeneratingAdvice}
+                  onRetailerClick={actions.trackRetailerClick}
                   onSelectProduct={handleSelectProduct}
-                  onRetryAdviceRequest={state.handleRetryAdviceRequest}
-                  onRetryFeedbackChange={state.setRetryFeedback}
+                  onRetryAdviceRequest={retry.requestAdvice}
+                  onRetryFeedbackChange={retry.setFeedback}
                   onRetrySearch={handleRetrySearch}
-                  previousResults={state.previousResults}
-                  retryAdvice={state.retryAdvice}
-                  selectionState={state.selectionState}
-                  followUpNotes={state.followUpNotes}
-                  retryCount={state.retryCount}
-                  retryFeedback={state.retryFeedback}
-                  showFinalResultBadges={state.showFinalResultBadges}
+                  previousResults={results.previous}
+                  retryAdvice={retry.advice}
+                  selectionState={results.selectionState}
+                  followUpNotes={query.followUpNotes}
+                  retryCount={retry.count}
+                  retryFeedback={retry.feedback}
+                  showFinalResultBadges={results.showFinalBadges}
                   showPreviewResults={showPreviewResults}
-                  suggestedRetryQuery={state.suggestedRetryQuery}
+                  suggestedRetryQuery={retry.suggestedQuery}
                   submittedQuery={submittedQuery}
                 />
               </Suspense>
@@ -787,7 +780,7 @@ function OpenLayout(props) {
           ) : null}
         </section>
 
-        {showTimingPanel ? <TimingPanel requestTiming={state.requestTiming} /> : null}
+        {showTimingPanel ? <TimingPanel requestTiming={status.requestTiming} /> : null}
       </div>
       </main>
     </>
@@ -795,18 +788,15 @@ function OpenLayout(props) {
 }
 
 export function HomeExperience({ initialSearchQuery = '' } = {}) {
-  const state = useGuidedSearch()
-  const {
-    beginGuidedSearch,
-    hasStartedSearch,
-    productQuery,
-    setProductQuery,
-  } = state
+  const guided = useGuidedSearch()
+  const { actions, analytics, query, results, status } = guided
+  const { beginGuidedSearch, trackRetailerClick } = actions
+  const { productQuery, setProductQuery, submittedQuery } = query
   const initialSearchQueryText = String(initialSearchQuery || '').trim()
   const initialSearchRef = useRef({ query: '', status: 'idle' })
   const showTimingPanel = shouldShowTimingPanel()
   const [feedbackSessionId] = useState(() => getOrCreateAnalyticsSessionId())
-  const feedbackStage = getFeedbackStage(state)
+  const feedbackStage = getFeedbackStage(guided)
 
   useEffect(() => {
     applyPlainBackgroundMode()
@@ -836,7 +826,7 @@ export function HomeExperience({ initialSearchQuery = '' } = {}) {
       !initialSearchQueryText ||
       initialSearch.query !== initialSearchQueryText ||
       initialSearch.status !== 'set-query' ||
-      hasStartedSearch ||
+      status.hasStartedSearch ||
       productQuery !== initialSearchQueryText
     ) {
       return
@@ -852,62 +842,42 @@ export function HomeExperience({ initialSearchQuery = '' } = {}) {
     }
   }, [
     beginGuidedSearch,
-    hasStartedSearch,
+    status.hasStartedSearch,
     initialSearchQueryText,
     productQuery,
   ])
 
   const layoutProps = {
-    displayedResults: state.displayedResults,
-    errorMessage: state.errorMessage,
-    hasFinalResults: state.hasFinalResults,
-    hasStartedSearch: state.hasStartedSearch,
-    isLoading: state.isLoading,
-    onFinalize: state.handleFinalizeRefinement,
-    onRetailerClick: state.handleRetailerClick,
-    onSelectProduct: state.handleSelectProduct,
-    onShowProductsNow: state.handleShowProductsNow,
-    prompt: state.refinementPrompt,
-    previousResults: state.previousResults,
-    resetToNewSearch: state.resetToNewSearch,
-    selectionState: state.selectionState,
-    retryCount: state.retryCount,
-    retryFeedback: state.retryFeedback,
-    setFollowUpNotes: state.setFollowUpNotes,
-    setProductQuery: state.setProductQuery,
-    showFinalResultBadges: state.showFinalResultBadges,
+    guided,
     showTimingPanel,
-    showPreviewResults: state.showPreviewResults,
-    state,
-    submittedQuery: state.submittedQuery,
   }
 
   return (
     <>
       <OpenLayout {...layoutProps} />
-      {state.selectedProduct ? (
+      {results.selectedProduct ? (
         <Suspense fallback={<ProductDetailModalFallback />}>
           <ProductDetailModal
-            item={state.selectedProduct}
-            isEnrichmentSettled={state.isEnrichmentSettled}
+            item={results.selectedProduct}
+            isEnrichmentSettled={status.isEnrichmentSettled}
             onRetailerClick={() =>
-              state.handleRetailerClick(state.selectedProduct, {
-                position: state.selectedProduct?.analyticsMeta?.position ?? 0,
-                resultSet: state.selectedProduct?.analyticsMeta?.resultSet || 'final',
+              trackRetailerClick(results.selectedProduct, {
+                position: results.selectedProduct?.analyticsMeta?.position ?? 0,
+                resultSet: results.selectedProduct?.analyticsMeta?.resultSet || 'final',
               })
             }
-            onClose={() => state.setSelectedProduct(null)}
+            onClose={() => results.setSelectedProduct(null)}
           />
         </Suspense>
       ) : null}
       <FeedbackFab
-        finalized={state.hasFinalResults}
-        hasStartedSearch={state.hasStartedSearch}
-        queryText={state.submittedQuery || state.productQuery}
-        resultsSeen={state.displayedResults.length > 0}
-        searchId={state.analyticsSearchId}
-        selectedProductId={state.selectedProduct?.id || ''}
-        sessionId={state.analyticsSessionId || feedbackSessionId}
+        finalized={results.hasFinalResults}
+        hasStartedSearch={status.hasStartedSearch}
+        queryText={submittedQuery || productQuery}
+        resultsSeen={results.displayed.length > 0}
+        searchId={analytics.searchId}
+        selectedProductId={results.selectedProduct?.id || ''}
+        sessionId={analytics.sessionId || feedbackSessionId}
         stageReached={feedbackStage}
       />
     </>
