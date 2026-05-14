@@ -14,6 +14,7 @@ import {
   handleRainforestDiscoverySearch,
   handleRefinementPrompt,
   handleRetryAdvice,
+  handleSentrySmokeTest,
   handleSearchDebug,
   handleSupabaseHealth,
 } from './server.js'
@@ -102,6 +103,10 @@ app.post('/api/analytics/track', async (req, res) => {
 
 app.get('/api/analytics/dashboard', async (req, res) => {
   await handleAnalyticsDashboard(req, res)
+})
+
+app.get('/api/debug/sentry-smoke-test', async (req, res) => {
+  await handleSentrySmokeTest(getRequestUrl(req), res)
 })
 
 app.post('/api/feedback', async (req, res) => {

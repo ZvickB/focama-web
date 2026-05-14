@@ -74,6 +74,7 @@ const FEEDBACK_MAX_SELECTED_PRODUCT_ID_LENGTH = 200
 const ANALYTICS_DASHBOARD_MAX_DAYS = 90
 const ANALYTICS_DASHBOARD_DEFAULT_DAYS = 14
 const ENRICHMENT_STREAM_TIMEOUT_MS = 30000
+const SENTRY_SMOKE_TEST_ROUTE = '/api/debug/sentry-smoke-test'
 const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
 const CACHE_SCOPE_RAINFOREST = 'rainforest_discovery'
 const CACHE_SCOPE_DISCOVERY_SESSION = 'guided_discovery_session'
@@ -2253,6 +2254,36 @@ export async function handleAnalyticsDashboard(request, response) {
   sendJson(response, 200, dashboard)
 }
 
+export async function handleSentrySmokeTest(requestUrl, response) {
+  const configuredSecret = getEnv('SENTRY_TEST_SECRET')
+
+  if (!configuredSecret) {
+    sendJson(response, 404, { error: 'Not found.' })
+    return
+  }
+
+  const providedSecret = requestUrl.searchParams.get('secret') || ''
+
+  if (providedSecret !== configuredSecret) {
+    sendJson(response, 404, { error: 'Not found.' })
+    return
+  }
+
+  const smokeTestId = randomUUID()
+
+  reportBackendError(new Error('Sentry smoke test'), {
+    label: 'sentry_smoke_test',
+    route: SENTRY_SMOKE_TEST_ROUTE,
+    smokeTestId,
+    source: 'manual_debug',
+  })
+
+  sendJson(response, 202, {
+    ok: true,
+    smokeTestId,
+  })
+}
+
 export function createApiServer() {
   initObservability()
   registerProcessErrorHandlers()
@@ -2325,6 +2356,11 @@ export function createApiServer() {
 
       if (request.method === 'GET' && requestUrl.pathname === '/api/analytics/dashboard') {
         await handleAnalyticsDashboard(request, response)
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === SENTRY_SMOKE_TEST_ROUTE) {
+        await handleSentrySmokeTest(requestUrl, response)
         return
       }
 
