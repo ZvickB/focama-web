@@ -79,26 +79,25 @@ describe('ProductDetailModal', () => {
 })
 
 describe('ResultsSection retry advice', () => {
-  it('shows a simple jump action instead of an inline suggested query editor', () => {
-    const handleJumpToSearchForm = vi.fn()
+  it('shows inline suggested-query confirmation and edit controls', () => {
+    const handleRetrySearch = vi.fn()
 
     render(
       <ResultsSection
         displayedResults={[]}
         errorMessage=""
         hasFinalResults
-        hasLoadedSuggestionAtTop
         hasStartedSearch
         isFinalizing={false}
         isLoading={false}
         isRetryReady
         isRetrying={false}
         isGeneratingRetryAdvice={false}
-        onJumpToSearchForm={handleJumpToSearchForm}
         onRetailerClick={vi.fn()}
         onSelectProduct={vi.fn()}
         onRetryAdviceRequest={vi.fn()}
         onRetryFeedbackChange={vi.fn()}
+        onRetrySearch={handleRetrySearch}
         previousResults={[]}
         retryAdvice={{
           rationale: 'The first search was too broad for the kind of product you described.',
@@ -113,17 +112,22 @@ describe('ResultsSection retry advice', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /not quite what you needed/i }))
+    fireEvent.click(screen.getByRole('button', { name: /not seeing what you had in mind/i }))
 
-    expect(screen.getByRole('button', { name: /go to search form/i })).toBeInTheDocument()
+    expect(screen.getByText(/try this search instead/i)).toBeInTheDocument()
+    expect(screen.getByText('compact carry on stroller')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /search this/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /edit first/i })).toBeInTheDocument()
     expect(screen.queryByText(/suggestion loaded above/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/scroll up to edit and try it/i)).not.toBeInTheDocument()
-    expect(screen.queryByLabelText(/try this search/i)).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /use this search/i })).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /go to search form/i }))
+    fireEvent.click(screen.getByRole('button', { name: /edit first/i }))
+    fireEvent.change(screen.getByLabelText(/edit suggested search/i), {
+      target: { value: 'compact umbrella stroller' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /search this/i }))
 
-    expect(handleJumpToSearchForm).toHaveBeenCalledTimes(1)
+    expect(handleRetrySearch).toHaveBeenCalledWith('compact umbrella stroller')
   })
 })
 

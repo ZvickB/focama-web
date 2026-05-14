@@ -21,13 +21,15 @@
 - Query-quality SSE and suggested-query prewarm remain intentionally unimplemented. Add them only if the polling MVP proves useful and the user explicitly chooses that next step.
 - Review early tester feedback from the new homepage FAB and decide whether the reveal timing, wording, or question set should change.
 - Decide whether to add a proactive pool-mismatch nudge before the user opens retry.
+- Watch retry-advice behavior on multi-constraint misses such as brand + product type + dietary need; the prompt now preserves accumulated constraints by default, and the frontend now exposes correction chips plus inline suggested-query confirmation, but this still needs live validation.
 - Replace the About page with a `Why Focamai` page, then update nav and add a clear return-home path.
 - Watch whether the new inline clickout disclosure feels clear and trust-building, and adjust the wording if testers read it as friction or legal copy.
 - Keep trimming `backend/server.js` so route orchestration and flow logic do not keep growing in one file.
 - Use the local `/admin/analytics` dashboard during development against live data and decide which weak-query, weak-ranking, or refine-friction fixes to prioritize first.
 
 ## Backend/provider follow-ups
-- The current shortlist-detail helper is still Oxylabs-backed. When ready, switch finalize to `fetchRainforestProductDetailsByAsin` without changing the shared product-details cache layer.
+- Discovery now tries Rainforest first and falls back to Oxylabs when Rainforest is unavailable, rate-limited, out of credits, or in a provider incident; validate this split on live tester searches before removing the fallback.
+- The current shortlist-detail helper is still Oxylabs-backed so modal bullets/descriptions stay on the stronger detail path for now.
 - Keep the SerpApi route inactive unless there is a deliberate reason to reactivate multi-retailer discovery.
 - Create the `rate_limit_events` table in Supabase before public traffic so Render instances share the same rate-limit bucket; the app falls back to process-local limiting if the table is unavailable.
 - Add the real `SENTRY_DSN` and confirm events arrive in production once the Render environment is updated.

@@ -862,7 +862,7 @@ export function useGuidedSearch() {
         activeSearchIdRef.current !== snapshot.searchId ||
         submittedQuery !== snapshot.query ||
         followUpNotes !== snapshot.followUpNotes ||
-        retryFeedback.trim() !== snapshot.rejectionFeedback ||
+        retryFeedback.trim() !== snapshot.visibleFeedback ||
         finalResultsKey !== snapshot.resultsKey
       ) {
         return
@@ -885,7 +885,7 @@ export function useGuidedSearch() {
         activeSearchIdRef.current !== snapshot.searchId ||
         submittedQuery !== snapshot.query ||
         followUpNotes !== snapshot.followUpNotes ||
-        retryFeedback.trim() !== snapshot.rejectionFeedback ||
+        retryFeedback.trim() !== snapshot.visibleFeedback ||
         finalResultsKey !== snapshot.resultsKey
       ) {
         return
@@ -1386,12 +1386,14 @@ export function useGuidedSearch() {
     startGuidedSearch(normalizedQuery)
   }
 
-  function handleRetryAdviceRequest() {
-    if (!submittedQuery || !retryFeedback.trim() || !hasFinalResults || retryAdviceMutation.isPending) {
+  function handleRetryAdviceRequest({ rejectionFeedback } = {}) {
+    const normalizedVisibleFeedback = retryFeedback.trim()
+    const normalizedFeedback = String(rejectionFeedback ?? normalizedVisibleFeedback).trim()
+
+    if (!submittedQuery || !normalizedFeedback || !hasFinalResults || retryAdviceMutation.isPending) {
       return
     }
 
-    const normalizedFeedback = retryFeedback.trim()
     const requestId = retryAdviceRequestIdRef.current + 1
     retryAdviceRequestIdRef.current = requestId
 
@@ -1413,9 +1415,34 @@ export function useGuidedSearch() {
         query: submittedQuery,
         followUpNotes,
         rejectionFeedback: normalizedFeedback,
+        visibleFeedback: normalizedVisibleFeedback,
         resultsKey: finalResultsKey,
       },
     })
+  }
+
+  function handleTryRetrySuggestion(query) {
+    const nextQuery = String(query || suggestedRetryQuery || '').trim()
+
+    if (!nextQuery) {
+      return false
+    }
+
+    const { error, isValid, normalizedQuery } = validateSearchInput(nextQuery, '')
+
+    if (!isValid) {
+      setErrorMessage(error)
+      return false
+    }
+
+    trackSearchEvent('retry_advice_accepted', {
+      suggestedQueryLength: normalizedQuery.length,
+    })
+    setProductQuery(normalizedQuery)
+    startGuidedSearch(normalizedQuery, {
+      searchEventName: 'retry_advice_search_started',
+    })
+    return true
   }
 
   function updateRetryFeedback(nextValue) {
@@ -1522,6 +1549,7 @@ export function useGuidedSearch() {
     handleRetryAdviceRequest,
     handleShowProductsNow,
     handleTryQuerySuggestion,
+    handleTryRetrySuggestion,
     resetToNewSearch,
     setRetryFeedback: updateRetryFeedback,
     setFollowUpNotes,

@@ -72,4 +72,26 @@ describe('getAmazonDomain', () => {
       ]),
     )
   })
+
+  it('preserves the Rainforest provider status when the request fails', async () => {
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 402,
+    })
+
+    const result = await fetchRainforestArtifacts({
+      productQuery: 'travel stroller',
+      rainforestApiKey: 'rf-key',
+      amazonDomain: 'amazon.ca',
+    })
+
+    expect(result).toEqual({
+      error: {
+        error: 'Rainforest API request failed.',
+        providerStatusCode: 402,
+        statusCode: 502,
+      },
+      artifacts: null,
+    })
+  })
 })

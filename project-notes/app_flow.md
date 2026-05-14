@@ -34,7 +34,7 @@
 ## Guided backend flow
 - `GET /api/search/rainforest-discover`
   - primary homepage discovery route
-  - currently uses the Oxylabs-backed Amazon path under the Rainforest-named route
+  - uses Rainforest for Amazon discovery first, then falls back to Oxylabs discovery when Rainforest is unavailable, rate-limited, out of credits, or in a provider incident
   - writes reusable guided discovery cache and creates a separate token-scoped session snapshot for finalize/enrichment
   - marketplace items without a known positive price are treated as invalid and are removed before preview results or AI candidate-pool caching
   - after the normal response is sent, starts a background query-quality review when OpenAI is configured and stores `selection.queryQuality` on the token-scoped session snapshot
@@ -94,9 +94,14 @@
 
 ## Retry behavior
 - Retry is not an endless-results flow.
-- The current retry UX asks what felt wrong about the picks.
+- The current retry UX opens with `Not seeing what you had in mind? Tell us what to correct`.
+- The expanded retry panel asks `What should Focamai keep or change?`, offers quick correction chips such as wrong brand, wrong product type, missing dietary need, too expensive, wrong size/count, and not available, and keeps a freeform text area for explicit corrections.
 - `/api/search/retry-advice` suggests a more specific next query.
-- When retry advice returns a suggested query, the homepage loads it into the main search input, scrolls back to the top search form, hides the previous follow-up textarea, and lets the user either try that new search or jump back down to the existing results without resetting state yet.
+- Retry advice preserves accumulated must-have constraints from the original query, follow-up notes, and retry feedback by default, but can replace or remove a previous constraint when the latest feedback clearly changes direction.
+- Selected correction chips are folded into the existing `rejectionFeedback` text sent to `/api/search/retry-advice`; the backend contract is otherwise unchanged.
+- When retry advice returns a suggested query, the retry panel shows an inline confirmation strip near the current results with `Search this` and `Edit first`.
+- `Search this` starts a normal new guided search from the retry area and scrolls toward the loading/results region. `Edit first` keeps the suggested query editable inside the retry panel instead of moving it into the top search box.
+- The panel shows small `Keeping:` tags when it can infer retained constraints from the suggested query and prior context. These are reassurance UI, not a hard lock; explicit user changes can still replace or remove constraints.
 - The same-pool retry path is not part of the active homepage UI right now.
 
 ## Query-quality suggestion behavior

@@ -43,6 +43,7 @@ import {
   writeProductDetailsCacheEntries,
 } from './lib/search-storage.js'
 import { buildCacheKey, getEnv, validateSearchInput } from './lib/search-data.js'
+import { fetchRainforestArtifacts } from './lib/rainforest-pipeline.js'
 import { getAmazonDomainFromCountryCode, normalizeAmazonDomain } from '../shared/amazon-marketplaces.js'
 
 const PORT = Number(process.env.PORT || 8787)
@@ -80,6 +81,7 @@ const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const RATE_LIMIT_WAIT_MESSAGE = 'Please wait about 10 seconds and try again.'
+const RAINFOREST_FALLBACK_STATUS_CODES = new Set([402, 429, 500, 503])
 
 function getRequestedAmazonDomain(value = '') {
   return normalizeAmazonDomain(value)
@@ -88,6 +90,93 @@ function getRequestedAmazonDomain(value = '') {
 function getAmazonMarketplaceScope(scope, amazonDomain = '') {
   const normalizedAmazonDomain = getRequestedAmazonDomain(amazonDomain)
   return normalizedAmazonDomain ? `${scope}:${normalizedAmazonDomain}` : scope
+}
+
+function shouldFallbackFromRainforest(error) {
+  if (!error || typeof error !== 'object') {
+    return true
+  }
+
+  const statusCode = Number(error.providerStatusCode ?? error.statusCode)
+  return Number.isFinite(statusCode)
+    ? RAINFOREST_FALLBACK_STATUS_CODES.has(statusCode)
+    : true
+}
+
+async function fetchDiscoveryArtifactsWithFallback({
+  filterConfig,
+  productQuery,
+  details,
+  reasonFallback,
+  rainforestApiKey,
+  oxylabsUsername,
+  oxylabsPassword,
+  countryCode,
+  amazonDomain,
+}) {
+  if (rainforestApiKey) {
+    try {
+      const rainforestResult = await fetchRainforestArtifacts({
+        filterConfig,
+        productQuery,
+        details,
+        reasonFallback,
+        rainforestApiKey,
+        countryCode,
+        amazonDomain,
+      })
+
+      if (!rainforestResult.error) {
+        return {
+          ...rainforestResult,
+          source: 'rainforest_discovery',
+          fallbackFrom: null,
+        }
+      }
+
+      if (!shouldFallbackFromRainforest(rainforestResult.error) || !oxylabsUsername || !oxylabsPassword) {
+        return {
+          ...rainforestResult,
+          source: 'rainforest_discovery',
+          fallbackFrom: null,
+        }
+      }
+    } catch (error) {
+      if (!oxylabsUsername || !oxylabsPassword) {
+        throw error
+      }
+    }
+  }
+
+  if (!oxylabsUsername || !oxylabsPassword) {
+    return {
+      error: {
+        error: rainforestApiKey
+          ? 'Rainforest API request failed and Oxylabs fallback is not configured.'
+          : 'RAINFOREST_API_KEY or OXYLABS_USERNAME and OXYLABS_PASSWORD are required in the root .env file.',
+        statusCode: 500,
+      },
+      artifacts: null,
+      source: 'rainforest_discovery',
+      fallbackFrom: null,
+    }
+  }
+
+  const oxylabsResult = await fetchOxylabsArtifacts({
+    filterConfig,
+    productQuery,
+    details,
+    reasonFallback,
+    oxylabsUsername,
+    oxylabsPassword,
+    amazonDomain,
+  })
+
+  return {
+    ...oxylabsResult,
+    source: rainforestApiKey ? 'oxylabs_discovery_fallback' : 'oxylabs_discovery',
+    fallbackFrom: rainforestApiKey ? 'rainforest_discovery' : null,
+  }
 }
 
 function getDiscoverySessionScope(discoveryToken = '') {
@@ -815,11 +904,14 @@ export async function handleCachedSearch(requestUrl, response) {
 
 export async function handleRainforestDiscoverySearch(requestUrl, response, request = { headers: {} }) {
   const requestStartedAt = nowMs()
-  const oxylabsUsername = getEnv('OXYLABS_USERNAME') // TODO: swap back to Rainforest before launch.
-  const oxylabsPassword = getEnv('OXYLABS_PASSWORD') // TODO: swap back to Rainforest before launch.
+  const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
+  const oxylabsUsername = getEnv('OXYLABS_USERNAME')
+  const oxylabsPassword = getEnv('OXYLABS_PASSWORD')
 
-  if (!oxylabsUsername || !oxylabsPassword) {
-    sendJson(response, 500, { error: 'OXYLABS_USERNAME and OXYLABS_PASSWORD are required in the root .env file.' })
+  if (!rainforestApiKey && (!oxylabsUsername || !oxylabsPassword)) {
+    sendJson(response, 500, {
+      error: 'RAINFOREST_API_KEY or OXYLABS_USERNAME and OXYLABS_PASSWORD are required in the root .env file.',
+    })
     return
   }
 
@@ -915,13 +1007,20 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
     const discoveryToken = createDiscoveryToken()
     const discoverySessionScope = getDiscoverySessionScope(discoveryToken)
     const rainforestStartedAt = nowMs()
-    const { artifacts, error: artifactsError } = await fetchOxylabsArtifacts({ // TODO: swap back to Rainforest before launch.
+    const {
+      artifacts,
+      error: artifactsError,
+      fallbackFrom,
+      source: discoverySource,
+    } = await fetchDiscoveryArtifactsWithFallback({
       filterConfig: LIVE_RESULT_FILTER_CONFIG,
       productQuery: normalizedQuery,
       details: normalizedDetails,
       reasonFallback: 'Returned by the Rainforest API search route',
+      rainforestApiKey,
       oxylabsUsername,
       oxylabsPassword,
+      countryCode,
       amazonDomain,
     })
 
@@ -944,11 +1043,12 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
         discoveryToken: '',
         results: artifacts.results,
         selection: buildDiscoveryPreviewSelection(artifacts.results),
-        source: 'rainforest_discovery',
+        source: discoverySource,
         scope: rainforestScope,
       }),
       {
         amazonDomain,
+        fallbackFrom,
         label: 'write_guided_discovery_snapshot',
         query: normalizedQuery,
         route: '/api/search/rainforest-discover',
@@ -965,7 +1065,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       discoveryToken,
       results: artifacts.results,
       selection: buildDiscoveryPreviewSelection(artifacts.results),
-      source: 'rainforest_discovery_session',
+      source: `${discoverySource}_session`,
       scope: discoverySessionScope,
     })
 
@@ -979,7 +1079,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       productQuery: normalizedQuery,
       resultCount: artifacts.results.length,
       selectionMode: 'discovery_preview',
-      source: 'rainforest_discovery',
+      source: discoverySource,
     })
 
     logSearchFlowEvent('rainforest_discovery_completed', {
@@ -991,7 +1091,9 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
         : 0,
       previewCount: artifacts.results.length,
       cacheMs: roundTimingDuration(cacheLookupDuration),
+      fallbackFrom,
       rainforestMs: roundTimingDuration(rainforestDuration),
+      source: discoverySource,
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
 
@@ -1003,6 +1105,8 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
         amazonDomain,
       },
       previewResults: artifacts.results,
+      source: discoverySource,
+      fallbackFrom,
     }, {
       serverTiming: [
         { name: 'cache', duration: cacheLookupDuration },

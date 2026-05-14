@@ -102,14 +102,15 @@ describe('HomePage retry advice', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Compact airport stroller')
-    await user.click(screen.getByRole('button', { name: /not quite what you needed\?/i }))
-    await screen.findByText(/what felt off about these picks\?/i)
+    await user.click(screen.getByRole('button', { name: /not seeing what you had in mind/i }))
+    await screen.findByText(/what should focamai keep or change/i)
 
+    await user.click(screen.getByRole('button', { name: /wrong product type/i }))
     await user.type(
       document.getElementById('results-retry-feedback'),
       'Still too bulky for city travel.',
     )
-    await user.click(screen.getByRole('button', { name: /get a suggestion/i }))
+    await user.click(screen.getByRole('button', { name: /suggest a better search/i }))
 
     expect(
       await screen.findByText(/the rejected picks sounded too bulky/i),
@@ -128,7 +129,7 @@ describe('HomePage retry advice', () => {
     expect(JSON.parse(retryAdviceRequest[1].body)).toEqual({
       query: 'stroller',
       followUpNotes: 'comfort matters most',
-      rejectionFeedback: 'Still too bulky for city travel.',
+      rejectionFeedback: 'Correction type: Wrong product type\nStill too bulky for city travel.',
       shortlist: [
         { title: 'Travel stroller' },
         { title: 'Compact airport stroller' },
@@ -137,14 +138,21 @@ describe('HomePage retry advice', () => {
     expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/search/finalize'))).toHaveLength(1)
 
     const productTopicInput = screen.getByLabelText(/product topic/i)
-    expect(productTopicInput).toHaveValue('compact city stroller under 18 pounds')
-    expect(screen.getByRole('button', { name: /try this search/i })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /back to results/i }).length).toBeGreaterThan(0)
+    expect(productTopicInput).toHaveValue('stroller')
+    expect(screen.getByText(/try this search instead/i)).toBeInTheDocument()
+    expect(screen.getByText('compact city stroller under 18 pounds')).toBeInTheDocument()
+    expect(screen.getByText(/keeping:/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /search this/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /edit first/i })).toBeInTheDocument()
 
-    await user.clear(productTopicInput)
-    await user.type(productTopicInput, 'lightweight umbrella stroller for city travel')
+    await user.click(screen.getByRole('button', { name: /edit first/i }))
+    await user.clear(screen.getByLabelText(/edit suggested search/i))
+    await user.type(screen.getByLabelText(/edit suggested search/i), 'lightweight umbrella stroller for city travel')
 
     expect(screen.getByLabelText(/product topic/i)).toHaveValue(
+      'stroller',
+    )
+    expect(screen.getByLabelText(/edit suggested search/i)).toHaveValue(
       'lightweight umbrella stroller for city travel',
     )
     expect(fetchMock).toHaveBeenCalledTimes(4)
@@ -238,12 +246,12 @@ describe('HomePage retry advice', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
-    await user.click(screen.getByRole('button', { name: /not quite what you needed\?/i }))
-    await screen.findByText(/what felt off about these picks\?/i)
+    await user.click(screen.getByRole('button', { name: /not seeing what you had in mind/i }))
+    await screen.findByText(/what should focamai keep or change/i)
 
     const retryTextarea = document.getElementById('results-retry-feedback')
     await user.type(retryTextarea, 'Too bulky')
-    await user.click(screen.getByRole('button', { name: /get a suggestion/i }))
+    await user.click(screen.getByRole('button', { name: /suggest a better search/i }))
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/search/retry-advice'))).toBe(true)
     })
@@ -263,7 +271,7 @@ describe('HomePage retry advice', () => {
     })
 
     expect(screen.queryByText(/a narrower search should help/i)).not.toBeInTheDocument()
-    expect(screen.queryByLabelText(/try this search/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /search this/i })).not.toBeInTheDocument()
     expect(screen.getByLabelText(/product topic/i)).toHaveValue('')
   }, 10000)
 
@@ -353,11 +361,11 @@ describe('HomePage retry advice', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
-    await user.click(screen.getByRole('button', { name: /not quite what you needed\?/i }))
-    await screen.findByText(/what felt off about these picks\?/i)
+    await user.click(screen.getByRole('button', { name: /not seeing what you had in mind/i }))
+    await screen.findByText(/what should focamai keep or change/i)
 
     await user.type(document.getElementById('results-retry-feedback'), 'Too bulky')
-    await user.click(screen.getByRole('button', { name: /get a suggestion/i }))
+    await user.click(screen.getByRole('button', { name: /suggest a better search/i }))
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/search/retry-advice'))).toBe(true)
     })
@@ -452,14 +460,14 @@ describe('HomePage retry advice', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
-    await user.click(screen.getByRole('button', { name: /not quite what you needed\?/i }))
-    await screen.findByText(/what felt off about these picks\?/i)
+    await user.click(screen.getByRole('button', { name: /not seeing what you had in mind/i }))
+    await screen.findByText(/what should focamai keep or change/i)
     await user.type(document.getElementById('results-retry-feedback'), 'Too bulky')
-    await user.click(screen.getByRole('button', { name: /get a suggestion/i }))
+    await user.click(screen.getByRole('button', { name: /suggest a better search/i }))
 
     expect(await screen.findByText(/a narrower search should help/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/product topic/i)).toHaveValue('stroller')
-    expect(screen.queryByRole('button', { name: /try this search/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /search this/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /new search/i })).toBeInTheDocument()
   }, 10000)
 
@@ -595,12 +603,12 @@ describe('HomePage retry advice', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
-    await user.click(screen.getByRole('button', { name: /not quite what you needed\?/i }))
-    await screen.findByText(/what felt off about these picks\?/i)
+    await user.click(screen.getByRole('button', { name: /not seeing what you had in mind/i }))
+    await screen.findByText(/what should focamai keep or change/i)
 
-    expect(screen.getByText(/what felt off about these picks\?/i)).toBeInTheDocument()
+    expect(screen.getByText(/what should focamai keep or change/i)).toBeInTheDocument()
     expect(document.getElementById('results-retry-feedback')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /get a suggestion/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /suggest a better search/i })).toBeDisabled()
     expect(screen.queryByText(/retry 1 of 2/i)).not.toBeInTheDocument()
   })
 
@@ -668,6 +676,28 @@ describe('HomePage retry advice', () => {
             rationale: 'A narrower city stroller search should better match that feedback.',
           }),
       })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            discoveryToken: 'retry-discovery-token',
+            candidatePool: {
+              query: 'slim city stroller',
+              details: '',
+              candidates: [],
+            },
+            previewResults: [createMockResult({ id: 'result-3', title: 'Slim city stroller' })],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            prompt: 'What should we optimize for with this slim city stroller?',
+            helperText: 'Pick anything that matters.',
+            followUpPlaceholder: 'Anything else?',
+          }),
+      })
 
     vi.stubGlobal('fetch', fetchMock)
 
@@ -679,8 +709,8 @@ describe('HomePage retry advice', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await screen.findByText('Travel stroller')
-    await user.click(screen.getByRole('button', { name: /not quite what you needed\?/i }))
-    await screen.findByText(/what felt off about these picks\?/i)
+    await user.click(screen.getByRole('button', { name: /not seeing what you had in mind/i }))
+    await screen.findByText(/what should focamai keep or change/i)
 
     const retryTextarea = document.getElementById('results-retry-feedback')
     await user.type(retryTextarea, 'Line one')
@@ -695,7 +725,17 @@ describe('HomePage retry advice', () => {
     expect(
       await screen.findByText(/a narrower city stroller search should better match that feedback/i),
     ).toBeInTheDocument()
+    expect(screen.getByLabelText(/product topic/i)).toHaveValue('stroller')
+    expect(screen.getByRole('button', { name: /search this/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /search this/i }))
+
+    await screen.findByText(/what should we optimize for with this slim city stroller/i)
     expect(screen.getByLabelText(/product topic/i)).toHaveValue('slim city stroller')
-    expect(screen.getByRole('button', { name: /try this search/i })).toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes('/api/search/rainforest-discover?query=slim+city+stroller'),
+      ),
+    ).toBe(true)
   })
 })

@@ -318,9 +318,7 @@ function OpenLayout(props) {
   const lastResultsScrollQueryRef = useRef('')
   const lastPreviewScrollQueryRef = useRef('')
   const lastFinalizeScrollQueryRef = useRef('')
-  const lastAppliedRetrySuggestionRef = useRef('')
   const [showHeroCopy, setShowHeroCopy] = useState(false)
-  const [loadedRetrySuggestion, setLoadedRetrySuggestion] = useState(null)
   const [hasOpenedModal, setHasOpenedModal] = useState(false)
   const {
     displayedResults,
@@ -341,8 +339,7 @@ function OpenLayout(props) {
     state,
     submittedQuery,
   } = props
-  const hasLoadedRetrySuggestion = Boolean(loadedRetrySuggestion)
-  const shouldShowRefinementControls = hasStartedSearch && !hasLoadedRetrySuggestion
+  const shouldShowRefinementControls = hasStartedSearch
 
   useEffect(() => {
     const revealTimer = window.setTimeout(() => {
@@ -467,88 +464,24 @@ function OpenLayout(props) {
     }
   }, [hasFinalResults, submittedQuery])
 
-  useEffect(() => {
-    const normalizedSuggestion = String(state.suggestedRetryQuery || '').trim()
-
-    if (
-      !state.retryAdvice ||
-      !normalizedSuggestion ||
-      !hasStartedSearch ||
-      lastAppliedRetrySuggestionRef.current === normalizedSuggestion
-    ) {
-      return
-    }
-
-    const applyTimer = window.setTimeout(() => {
-      lastAppliedRetrySuggestionRef.current = normalizedSuggestion
-      setLoadedRetrySuggestion({
-        previousQuery: submittedQuery || state.productQuery,
-      })
-      setProductQuery(normalizedSuggestion)
-      scrollElementNearTop(refinementRef.current, 20)
-      searchInputRef.current?.focus?.()
-      searchInputRef.current?.select?.()
-    }, 0)
-
-    return () => {
-      window.clearTimeout(applyTimer)
-    }
-  }, [
-    hasStartedSearch,
-    setProductQuery,
-    state.productQuery,
-    state.retryAdvice,
-    state.suggestedRetryQuery,
-    submittedQuery,
-  ])
-
-  useEffect(() => {
-    if (!hasStartedSearch) {
-      const resetTimer = window.setTimeout(() => {
-        setLoadedRetrySuggestion(null)
-        lastAppliedRetrySuggestionRef.current = ''
-      }, 0)
-
-      return () => {
-        window.clearTimeout(resetTimer)
-      }
-    }
-
-    return undefined
-  }, [hasStartedSearch])
-
   const hasDiscoveryResults = Boolean(state.candidatePool)
   const showLoadingResults = isLoading && displayedResults.length === 0
   const shouldLoadResultsSection =
     hasStartedSearch || displayedResults.length > 0 || Boolean(errorMessage)
-  const canSubmitTopQuery = !isLoading && (!hasStartedSearch || hasLoadedRetrySuggestion)
+  const canSubmitTopQuery = !isLoading && !hasStartedSearch
 
   function handleSearchSubmit(event) {
-    if (hasLoadedRetrySuggestion) {
-      setLoadedRetrySuggestion(null)
-    }
-
     state.beginGuidedSearch(event)
   }
 
-  function handleBackToResults() {
-    if (!loadedRetrySuggestion) {
-      return
+  function handleRetrySearch(query) {
+    const didStart = state.handleTryRetrySuggestion(query)
+
+    if (didStart) {
+      window.setTimeout(() => {
+        scrollElementNearTop(resultsViewportRef.current, 20)
+      }, 0)
     }
-
-    setProductQuery(loadedRetrySuggestion.previousQuery || submittedQuery)
-    setLoadedRetrySuggestion(null)
-
-    window.setTimeout(() => {
-      scrollElementNearTop(resultsViewportRef.current, 20)
-    }, 0)
-  }
-
-  function handleJumpToSearchForm() {
-    scrollElementNearTop(refinementRef.current, 20)
-    window.setTimeout(() => {
-      searchInputRef.current?.focus?.()
-    }, 0)
   }
 
   const { setProgress } = useSearchProgress()
@@ -629,18 +562,6 @@ function OpenLayout(props) {
             <div
               className="w-full max-w-3xl"
             >
-              {hasLoadedRetrySuggestion ? (
-                <div className="mb-3 flex justify-start px-2">
-                  <button
-                    type="button"
-                    className="text-left text-sm text-slate-500 underline-offset-2 transition-colors hover:text-slate-700 hover:underline"
-                    onClick={handleBackToResults}
-                  >
-                    <span aria-hidden="true">←</span> Back to results
-                  </button>
-                </div>
-              ) : null}
-
               <div
                 ref={refinementRef}
                 className={`scroll-mt-28 rounded-[36px] border p-4 text-left shadow-[0_28px_120px_-72px_rgba(15,23,42,0.45)] backdrop-blur transition-all duration-300 sm:p-5 ${
@@ -673,13 +594,8 @@ function OpenLayout(props) {
                       autoFocus={isDesktop}
                       disabled={isLoading}
                     />
-                    {(hasLoadedRetrySuggestion || shouldShowCharCounter(state.productQuery.length, MAX_PRODUCT_QUERY_LENGTH)) ? (
+                    {shouldShowCharCounter(state.productQuery.length, MAX_PRODUCT_QUERY_LENGTH) ? (
                       <div className="mt-2 flex items-center justify-between gap-3 px-2">
-                        {hasLoadedRetrySuggestion ? (
-                          <p className="min-w-0 text-sm text-slate-600">
-                            Suggested based on your feedback — edit if needed.
-                          </p>
-                        ) : <span />}
                         {shouldShowCharCounter(state.productQuery.length, MAX_PRODUCT_QUERY_LENGTH) ? (
                           <span className="shrink-0">
                             <CharCounter current={state.productQuery.length} max={MAX_PRODUCT_QUERY_LENGTH} />
@@ -689,24 +605,22 @@ function OpenLayout(props) {
                     ) : null}
                   </div>
                   <Button
-                    type={!hasStartedSearch || hasLoadedRetrySuggestion ? 'submit' : 'button'}
+                    type={!hasStartedSearch ? 'submit' : 'button'}
                     disabled={isLoading}
                     className={`h-16 rounded-[28px] px-6 text-base text-primary-foreground shadow-[0_22px_48px_-28px_rgba(15,97,117,0.38)] transition-transform hover:-translate-y-[1px] ${
-                      hasStartedSearch && !hasLoadedRetrySuggestion
+                      hasStartedSearch
                         ? 'bg-primary/75 hover:bg-primary/85'
                         : 'bg-primary hover:bg-primary/90'
                     }`}
                     onClick={
-                      hasStartedSearch && !hasLoadedRetrySuggestion
+                      hasStartedSearch
                         ? (event) => handleNewSearchClick(event, resetToNewSearch)
                         : undefined
                     }
                   >
                     {isLoading
                       ? 'Starting your search...'
-                      : hasLoadedRetrySuggestion
-                        ? 'Try this search'
-                        : hasStartedSearch
+                      : hasStartedSearch
                         ? 'New search'
                         : 'Start search'}
                     {isLoading ? (
@@ -852,15 +766,15 @@ function OpenLayout(props) {
                   isRetryReady
                   isRetrying={state.isFinalizing}
                   isGeneratingRetryAdvice={state.isGeneratingRetryAdvice}
-                  hasLoadedSuggestionAtTop={hasLoadedRetrySuggestion}
                   onRetailerClick={onRetailerClick}
-                  onJumpToSearchForm={handleJumpToSearchForm}
                   onSelectProduct={handleSelectProduct}
                   onRetryAdviceRequest={state.handleRetryAdviceRequest}
                   onRetryFeedbackChange={state.setRetryFeedback}
+                  onRetrySearch={handleRetrySearch}
                   previousResults={state.previousResults}
                   retryAdvice={state.retryAdvice}
                   selectionState={state.selectionState}
+                  followUpNotes={state.followUpNotes}
                   retryCount={state.retryCount}
                   retryFeedback={state.retryFeedback}
                   showFinalResultBadges={state.showFinalResultBadges}

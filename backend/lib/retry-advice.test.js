@@ -64,9 +64,47 @@ describe('retry advice', () => {
     expect(parsedBody.text.format.schema.properties.suggested_query.maxLength).toBe(100)
     expect(parsedBody.input[1].content).toContain('Always return recommendation as new_search.')
     expect(parsedBody.input[1].content).toContain('The suggested_query must be 100 characters or fewer')
+    expect(parsedBody.input[1].content).toContain('Preserve accumulated must-have constraints')
+    expect(parsedBody.input[1].content).toContain('Only drop or replace a previous constraint when the latest feedback clearly says')
+    expect(parsedBody.input[1].content).toContain('keep the earlier requirements and add the new one')
     expect(parsedBody.input[1].content).toContain('Write rationale as exactly 1 sentence of natural UI copy.')
     expect(parsedBody.input[1].content).toContain('User feedback: Still too bulky for city travel.')
     expect(parsedBody.input[1].content).toContain('1. Full-size stroller')
+  })
+
+  it('tells the model to preserve earlier constraints while allowing explicit user changes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          recommendation: 'new_search',
+          suggested_query: 'Yupik dairy-free white chocolate chips',
+          rationale: 'Keeps the brand and product type while adding the dietary need.',
+        }),
+      }),
+    })
+
+    await generateRetryAdvice(
+      {
+        productQuery: 'yupick white chocolate chips',
+        followUpNotes: 'non dairy',
+        rejectionFeedback: 'i wanted Yupik brand and white chocolate chips',
+        shortlist: [
+          { title: 'Yupik Organic Dark Chocolate Chips, 70% Cacao, 500 g' },
+          { title: 'King David Vegan Lactose-Free White Chocolate Flavored Chips' },
+        ],
+        apiKey: 'test-key',
+      },
+      fetchMock,
+    )
+
+    const [, request] = fetchMock.mock.calls[0]
+    const prompt = JSON.parse(request.body).input[1].content
+
+    expect(prompt).toContain('Original search: yupick white chocolate chips')
+    expect(prompt).toContain('Follow-up notes: non dairy')
+    expect(prompt).toContain('User feedback: i wanted Yupik brand and white chocolate chips')
+    expect(prompt).toContain('Only drop or replace a previous constraint when the latest feedback clearly says')
   })
 
   it('throws a useful error when OpenAI rejects the request', async () => {

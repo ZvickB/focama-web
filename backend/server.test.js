@@ -827,6 +827,102 @@ describe('server handlers', () => {
     await flushAsyncWork()
   })
 
+  it('uses Rainforest for live discovery when configured', async () => {
+    getEnv.mockImplementation((name) => ({
+      RAINFOREST_API_KEY: 'rf-key',
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
+    })[name] || '')
+    getFilteredSearchArtifacts.mockReturnValue({
+      candidatePool: {
+        query: 'yupik white chocolate chips',
+        details: '',
+        combinedSearchText: 'yupik white chocolate chips',
+        searchState: '',
+        similarQueries: [],
+        candidates: [{ ...createFinalizeCandidate('one'), title: 'Yupik White Chocolate Chips' }],
+      },
+      results: [{ id: 'one', title: 'Yupik White Chocolate Chips', price: '$28.03' }],
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        search_results: [
+          {
+            asin: 'one',
+            title: 'Yupik White Chocolate Chips',
+            price: { value: 28.03, raw: '$28.03' },
+            link: 'https://www.amazon.ca/dp/one',
+            image: 'https://example.com/one.jpg',
+          },
+        ],
+      }),
+    })))
+
+    const response = createResponseRecorder()
+
+    await handleRainforestDiscoverySearch(
+      new URL('http://localhost/api/search/rainforest-discover?query=yupik%20white%20chocolate%20chips&amazonDomain=amazon.ca'),
+      response,
+      { headers: { 'x-forwarded-for': '203.0.113.23' } },
+    )
+
+    const payload = JSON.parse(response.body)
+
+    expect(response.statusCode).toBe(200)
+    expect(payload.source).toBe('rainforest_discovery')
+    expect(payload.fallbackFrom).toBeNull()
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch.mock.calls[0][0]).toBeInstanceOf(URL)
+  })
+
+  it('falls back to Oxylabs discovery when Rainforest runs out of credits', async () => {
+    getEnv.mockImplementation((name) => ({
+      RAINFOREST_API_KEY: 'rf-key',
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
+    })[name] || '')
+    getFilteredSearchArtifacts.mockReturnValue({
+      candidatePool: {
+        query: 'yupik white chocolate chips',
+        details: '',
+        combinedSearchText: 'yupik white chocolate chips',
+        searchState: '',
+        similarQueries: [],
+        candidates: [{ ...createFinalizeCandidate('one'), title: 'Fallback White Chocolate Chips' }],
+      },
+      results: [{ id: 'one', title: 'Fallback White Chocolate Chips', price: '$28.03' }],
+    })
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 402,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          results: [{ content: { results: { organic: [{}] } } }],
+        }),
+      }))
+
+    const response = createResponseRecorder()
+
+    await handleRainforestDiscoverySearch(
+      new URL('http://localhost/api/search/rainforest-discover?query=yupik%20white%20chocolate%20chips&amazonDomain=amazon.ca'),
+      response,
+      { headers: { 'x-forwarded-for': '203.0.113.24' } },
+    )
+
+    const payload = JSON.parse(response.body)
+
+    expect(response.statusCode).toBe(200)
+    expect(payload.source).toBe('oxylabs_discovery_fallback')
+    expect(payload.fallbackFrom).toBe('rainforest_discovery')
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch.mock.calls[0][0]).toBeInstanceOf(URL)
+    expect(fetch.mock.calls[1][1].method).toBe('POST')
+  })
+
   it('stores query-quality review state on the token-scoped discovery snapshot', async () => {
     let sessionEntry = null
 

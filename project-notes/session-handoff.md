@@ -29,7 +29,7 @@
 - Current behavior is canonical in `project-notes/app_flow.md`.
 
 ## Current guided flow
-- `GET /api/search/rainforest-discover` is the main discovery route used by the homepage.
+- `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It tries Rainforest discovery first and falls back to Oxylabs discovery when Rainforest is unavailable, rate-limited, out of credits, or in a provider incident.
 - Discovery now runs a background query-quality review after the normal response when OpenAI is configured, storing review state at `selection.queryQuality` on the token-scoped session snapshot.
 - `GET /api/search/query-quality` is the polling endpoint for that stored review, and the homepage can show a small optional suggested-query prompt when the review is ready and high-confidence.
 - `GET /api/search/refine` returns one short follow-up question while discovery runs.
@@ -43,7 +43,8 @@
 - Backend rate limiting now uses Supabase `rate_limit_events` when configured, with memory fallback for local/test or storage outages.
 - `GET /api/search/enrichment-stream` is the first enrichment path from the frontend; it is cross-origin enabled for the Render backend, token-scoped to the active search session, and if the stream fails, the frontend falls back to polling.
 - `GET /api/search/enrichment` remains the polling fallback and script-friendly read path, and it is also token-scoped to the active search session.
-- `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist, and the homepage now loads that suggestion back into the top search box instead of keeping an editable duplicate inside the retry panel.
+- `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist, preserving accumulated must-have constraints unless the latest feedback clearly changes direction.
+- The retry panel now keeps the recovery interaction near the results: clearer collapsed CTA, correction chips, `What should Focamai keep or change?`, inferred `Keeping:` tags where possible, and a suggested-query confirmation strip with `Search this` and `Edit first`.
 - `POST /api/feedback` stores tester feedback from the homepage FAB.
 - The product modal now includes an inline affiliate disclosure beside the retailer clickout flow, while the full disclosure still lives at `/affiliate-disclosure`.
 - `/admin/analytics` is a local-only dev funnel dashboard, backed by localhost `GET /api/analytics/dashboard`.

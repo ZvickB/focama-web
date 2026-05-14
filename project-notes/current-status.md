@@ -31,13 +31,15 @@
 - `Show focused picks` runs guided finalize and scrolls directly to the results region.
 - Final result cards stay metadata-first on the grid.
 - The product modal shows feature bullets immediately when available, then fills in `fit_reason` and `caveat` when enrichment arrives.
-- Retry is currently suggestion-led: the user explains what felt off, `/api/search/retry-advice` proposes a better next query, and that suggestion is now loaded back into the top search box instead of being edited inline inside the lower retry panel.
+- Retry is currently suggestion-led: the user opens a clearer correction panel, can tap quick correction chips, explains what to keep or change, and `/api/search/retry-advice` proposes a better next query.
+- Retry suggestions now stay in the retry/results area as a confirmation strip with `Search this` and `Edit first`; accepting starts a normal new guided search from there instead of silently moving the query into the top search box.
+- Retry advice now tells AI to preserve accumulated must-have constraints from the original query, follow-up notes, and feedback by default, while still allowing the latest feedback to replace or remove a constraint when the user clearly changes direction.
 
 ## Current backend/deployment reality
 - Frontend is deployed on Vercel.
 - Backend is deployed on Render through `backend/express-server.js`.
 - Render CORS now explicitly accepts the current `focamai.com` and `www.focamai.com` frontend origins, while still tolerating the older `focama.vercel.app` origin during transition.
-- `GET /api/search/rainforest-discover` is the primary homepage discovery route.
+- `GET /api/search/rainforest-discover` is the primary homepage discovery route. It now tries Rainforest discovery first and falls back to Oxylabs discovery when Rainforest is unavailable, rate-limited, out of credits, or in a provider incident.
 - `GET /api/search/rainforest-discover` now starts a background query-quality review after the normal discovery response when OpenAI is configured, and stores the review state under `selection.queryQuality` on the token-scoped session snapshot.
 - `GET /api/search/query-quality` exposes the stored query-quality review through simple polling. The homepage uses it to show an optional suggested-query prompt only when the backend review says to suggest one.
 - `GET /api/search/refine`, `POST /api/search/finalize`, `GET /api/search/enrichment-stream`, `GET /api/search/enrichment`, `GET /api/search/query-quality`, and `POST /api/search/retry-advice` are all active in the Render app.
@@ -58,7 +60,7 @@
 - Discovery cache is now split from session state: repeated same-query searches reuse the shared candidate pool, but each run gets its own token-scoped session snapshot for finalize/enrichment.
 - Haiku locks the shortlist first.
 - Partial valid Haiku output is treated as recoverable: the backend tops it up from deterministic fallback and returns `selection.strategy: 'haiku_lock_topped_up'`.
-- The current detail helper for shortlisted ASINs is still `fetchOxylabsProductDetailsByAsin`.
+- The current detail helper for shortlisted ASINs is still `fetchOxylabsProductDetailsByAsin`, so discovery can use Rainforest while modal bullets/descriptions still come from Oxylabs.
 - Product details are cached per ASIN before mini enrichment runs, using the final displayed shortlist IDs.
 - Failed shortlisted detail calls now retry once in the background after the fast first pass, so mini enrichment can proceed with partial detail coverage while later cache quality still improves.
 - If that background retry later finds bullets, the active stored enrichment payload is patched and the modal can hydrate those bullets without a fresh finalize run.

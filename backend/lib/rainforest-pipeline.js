@@ -118,6 +118,7 @@ export async function fetchRainforestArtifacts({
     return {
       error: {
         error: 'Rainforest API request failed.',
+        providerStatusCode: apiResponse.status,
         statusCode: 502,
       },
       artifacts: null,
