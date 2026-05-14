@@ -173,7 +173,7 @@ export function HomeShell({
                         disabled={isStarting}
                       />
                       {errorMessage ? (
-                        <p className="mt-2 px-2 text-sm text-red-500">{errorMessage}</p>
+                        <p className="mt-2 px-2 text-sm text-red-500">Hi there, thanks so much for testing Focamai — it&apos;s times like this that your testing shines. Don&apos;t worry, this error is being sent to us to fix ASAP. Thanks again!</p>
                       ) : null}
                     </div>
                     <Button

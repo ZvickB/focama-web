@@ -276,7 +276,7 @@ export function ResultsSection({
 
       {errorMessage ? (
         <div className="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {errorMessage}
+          Hi there, thanks so much for testing Focamai — it&apos;s times like this that your testing shines. Don&apos;t worry, this error is being sent to us to fix ASAP. Thanks again!
         </div>
       ) : null}
 
