@@ -5,7 +5,40 @@ import {
   getSearchDebugEvents,
   recordSearchDebugEvent,
 } from './searchDebugEvents.js'
-import { resolveSelectedProductForDisplay } from './useGuidedSearch.js'
+import { detectHardConstraint, resolveSelectedProductForDisplay } from './useGuidedSearch.js'
+
+describe('detectHardConstraint', () => {
+  it.each([
+    ['kosher cookies', 'jewish_kosher', 'kosher'],
+    ['must be pareve', 'jewish_kosher', 'pareve'],
+    ['parve chocolate chips', 'jewish_kosher', 'parve'],
+    ['cholov yisroel cheese', 'jewish_kosher', 'cholov yisroel'],
+    ['chalav yisrael snacks', 'jewish_kosher', 'chalav yisrael'],
+    ['for shabbos', 'jewish_kosher', 'shabbos'],
+    ['for shabbat', 'jewish_kosher', 'shabbat'],
+    ['non-dairy white chocolate', 'dietary_allergy', 'non dairy'],
+    ['non dairy white chocolate', 'dietary_allergy', 'non dairy'],
+    ['nondairy white chocolate', 'dietary_allergy', 'non dairy'],
+    ['dairyfree white chocolate', 'dietary_allergy', 'dairy free'],
+    ['gluten-free pasta', 'dietary_allergy', 'gluten free'],
+    ['gluten free pasta', 'dietary_allergy', 'gluten free'],
+    ['glutenfree pasta', 'dietary_allergy', 'gluten free'],
+  ])('detects %s', (text, category, matchedTerm) => {
+    expect(detectHardConstraint(text)).toEqual({
+      category,
+      matchedTerm,
+      shouldRefresh: true,
+    })
+  })
+
+  it('does not refresh for soft preferences', () => {
+    expect(detectHardConstraint('something cute and affordable')).toEqual({
+      category: '',
+      matchedTerm: '',
+      shouldRefresh: false,
+    })
+  })
+})
 
 describe('resolveSelectedProductForDisplay', () => {
   it('hydrates an open final-result modal from the latest results by id', () => {

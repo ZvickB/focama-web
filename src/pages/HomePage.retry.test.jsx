@@ -734,7 +734,8 @@ describe('HomePage retry advice', () => {
     expect(screen.getByLabelText(/product topic/i)).toHaveValue('slim city stroller')
     expect(
       fetchMock.mock.calls.some(([url]) =>
-        String(url).includes('/api/search/rainforest-discover?query=slim+city+stroller'),
+        String(url).includes('/api/search/rainforest-discover?query=slim+city+stroller') &&
+          String(url).includes('cacheMode=refresh'),
       ),
     ).toBe(true)
   })

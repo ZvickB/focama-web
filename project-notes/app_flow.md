@@ -24,7 +24,7 @@
   - result skeletons appear below
   - the page scrolls toward the refine/results region
 - `Show products now` reveals the preview set.
-- `Show focused picks` runs guided finalize and narrows to the final 6.
+- `Show focused picks` runs guided finalize and narrows to the final 6; when follow-up notes add hard eligibility constraints such as kosher/Jewish-use, dietary/allergy, safety/material, or compatibility/exclusion needs, the frontend first does one refreshed Rainforest discovery pass with the original query plus notes, then finalizes from that refreshed token.
 - `Start a new search` clears the guided state and returns to a fresh search box.
 - After final results appear, the user can open the retry panel and ask for a better search direction.
 - As soon as `HomeExperience` mounts, it prefetches the lazy `ResultsSection` and `ProductDetailModal` chunks so those UI steps are more likely to be ready before the user needs them.
@@ -36,6 +36,8 @@
   - primary homepage discovery route
   - uses Rainforest for Amazon discovery first, then falls back to Oxylabs discovery when Rainforest is unavailable, rate-limited, out of credits, or in a provider incident
   - writes reusable guided discovery cache and creates a separate token-scoped session snapshot for finalize/enrichment
+  - honors an explicit one-request cache refresh mode for accepted retry-advice searches, bypassing the shared discovery cache read while still writing fresh provider results back to shared cache and session state
+  - also honors that refresh mode for the one-time pre-finalize discovery pass when follow-up notes contain hard constraints
   - marketplace items without a known positive price are treated as invalid and are removed before preview results or AI candidate-pool caching
   - after the normal response is sent, starts a background query-quality review when OpenAI is configured and stores `selection.queryQuality` on the token-scoped session snapshot
   - query-quality review is checked by the frontend through polling; if a high-confidence suggestion is ready, the homepage shows an optional small prompt without replacing the original results
@@ -100,7 +102,7 @@
 - Retry advice preserves accumulated must-have constraints from the original query, follow-up notes, and retry feedback by default, but can replace or remove a previous constraint when the latest feedback clearly changes direction.
 - Selected correction chips are folded into the existing `rejectionFeedback` text sent to `/api/search/retry-advice`; the backend contract is otherwise unchanged.
 - When retry advice returns a suggested query, the retry panel shows an inline confirmation strip near the current results with `Search this` and `Edit first`.
-- `Search this` starts a normal new guided search from the retry area and scrolls toward the loading/results region. `Edit first` keeps the suggested query editable inside the retry panel instead of moving it into the top search box.
+- `Search this` starts a new guided search from the retry area with a one-request discovery cache refresh, then scrolls toward the loading/results region. `Edit first` keeps the suggested query editable inside the retry panel instead of moving it into the top search box.
 - The panel shows small `Keeping:` tags when it can infer retained constraints from the suggested query and prior context. These are reassurance UI, not a hard lock; explicit user changes can still replace or remove constraints.
 - The same-pool retry path is not part of the active homepage UI right now.
 
@@ -119,6 +121,7 @@
 
 ## Data, cache, and observability
 - Guided discovery is the reusable persistent cache layer.
+- Rainforest guided discovery uses a versioned shared cache scope (`rainforest_discovery:v2`) so older provider/search-era candidate pools are not reused as current evidence.
 - Finalize remains request-specific and rebuilds from discovery cache.
 - Cached preview results and cached candidate pools are sanitized on read so stale marketplace entries without a known positive price do not reappear or reach finalize AI selection.
 - Partial valid haiku output is recoverable, not final: zero picks still use rules fallback, full valid picks stay `haiku_lock`, and partial valid picks are returned as `haiku_lock_topped_up`.

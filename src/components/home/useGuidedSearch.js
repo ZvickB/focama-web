@@ -33,6 +33,105 @@ const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const FINALIZE_REQUEST_MODE_REFINED = 'guided_refined'
 
+const HARD_CONSTRAINT_PATTERNS = [
+  {
+    category: 'jewish_kosher',
+    terms: [
+      'kosher',
+      'kosher certified',
+      'hechsher',
+      'hechser',
+      'pareve',
+      'parve',
+      'cholov yisroel',
+      'chalav yisrael',
+      'cholov israel',
+      'pas yisroel',
+      'pat yisrael',
+      'bishul yisroel',
+      'bishul yisrael',
+      'shabbos',
+      'shabbat',
+      'passover',
+      'pesach',
+      'kitniyot',
+      'kitniyos',
+      'gebrochts',
+      'non gebrochts',
+      'mevushal',
+      'havdalah',
+      'havdala',
+      'blech',
+      'plata',
+      'shabbos lamp',
+      'shabbat lamp',
+      'hot plate',
+    ],
+  },
+  {
+    category: 'dietary_allergy',
+    terms: [
+      'vegan',
+      'vegetarian',
+      'dairy free',
+      'non dairy',
+      'no dairy',
+      'gluten free',
+      'nut free',
+      'peanut free',
+      'tree nut free',
+      'soy free',
+      'egg free',
+      'sesame free',
+      'sugar free',
+      'low sugar',
+      'caffeine free',
+      'allergy',
+      'allergen',
+      'safe for allergy',
+    ],
+  },
+  {
+    category: 'safety_material',
+    terms: [
+      'hypoallergenic',
+      'fragrance free',
+      'latex free',
+      'bpa free',
+      'phthalate free',
+      'paraben free',
+      'non toxic',
+      'lead free',
+      'pfas free',
+      'food safe',
+      'baby safe',
+      'toddler safe',
+      'sensitive skin',
+    ],
+  },
+  {
+    category: 'compatibility_exclusion',
+    terms: [
+      'compatible with',
+      'fits',
+      'replacement for',
+      'works with',
+      'without',
+      'free of',
+      'voltage',
+      'wattage',
+    ],
+  },
+]
+
+const HARD_CONSTRAINT_COMPACT_TERMS = new Set(
+  HARD_CONSTRAINT_PATTERNS.flatMap(({ terms }) =>
+    terms
+      .filter((term) => /\s/.test(term))
+      .map((term) => term.replace(/\s+/g, '')),
+  ),
+)
+
 function roundTiming(value) {
   return Math.round(value * 10) / 10
 }
@@ -74,6 +173,61 @@ function createExpiredSessionMessage() {
 function appendAmazonDomain(searchParams, amazonDomain) {
   if (amazonDomain && amazonDomain !== AMAZON_MARKETPLACE_AUTO) {
     searchParams.set('amazonDomain', amazonDomain)
+  }
+}
+
+function normalizeConstraintText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[-/_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function detectHardConstraint(text) {
+  const normalizedText = normalizeConstraintText(text)
+
+  if (!normalizedText) {
+    return {
+      category: '',
+      matchedTerm: '',
+      shouldRefresh: false,
+    }
+  }
+
+  const paddedText = ` ${normalizedText} `
+  const compactText = normalizedText.replace(/\s+/g, '')
+
+  for (const { category, terms } of HARD_CONSTRAINT_PATTERNS) {
+    for (const term of terms) {
+      const normalizedTerm = normalizeConstraintText(term)
+      const compactTerm = normalizedTerm.replace(/\s+/g, '')
+
+      if (
+        paddedText.includes(` ${normalizedTerm} `) ||
+        (HARD_CONSTRAINT_COMPACT_TERMS.has(compactTerm) && compactText.includes(compactTerm))
+      ) {
+        return {
+          category,
+          matchedTerm: normalizedTerm,
+          shouldRefresh: true,
+        }
+      }
+    }
+  }
+
+  if (/\bno\s+\w{2,40}\b/.test(normalizedText)) {
+    return {
+      category: 'compatibility_exclusion',
+      matchedTerm: 'no',
+      shouldRefresh: true,
+    }
+  }
+
+  return {
+    category: '',
+    matchedTerm: '',
+    shouldRefresh: false,
   }
 }
 
@@ -130,9 +284,12 @@ async function readJsonResponse(response, requestStartedAt) {
   }
 }
 
-async function fetchDiscoveryResults(query, amazonDomain = AMAZON_MARKETPLACE_AUTO, signal) {
+async function fetchDiscoveryResults(query, amazonDomain = AMAZON_MARKETPLACE_AUTO, signal, options = {}) {
   const searchParams = new URLSearchParams({ query })
   appendAmazonDomain(searchParams, amazonDomain)
+  if (options.cacheMode === 'refresh') {
+    searchParams.set('cacheMode', 'refresh')
+  }
   const requestStartedAt = performance.now()
   const response = await fetch(`${BACKEND_URL}/api/search/rainforest-discover?${searchParams.toString()}`, {
     signal,
@@ -376,6 +533,7 @@ export function useGuidedSearch() {
   const [showPreviewResults, setShowPreviewResults] = useState(false)
   const [isDiscovering, setIsDiscovering] = useState(false)
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false)
+  const [isRefreshingConstraintDiscovery, setIsRefreshingConstraintDiscovery] = useState(false)
   const [isEnrichmentReady, setIsEnrichmentReady] = useState(false)
   const [isEnrichmentSettled, setIsEnrichmentSettled] = useState(false)
   const [querySuggestion, setQuerySuggestion] = useState(null)
@@ -400,6 +558,8 @@ export function useGuidedSearch() {
   const hasTrackedRefinementViewRef = useRef(false)
   const hasTrackedPreviewImpressionsRef = useRef(false)
   const startGuidedSearchRef = useRef(null)
+  const constraintRefreshSearchIdRef = useRef(0)
+  const constraintRefreshResultRef = useRef(null)
 
   function invalidateRetryAdviceRequests() {
     retryAdviceRequestIdRef.current += 1
@@ -1069,7 +1229,7 @@ export function useGuidedSearch() {
     stopQueryQualityPolling()
   }, [])
 
-  const isFinalizing = finalizeMutation.isPending
+  const isFinalizing = finalizeMutation.isPending || isRefreshingConstraintDiscovery
   const isLoading = isDiscovering || isGeneratingPrompt || isFinalizing
   const hasFinalResults = results.length > 0
   const displayedResults = hasFinalResults ? results : showPreviewResults ? previewResults : []
@@ -1098,6 +1258,8 @@ export function useGuidedSearch() {
     cancelFinalizeRequest()
     cancelRefinementRequest()
     invalidateRetryAdviceRequests()
+    constraintRefreshSearchIdRef.current = 0
+    constraintRefreshResultRef.current = null
 
     if (resetMutationState) {
       finalizeMutation.reset()
@@ -1140,6 +1302,7 @@ export function useGuidedSearch() {
     if (resetLoadingState) {
       setIsDiscovering(false)
       setIsGeneratingPrompt(false)
+      setIsRefreshingConstraintDiscovery(false)
     }
 
     if (clearAnalyticsForIdle) {
@@ -1169,6 +1332,7 @@ export function useGuidedSearch() {
     {
       preserveFollowUpNotes = false,
       reuseAnalytics = false,
+      cacheMode = 'default',
       searchEventName = 'search_started',
     } = {},
   ) {
@@ -1195,6 +1359,7 @@ export function useGuidedSearch() {
     recordSearchDebugEvent('startGuidedSearch', 'started', {
       activeSearchId: nextSearchId,
       amazonDomain: nextAmazonDomain,
+      cacheMode,
       query: normalizedQuery,
     })
 
@@ -1215,7 +1380,7 @@ export function useGuidedSearch() {
     const discoveryAbortController = new AbortController()
     discoveryAbortControllerRef.current = discoveryAbortController
 
-    fetchDiscoveryResults(normalizedQuery, nextAmazonDomain, discoveryAbortController.signal)
+    fetchDiscoveryResults(normalizedQuery, nextAmazonDomain, discoveryAbortController.signal, { cacheMode })
       .then((payload) => {
         if (activeSearchIdRef.current !== nextSearchId) {
           recordSearchDebugEvent('discovery', 'stale', {
@@ -1449,8 +1614,124 @@ export function useGuidedSearch() {
     startGuidedSearch(normalizedQuery)
   }
 
-  function handleFinalizeRefinement() {
+  async function refreshDiscoveryForHardConstraints({
+    amazonDomain,
+    constraintMatch,
+    followUpNotes: nextFollowUpNotes,
+    originalCandidatePool,
+    searchId,
+    submittedQuery: nextSubmittedQuery,
+  }) {
+    const constraintRefreshQuery = `${nextSubmittedQuery} ${nextFollowUpNotes}`.replace(/\s+/g, ' ').trim()
+
+    constraintRefreshSearchIdRef.current = searchId
+    setIsRefreshingConstraintDiscovery(true)
+    setErrorMessage('')
+    recordSearchDebugEvent('constraint-refresh', 'started', {
+      activeSearchId: searchId,
+      amazonDomain,
+      constraintCategory: constraintMatch.category,
+      matchedTerm: constraintMatch.matchedTerm,
+      query: constraintRefreshQuery,
+    })
+
+    try {
+      const payload = await fetchDiscoveryResults(
+        constraintRefreshQuery,
+        amazonDomain,
+        undefined,
+        { cacheMode: 'refresh' },
+      )
+
+      if (activeSearchIdRef.current !== searchId) {
+        recordSearchDebugEvent('constraint-refresh', 'stale', {
+          activeSearchId: searchId,
+          amazonDomain,
+          constraintCategory: constraintMatch.category,
+          matchedTerm: constraintMatch.matchedTerm,
+          query: constraintRefreshQuery,
+          stale: true,
+          token: payload?.discoveryToken,
+        })
+        return null
+      }
+
+      if (!payload.discoveryToken) {
+        throw new Error(createExpiredSessionMessage())
+      }
+
+      const refreshedAmazonDomain = payload.amazonDomain || amazonDomain
+      const refreshedCandidatePool = payload.candidatePool || originalCandidatePool
+      const refreshedDiscovery = {
+        amazonDomain: refreshedAmazonDomain,
+        candidatePool: refreshedCandidatePool,
+        discoveryToken: payload.discoveryToken,
+        query: constraintRefreshQuery,
+        searchId,
+      }
+
+      setDiscoveryToken(payload.discoveryToken || '')
+      setSubmittedAmazonDomain(refreshedAmazonDomain)
+      setCandidatePool(refreshedCandidatePool || null)
+      setPreviewResults(payload.previewResults || [])
+      stopQueryQualityPolling({ clearSuggestion: true })
+      setRequestTiming((current) => ({
+        ...current,
+        discover: payload.timing || current.discover,
+      }))
+
+      recordSearchDebugEvent('constraint-refresh', 'success', {
+        activeSearchId: searchId,
+        amazonDomain: refreshedAmazonDomain,
+        candidateCount: Array.isArray(refreshedCandidatePool?.candidates)
+          ? refreshedCandidatePool.candidates.length
+          : 0,
+        constraintCategory: constraintMatch.category,
+        matchedTerm: constraintMatch.matchedTerm,
+        previewCount: Array.isArray(payload.previewResults) ? payload.previewResults.length : 0,
+        query: constraintRefreshQuery,
+        token: payload.discoveryToken,
+      })
+      constraintRefreshResultRef.current = refreshedDiscovery
+
+      return refreshedDiscovery
+    } catch (error) {
+      if (activeSearchIdRef.current !== searchId) {
+        recordSearchDebugEvent('constraint-refresh', 'stale', {
+          activeSearchId: searchId,
+          amazonDomain,
+          constraintCategory: constraintMatch.category,
+          error,
+          matchedTerm: constraintMatch.matchedTerm,
+          query: constraintRefreshQuery,
+          stale: true,
+        })
+        return null
+      }
+
+      recordSearchDebugEvent('constraint-refresh', 'fail', {
+        activeSearchId: searchId,
+        amazonDomain,
+        constraintCategory: constraintMatch.category,
+        error,
+        matchedTerm: constraintMatch.matchedTerm,
+        query: constraintRefreshQuery,
+      })
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to refresh the search with your constraints.')
+      return null
+    } finally {
+      if (activeSearchIdRef.current === searchId) {
+        setIsRefreshingConstraintDiscovery(false)
+      }
+    }
+  }
+
+  async function handleFinalizeRefinement() {
     if (!candidatePool || !submittedQuery) {
+      return
+    }
+
+    if (isFinalizing) {
       return
     }
 
@@ -1476,11 +1757,49 @@ export function useGuidedSearch() {
     }
 
     if (normalizedFollowUpNotes) {
+      let finalizeQuery = submittedQuery
+      let finalizeAmazonDomain = submittedAmazonDomain
+      let finalizeDiscoveryToken = discoveryToken
+      let finalizeCandidatePool = candidatePool
+      const constraintMatch = detectHardConstraint(normalizedFollowUpNotes)
+
+      if (
+        constraintMatch.shouldRefresh &&
+        constraintRefreshSearchIdRef.current !== activeSearchIdRef.current
+      ) {
+        const refreshedDiscovery = await refreshDiscoveryForHardConstraints({
+          amazonDomain: submittedAmazonDomain,
+          constraintMatch,
+          followUpNotes: normalizedFollowUpNotes,
+          originalCandidatePool: candidatePool,
+          searchId: activeSearchIdRef.current,
+          submittedQuery,
+        })
+
+        if (!refreshedDiscovery) {
+          return
+        }
+
+        finalizeQuery = refreshedDiscovery.query
+        finalizeAmazonDomain = refreshedDiscovery.amazonDomain
+        finalizeDiscoveryToken = refreshedDiscovery.discoveryToken
+        finalizeCandidatePool = refreshedDiscovery.candidatePool
+      } else if (constraintMatch.shouldRefresh) {
+        const refreshedDiscovery = constraintRefreshResultRef.current
+
+        if (refreshedDiscovery?.searchId === activeSearchIdRef.current) {
+          finalizeQuery = refreshedDiscovery.query
+          finalizeAmazonDomain = refreshedDiscovery.amazonDomain
+          finalizeDiscoveryToken = refreshedDiscovery.discoveryToken
+          finalizeCandidatePool = refreshedDiscovery.candidatePool
+        }
+      }
+
       const nextFinalizeRequest = {
-        query: submittedQuery,
-        amazonDomain: submittedAmazonDomain,
-        discoveryToken,
-        originalCandidatePool: candidatePool,
+        query: finalizeQuery,
+        amazonDomain: finalizeAmazonDomain,
+        discoveryToken: finalizeDiscoveryToken,
+        originalCandidatePool: finalizeCandidatePool,
         followUpNotes,
         rejectionFeedback: '',
         retryCount: 0,
@@ -1633,6 +1952,7 @@ export function useGuidedSearch() {
     })
     setProductQuery(normalizedQuery)
     startGuidedSearch(normalizedQuery, {
+      cacheMode: 'refresh',
       searchEventName: 'retry_advice_search_started',
     })
     return true

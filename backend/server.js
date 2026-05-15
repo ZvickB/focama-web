@@ -75,7 +75,7 @@ const ANALYTICS_DASHBOARD_MAX_DAYS = 90
 const ANALYTICS_DASHBOARD_DEFAULT_DAYS = 14
 const ENRICHMENT_STREAM_TIMEOUT_MS = 30000
 const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
-const CACHE_SCOPE_RAINFOREST = 'rainforest_discovery'
+const CACHE_SCOPE_RAINFOREST = 'rainforest_discovery:v2'
 const CACHE_SCOPE_DISCOVERY_SESSION = 'guided_discovery_session'
 const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
@@ -182,6 +182,13 @@ async function fetchDiscoveryArtifactsWithFallback({
 function getDiscoverySessionScope(discoveryToken = '') {
   const truncatedToken = truncateText(discoveryToken, 300)
   return truncatedToken ? `${CACHE_SCOPE_DISCOVERY_SESSION}:${truncatedToken}` : CACHE_SCOPE_DISCOVERY_SESSION
+}
+
+function shouldRefreshDiscoveryCache(requestUrl) {
+  const cacheMode = String(requestUrl?.searchParams?.get('cacheMode') || '').trim().toLowerCase()
+  const bypassCache = String(requestUrl?.searchParams?.get('bypassCache') || '').trim().toLowerCase()
+
+  return cacheMode === 'refresh' || bypassCache === 'true'
 }
 
 function resolveAmazonDomain({ requestUrl = null, body = null, countryCode = 'US' } = {}) {
@@ -946,8 +953,9 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
     scope: rainforestScope,
   })
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
+  const refreshCache = shouldRefreshDiscoveryCache(requestUrl)
 
-  if (cachedEntry?.candidatePool && cachedEntry?.results?.length) {
+  if (cachedEntry?.candidatePool && cachedEntry?.results?.length && !refreshCache) {
     const tokenizedDiscovery = await ensureDiscoverySnapshotToken({
       normalizedQuery,
       normalizedDetails,
@@ -1001,6 +1009,19 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       discoveryScope: getDiscoverySessionScope(tokenizedDiscovery.discoveryToken),
     })
     return
+  }
+
+  if (cachedEntry?.candidatePool && cachedEntry?.results?.length && refreshCache) {
+    logSearchFlowEvent('rainforest_discovery_cache_refresh', {
+      route: '/api/search/rainforest-discover',
+      query: normalizedQuery,
+      cacheStatus: 'refresh_bypass',
+      cachedCandidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
+        ? cachedEntry.candidatePool.candidates.length
+        : normalizedCachedResults.length,
+      cachedPreviewCount: normalizedCachedResults.length,
+      cacheMs: roundTimingDuration(cacheLookupDuration),
+    })
   }
 
   try {
@@ -1071,7 +1092,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
 
     await recordSearchCacheEvent({
       cacheKey: discoveryCacheKey,
-      cacheStatus: 'miss',
+      cacheStatus: refreshCache ? 'refresh' : 'miss',
       candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
         ? artifacts.candidatePool.candidates.length
         : 0,
@@ -1085,7 +1106,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
     logSearchFlowEvent('rainforest_discovery_completed', {
       route: '/api/search/rainforest-discover',
       query: normalizedQuery,
-      cacheStatus: 'miss',
+      cacheStatus: refreshCache ? 'refresh' : 'miss',
       candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
         ? artifacts.candidatePool.candidates.length
         : 0,

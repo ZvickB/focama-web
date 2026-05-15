@@ -61,6 +61,8 @@ function createDebugEvent(phase, status, data = {}) {
       candidateCount: toCount(data.candidateCount),
       previewCount: toCount(data.previewCount),
       resultCount: toCount(data.resultCount),
+      constraintCategory: data.constraintCategory,
+      matchedTerm: data.matchedTerm,
       errorName: data.errorName || errorData.errorName,
       errorMessage: data.errorMessage || errorData.errorMessage,
       stale: toBoolean(data.stale),

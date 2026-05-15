@@ -706,6 +706,7 @@ describe('server handlers', () => {
       OXYLABS_USERNAME: 'oxy-user',
       OXYLABS_PASSWORD: 'oxy-pass',
     })[name] || '')
+    vi.stubGlobal('fetch', vi.fn())
 
     readStoredSearchCacheEntry.mockResolvedValueOnce({
       cachedAt: '2026-03-17T12:00:00.000Z',
@@ -741,8 +742,10 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(200)
 
     const payload = JSON.parse(response.body)
+    expect(payload.source).toBe('cache')
     expect(payload.discoveryToken).toBeTruthy()
     expect(payload.discoveryToken).not.toBe('old-token')
+    expect(fetch).not.toHaveBeenCalled()
 
     expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -755,6 +758,90 @@ describe('server handlers', () => {
         }),
       }),
     )
+  })
+
+  it('refreshes discovery from the provider instead of returning an existing cache hit when requested', async () => {
+    getEnv.mockImplementation((name) => ({
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
+    })[name] || '')
+
+    readStoredSearchCacheEntry.mockResolvedValueOnce({
+      cachedAt: '2026-03-17T12:00:00.000Z',
+      expiresAt: '2026-03-17T18:00:00.000Z',
+      source: 'rainforest_discovery',
+      selection: { mode: 'discovery_preview' },
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Stale cached search results',
+        similarQueries: [],
+        candidates: [{ id: 'cached-1', title: 'Stale Thermos bottle', price: '$34.99', numericPrice: 34.99 }],
+      },
+      results: [{ id: 'cached-1', title: 'Stale Thermos bottle', price: '$34.99', numericPrice: 34.99 }],
+      discoveryToken: 'old-token',
+    })
+    getFilteredSearchArtifacts.mockReturnValue({
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Fresh provider search results',
+        similarQueries: [],
+        candidates: [{ ...createFinalizeCandidate('fresh-1'), title: 'Fresh Thermos bottle' }],
+      },
+      results: [{ id: 'fresh-1', title: 'Fresh Thermos bottle', price: '$39.99' }],
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        results: [{ content: { results: { organic: [{}] } } }],
+      }),
+    })))
+
+    const response = createResponseRecorder()
+
+    await handleRainforestDiscoverySearch(
+      new URL('http://localhost/api/search/rainforest-discover?query=thermos&amazonDomain=amazon.com&cacheMode=refresh'),
+      response,
+      { headers: { 'x-forwarded-for': '203.0.113.20' } },
+    )
+
+    expect(response.statusCode).toBe(200)
+
+    const payload = JSON.parse(response.body)
+    expect(payload.source).toBe('oxylabs_discovery')
+    expect(payload.discoveryToken).toBeTruthy()
+    expect(payload.discoveryToken).not.toBe('old-token')
+    expect(payload.previewResults).toEqual([
+      expect.objectContaining({
+        id: 'fresh-1',
+        title: 'Fresh Thermos bottle',
+      }),
+    ])
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productQuery: 'thermos',
+        discoveryToken: payload.discoveryToken,
+        scope: `guided_discovery_session:${payload.discoveryToken}`,
+      }),
+    )
+    await waitForExpectation(() => {
+      expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          productQuery: 'thermos',
+          discoveryToken: '',
+          scope: 'rainforest_discovery:v2:amazon.com',
+          results: [
+            expect.objectContaining({
+              id: 'fresh-1',
+            }),
+          ],
+        }),
+      )
+    })
   })
 
   it('returns live discovery before the background query-quality review resolves', async () => {
@@ -941,7 +1028,7 @@ describe('server handlers', () => {
       generatedAt: '2026-03-17T12:00:02.000Z',
     })
     readStoredSearchCacheEntry.mockImplementation(async ({ scope }) => {
-      if (scope === 'rainforest_discovery:amazon.com') {
+      if (scope === 'rainforest_discovery:v2:amazon.com') {
         const cacheEntry = createDiscoveryCacheEntry('celcius drink', [createFinalizeCandidate('one')], {
           mode: 'discovery_preview',
         }, 'old-token')

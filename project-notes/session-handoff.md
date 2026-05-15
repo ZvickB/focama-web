@@ -30,11 +30,14 @@
 
 ## Current guided flow
 - `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It tries Rainforest discovery first and falls back to Oxylabs discovery when Rainforest is unavailable, rate-limited, out of credits, or in a provider incident.
+- Retry-accepted discovery requests add `cacheMode=refresh`; the backend bypasses a shared discovery cache hit for that one request, fetches fresh provider evidence, then writes shared cache and token-scoped session snapshots normally.
+- Hard-constraint follow-up notes, including kosher/Jewish-use, dietary/allergy, safety/material, and compatibility/exclusion signals, now trigger one pre-finalize refreshed discovery pass using the original query plus notes. Finalize then uses the refreshed discovery token and the same combined query that created that token.
 - Discovery now runs a background query-quality review after the normal response when OpenAI is configured, storing review state at `selection.queryQuality` on the token-scoped session snapshot.
 - `GET /api/search/query-quality` is the polling endpoint for that stored review, and the homepage can show a small optional suggested-query prompt when the review is ready and high-confidence.
 - `GET /api/search/refine` returns one short follow-up question while discovery runs.
 - `POST /api/search/finalize` rebuilds the candidate pool from guided cache, uses Haiku first, tops partial valid Haiku output up from deterministic fallback when needed, returns shortlist cards, and starts async enrichment work for the final displayed IDs.
 - Repeated same-query searches now reuse shared discovery candidates but get a fresh token-scoped session snapshot for finalize/enrichment, so older context-specific caveats cannot bleed into a new run.
+- Rainforest shared discovery cache is versioned as `rainforest_discovery:v2`; older unversioned Rainforest/provider-era shared cache entries are intentionally not reused.
 - Marketplace listings without a known positive price are now stripped out before guided preview caching, cached-result reuse, and finalize candidate selection so unavailable products do not reach AI or the UI shortlist.
 - Query-quality suggestions are now user-visible through polling only: accepting starts a normal new guided search for the suggested query, rejecting keeps the original results, and there is still no SSE or prewarm path.
 - The shortlisted detail helper now keeps a fast first pass for enrichment and retries failed ASIN detail calls in the background so later cache reads can improve without delaying AI copy further.
@@ -44,7 +47,7 @@
 - `GET /api/search/enrichment-stream` is the first enrichment path from the frontend; it is cross-origin enabled for the Render backend, token-scoped to the active search session, and if the stream fails, the frontend falls back to polling.
 - `GET /api/search/enrichment` remains the polling fallback and script-friendly read path, and it is also token-scoped to the active search session.
 - `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist, preserving accumulated must-have constraints unless the latest feedback clearly changes direction.
-- The retry panel now keeps the recovery interaction near the results: clearer collapsed CTA, correction chips, `What should Focamai keep or change?`, inferred `Keeping:` tags where possible, and a suggested-query confirmation strip with `Search this` and `Edit first`.
+- The retry panel now keeps the recovery interaction near the results: clearer collapsed CTA, correction chips, `What should Focamai keep or change?`, inferred `Keeping:` tags where possible, and a suggested-query confirmation strip with `Search this` and `Edit first`; accepting `Search this` refreshes discovery evidence instead of reusing the old shared cache entry.
 - `POST /api/feedback` stores tester feedback from the homepage FAB.
 - The product modal now includes an inline affiliate disclosure beside the retailer clickout flow, while the full disclosure still lives at `/affiliate-disclosure`.
 - `/admin/analytics` is a local-only dev funnel dashboard, backed by localhost `GET /api/analytics/dashboard`.

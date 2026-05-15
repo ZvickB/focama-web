@@ -28,11 +28,11 @@
 - Discovery and the AI follow-up question run in parallel after submit.
 - A one-time inline marketplace prompt now appears after search starts until the user chooses an Amazon store or dismisses it.
 - `Show products now` reveals the preview set without finalize.
-- `Show focused picks` runs guided finalize and scrolls directly to the results region.
+- `Show focused picks` runs guided finalize and scrolls directly to the results region. If the follow-up notes include hard eligibility constraints, including kosher/Jewish-use terms, dietary/allergy needs, safety/material exclusions, or compatibility language, the frontend refreshes Rainforest discovery once with the query plus notes before finalizing.
 - Final result cards stay metadata-first on the grid.
 - The product modal shows feature bullets immediately when available, then fills in `fit_reason` and `caveat` when enrichment arrives.
 - Retry is currently suggestion-led: the user opens a clearer correction panel, can tap quick correction chips, explains what to keep or change, and `/api/search/retry-advice` proposes a better next query.
-- Retry suggestions now stay in the retry/results area as a confirmation strip with `Search this` and `Edit first`; accepting starts a normal new guided search from there instead of silently moving the query into the top search box.
+- Retry suggestions now stay in the retry/results area as a confirmation strip with `Search this` and `Edit first`; accepting starts a new guided search from there with a one-request discovery cache refresh instead of silently moving the query into the top search box.
 - Retry advice now tells AI to preserve accumulated must-have constraints from the original query, follow-up notes, and feedback by default, while still allowing the latest feedback to replace or remove a constraint when the user clearly changes direction.
 
 ## Current backend/deployment reality
@@ -40,6 +40,7 @@
 - Backend is deployed on Render through `backend/express-server.js`.
 - Render CORS now explicitly accepts the current `focamai.com` and `www.focamai.com` frontend origins, while still tolerating the older `focama.vercel.app` origin during transition.
 - `GET /api/search/rainforest-discover` is the primary homepage discovery route. It now tries Rainforest discovery first and falls back to Oxylabs discovery when Rainforest is unavailable, rate-limited, out of credits, or in a provider incident.
+- `GET /api/search/rainforest-discover` normally reuses the shared discovery cache when available, but retry-accepted searches and hard-constraint pre-finalize refreshes send `cacheMode=refresh` so the route bypasses the cache hit once, fetches fresh provider evidence, and writes the new shared/session snapshots normally.
 - `GET /api/search/rainforest-discover` now starts a background query-quality review after the normal discovery response when OpenAI is configured, and stores the review state under `selection.queryQuality` on the token-scoped session snapshot.
 - `GET /api/search/query-quality` exposes the stored query-quality review through simple polling. The homepage uses it to show an optional suggested-query prompt only when the backend review says to suggest one.
 - `GET /api/search/refine`, `POST /api/search/finalize`, `GET /api/search/enrichment-stream`, `GET /api/search/enrichment`, `GET /api/search/query-quality`, and `POST /api/search/retry-advice` are all active in the Render app.
@@ -48,6 +49,7 @@
 - The Amazon marketplace context now remembers the last saved marketplace in localStorage (`focamai_marketplace`) so repeat visits skip geo lookup when a preference or confident detection already exists.
 - If the effective marketplace changes while a search is in flight or already active, discovery/refine restart for the current submitted query and stale older responses are ignored.
 - Discovery cache and operational history use Supabase when configured, with local file fallback in development.
+- Rainforest discovery cache reuse is now scoped under `rainforest_discovery:v2`, which intentionally leaves older shared discovery entries behind so stale provider-era evidence is not treated as current.
 - Product details use a separate provider-agnostic per-ASIN cache, also with Supabase preferred and local fallback available.
 - Tester feedback stores to a dedicated `tester_feedback` table in Supabase when configured, with local fallback in development.
 - Backend production observability is now wired for opt-in Sentry via `SENTRY_DSN`, with sanitized context and explicit reporting for background async failures plus unhandled server errors.
@@ -57,6 +59,7 @@
 
 ## Current finalize reality
 - Finalize rebuilds the candidate pool from guided discovery cache instead of trusting a browser-posted rich pool.
+- Hard-constraint follow-up notes are treated as discovery-changing context before finalize: the frontend detects broad kosher/Jewish-use, dietary/allergy, safety/material, and compatibility/exclusion terms, refreshes discovery at most once for the active search, then sends finalize the refreshed token and the same combined query used for that refreshed discovery.
 - Discovery cache is now split from session state: repeated same-query searches reuse the shared candidate pool, but each run gets its own token-scoped session snapshot for finalize/enrichment.
 - Haiku locks the shortlist first.
 - Partial valid Haiku output is treated as recoverable: the backend tops it up from deterministic fallback and returns `selection.strategy: 'haiku_lock_topped_up'`.
