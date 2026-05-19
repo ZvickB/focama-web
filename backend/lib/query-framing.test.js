@@ -17,6 +17,7 @@ describe('query framing', () => {
         },
         output_text: JSON.stringify({
           prompt: 'What matters most here: airline carry-on size, one-hand fold, or lower price?',
+          refinement_suggestions: ['Easy cleaning', 'Small batches', 'Quiet operation'],
         }),
       }),
     })
@@ -32,6 +33,11 @@ describe('query framing', () => {
     expect(result.prompt).toBe(
       'What matters most here: airline carry-on size, one-hand fold, or lower price?',
     )
+    expect(result.refinementSuggestions).toEqual([
+      'Easy cleaning',
+      'Small batches',
+      'Quiet operation',
+    ])
     expect(result.usage).toEqual({
       inputTokens: 92,
       outputTokens: 44,
@@ -45,8 +51,20 @@ describe('query framing', () => {
 
     expect(parsedBody.reasoning.effort).toBe('minimal')
     expect(parsedBody.text.format.name).toBe('question_fast')
-    expect(parsedBody.text.format.schema.required).toEqual(['prompt'])
+    expect(parsedBody.text.format.schema.required).toEqual(['prompt', 'refinement_suggestions'])
+    expect(parsedBody.text.format.schema.properties.refinement_suggestions).toEqual({
+      type: 'array',
+      minItems: 3,
+      maxItems: 3,
+      items: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 22,
+      },
+    })
     expect(parsedBody.text.format.schema.properties).not.toHaveProperty('category_hint')
+    expect(parsedBody.input[1].content).toContain('exactly 3 short refinement chip labels')
+    expect(parsedBody.input[1].content).toContain('22 characters or fewer')
   })
 
   it('normalizes and clamps model prompts from response content chunks', async () => {
@@ -67,6 +85,12 @@ describe('query framing', () => {
               {
                 text: JSON.stringify({
                   prompt: `  What   matters   most if you want this for travel, daily use, and tight storage ${'x'.repeat(80)}  `,
+                  refinement_suggestions: [
+                    '  Easy   storage ',
+                    'Quiet operation',
+                    'This label is too long to fit',
+                    { label: 'ignored' },
+                  ],
                 }),
               },
             ],
@@ -86,6 +110,7 @@ describe('query framing', () => {
     expect(result.prompt.length).toBeLessThanOrEqual(140)
     expect(result.prompt).toMatch(/^What matters most if you want this for travel, daily use/)
     expect(result.prompt).not.toContain('  ')
+    expect(result.refinementSuggestions).toEqual(['Easy storage', 'Quiet operation'])
     expect(result.usage).toEqual({
       inputTokens: 0,
       outputTokens: 12,

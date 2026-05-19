@@ -17,6 +17,7 @@ describe('refinement assistant', () => {
         },
         output_text: JSON.stringify({
           prompt: 'What matters most here: portability, comfort, or battery life?',
+          refinement_suggestions: ['Travel use', 'Long battery', 'Comfort fit'],
         }),
       }),
     })
@@ -33,6 +34,7 @@ describe('refinement assistant', () => {
       prompt: 'What matters most here: portability, comfort, or battery life?',
       helperText: 'Or write whatever is important to you. Feel free to write in natural language.',
       followUpPlaceholder: 'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
+      refinementSuggestions: ['Travel use', 'Long battery', 'Comfort fit'],
       usage: {
         inputTokens: 78,
         outputTokens: 24,
@@ -65,7 +67,7 @@ describe('refinement assistant', () => {
 
     expect(parsedBody.reasoning.effort).toBe('minimal')
     expect(parsedBody.text.format.name).toBe('question_fast')
-    expect(parsedBody.text.format.schema.required).toEqual(['prompt'])
+    expect(parsedBody.text.format.schema.required).toEqual(['prompt', 'refinement_suggestions'])
     expect(parsedBody.text.format.schema.properties).not.toHaveProperty('tradeoff_axes')
   })
 
@@ -83,6 +85,7 @@ describe('refinement assistant', () => {
         },
         output_text: JSON.stringify({
           prompt: `What matters most for this pick if you want it for travel and also home use every day ${'x'.repeat(40)}`,
+          refinement_suggestions: ['Daily use', 'Easy cleaning', 'Under $200'],
         }),
       }),
     })
@@ -98,6 +101,7 @@ describe('refinement assistant', () => {
     expect(result.prompt.length).toBeLessThanOrEqual(140)
     expect(result.helperText).toBe('Or write whatever is important to you. Feel free to write in natural language.')
     expect(result.followUpPlaceholder).toBe('Example: I want something lightweight for daily travel, under $200, and easy to clean.')
+    expect(result.refinementSuggestions).toEqual(['Daily use', 'Easy cleaning', 'Under $200'])
     expect(result.queryFraming).toEqual(
       expect.objectContaining({
         layer: 'query_framing',

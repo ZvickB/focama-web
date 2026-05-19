@@ -21,6 +21,7 @@ export async function generateRefinementPrompt(
     prompt: questionFast.prompt,
     helperText: DEFAULT_HELPER_TEXT,
     followUpPlaceholder: DEFAULT_PLACEHOLDER,
+    refinementSuggestions: questionFast.refinementSuggestions,
     usage: questionFast.usage,
     queryFraming: createQuestionOnlyQueryFramingContract({
       productQuery,

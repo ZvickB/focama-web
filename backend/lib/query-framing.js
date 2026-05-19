@@ -2,6 +2,8 @@ import { createQueryFramingContract } from './layered-contracts.js'
 import { DEFAULT_REFINEMENT_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
 
 const MAX_PROMPT_LENGTH = 140
+const MAX_REFINEMENT_SUGGESTION_LENGTH = 22
+const MAX_REFINEMENT_SUGGESTIONS = 3
 
 function clampText(value, maxLength) {
   const normalizedValue = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
@@ -11,6 +13,19 @@ function clampText(value, maxLength) {
   }
 
   return normalizedValue.slice(0, maxLength).trim()
+}
+
+function normalizeRefinementSuggestions(value) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .filter((item) => typeof item === 'string')
+    .map((item) => item.trim().replace(/\s+/g, ' '))
+    .filter(Boolean)
+    .filter((item) => item.length <= MAX_REFINEMENT_SUGGESTION_LENGTH)
+    .slice(0, MAX_REFINEMENT_SUGGESTIONS)
 }
 
 function normalizeOpenAiUsage(payload) {
@@ -60,8 +75,18 @@ function buildQuestionFastSchema() {
         type: 'string',
         maxLength: MAX_PROMPT_LENGTH,
       },
+      refinement_suggestions: {
+        type: 'array',
+        minItems: MAX_REFINEMENT_SUGGESTIONS,
+        maxItems: MAX_REFINEMENT_SUGGESTIONS,
+        items: {
+          type: 'string',
+          minLength: 1,
+          maxLength: MAX_REFINEMENT_SUGGESTION_LENGTH,
+        },
+      },
     },
-    required: ['prompt'],
+    required: ['prompt', 'refinement_suggestions'],
     additionalProperties: false,
   }
 }
@@ -69,10 +94,15 @@ function buildQuestionFastSchema() {
 
 function buildQuestionFastInput(productQuery) {
   return [
-    'Write one short follow-up question for a shopping search before any product results exist.',
+    'Write one short follow-up question and exactly 3 short refinement chip labels for a shopping search before any product results exist.',
     'Stay query-only. Do not assume specific products, brands, or merchants.',
     `Keep the question at or under ${MAX_PROMPT_LENGTH} characters.`,
     'Ask only one question.',
+    `Each refinement chip label must be 1-3 words and ${MAX_REFINEMENT_SUGGESTION_LENGTH} characters or fewer.`,
+    'The chip labels should be tappable preferences, constraints, use cases, or deal breakers the shopper might choose.',
+    'Use natural shopping language.',
+    'Do not use brands, merchants, hype, generic quality claims, or broad labels like "Quality", "Best option", "Top rated", or "Good product".',
+    'Do not repeat the follow-up question as chip labels.',
     'Do not add helper text, examples, a placeholder, category notes, or reasoning fields.',
     'Focus on the detail most likely to change ranking, such as use case, must-have, budget, size, comfort, or what to avoid.',
     `Product request: ${productQuery}`,
@@ -210,6 +240,7 @@ export async function generateQuestionFast(
 
   return {
     prompt: clampText(parsed.prompt, MAX_PROMPT_LENGTH),
+    refinementSuggestions: normalizeRefinementSuggestions(parsed.refinement_suggestions),
     usage,
     generatedAt: new Date().toISOString(),
   }
