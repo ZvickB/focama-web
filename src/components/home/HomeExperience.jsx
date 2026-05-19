@@ -3,7 +3,7 @@ import { LoaderCircle, Search, Sparkles } from 'lucide-react'
 import { MAX_PRODUCT_QUERY_LENGTH, MAX_DETAILS_LENGTH } from '../../../shared/search-input.js'
 
 import wordmark from '@/assets/wordmark.PNG'
-import { FeedbackFab } from '@/components/home/FeedbackFab.jsx'
+// import { FeedbackFab } from '@/components/home/FeedbackFab.jsx'
 import { ResultSkeleton } from '@/components/home/ResultSkeleton.jsx'
 import {
   RESULT_CARD_SLOTS,
@@ -870,7 +870,8 @@ export function HomeExperience({ initialSearchQuery = '' } = {}) {
           />
         </Suspense>
       ) : null}
-      <FeedbackFab
+      {/* FeedbackFab temporarily hidden — unused by testers */}
+      {/* <FeedbackFab
         finalized={results.hasFinalResults}
         hasStartedSearch={status.hasStartedSearch}
         queryText={submittedQuery || productQuery}
@@ -879,7 +880,7 @@ export function HomeExperience({ initialSearchQuery = '' } = {}) {
         selectedProductId={results.selectedProduct?.id || ''}
         sessionId={analytics.sessionId || feedbackSessionId}
         stageReached={feedbackStage}
-      />
+      /> */}
     </>
   )
 }

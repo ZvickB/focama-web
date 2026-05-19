@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import {
   ChevronDown,
   Clock3,
+  RotateCcw,
   Sparkles,
 } from 'lucide-react'
 
@@ -166,6 +167,7 @@ export function ResultsSection({
   suggestedRetryQuery,
   submittedQuery,
 }) {
+  const retryViewRef = useRef(null)
   const [showRetryView, setShowRetryView] = useState(false)
   const [selectedCorrectionChips, setSelectedCorrectionChips] = useState([])
   const [isEditingSuggestedQuery, setIsEditingSuggestedQuery] = useState(false)
@@ -236,6 +238,13 @@ export function ResultsSection({
     setEditableSuggestedQuerySource('')
     setRetryViewQuery('')
     onRetrySearch(queryToSearch)
+  }
+
+  function handleRetryFabClick() {
+    handleOpenRetryView()
+    setTimeout(() => {
+      retryViewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
   }
 
   function handleOpenRetryView() {
@@ -471,7 +480,7 @@ export function ResultsSection({
       ) : null}
 
       {isRetryViewVisible ? (
-        <div className="rounded-[36px] border border-[#e7dac8] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,246,240,0.9))] p-5 shadow-[0_28px_120px_-72px_rgba(120,87,63,0.3)]">
+        <div ref={retryViewRef} className="rounded-[36px] border border-[#e7dac8] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,246,240,0.9))] p-5 shadow-[0_28px_120px_-72px_rgba(120,87,63,0.3)]">
           <button
             type="button"
             className="mb-5 flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
@@ -624,6 +633,21 @@ export function ResultsSection({
               Try a more specific search or add more context so Focamai can narrow the best options.
             </p>
           </div>
+        </div>
+      ) : null}
+      {hasFinalResults && !isRetryViewVisible ? (
+        <div className="pointer-events-none fixed right-4 bottom-[calc(env(safe-area-inset-bottom,0px)+1rem)] z-50 sm:right-6 sm:bottom-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]">
+          <button
+            type="button"
+            className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-[#dcccc0] bg-white/95 px-4 py-3 text-left shadow-[0_16px_38px_-20px_rgba(15,23,42,0.22)] backdrop-blur hover:border-[#cbb9a3] hover:bg-[#fdfaf6] transition-colors"
+            onClick={handleRetryFabClick}
+          >
+            <RotateCcw className="h-4 w-4 shrink-0 text-slate-500" />
+            <span className="flex flex-col">
+              <span className="text-sm text-slate-500">Not quite right?</span>
+              <span className="text-sm font-medium text-slate-800">Find better options</span>
+            </span>
+          </button>
         </div>
       ) : null}
     </section>
