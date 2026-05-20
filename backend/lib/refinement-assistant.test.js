@@ -17,7 +17,11 @@ describe('refinement assistant', () => {
         },
         output_text: JSON.stringify({
           prompt: 'What matters most here: portability, comfort, or battery life?',
-          refinement_suggestions: ['Travel use', 'Long battery', 'Comfort fit'],
+          refinement_suggestions: [
+            { label: 'Travel use', prompt: 'I need something that works well for travel and is easy to carry' },
+            { label: 'Long battery', prompt: 'Battery life is important — I want it to last a full day' },
+            { label: 'Comfort fit', prompt: 'Comfort is a priority for me, especially for extended use' },
+          ],
         }),
       }),
     })
@@ -34,7 +38,11 @@ describe('refinement assistant', () => {
       prompt: 'What matters most here: portability, comfort, or battery life?',
       helperText: 'Or write whatever is important to you. Feel free to write in natural language.',
       followUpPlaceholder: 'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
-      refinementSuggestions: ['Travel use', 'Long battery', 'Comfort fit'],
+      refinementSuggestions: [
+        { label: 'Travel use', prompt: 'I need something that works well for travel and is easy to carry' },
+        { label: 'Long battery', prompt: 'Battery life is important — I want it to last a full day' },
+        { label: 'Comfort fit', prompt: 'Comfort is a priority for me, especially for extended use' },
+      ],
       usage: {
         inputTokens: 78,
         outputTokens: 24,
@@ -85,7 +93,11 @@ describe('refinement assistant', () => {
         },
         output_text: JSON.stringify({
           prompt: `What matters most for this pick if you want it for travel and also home use every day ${'x'.repeat(40)}`,
-          refinement_suggestions: ['Daily use', 'Easy cleaning', 'Under $200'],
+          refinement_suggestions: [
+            { label: 'Daily use', prompt: 'I plan to use this every day so durability matters' },
+            { label: 'Easy cleaning', prompt: 'I want something that is easy to clean after use' },
+            { label: 'Under $200', prompt: 'My budget is under $200' },
+          ],
         }),
       }),
     })
@@ -101,7 +113,11 @@ describe('refinement assistant', () => {
     expect(result.prompt.length).toBeLessThanOrEqual(140)
     expect(result.helperText).toBe('Or write whatever is important to you. Feel free to write in natural language.')
     expect(result.followUpPlaceholder).toBe('Example: I want something lightweight for daily travel, under $200, and easy to clean.')
-    expect(result.refinementSuggestions).toEqual(['Daily use', 'Easy cleaning', 'Under $200'])
+    expect(result.refinementSuggestions).toEqual([
+      { label: 'Daily use', prompt: 'I plan to use this every day so durability matters' },
+      { label: 'Easy cleaning', prompt: 'I want something that is easy to clean after use' },
+      { label: 'Under $200', prompt: 'My budget is under $200' },
+    ])
     expect(result.queryFraming).toEqual(
       expect.objectContaining({
         layer: 'query_framing',

@@ -17,7 +17,11 @@ describe('query framing', () => {
         },
         output_text: JSON.stringify({
           prompt: 'What matters most here: airline carry-on size, one-hand fold, or lower price?',
-          refinement_suggestions: ['Easy cleaning', 'Small batches', 'Quiet operation'],
+          refinement_suggestions: [
+            { label: 'Easy cleaning', prompt: 'I want something that cleans up quickly after use' },
+            { label: 'Small batches', prompt: 'I only need to make small quantities at a time' },
+            { label: 'Quiet operation', prompt: 'I need something that runs quietly at home' },
+          ],
         }),
       }),
     })
@@ -34,9 +38,9 @@ describe('query framing', () => {
       'What matters most here: airline carry-on size, one-hand fold, or lower price?',
     )
     expect(result.refinementSuggestions).toEqual([
-      'Easy cleaning',
-      'Small batches',
-      'Quiet operation',
+      { label: 'Easy cleaning', prompt: 'I want something that cleans up quickly after use' },
+      { label: 'Small batches', prompt: 'I only need to make small quantities at a time' },
+      { label: 'Quiet operation', prompt: 'I need something that runs quietly at home' },
     ])
     expect(result.usage).toEqual({
       inputTokens: 92,
@@ -57,9 +61,13 @@ describe('query framing', () => {
       minItems: 3,
       maxItems: 3,
       items: {
-        type: 'string',
-        minLength: 1,
-        maxLength: 22,
+        type: 'object',
+        properties: {
+          label: { type: 'string', minLength: 1, maxLength: 22 },
+          prompt: { type: 'string', minLength: 1 },
+        },
+        required: ['label', 'prompt'],
+        additionalProperties: false,
       },
     })
     expect(parsedBody.text.format.schema.properties).not.toHaveProperty('category_hint')
@@ -86,10 +94,10 @@ describe('query framing', () => {
                 text: JSON.stringify({
                   prompt: `  What   matters   most if you want this for travel, daily use, and tight storage ${'x'.repeat(80)}  `,
                   refinement_suggestions: [
-                    '  Easy   storage ',
-                    'Quiet operation',
-                    'This label is too long to fit',
-                    { label: 'ignored' },
+                    { label: '  Easy   storage ', prompt: 'I have limited space and need something compact' },
+                    { label: 'Quiet operation', prompt: 'I need something that runs quietly' },
+                    { label: 'This label is too long to fit', prompt: 'Some prompt' },
+                    'a plain string that is now ignored',
                   ],
                 }),
               },
@@ -110,7 +118,10 @@ describe('query framing', () => {
     expect(result.prompt.length).toBeLessThanOrEqual(140)
     expect(result.prompt).toMatch(/^What matters most if you want this for travel, daily use/)
     expect(result.prompt).not.toContain('  ')
-    expect(result.refinementSuggestions).toEqual(['Easy storage', 'Quiet operation'])
+    expect(result.refinementSuggestions).toEqual([
+      { label: 'Easy storage', prompt: 'I have limited space and need something compact' },
+      { label: 'Quiet operation', prompt: 'I need something that runs quietly' },
+    ])
     expect(result.usage).toEqual({
       inputTokens: 0,
       outputTokens: 12,

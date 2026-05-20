@@ -21,10 +21,14 @@ function normalizeRefinementSuggestions(value) {
   }
 
   return value
-    .filter((item) => typeof item === 'string')
-    .map((item) => item.trim().replace(/\s+/g, ' '))
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null
+      const label = typeof item.label === 'string' ? item.label.trim().replace(/\s+/g, ' ') : ''
+      const prompt = typeof item.prompt === 'string' ? item.prompt.trim() : ''
+      if (!label || label.length > MAX_REFINEMENT_SUGGESTION_LENGTH) return null
+      return prompt ? { label, prompt } : { label }
+    })
     .filter(Boolean)
-    .filter((item) => item.length <= MAX_REFINEMENT_SUGGESTION_LENGTH)
     .slice(0, MAX_REFINEMENT_SUGGESTIONS)
 }
 
@@ -80,9 +84,13 @@ function buildQuestionFastSchema() {
         minItems: MAX_REFINEMENT_SUGGESTIONS,
         maxItems: MAX_REFINEMENT_SUGGESTIONS,
         items: {
-          type: 'string',
-          minLength: 1,
-          maxLength: MAX_REFINEMENT_SUGGESTION_LENGTH,
+          type: 'object',
+          properties: {
+            label: { type: 'string', minLength: 1, maxLength: MAX_REFINEMENT_SUGGESTION_LENGTH },
+            prompt: { type: 'string', minLength: 1 },
+          },
+          required: ['label', 'prompt'],
+          additionalProperties: false,
         },
       },
     },
@@ -100,6 +108,7 @@ function buildQuestionFastInput(productQuery) {
     'Ask only one question.',
     `Each refinement chip label must be 1-3 words and ${MAX_REFINEMENT_SUGGESTION_LENGTH} characters or fewer.`,
     'The chip labels should be tappable preferences, constraints, use cases, or deal breakers the shopper might choose.',
+    'For each chip, also write a short natural-language prompt (1-2 sentences) that expands what that chip means in the context of this specific search, written as if the shopper is saying it.',
     'Use natural shopping language.',
     'Do not use brands, merchants, hype, generic quality claims, or broad labels like "Quality", "Best option", "Top rated", or "Good product".',
     'Do not repeat the follow-up question as chip labels.',
