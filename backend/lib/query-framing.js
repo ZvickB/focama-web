@@ -1,5 +1,8 @@
+import Anthropic from '@anthropic-ai/sdk'
 import { createQueryFramingContract } from './layered-contracts.js'
 import { DEFAULT_REFINEMENT_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
+
+const HAIKU_REFINEMENT_MODEL = 'claude-haiku-4-5-20251001'
 
 const MAX_PROMPT_LENGTH = 140
 const MAX_REFINEMENT_SUGGESTION_LENGTH = 22
@@ -230,22 +233,71 @@ async function callStructuredQueryFraming(
   }
 }
 
+async function callHaikuQueryFraming({ claudeApiKey, input }) {
+  if (!claudeApiKey) {
+    throw new Error('CLAUDE_API_KEY is missing.')
+  }
+
+  const anthropic = new Anthropic({ apiKey: claudeApiKey })
+  const message = await anthropic.messages.create({
+    model: HAIKU_REFINEMENT_MODEL,
+    max_tokens: 512,
+    system: 'You help shoppers clarify what matters before choosing products. Return only valid JSON — no explanation, no markdown.',
+    messages: [{ role: 'user', content: input }],
+  })
+
+  const text = message.content?.[0]?.type === 'text' ? message.content[0].text.trim() : ''
+
+  if (!text) {
+    throw new Error('Haiku refinement returned no output.')
+  }
+
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
+
+  if (!jsonMatch) {
+    throw new Error('Haiku refinement returned no JSON.')
+  }
+
+  const parsed = JSON.parse(jsonMatch[0])
+  const usage = {
+    inputTokens: message.usage?.input_tokens ?? 0,
+    outputTokens: message.usage?.output_tokens ?? 0,
+    totalTokens: (message.usage?.input_tokens ?? 0) + (message.usage?.output_tokens ?? 0),
+    reasoningTokens: 0,
+  }
+
+  return { parsed, usage }
+}
+
 export async function generateQuestionFast(
-  { productQuery, apiKey, model = DEFAULT_REFINEMENT_MODEL, debugContext = null },
+  { productQuery, apiKey, claudeApiKey, model = DEFAULT_REFINEMENT_MODEL, debugContext = null },
   fetchImpl = fetch,
 ) {
-  const { parsed, usage } = await callStructuredQueryFraming(
-    {
-      productQuery,
-      apiKey,
-      model,
-      input: buildQuestionFastInput(productQuery),
-      schemaName: 'question_fast',
-      schema: buildQuestionFastSchema(),
-      debugContext,
-    },
-    fetchImpl,
-  )
+  const input = buildQuestionFastInput(productQuery)
+  let parsed, usage
+
+  if (claudeApiKey) {
+    try {
+      const result = await callHaikuQueryFraming({ claudeApiKey, input })
+      parsed = result.parsed
+      usage = result.usage
+    } catch (err) {
+      console.warn('[refinement] Haiku failed, falling back to OpenAI:', err?.message)
+      const result = await callStructuredQueryFraming(
+        { productQuery, apiKey, model, input, schemaName: 'question_fast', schema: buildQuestionFastSchema(), debugContext },
+        fetchImpl,
+      )
+      parsed = result.parsed
+      usage = result.usage
+    }
+  } else {
+    const result = await callStructuredQueryFraming(
+      { productQuery, apiKey, model, input, schemaName: 'question_fast', schema: buildQuestionFastSchema(), debugContext },
+      fetchImpl,
+    )
+    parsed = result.parsed
+    usage = result.usage
+  }
 
   return {
     prompt: clampText(parsed.prompt, MAX_PROMPT_LENGTH),
