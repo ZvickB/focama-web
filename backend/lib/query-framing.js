@@ -1,5 +1,7 @@
+import Anthropic from '@anthropic-ai/sdk'
+
 import { createQueryFramingContract } from './layered-contracts.js'
-import { DEFAULT_REFINEMENT_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
+import { DEFAULT_HAIKU_MODEL, DEFAULT_REFINEMENT_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
 
 const MAX_PROMPT_LENGTH = 140
 const MAX_REFINEMENT_SUGGESTION_LENGTH = 22
@@ -48,6 +50,37 @@ function normalizeOpenAiUsage(payload) {
     totalTokens: Number.isFinite(totalTokens) ? totalTokens : 0,
     reasoningTokens: Number.isFinite(reasoningTokens) ? reasoningTokens : 0,
   }
+}
+
+function normalizeAnthropicUsage(usage) {
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) {
+    return null
+  }
+
+  const inputTokens = Number(usage.input_tokens)
+  const outputTokens = Number(usage.output_tokens)
+  const normalizedInputTokens = Number.isFinite(inputTokens) ? inputTokens : 0
+  const normalizedOutputTokens = Number.isFinite(outputTokens) ? outputTokens : 0
+
+  return {
+    inputTokens: normalizedInputTokens,
+    outputTokens: normalizedOutputTokens,
+    totalTokens: normalizedInputTokens + normalizedOutputTokens,
+    reasoningTokens: 0,
+  }
+}
+
+function getAnthropicMessageText(message) {
+  const content = Array.isArray(message?.content) ? message.content : []
+  const chunks = []
+
+  for (const part of content) {
+    if (part?.type === 'text' && typeof part.text === 'string' && part.text.trim()) {
+      chunks.push(part.text)
+    }
+  }
+
+  return chunks.join('\n').trim()
 }
 
 function getResponseText(payload) {
@@ -115,6 +148,15 @@ function buildQuestionFastInput(productQuery) {
     'Do not add helper text, examples, a placeholder, category notes, or reasoning fields.',
     'Focus on the detail most likely to change ranking, such as use case, must-have, budget, size, comfort, or what to avoid.',
     `Product request: ${productQuery}`,
+  ].join('\n')
+}
+
+function buildQuestionFastAnthropicInput(productQuery) {
+  return [
+    buildQuestionFastInput(productQuery),
+    '',
+    'Return valid JSON only with this exact shape:',
+    '{"prompt":"...","refinement_suggestions":[{"label":"...","prompt":"..."},{"label":"...","prompt":"..."},{"label":"...","prompt":"..."}]}',
   ].join('\n')
 }
 
@@ -230,6 +272,77 @@ async function callStructuredQueryFraming(
   }
 }
 
+async function callHaikuQueryFraming(
+  { apiKey, model = DEFAULT_HAIKU_MODEL, input, schemaName, debugContext = null },
+) {
+  if (!apiKey) {
+    throw new Error('CLAUDE_API_KEY is missing from the root .env file.')
+  }
+
+  emitDebugEvent(debugContext, 'query_framing_haiku_request_started', {
+    schemaName,
+    model,
+    inputLength: input.length,
+  })
+
+  let message
+
+  try {
+    const anthropic = new Anthropic({ apiKey })
+    message = await anthropic.messages.create({
+      model,
+      max_tokens: 384,
+      system: 'You help shoppers clarify what matters before choosing products. Return only valid JSON.',
+      messages: [
+        {
+          role: 'user',
+          content: input,
+        },
+      ],
+    })
+  } catch (error) {
+    emitDebugEvent(debugContext, 'query_framing_haiku_request_failed', {
+      schemaName,
+      message: error instanceof Error ? error.message : 'Unknown Anthropic error',
+    })
+    throw error
+  }
+
+  const responseText = getAnthropicMessageText(message)
+  const usage = normalizeAnthropicUsage(message?.usage)
+  emitDebugEvent(debugContext, 'query_framing_haiku_response_received', {
+    schemaName,
+    responseId: typeof message?.id === 'string' ? message.id : null,
+    hasOutputText: Boolean(responseText),
+    outputTextLength: responseText.length,
+    usage,
+  })
+
+  if (!responseText) {
+    throw new Error(`Haiku ${schemaName} returned no structured output.`)
+  }
+
+  const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+  const jsonText = jsonMatch ? jsonMatch[0] : responseText
+  let parsed
+
+  try {
+    parsed = JSON.parse(jsonText)
+  } catch (error) {
+    emitDebugEvent(debugContext, 'query_framing_haiku_parse_failed', {
+      schemaName,
+      message: error instanceof Error ? error.message : 'Unknown parse error',
+      outputPreview: responseText.slice(0, 300),
+    })
+    throw error
+  }
+
+  return {
+    parsed,
+    usage,
+  }
+}
+
 export async function generateQuestionFast(
   { productQuery, apiKey, model = DEFAULT_REFINEMENT_MODEL, debugContext = null },
   fetchImpl = fetch,
@@ -251,6 +364,28 @@ export async function generateQuestionFast(
     prompt: clampText(parsed.prompt, MAX_PROMPT_LENGTH),
     refinementSuggestions: normalizeRefinementSuggestions(parsed.refinement_suggestions),
     usage,
+    generatedAt: new Date().toISOString(),
+  }
+}
+
+export async function generateQuestionFastHaiku(
+  { productQuery, apiKey, model = DEFAULT_HAIKU_MODEL, debugContext = null },
+) {
+  const { parsed, usage } = await callHaikuQueryFraming({
+    productQuery,
+    apiKey,
+    model,
+    input: buildQuestionFastAnthropicInput(productQuery),
+    schemaName: 'question_fast',
+    debugContext,
+  })
+
+  return {
+    prompt: clampText(parsed.prompt, MAX_PROMPT_LENGTH),
+    refinementSuggestions: normalizeRefinementSuggestions(parsed.refinement_suggestions),
+    usage,
+    model,
+    provider: 'anthropic',
     generatedAt: new Date().toISOString(),
   }
 }

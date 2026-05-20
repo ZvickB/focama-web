@@ -3,6 +3,7 @@ import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import {
   DEFAULT_FINALIZE_MODEL,
+  DEFAULT_HAIKU_MODEL,
   DEFAULT_REFINEMENT_MODEL,
   haikuLockWinnersAndBadges,
   miniEnrichSelectedCandidates,
@@ -200,6 +201,10 @@ function resolveAmazonDomain({ requestUrl = null, body = null, countryCode = 'US
 }
 function getRefinementModel() {
   return getEnv('OPENAI_REFINEMENT_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_REFINEMENT_MODEL
+}
+
+function getHaikuRefinementModel() {
+  return getEnv('CLAUDE_REFINEMENT_MODEL') || getEnv('CLAUDE_MODEL') || DEFAULT_HAIKU_MODEL
 }
 
 function hasContextAddedFinalizeSignals({
@@ -1168,6 +1173,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
 export async function handleRefinementPrompt(requestUrl, response) {
   const requestStartedAt = nowMs()
   const openAiApiKey = getEnv('OPENAI_API_KEY')
+  const anthropicApiKey = getEnv('CLAUDE_API_KEY')
   const { error, isValid, normalizedQuery } = getValidatedSearchRequest(requestUrl, {
     includeDetails: false,
   })
@@ -1182,23 +1188,25 @@ export async function handleRefinementPrompt(requestUrl, response) {
     return
   }
 
-  if (!openAiApiKey) {
-    logSearchFlowEvent('guided_refine_missing_openai_key', {
+  if (!anthropicApiKey && !openAiApiKey) {
+    logSearchFlowEvent('guided_refine_missing_ai_key', {
       route: '/api/search/refine',
       query: normalizedQuery,
     })
-    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
+    sendJson(response, 500, { error: 'CLAUDE_API_KEY or OPENAI_API_KEY is missing from the root .env file.' })
     return
   }
 
   try {
-    const openAiStartedAt = nowMs()
+    const aiStartedAt = nowMs()
     const refinementPrompt = await generateRefinementPrompt({
       productQuery: normalizedQuery,
-      apiKey: openAiApiKey,
+      anthropicApiKey,
+      openAiApiKey,
+      haikuModel: getHaikuRefinementModel(),
       model: getRefinementModel(),
     })
-    const openAiDuration = nowMs() - openAiStartedAt
+    const aiDuration = nowMs() - aiStartedAt
     const totalDuration = nowMs() - requestStartedAt
 
     logSearchFlowEvent('guided_refine_completed', {
@@ -1212,16 +1220,19 @@ export async function handleRefinementPrompt(requestUrl, response) {
       queryFramingAxisCount: Array.isArray(refinementPrompt.queryFraming?.tradeoffAxes)
         ? refinementPrompt.queryFraming.tradeoffAxes.length
         : 0,
-      openaiMs: roundTimingDuration(openAiDuration),
+      aiMs: roundTimingDuration(aiDuration),
       totalMs: roundTimingDuration(totalDuration),
-      openaiUsage: refinementPrompt.usage || null,
+      aiUsage: refinementPrompt.usage || null,
+      aiProvider: refinementPrompt.provider || '',
+      aiModel: refinementPrompt.model || '',
+      fallbackFrom: refinementPrompt.fallbackFrom || null,
       queryFramingMode: refinementPrompt.queryFramingMode || 'legacy_query_framing',
-      rankingOwner: 'openai_question_fast',
+      rankingOwner: refinementPrompt.provider === 'anthropic' ? 'haiku_question_fast' : 'openai_question_fast',
     })
 
     sendJson(response, 200, refinementPrompt, {
       serverTiming: [
-        { name: 'openai', duration: openAiDuration },
+        { name: refinementPrompt.provider === 'anthropic' ? 'haiku' : 'openai', duration: aiDuration },
         { name: 'total', duration: totalDuration },
       ],
     })

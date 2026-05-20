@@ -34,7 +34,7 @@
 - Hard-constraint follow-up notes, including kosher/Jewish-use, dietary/allergy, safety/material, and compatibility/exclusion signals, now trigger one pre-finalize refreshed discovery pass using the original query plus notes. Finalize then uses the refreshed discovery token and the same combined query that created that token.
 - Discovery now runs a background query-quality review after the normal response when OpenAI is configured, storing review state at `selection.queryQuality` on the token-scoped session snapshot.
 - `GET /api/search/query-quality` is the polling endpoint for that stored review, and the homepage can show a small optional suggested-query prompt when the review is ready and high-confidence.
-- `GET /api/search/refine` returns one short follow-up question while discovery runs.
+- `GET /api/search/refine` returns one short follow-up question and refinement chips while discovery runs, using Haiku first with OpenAI mini fallback.
 - `POST /api/search/finalize` rebuilds the candidate pool from guided cache, uses Haiku first, tops partial valid Haiku output up from deterministic fallback when needed, returns shortlist cards, and starts async enrichment work for the final displayed IDs.
 - Repeated same-query searches now reuse shared discovery candidates but get a fresh token-scoped session snapshot for finalize/enrichment, so older context-specific caveats cannot bleed into a new run.
 - Rainforest shared discovery cache is versioned as `rainforest_discovery:v2`; older unversioned Rainforest/provider-era shared cache entries are intentionally not reused.

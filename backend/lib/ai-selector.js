@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 
 export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses'
 export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini'
+export const DEFAULT_HAIKU_MODEL = 'claude-haiku-4-5-20251001'
 export const DEFAULT_REFINEMENT_MODEL = DEFAULT_OPENAI_MODEL
 export const DEFAULT_FINALIZE_MODEL = DEFAULT_OPENAI_MODEL
 const DESCRIPTION_BOILERPLATE_TOKENS = new Set([
@@ -358,7 +359,7 @@ export async function haikuLockWinnersAndBadges(
   const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
 
   if (candidates.length === 0) {
-    return { model: 'claude-haiku-4-5-20251001', lockedIds: [], usage: null }
+    return { model: DEFAULT_HAIKU_MODEL, lockedIds: [], usage: null }
   }
 
   const desiredCount = Math.min(finalResultLimit, candidates.length)
@@ -367,7 +368,7 @@ export async function haikuLockWinnersAndBadges(
 
   const anthropic = new Anthropic({ apiKey })
   const message = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: DEFAULT_HAIKU_MODEL,
     max_tokens: 256,
     messages: [{ role: 'user', content: prompt }],
   })
@@ -415,7 +416,7 @@ export async function haikuLockWinnersAndBadges(
   console.log('[haiku-lock] locked:', lockedIds.length, '/', desiredCount, JSON.stringify(lockedIds))
 
   return {
-    model: 'claude-haiku-4-5-20251001',
+    model: DEFAULT_HAIKU_MODEL,
     lockedIds,
     usage: {
       inputTokens: message.usage?.input_tokens ?? 0,

@@ -1,8 +1,68 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { generateQuestionFast } from './query-framing.js'
+const anthropicMocks = vi.hoisted(() => ({
+  create: vi.fn(),
+}))
+
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: vi.fn(function Anthropic() {
+    return {
+      messages: {
+        create: anthropicMocks.create,
+      },
+    }
+  }),
+}))
+
+import { generateQuestionFast, generateQuestionFastHaiku } from './query-framing.js'
 
 describe('query framing', () => {
+  it('returns the follow-up question and chip labels from Haiku JSON', async () => {
+    anthropicMocks.create.mockResolvedValueOnce({
+      id: 'msg_test',
+      content: [
+        {
+          type: 'text',
+          text: 'Here is the JSON:\n{"prompt":"What matters most: budget, size, or comfort?","refinement_suggestions":[{"label":"Lower price","prompt":"I want the lowest reasonable price"},{"label":"Small size","prompt":"I need something compact"},{"label":"Comfort fit","prompt":"Comfort matters most"}]}',
+        },
+      ],
+      usage: {
+        input_tokens: 72,
+        output_tokens: 31,
+      },
+    })
+
+    const result = await generateQuestionFastHaiku({
+      productQuery: 'travel stroller',
+      apiKey: 'claude-key',
+    })
+
+    expect(anthropicMocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 384,
+        system: expect.stringContaining('Return only valid JSON'),
+      }),
+    )
+    expect(result).toEqual({
+      prompt: 'What matters most: budget, size, or comfort?',
+      refinementSuggestions: [
+        { label: 'Lower price', prompt: 'I want the lowest reasonable price' },
+        { label: 'Small size', prompt: 'I need something compact' },
+        { label: 'Comfort fit', prompt: 'Comfort matters most' },
+      ],
+      usage: {
+        inputTokens: 72,
+        outputTokens: 31,
+        totalTokens: 103,
+        reasoningTokens: 0,
+      },
+      model: 'claude-haiku-4-5-20251001',
+      provider: 'anthropic',
+      generatedAt: expect.any(String),
+    })
+  })
+
   it('returns the follow-up question without asking for background framing fields', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
