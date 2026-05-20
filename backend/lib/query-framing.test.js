@@ -1,26 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-const anthropicMocks = vi.hoisted(() => ({
-  create: vi.fn(),
-}))
-
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: vi.fn(function Anthropic() {
-    return {
-      messages: {
-        create: anthropicMocks.create,
-      },
-    }
-  }),
-}))
+import { describe, expect, it, vi } from 'vitest'
 
 import { generateQuestionFast } from './query-framing.js'
 
 describe('query framing', () => {
-  beforeEach(() => {
-    anthropicMocks.create.mockReset()
-  })
-
   it('returns the follow-up question without asking for background framing fields', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -214,75 +196,5 @@ describe('query framing', () => {
         outputPreview: '{not valid json',
       }),
     )
-  })
-
-  it('uses Haiku when claudeApiKey is provided', async () => {
-    anthropicMocks.create.mockResolvedValue({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            prompt: 'What matters most: portability, battery life, or noise cancellation?',
-            refinement_suggestions: [
-              { label: 'Portable', prompt: 'I want something easy to carry around' },
-              { label: 'Long battery', prompt: 'Battery life is my top priority' },
-              { label: 'Noise cancel', prompt: 'I need strong noise cancellation for focus' },
-            ],
-          }),
-        },
-      ],
-      usage: { input_tokens: 50, output_tokens: 30 },
-    })
-
-    const fetchMock = vi.fn()
-
-    const result = await generateQuestionFast(
-      {
-        productQuery: 'wireless headphones',
-        apiKey: 'openai-key',
-        claudeApiKey: 'claude-key',
-      },
-      fetchMock,
-    )
-
-    expect(anthropicMocks.create).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'claude-haiku-4-5-20251001' }),
-    )
-    expect(fetchMock).not.toHaveBeenCalled()
-    expect(result.prompt).toBe('What matters most: portability, battery life, or noise cancellation?')
-    expect(result.refinementSuggestions).toHaveLength(3)
-    expect(result.usage).toEqual({ inputTokens: 50, outputTokens: 30, totalTokens: 80, reasoningTokens: 0 })
-  })
-
-  it('falls back to OpenAI when Haiku fails', async () => {
-    anthropicMocks.create.mockRejectedValue(new Error('Haiku unavailable'))
-
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        usage: { input_tokens: 60, output_tokens: 20, total_tokens: 80, output_tokens_details: { reasoning_tokens: 0 } },
-        output_text: JSON.stringify({
-          prompt: 'What is your primary use case?',
-          refinement_suggestions: [
-            { label: 'Travel', prompt: 'I need this for travel' },
-            { label: 'Office', prompt: 'I will use it in the office' },
-            { label: 'Gym', prompt: 'I plan to use it at the gym' },
-          ],
-        }),
-      }),
-    })
-
-    const result = await generateQuestionFast(
-      {
-        productQuery: 'earbuds',
-        apiKey: 'openai-key',
-        claudeApiKey: 'claude-key',
-      },
-      fetchMock,
-    )
-
-    expect(anthropicMocks.create).toHaveBeenCalledTimes(1)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(result.prompt).toBe('What is your primary use case?')
   })
 })

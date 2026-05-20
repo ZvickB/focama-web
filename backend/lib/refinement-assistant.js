@@ -5,14 +5,13 @@ const DEFAULT_HELPER_TEXT = 'Or write whatever is important to you. Feel free to
 const DEFAULT_PLACEHOLDER = 'Example: I want something lightweight for daily travel, under $200, and easy to clean.'
 
 export async function generateRefinementPrompt(
-  { productQuery, apiKey, claudeApiKey, model = DEFAULT_REFINEMENT_MODEL },
+  { productQuery, apiKey, model = DEFAULT_REFINEMENT_MODEL },
   fetchImpl = fetch,
 ) {
   const questionFast = await generateQuestionFast(
     {
       productQuery,
       apiKey,
-      claudeApiKey,
       model,
     },
     fetchImpl,

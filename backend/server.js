@@ -1168,7 +1168,6 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
 export async function handleRefinementPrompt(requestUrl, response) {
   const requestStartedAt = nowMs()
   const openAiApiKey = getEnv('OPENAI_API_KEY')
-  const claudeApiKey = getEnv('CLAUDE_API_KEY')
   const { error, isValid, normalizedQuery } = getValidatedSearchRequest(requestUrl, {
     includeDetails: false,
   })
@@ -1183,12 +1182,12 @@ export async function handleRefinementPrompt(requestUrl, response) {
     return
   }
 
-  if (!claudeApiKey && !openAiApiKey) {
-    logSearchFlowEvent('guided_refine_missing_ai_key', {
+  if (!openAiApiKey) {
+    logSearchFlowEvent('guided_refine_missing_openai_key', {
       route: '/api/search/refine',
       query: normalizedQuery,
     })
-    sendJson(response, 500, { error: 'No AI API key available (CLAUDE_API_KEY or OPENAI_API_KEY required).' })
+    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
     return
   }
 
@@ -1197,7 +1196,6 @@ export async function handleRefinementPrompt(requestUrl, response) {
     const refinementPrompt = await generateRefinementPrompt({
       productQuery: normalizedQuery,
       apiKey: openAiApiKey,
-      claudeApiKey,
       model: getRefinementModel(),
     })
     const openAiDuration = nowMs() - openAiStartedAt
