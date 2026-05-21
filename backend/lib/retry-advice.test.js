@@ -61,9 +61,9 @@ describe('retry advice', () => {
       'suggested_query',
       'rationale',
     ])
-    expect(parsedBody.text.format.schema.properties.suggested_query.maxLength).toBe(100)
+    expect(parsedBody.text.format.schema.properties.suggested_query.maxLength).toBe(80)
     expect(parsedBody.input[1].content).toContain('Always return recommendation as new_search.')
-    expect(parsedBody.input[1].content).toContain('The suggested_query must be 100 characters or fewer')
+    expect(parsedBody.input[1].content).toContain('The suggested_query must be 80 characters or fewer')
     expect(parsedBody.input[1].content).toContain('Preserve accumulated must-have constraints')
     expect(parsedBody.input[1].content).toContain('Only drop or replace a previous constraint when the latest feedback clearly says')
     expect(parsedBody.input[1].content).toContain('keep the earlier requirements and add the new one')
@@ -214,6 +214,31 @@ describe('retry advice', () => {
         reasoningTokens: 2,
       },
     })
+  })
+
+  it('clamps overlong model suggested queries to the product query limit', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          recommendation: 'new_search',
+          suggested_query: `compact city stroller ${'with extra lightweight foldable travel storage '.repeat(4)}`,
+          rationale: 'Narrows the search to lighter strollers for daily city trips.',
+        }),
+      }),
+    })
+
+    const result = await generateRetryAdvice(
+      {
+        productQuery: 'stroller',
+        rejectionFeedback: 'Too bulky.',
+        apiKey: 'test-key',
+      },
+      fetchMock,
+    )
+
+    expect(result.suggestedQuery.length).toBeLessThanOrEqual(80)
+    expect(result.suggestedQuery).toMatch(/^compact city stroller/)
   })
 
   it('falls back to the original query and default rationale when model fields are empty', async () => {
