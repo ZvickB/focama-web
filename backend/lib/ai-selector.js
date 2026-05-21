@@ -2,8 +2,9 @@ import Anthropic from '@anthropic-ai/sdk'
 
 export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses'
 export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini'
+export const DEFAULT_NANO_MODEL = 'gpt-5.4-nano'
 export const DEFAULT_HAIKU_MODEL = 'claude-haiku-4-5-20251001'
-export const DEFAULT_REFINEMENT_MODEL = DEFAULT_OPENAI_MODEL
+export const DEFAULT_REFINEMENT_MODEL = DEFAULT_NANO_MODEL
 export const DEFAULT_FINALIZE_MODEL = DEFAULT_OPENAI_MODEL
 const DESCRIPTION_BOILERPLATE_TOKENS = new Set([
   'at',

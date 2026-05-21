@@ -18,36 +18,36 @@ export async function generateRefinementPrompt(
   let questionFast
   let fallbackFrom = null
 
-  if (anthropicApiKey) {
+  if (openAiApiKey) {
     try {
-      questionFast = await generateQuestionFastHaiku({
-        productQuery,
-        apiKey: anthropicApiKey,
-        model: haikuModel,
-      })
+      questionFast = await generateQuestionFast(
+        {
+          productQuery,
+          apiKey: openAiApiKey,
+          model,
+        },
+        fetchImpl,
+      )
+      questionFast = {
+        ...questionFast,
+        model,
+        provider: 'openai',
+      }
     } catch (error) {
-      fallbackFrom = haikuModel
+      fallbackFrom = model
 
-      if (!openAiApiKey) {
+      if (!anthropicApiKey) {
         throw error
       }
     }
   }
 
   if (!questionFast) {
-    questionFast = await generateQuestionFast(
-      {
-        productQuery,
-        apiKey: openAiApiKey,
-        model,
-      },
-      fetchImpl,
-    )
-    questionFast = {
-      ...questionFast,
-      model,
-      provider: 'openai',
-    }
+    questionFast = await generateQuestionFastHaiku({
+      productQuery,
+      apiKey: anthropicApiKey,
+      model: haikuModel,
+    })
   }
 
   return {
