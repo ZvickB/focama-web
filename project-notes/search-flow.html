@@ -519,9 +519,8 @@
             </div>
             <p>
               Finalize validates the body, rate limits by IP, resolves the discovery snapshot,
-              trims notes and retry feedback, filters excluded IDs on retry passes, then asks Haiku
-              to lock the shortlist. The fallback path is deterministic, and partial valid Haiku
-              output is topped up rather than discarded.
+              trims notes, then asks Haiku to lock the shortlist. The fallback path is
+              deterministic, and partial valid Haiku output is topped up rather than discarded.
             </p>
             <div class="detail-grid">
               <div class="detail green">
@@ -535,13 +534,6 @@
               <div class="detail amber">
                 <strong>Fallback path</strong>
                 <p><code>selection.mode: 'rules_fallback'</code> when Haiku yields nothing usable.</p>
-              </div>
-              <div class="detail">
-                <strong>Retry edge case</strong>
-                <p>
-                  If a retry excludes every remaining candidate, finalize returns
-                  <code>selection.mode: 'retry_exhausted'</code>.
-                </p>
               </div>
             </div>
           </div>
@@ -673,7 +665,7 @@
         <article class="step">
           <div class="step-id"><span>10</span></div>
           <div>
-            <h3>Retry Is Suggestion-Led Right Now</h3>
+            <h3>Retry Is Suggestion-Led</h3>
             <div class="tag-row">
               <span class="tag ui">Retry panel</span>
               <span class="tag api">POST /api/search/retry-advice</span>
@@ -681,8 +673,7 @@
             <p>
               After final results, the active UI asks what felt off and requests a better next
               search. The returned suggestion is editable, and using it resets the page into a
-              fresh search flow. The same-pool retry mechanism still exists internally, but it is
-              not the active homepage experience.
+              fresh search flow.
             </p>
             <div class="detail-grid">
               <div class="detail">
@@ -690,10 +681,12 @@
                 <p><code>Get a suggestion</code> followed by <code>Use this search</code></p>
               </div>
               <div class="detail amber">
-                <strong>Not currently primary UI</strong>
+                <strong>Archived — same-pool retry</strong>
                 <p>
-                  Same-pool retry with excluded IDs is still implemented in the hook/backend
-                  contract, but the user-facing homepage flow is suggestion-led.
+                  The same-pool retry path (excluded IDs, <code>retryCount &gt; 0</code>,
+                  <code>retry_exhausted</code>) exists only in code archives. The frontend always
+                  sends <code>retryCount: 0</code> — those server branches are unreachable from
+                  the active flow.
                 </p>
               </div>
             </div>

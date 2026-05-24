@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const anthropicMocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -17,27 +17,32 @@ vi.mock('@anthropic-ai/sdk', () => ({
 import { generateRefinementPrompt } from './refinement-assistant.js'
 
 describe('refinement assistant', () => {
-  it('uses Haiku first for structured prompt text and chip suggestions', async () => {
-    anthropicMocks.create.mockResolvedValueOnce({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            prompt: 'What matters most: budget, portability, or comfort?',
-            refinement_suggestions: [
-              { label: 'Lower price', prompt: 'I want to keep the price low without losing the basics' },
-              { label: 'Easy travel', prompt: 'I need something that is simple to carry while traveling' },
-              { label: 'Comfort first', prompt: 'Comfort matters most for longer use' },
-            ],
-          }),
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('uses OpenAI mini first for structured prompt text and chip suggestions', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        usage: {
+          input_tokens: 78,
+          output_tokens: 24,
+          total_tokens: 102,
+          output_tokens_details: {
+            reasoning_tokens: 10,
+          },
         },
-      ],
-      usage: {
-        input_tokens: 55,
-        output_tokens: 28,
-      },
+        output_text: JSON.stringify({
+          prompt: 'What matters most: budget, portability, or comfort?',
+          refinement_suggestions: [
+            { label: 'Lower price', prompt: 'I want to keep the price low without losing the basics' },
+            { label: 'Easy travel', prompt: 'I need something that is simple to carry while traveling' },
+            { label: 'Comfort first', prompt: 'Comfort matters most for longer use' },
+          ],
+        }),
+      }),
     })
-    const fetchMock = vi.fn()
 
     const result = await generateRefinementPrompt(
       {
@@ -48,13 +53,16 @@ describe('refinement assistant', () => {
       fetchMock,
     )
 
-    expect(fetchMock).not.toHaveBeenCalled()
-    expect(anthropicMocks.create).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
       expect.objectContaining({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 384,
+        method: 'POST',
+        body: expect.any(String),
       }),
     )
+    expect(anthropicMocks.create).not.toHaveBeenCalled()
+    const [, request] = fetchMock.mock.calls[0]
+    expect(JSON.parse(request.body).model).toBe('gpt-5-mini')
     expect(result).toEqual(
       expect.objectContaining({
         prompt: 'What matters most: budget, portability, or comfort?',
@@ -64,32 +72,41 @@ describe('refinement assistant', () => {
           { label: 'Comfort first', prompt: 'Comfort matters most for longer use' },
         ],
         usage: {
-          inputTokens: 55,
-          outputTokens: 28,
-          totalTokens: 83,
-          reasoningTokens: 0,
+          inputTokens: 78,
+          outputTokens: 24,
+          totalTokens: 102,
+          reasoningTokens: 10,
         },
-        provider: 'anthropic',
-        model: 'claude-haiku-4-5-20251001',
+        provider: 'openai',
+        model: 'gpt-5-mini',
         fallbackFrom: null,
       }),
     )
   })
 
-  it('falls back to OpenAI mini when Haiku fails', async () => {
-    anthropicMocks.create.mockRejectedValueOnce(new Error('temporary claude outage'))
+  it('falls back to Haiku when OpenAI mini fails', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        output_text: JSON.stringify({
-          prompt: 'What matters most here: price, size, or durability?',
-          refinement_suggestions: [
-            { label: 'Under $100', prompt: 'I want to stay under $100' },
-            { label: 'Compact size', prompt: 'I need something compact and easy to store' },
-            { label: 'Long lasting', prompt: 'Durability matters more than extra features' },
-          ],
-        }),
-      }),
+      ok: false,
+      text: async () => 'temporary openai outage',
+    })
+    anthropicMocks.create.mockResolvedValueOnce({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            prompt: 'What matters most here: price, size, or durability?',
+            refinement_suggestions: [
+              { label: 'Under $100', prompt: 'I want to stay under $100' },
+              { label: 'Compact size', prompt: 'I need something compact and easy to store' },
+              { label: 'Long lasting', prompt: 'Durability matters more than extra features' },
+            ],
+          }),
+        },
+      ],
+      usage: {
+        input_tokens: 55,
+        output_tokens: 28,
+      },
     })
 
     const result = await generateRefinementPrompt(
@@ -102,12 +119,18 @@ describe('refinement assistant', () => {
     )
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(anthropicMocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 384,
+      }),
+    )
     expect(result).toEqual(
       expect.objectContaining({
         prompt: 'What matters most here: price, size, or durability?',
-        provider: 'openai',
-        model: 'gpt-5-mini',
-        fallbackFrom: 'claude-haiku-4-5-20251001',
+        provider: 'anthropic',
+        model: 'claude-haiku-4-5-20251001',
+        fallbackFrom: 'gpt-5-mini',
       }),
     )
   })

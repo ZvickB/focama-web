@@ -44,8 +44,8 @@
   - there is still no query-quality SSE or suggested-query prewarm path
 - `GET /api/search/refine`
   - returns one short follow-up question plus helper copy
-  - uses Haiku first for the generated question and refinement chip suggestions
-  - falls back to OpenAI mini if Haiku fails or is not configured
+  - uses OpenAI mini first for the generated question and refinement chip suggestions
+  - falls back to Haiku if OpenAI fails or is not configured
 - `POST /api/search/finalize`
   - accepts lightweight context
   - rebuilds the candidate pool server-side from guided cache

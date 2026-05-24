@@ -68,7 +68,7 @@ project-notes/archive/      Superseded docs — read for history, don't treat as
 - **Deploy:** Frontend on Vercel; Backend on Render (`render.yaml`). Frontend API calls go directly to Render via `VITE_BACKEND_URL`, except `api/geo.js` which stays on Vercel for geolocation headers.
 
 ## AI Models
-- Refinement: lightweight/fast model (~1s)
+- Refinement: gpt-5-mini first for the first question and chips, with Haiku fallback
 - Finalize lock: claude-haiku-4-5-20251001 (~2s, shortlist selection)
 - Finalize enrichment: gpt-5-mini (async, writes fit_reason + caveat after lock)
 - Model env vars: `OPENAI_REFINEMENT_MODEL`, `OPENAI_FINALIZE_MODEL`, `OPENAI_FINALIZE_CONTEXT_MODEL`, `OPENAI_FINALIZE_EMPTY_MODEL`, `CLAUDE_API_KEY`
