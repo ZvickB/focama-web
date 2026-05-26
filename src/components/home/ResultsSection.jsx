@@ -10,6 +10,7 @@ import {
 
 import ProductCard from '@/components/ProductCard.jsx'
 import logo from '@/assets/logo_master_version.svg'
+import { FinalizeLoadingState } from '@/components/home/FinalizeLoadingState.jsx'
 import { getUserFacingDescription, getUserFacingReasons } from '@/components/home/homeContentUtils.js'
 import { RESULT_CARD_SLOTS } from '@/components/home/useGuidedSearch.js'
 import { ResultSkeleton } from '@/components/home/ResultSkeleton.jsx'
@@ -222,7 +223,7 @@ function RankedPickRow({
 
   return (
     <div
-      className="group relative overflow-hidden rounded-[22px] border border-[#eadfce] bg-white/94 transition duration-200 hover:border-[#d8c9b6] hover:bg-[#fffdfb]"
+      className="group relative overflow-hidden rounded-2xl border border-[#eadfce] bg-white/96 transition duration-200 hover:border-[#d8c9b6] hover:bg-white"
     >
       <button
         type="button"
@@ -232,8 +233,8 @@ function RankedPickRow({
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#e6d8c5] bg-[#fbf6f0] text-xs font-semibold text-[#80573f]">
           {index + 1}
         </div>
-        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-[16px] border border-[#eee5da] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,246,240,0.92))] p-1.5">
-          <ProductImage className="h-full w-full rounded-[12px]" image={item.image} title={item.title} />
+        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-[#eee5da] bg-[#fbf7f1] p-1.5">
+          <ProductImage className="h-full w-full rounded-xl" image={item.image} title={item.title} />
         </div>
         <div className="min-w-0 flex-1 space-y-1.5">
           <p className="line-clamp-2 text-sm font-medium leading-5 text-slate-900">{item.title}</p>
@@ -245,7 +246,7 @@ function RankedPickRow({
           </div>
         </div>
       </button>
-      <div className="flex items-center justify-between border-t border-[#f0e7da] bg-[#fdfaf6]/70 px-4 py-2">
+      <div className="flex items-center justify-between border-t border-[#f0e7da] bg-[#fbf7f1]/70 px-4 py-2">
         <button
           type="button"
           className="text-xs font-semibold text-primary transition hover:text-primary/80"
@@ -394,7 +395,7 @@ export function ResultsSection({
         <div className="space-y-3">
           <Badge
             variant="outline"
-            className="w-fit rounded-full border-[#e6d8c5] bg-[linear-gradient(180deg,rgba(250,245,239,0.98),rgba(255,255,255,0.96))] px-3 py-1 text-[#80573f]"
+            className="w-fit rounded-full border-[#e6d8c5] bg-white/90 px-3 py-1 text-[#80573f]"
           >
             Results
           </Badge>
@@ -426,7 +427,7 @@ export function ResultsSection({
           <div
             role="status"
             aria-live="polite"
-            className="flex items-center gap-3 rounded-full border border-[#e7dac8] bg-[linear-gradient(180deg,rgba(250,246,240,0.96),rgba(255,255,255,0.96))] px-4 py-2.5 text-sm text-[#6f5a47] shadow-[0_16px_42px_-34px_rgba(120,87,63,0.32)]"
+            className="flex items-center gap-3 rounded-full border border-[#e7dac8] bg-white/90 px-4 py-2.5 text-sm text-[#6f5a47] shadow-[0_12px_32px_-26px_rgba(120,87,63,0.22)]"
           >
             <span className="relative flex h-2.5 w-2.5">
               <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
@@ -448,7 +449,7 @@ export function ResultsSection({
       ) : null}
 
       {!hasFinalResults && !showPreviewResults && hasStartedSearch && !errorMessage && !isLoading ? (
-        <div className="rounded-[28px] border border-dashed border-[#e6d8c5] bg-[linear-gradient(180deg,rgba(250,246,240,0.78),rgba(255,255,255,0.92))] px-6 py-12 text-center shadow-[0_24px_70px_-58px_rgba(120,87,63,0.3)] sm:px-8">
+        <div className="rounded-2xl border border-dashed border-[#e6d8c5] bg-white/82 px-6 py-12 text-center shadow-[0_14px_38px_-32px_rgba(120,87,63,0.18)] sm:px-8">
           <div className="mx-auto max-w-xl space-y-3">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
               <Sparkles className="h-4 w-4 text-primary" />
@@ -465,24 +466,7 @@ export function ResultsSection({
       ) : null}
 
       {isFinalizing && hasDisplayedResults && !hasFinalResults ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="rounded-[24px] border border-[#e7dac8] bg-[linear-gradient(180deg,rgba(250,246,240,0.94),rgba(255,255,255,0.96))] px-4 py-4 text-left text-slate-600 shadow-[0_22px_60px_-42px_rgba(120,87,63,0.28)] transition-all duration-300 sm:px-5"
-        >
-          <div className="flex items-start gap-3">
-            <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
-              <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
-              <span className="relative h-2.5 w-2.5 rounded-full bg-primary/70" />
-            </span>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-slate-900">Taking a closer look at these options.</p>
-              <p className="text-sm leading-6 text-slate-600">
-                We&apos;re narrowing things down and locking the shortlist.
-              </p>
-            </div>
-          </div>
-        </div>
+        <FinalizeLoadingState compact />
       ) : null}
 
       {hasDisplayedResults ? (
@@ -490,7 +474,7 @@ export function ResultsSection({
           <div
             className={`relative overflow-hidden rounded-[30px] transition-all duration-500 ${
               isFinalizing && !hasFinalResults
-                ? 'bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.96),rgba(250,247,242,0.82)_44%,rgba(244,238,231,0.64)_100%)] p-2 sm:p-3'
+                ? 'bg-[#fbf7f1] p-2 sm:p-3'
                 : ''
             }`}
           >
@@ -553,7 +537,7 @@ export function ResultsSection({
       ) : null}
 
       {orderedPreviousResults.length > 0 ? (
-        <details className="group rounded-[28px] border border-[#e7dac8] bg-[linear-gradient(180deg,rgba(250,246,240,0.84),rgba(255,255,255,0.94))] px-5 py-4 shadow-[0_24px_70px_-58px_rgba(120,87,63,0.24)]">
+        <details className="group rounded-2xl border border-[#e7dac8] bg-white/88 px-5 py-4 shadow-[0_14px_38px_-32px_rgba(120,87,63,0.18)]">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left">
             <div className="space-y-1">
               <p className="text-sm font-medium text-slate-900">Previous picks</p>
@@ -588,7 +572,7 @@ export function ResultsSection({
       ) : null}
 
       {selectionState?.mode === 'retry_exhausted' ? (
-        <div className="rounded-[28px] border border-dashed border-[#e6d8c5] bg-[linear-gradient(180deg,rgba(250,246,240,0.78),rgba(255,255,255,0.92))] px-6 py-8 text-center shadow-[0_24px_70px_-58px_rgba(120,87,63,0.3)] sm:px-8">
+        <div className="rounded-2xl border border-dashed border-[#e6d8c5] bg-white/82 px-6 py-8 text-center shadow-[0_14px_38px_-32px_rgba(120,87,63,0.18)] sm:px-8">
           <div className="mx-auto max-w-xl space-y-3">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
               <Clock3 className="h-4 w-4 text-slate-500" />
@@ -606,7 +590,7 @@ export function ResultsSection({
           <Button
             type="button"
             variant="outline"
-            className="h-11 rounded-full border-[#dcccc0] bg-white/94 px-6 text-sm text-slate-600 shadow-[0_16px_38px_-30px_rgba(120,87,63,0.26)] hover:border-[#cbb9a3] hover:bg-[#fdfaf6] hover:text-slate-900"
+            className="h-11 rounded-full border-[#dcccc0] bg-white/94 px-6 text-sm text-slate-600 shadow-[0_12px_28px_-24px_rgba(120,87,63,0.2)] hover:border-[#cbb9a3] hover:bg-[#fdfaf6] hover:text-slate-900"
             onClick={handleOpenRetryView}
           >
             Not seeing what you had in mind? Tell us what to correct
@@ -615,7 +599,7 @@ export function ResultsSection({
       ) : null}
 
       {isRetryViewVisible ? (
-        <div ref={retryViewRef} className="rounded-[36px] border border-[#e7dac8] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,246,240,0.9))] p-5 shadow-[0_28px_120px_-72px_rgba(120,87,63,0.3)]">
+        <div ref={retryViewRef} className="rounded-[28px] border border-[#e7dac8] bg-white/94 p-5 shadow-[0_24px_64px_-50px_rgba(120,87,63,0.22)]">
           <button
             type="button"
             className="mb-5 flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
@@ -624,7 +608,7 @@ export function ResultsSection({
             <span aria-hidden="true">←</span> Back to results
           </button>
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#e6d8c5] bg-[linear-gradient(180deg,rgba(250,245,239,0.98),rgba(255,255,255,0.96))] px-3 py-1 text-sm text-[#80573f] shadow-[0_10px_30px_-24px_rgba(120,87,63,0.5)]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#e6d8c5] bg-white/90 px-3 py-1 text-sm text-[#80573f]">
               <Sparkles className="h-4 w-4" />
               Let&apos;s find a better direction
             </div>
@@ -659,7 +643,7 @@ export function ResultsSection({
               })}
             </div>
 
-            <div className="rounded-[30px] border border-[#e5dacb] bg-white p-1 shadow-[0_22px_60px_-42px_rgba(120,87,63,0.22)]">
+            <div className="rounded-[22px] border border-[#e5dacb] bg-white p-1 shadow-[0_14px_38px_-32px_rgba(120,87,63,0.16)]">
               <Textarea
                 id="results-retry-feedback"
                 value={retryFeedback}
@@ -684,7 +668,7 @@ export function ResultsSection({
               <Button
                 type="button"
                 disabled={!isRetryReady || isRetrying || isGeneratingRetryAdvice || !canRequestRetryAdvice}
-                className="h-12 rounded-[24px] bg-primary px-6 text-sm text-primary-foreground shadow-[0_22px_48px_-26px_rgba(15,97,117,0.42)] hover:bg-primary/90"
+                className="h-12 rounded-[22px] bg-primary px-6 text-sm text-primary-foreground shadow-[0_16px_36px_-26px_rgba(15,97,117,0.34)] hover:bg-primary/90"
                 onClick={handleRetryAdviceSubmit}
               >
                 {isGeneratingRetryAdvice ? 'Finding a better search...' : 'Suggest a better search'}
@@ -692,7 +676,7 @@ export function ResultsSection({
             </div>
 
             {retryAdvice ? (
-              <div className="space-y-3 rounded-[24px] border border-[#e7dac8] bg-[linear-gradient(180deg,rgba(250,246,240,0.96),rgba(255,255,255,0.96))] p-4 shadow-[0_18px_42px_-32px_rgba(120,87,63,0.28)]">
+              <div className="space-y-3 rounded-2xl border border-[#e7dac8] bg-white/90 p-4 shadow-[0_14px_34px_-28px_rgba(120,87,63,0.18)]">
                 <div className="space-y-2">
                   {retryAdvice.rationale ? (
                     <p className="text-sm leading-6 text-slate-700">
@@ -758,7 +742,7 @@ export function ResultsSection({
       ) : null}
 
       {!hasStartedSearch && !errorMessage ? null : !isLoading && displayedResults.length === 0 && !errorMessage ? (
-        <div className="rounded-[28px] border border-dashed border-[#e6d8c5] bg-[linear-gradient(180deg,rgba(250,246,240,0.78),rgba(255,255,255,0.92))] px-6 py-12 text-center shadow-[0_24px_70px_-58px_rgba(120,87,63,0.3)] sm:px-8">
+        <div className="rounded-2xl border border-dashed border-[#e6d8c5] bg-white/82 px-6 py-12 text-center shadow-[0_14px_38px_-32px_rgba(120,87,63,0.18)] sm:px-8">
           <div className="mx-auto max-w-xl space-y-3">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
               <Clock3 className="h-4 w-4 text-slate-500" />
@@ -774,7 +758,7 @@ export function ResultsSection({
         <div className="pointer-events-none fixed right-4 bottom-[calc(env(safe-area-inset-bottom,0px)+1rem)] z-50 sm:right-6 sm:bottom-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]">
           <button
             type="button"
-            className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-[#dcccc0] bg-white/95 px-4 py-3 text-left shadow-[0_16px_38px_-20px_rgba(15,23,42,0.22)] backdrop-blur hover:border-[#cbb9a3] hover:bg-[#fdfaf6] transition-colors"
+            className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-[#dcccc0] bg-white/95 px-4 py-3 text-left shadow-[0_12px_28px_-20px_rgba(15,23,42,0.18)] backdrop-blur transition-colors hover:border-[#cbb9a3] hover:bg-[#fdfaf6]"
             onClick={handleRetryFabClick}
           >
             <RotateCcw className="h-4 w-4 shrink-0 text-slate-500" />

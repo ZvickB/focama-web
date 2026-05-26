@@ -5,6 +5,7 @@ import { MAX_PRODUCT_QUERY_LENGTH, MAX_DETAILS_LENGTH } from '../../../shared/se
 import wordmark from '@/assets/wordmark.PNG'
 // import { FeedbackFab } from '@/components/home/FeedbackFab.jsx'
 import { ResultSkeleton } from '@/components/home/ResultSkeleton.jsx'
+import { FinalizeLoadingState } from '@/components/home/FinalizeLoadingState.jsx'
 import {
   RESULT_CARD_SLOTS,
   useGuidedSearch,
@@ -158,7 +159,7 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
           Add any preferences, must-haves, or deal breakers.
         </p>
       </div>
-      <div className="rounded-[24px] border border-[#e6d8c5] bg-[linear-gradient(180deg,rgba(250,245,239,0.98),rgba(255,255,255,0.96))] p-4 shadow-[0_18px_56px_-42px_rgba(120,87,63,0.32)]">
+      <div className="rounded-2xl border border-[#e6d8c5] bg-white/90 p-4 shadow-[0_14px_36px_-30px_rgba(120,87,63,0.28)]">
         <div className="flex items-center justify-center gap-2 text-sm font-semibold text-[#80573f] sm:justify-start">
           <Sparkles className={`h-4 w-4 ${isGeneratingPrompt ? 'animate-pulse' : ''}`} />
           <span>{displayedCopy.titleEyebrow}</span>
@@ -268,7 +269,7 @@ function RefinementChips({
               disabled={disabled}
               className={`min-h-12 rounded-full border px-4 py-2 text-center text-sm font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50 ${
                 selected
-                  ? 'border-primary/45 bg-[#eef7f6] text-primary shadow-[0_14px_34px_-30px_rgba(15,97,117,0.38)]'
+                  ? 'border-primary/45 bg-[#eef7f6] text-primary'
                   : 'border-[#e5dacb] bg-[#f8f4ee] text-slate-800 hover:border-primary/30 hover:bg-white'
               }`}
               onClick={() => handleChipClick(chip)}
@@ -293,7 +294,7 @@ function TimingPanel({ requestTiming }) {
   }
 
   return (
-    <section className="w-full max-w-5xl rounded-[28px] border border-dashed border-[#e6dacb] bg-[linear-gradient(180deg,rgba(250,246,240,0.68),rgba(255,255,255,0.92))] p-4 sm:p-5">
+    <section className="w-full max-w-5xl rounded-2xl border border-dashed border-[#e6dacb] bg-white/80 p-4 sm:p-5">
       <div className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
           Dev timing
@@ -307,7 +308,7 @@ function TimingPanel({ requestTiming }) {
         {entries.map(([label, timing]) => (
           <div
             key={label}
-            className="rounded-[22px] border border-[#ece1d3] bg-white/92 p-4 text-sm text-slate-600 shadow-[0_18px_46px_-38px_rgba(120,87,63,0.24)]"
+            className="rounded-2xl border border-[#ece1d3] bg-white p-4 text-sm text-slate-600"
           >
             <p className="font-medium text-slate-900">{label}</p>
             <p className="mt-2">Client total: {formatTimingValue(timing?.client?.totalMs)}</p>
@@ -342,7 +343,7 @@ function QuerySuggestionPrompt({
     <div
       role="status"
       aria-live="polite"
-      className="rounded-[24px] border border-[#d9e6e8] bg-[linear-gradient(180deg,rgba(248,253,253,0.98),rgba(255,255,255,0.96))] p-4 shadow-[0_18px_56px_-42px_rgba(15,97,117,0.34)] sm:flex sm:items-center sm:justify-between sm:gap-4"
+      className="rounded-2xl border border-[#d9e6e8] bg-white/92 p-4 shadow-[0_14px_36px_-30px_rgba(15,97,117,0.22)] sm:flex sm:items-center sm:justify-between sm:gap-4"
     >
       <div className="min-w-0 space-y-1 text-left">
         <p className="text-sm font-medium text-slate-600">
@@ -356,14 +357,14 @@ function QuerySuggestionPrompt({
         <Button
           type="button"
           disabled={isApplying}
-          className="h-11 w-full rounded-[18px] bg-primary px-4 text-sm text-primary-foreground shadow-[0_18px_42px_-28px_rgba(15,97,117,0.38)] hover:bg-primary/90 sm:w-auto"
+          className="h-11 w-full rounded-2xl bg-primary px-4 text-sm text-primary-foreground shadow-[0_14px_32px_-24px_rgba(15,97,117,0.32)] hover:bg-primary/90 sm:w-auto"
           onClick={onTrySuggestedSearch}
         >
           {isApplying ? 'Starting...' : 'Try suggested search'}
         </Button>
         <button
           type="button"
-          className="h-11 w-full rounded-[18px] px-4 text-sm font-medium text-slate-500 transition-colors hover:text-slate-800 sm:w-auto"
+          className="h-11 w-full rounded-2xl px-4 text-sm font-medium text-slate-500 transition-colors hover:text-slate-800 sm:w-auto"
           onClick={onKeepResults}
         >
           Keep these results
@@ -381,7 +382,7 @@ function FlowStageSummary({
   status = 'Done',
 }) {
   return (
-    <div className="w-full rounded-[24px] border border-[#e6dacb] bg-white/90 px-4 py-3 shadow-[0_18px_54px_-44px_rgba(120,87,63,0.28)] backdrop-blur sm:px-5">
+    <div className="w-full rounded-2xl border border-[#e6dacb] bg-white/92 px-4 py-3 shadow-[0_14px_36px_-30px_rgba(120,87,63,0.22)] backdrop-blur sm:px-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#eef7f6] text-primary">
@@ -455,12 +456,15 @@ function FlowProgress({ hasDiscoveryResults, hasFinalResults, hasStartedSearch }
 }
 
 
-function ResultsSectionFallback() {
+function ResultsSectionFallback({ showFinalizeStatus = false }) {
   return (
-    <div className="mobile-landscape-results-grid grid grid-cols-1 gap-4">
-      {RESULT_CARD_SLOTS.map((index) => (
-        <ResultSkeleton key={index} className="opacity-95" />
-      ))}
+    <div className="space-y-4">
+      {showFinalizeStatus ? <FinalizeLoadingState /> : null}
+      <div className="mobile-landscape-results-grid grid grid-cols-1 gap-4">
+        {RESULT_CARD_SLOTS.map((index) => (
+          <ResultSkeleton key={index} className="opacity-95" />
+        ))}
+      </div>
     </div>
   )
 }
@@ -468,7 +472,7 @@ function ResultsSectionFallback() {
 function ProductDetailModalFallback() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(51,39,30,0.22)] backdrop-blur-[2px]">
-      <div className="rounded-full border border-[#e7dac8] bg-white/96 px-4 py-3 text-sm text-slate-600 shadow-[0_16px_42px_-34px_rgba(120,87,63,0.32)]">
+      <div className="rounded-full border border-[#e7dac8] bg-white/96 px-4 py-3 text-sm text-slate-600 shadow-[0_12px_32px_-26px_rgba(120,87,63,0.28)]">
         Loading details...
       </div>
     </div>
@@ -667,11 +671,7 @@ function OpenLayout(props) {
           {!hasStartedSearch ? (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 top-0 h-[78%] opacity-90"
-              style={{
-                background:
-                  'radial-gradient(circle at 20% 22%, rgba(229,155,38,0.11), transparent 26%), radial-gradient(circle at 78% 18%, rgba(15,97,117,0.09), transparent 24%), radial-gradient(circle at 50% 0%, rgba(255,255,255,0.9), transparent 56%)',
-              }}
+              className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[#eadfce]"
             />
           ) : null}
           <div className={`relative ${hasStartedSearch ? 'space-y-3' : 'space-y-6'}`}>
@@ -733,10 +733,10 @@ function OpenLayout(props) {
               ) : (
                 <form onSubmit={handleSearchSubmit}>
               <div
-                className={`scroll-mt-28 rounded-[36px] border p-4 text-left shadow-[0_28px_120px_-72px_rgba(15,23,42,0.45)] backdrop-blur transition-all duration-300 sm:p-5 ${
+                className={`scroll-mt-28 rounded-[28px] border p-4 text-left shadow-[0_24px_64px_-50px_rgba(15,23,42,0.28)] backdrop-blur transition-all duration-300 sm:p-5 ${
                   hasStartedSearch
-                    ? 'border-[#e4d5c2] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(251,248,244,0.96))] shadow-[0_36px_140px_-68px_rgba(15,23,42,0.5)]'
-                    : 'border-[#e4d7c6] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,246,241,0.94))]'
+                    ? 'border-[#e4d5c2] bg-white/96'
+                    : 'border-[#e4d7c6] bg-white/94'
                 }`}
               >
                 <div className="flex flex-col gap-3 md:flex-row md:items-center">
@@ -759,7 +759,7 @@ function OpenLayout(props) {
                         })
                       }
                       placeholder='Try "travel stroller for airplane", "ergonomic office chair", or "lego botanical set"'
-                      className="min-h-[5.25rem] w-full resize-none rounded-[28px] border border-[#e5dacb] bg-white px-5 py-4 text-lg leading-7 text-slate-900 outline-none transition placeholder:text-[15px] placeholder:text-slate-400 focus-visible:border-primary/50 focus-visible:ring-[4px] focus-visible:ring-[rgba(15,97,117,0.08)] sm:placeholder:text-base"
+                      className="min-h-[5.25rem] w-full resize-none rounded-[22px] border border-[#e5dacb] bg-white px-5 py-4 text-lg leading-7 text-slate-900 outline-none transition placeholder:text-[15px] placeholder:text-slate-400 focus-visible:border-primary/50 focus-visible:ring-[4px] focus-visible:ring-[rgba(15,97,117,0.08)] sm:placeholder:text-base"
                       autoFocus={isDesktop}
                       disabled={isLoading}
                     />
@@ -776,7 +776,7 @@ function OpenLayout(props) {
                   <Button
                     type={!hasStartedSearch ? 'submit' : 'button'}
                     disabled={isLoading}
-                    className={`h-16 rounded-[28px] px-6 text-base text-primary-foreground shadow-[0_22px_48px_-28px_rgba(15,97,117,0.38)] transition-transform hover:-translate-y-[1px] ${
+                    className={`h-16 rounded-[22px] px-6 text-base text-primary-foreground shadow-[0_18px_40px_-28px_rgba(15,97,117,0.34)] transition-transform hover:-translate-y-[1px] ${
                       hasStartedSearch
                         ? 'bg-primary/75 hover:bg-primary/85'
                         : 'bg-primary hover:bg-primary/90'
@@ -813,7 +813,7 @@ function OpenLayout(props) {
         {shouldShowRefinementPanel ? (
           <section
             ref={refinementRef}
-            className="w-full max-w-4xl scroll-mt-28 rounded-[32px] border border-[#e4d5c2] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(251,248,244,0.96))] p-4 text-left shadow-[0_34px_110px_-72px_rgba(15,23,42,0.42)] transition-all duration-300 sm:p-5"
+            className="w-full max-w-4xl scroll-mt-28 rounded-[28px] border border-[#e4d5c2] bg-white/96 p-4 text-left shadow-[0_24px_64px_-50px_rgba(15,23,42,0.24)] transition-all duration-300 sm:p-5"
           >
             <div className="space-y-5">
               <RefinementCopy
@@ -833,8 +833,8 @@ function OpenLayout(props) {
                 <div
                   className={`rounded-[30px] border bg-white p-1 transition-all duration-300 ${
                     status.isGeneratingPrompt
-                      ? 'border-primary/20 shadow-[0_24px_64px_-42px_rgba(15,97,117,0.34)] ring-1 ring-primary/15'
-                      : 'border-[#e5dacb] shadow-[0_22px_64px_-42px_rgba(120,87,63,0.24)]'
+                      ? 'border-primary/20 shadow-[0_16px_42px_-32px_rgba(15,97,117,0.24)] ring-1 ring-primary/15'
+                      : 'border-[#e5dacb] shadow-[0_14px_38px_-32px_rgba(120,87,63,0.18)]'
                   }`}
                 >
                   <Label htmlFor="open-follow-up-notes" className="sr-only">
@@ -896,7 +896,7 @@ function OpenLayout(props) {
                   <Button
                     type="button"
                     disabled={!hasDiscoveryResults || status.isFinalizing}
-                    className="h-14 w-full rounded-[24px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_24px_52px_-28px_rgba(15,97,117,0.42)] hover:bg-primary/90 sm:w-auto sm:min-w-[220px]"
+                    className="h-14 w-full rounded-[22px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_18px_42px_-28px_rgba(15,97,117,0.36)] hover:bg-primary/90 sm:w-auto sm:min-w-[220px]"
                     onClick={actions.finalizeRefinement}
                   >
                     {status.isFinalizing ? 'Narrowing your picks...' : 'Show focused picks'}
@@ -937,14 +937,14 @@ function OpenLayout(props) {
           ) : null}
           {showLoadingResults ? (
             <div ref={resultsViewportRef} className="max-h-[360px] scroll-mt-28 overflow-hidden">
-              <ResultsSectionFallback />
+              <ResultsSectionFallback showFinalizeStatus={status.isFinalizing} />
             </div>
           ) : shouldLoadResultsSection ? (
             <div
               ref={resultsViewportRef}
               className="scroll-mt-28"
             >
-              <Suspense fallback={<ResultsSectionFallback />}>
+              <Suspense fallback={<ResultsSectionFallback showFinalizeStatus={status.isFinalizing} />}>
                 <ResultsSection
                   displayedResults={displayedResults}
                   errorMessage={errorMessage}
