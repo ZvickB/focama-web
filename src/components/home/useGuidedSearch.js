@@ -17,7 +17,7 @@ import {
 } from '@/components/home/searchAnalytics.js'
 import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
-import { validateSearchInput } from '../../../shared/search-input.js'
+import { MAX_PRODUCT_QUERY_LENGTH, validateSearchInput } from '../../../shared/search-input.js'
 
 export { AMAZON_MARKETPLACE_AUTO }
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
@@ -116,13 +116,13 @@ const HARD_CONSTRAINT_PATTERNS = [
       'fits',
       'replacement for',
       'works with',
-      'without',
       'free of',
       'voltage',
       'wattage',
     ],
   },
 ]
+
 
 const HARD_CONSTRAINT_COMPACT_TERMS = new Set(
   HARD_CONSTRAINT_PATTERNS.flatMap(({ terms }) =>
@@ -1617,12 +1617,12 @@ export function useGuidedSearch() {
   async function refreshDiscoveryForHardConstraints({
     amazonDomain,
     constraintMatch,
-    followUpNotes: nextFollowUpNotes,
     originalCandidatePool,
     searchId,
     submittedQuery: nextSubmittedQuery,
   }) {
-    const constraintRefreshQuery = `${nextSubmittedQuery} ${nextFollowUpNotes}`.replace(/\s+/g, ' ').trim()
+    const combined = `${nextSubmittedQuery} ${constraintMatch.matchedTerm}`.replace(/\s+/g, ' ').trim()
+    const constraintRefreshQuery = combined.length <= MAX_PRODUCT_QUERY_LENGTH ? combined : constraintMatch.matchedTerm
 
     constraintRefreshSearchIdRef.current = searchId
     setIsRefreshingConstraintDiscovery(true)
