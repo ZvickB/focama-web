@@ -20,13 +20,30 @@ function createDashboardError(statusCode, message) {
   return error
 }
 
-async function fetchCachePool({ query }) {
+async function fetchCachePool({ query, limit = 10 }) {
   const params = new URLSearchParams()
   if (query) params.set('q', query)
+  params.set('limit', String(limit))
   const response = await fetch(`${BACKEND_URL}/api/analytics/cache-pool?${params}`)
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw createDashboardError(response.status, payload.error || 'Unable to load cache pool.')
   return payload
+}
+
+function buildCopyText(entry) {
+  const lines = [
+    `Product query: ${entry.productQuery || '(none)'}`,
+    `User context: ${entry.details || 'None provided.'}`,
+    '',
+    'Candidates:',
+  ]
+  entry.candidates.forEach((c) => {
+    const meta = [c.price, c.rating != null ? `${c.rating}★` : null, c.reviewCount != null ? `${formatNumber(c.reviewCount)} reviews` : null, c.source].filter(Boolean).join(' | ')
+    lines.push(`${c.rank}. ${c.title || '—'}${meta ? `  —  ${meta}` : ''}`)
+    if (c.attributes.length > 0) lines.push(`   Attributes: ${c.attributes.join(', ')}`)
+    if (c.description) lines.push(`   ${c.description}`)
+  })
+  return lines.join('\n')
 }
 
 async function fetchAnalyticsDashboard({ days }) {
@@ -104,6 +121,7 @@ function CandidatePoolInspector() {
   const [inputValue, setInputValue] = useState('')
   const [submittedQuery, setSubmittedQuery] = useState('')
   const [expandedIndex, setExpandedIndex] = useState(null)
+  const [copiedIndex, setCopiedIndex] = useState(null)
   const inputRef = useRef(null)
 
   const poolQuery = useQuery({
@@ -112,6 +130,14 @@ function CandidatePoolInspector() {
     enabled: true,
     retry: false,
   })
+
+  function handleCopy(e, entry, index) {
+    e.stopPropagation()
+    navigator.clipboard.writeText(buildCopyText(entry)).then(() => {
+      setCopiedIndex(index)
+      setTimeout(() => setCopiedIndex(null), 2000)
+    })
+  }
 
   function handleSubmit(e) {
     e.preventDefault()
@@ -175,6 +201,13 @@ function CandidatePoolInspector() {
                   <div className="flex items-center gap-3 shrink-0 text-xs text-slate-500">
                     <span>{entry.candidateCount} candidates</span>
                     <span>{entry.cachedAt ? new Date(entry.cachedAt).toLocaleString() : '—'}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleCopy(e, entry, index)}
+                      className="rounded-full border border-stone-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:bg-stone-50 transition"
+                    >
+                      {copiedIndex === index ? 'Copied!' : 'Copy'}
+                    </button>
                     <span className="text-slate-400">{isOpen ? '▲' : '▼'}</span>
                   </div>
                 </button>
