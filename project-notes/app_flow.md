@@ -6,9 +6,8 @@
 
 ## Current app structure
 - The site uses React Router with a shared shell.
-- Current public pages are Home, Why Focamai, Contact, Install, Privacy, and Affiliate Disclosure.
+- Current public pages are Home, Why Focamai, Contact, Privacy, and Affiliate Disclosure.
 - The homepage is the main product experience and uses the `open` layout.
-- `/install` is a tester-friendly PWA helper page with Android install prompt support when available and manual Safari steps for iOS.
 - Public routes now set page-level SEO metadata in the client: title, description, canonical URL, Open Graph, Twitter tags, and `noindex` on the 404 page.
 - Static crawl assets now include `robots.txt`, `sitemap.xml`, and `site.webmanifest`.
 
@@ -21,10 +20,15 @@
 - After submit:
   - guided discovery starts
   - the follow-up question starts in parallel
-  - result skeletons appear below
-  - the page scrolls toward the refine/results region
+  - the large search stage collapses into a compact progress line and search summary
+  - the refine step becomes the active panel
+  - the refine panel shows a clear "What should Focamai keep in mind?" heading, the AI follow-up question, and up to 3 refinement chips
+  - result skeletons appear below when needed
+  - the page scrolls toward the active refine/results region
+- Refinement chips use backend suggestions when available and fall back to `Good value`, `Easy to use`, and `Fits my space`; label-only chips append to the notes box, prompt-backed chips fill the notes box with richer text, and selected chips get a subtle selected state.
 - `Show products now` reveals the preview set.
 - `Show focused picks` runs guided finalize and narrows to the final 6; when follow-up notes add hard eligibility constraints such as kosher/Jewish-use, dietary/allergy, safety/material, or compatibility/exclusion needs, the frontend first does one refreshed Rainforest discovery pass with the original query plus notes, then finalizes from that refreshed token.
+- After final picks appear, the refinement panel collapses into a compact summary above the ranked results.
 - `Start a new search` clears the guided state and returns to a fresh search box.
 - After final results appear, the user can open the retry panel and ask for a better search direction.
 - As soon as `HomeExperience` mounts, it prefetches the lazy `ResultsSection` and `ProductDetailModal` chunks so those UI steps are more likely to be ready before the user needs them.
@@ -88,12 +92,13 @@
 - Manual store overrides still win over the auto-resolved domain.
 
 ## Final result behavior
-- Result lists show up to 6 cards.
-- Cards stay metadata-first: image, title, provider/source, price, rating, review count, and a deterministic badge.
-- Clicking a result opens a modal.
-- The modal shows `feature_bullets` immediately when available.
-- The modal later hydrates `fit_reason` and `caveat` from enrichment.
-- Retailer clicks happen from the modal CTA.
+- Result lists show up to 6 ranked picks.
+- Results use a single ranked shortlist layout rather than a marketplace grid or side preview.
+- On smaller screens, results collapse into stacked ranked pick cards.
+- Result rows/cards show reliable product facts first: image, title, provider/source, price, rating, review count, and a deterministic badge when available.
+- Selecting a row or the row details action opens the modal.
+- The modal still shows `feature_bullets` immediately when available, then hydrates `fit_reason` and `caveat` from enrichment.
+- Retailer clicks happen from result rows and the modal CTA.
 - The modal now shows a short inline affiliate disclosure directly under the retailer CTA, with a link to the fuller `/affiliate-disclosure` page.
 
 ## Retry behavior

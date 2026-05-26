@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import {
+  ArrowUpRight,
   ChevronDown,
   Clock3,
   RotateCcw,
@@ -8,11 +9,14 @@ import {
 } from 'lucide-react'
 
 import ProductCard from '@/components/ProductCard.jsx'
+import logo from '@/assets/logo_master_version.svg'
+import { getUserFacingDescription, getUserFacingReasons } from '@/components/home/homeContentUtils.js'
 import { RESULT_CARD_SLOTS } from '@/components/home/useGuidedSearch.js'
 import { ResultSkeleton } from '@/components/home/ResultSkeleton.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
+import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
 
 const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 const RETRY_CORRECTION_CHIPS = [
@@ -142,11 +146,139 @@ function deriveConstraintTags({ followUpNotes, retryFeedback, suggestedRetryQuer
   return tags.slice(0, 4)
 }
 
+function getRatingValue(rating) {
+  if (rating === null || rating === undefined || rating === '' || typeof rating === 'boolean') {
+    return null
+  }
+
+  const ratingValue = Number(rating)
+
+  return Number.isFinite(ratingValue) ? ratingValue : null
+}
+
+function getFeatureBullets(item) {
+  return Array.isArray(item?.feature_bullets)
+    ? item.feature_bullets.map((bullet) => String(bullet || '').trim()).filter(Boolean)
+    : []
+}
+
+function getShortReason(item, { hasFinalResults, isEnrichmentSettled }) {
+  const fitReason = String(item?.fit_reason || item?.fitReason || '').trim()
+  const caveat = String(item?.caveat || '').trim()
+  const primaryReason = getUserFacingReasons(item?.reasons || [])[0] || ''
+  const description = getUserFacingDescription(item?.description)
+  const featureBullets = getFeatureBullets(item)
+
+  if (fitReason) return fitReason
+  if (primaryReason) return primaryReason
+  if (description) return description
+  if (caveat) return caveat
+  if (featureBullets[0]) return featureBullets[0]
+  if (hasFinalResults && !isEnrichmentSettled) return 'Checking why this fits your search...'
+
+  return hasFinalResults
+    ? 'Open details for product facts and retailer info.'
+    : 'A credible option from the first pass.'
+}
+
+function ProductImage({ className = '', image, title }) {
+  const [imgError, setImgError] = useState(false)
+
+  if (imgError || !image) {
+    return (
+      <div className={`flex items-center justify-center bg-stone-200/55 ${className}`}>
+        <img
+          src={logo}
+          alt=""
+          aria-hidden="true"
+          className="h-12 w-12 object-contain opacity-[0.14]"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <img
+      src={image}
+      alt={title}
+      loading="lazy"
+      decoding="async"
+      className={`object-contain mix-blend-multiply ${className}`}
+      onError={() => setImgError(true)}
+    />
+  )
+}
+
+function RankedPickRow({
+  hasFinalResults,
+  index,
+  isEnrichmentSettled,
+  item,
+  onOpenDetails,
+  onRetailerClick,
+}) {
+  const displayPrice = formatDisplayPrice(item.price)
+  const shortReason = getShortReason(item, { hasFinalResults, isEnrichmentSettled })
+
+  return (
+    <div
+      className="group relative overflow-hidden rounded-[22px] border border-[#eadfce] bg-white/94 transition duration-200 hover:border-[#d8c9b6] hover:bg-[#fffdfb]"
+    >
+      <button
+        type="button"
+        className="flex w-full gap-3 p-3 text-left sm:p-4"
+        onClick={onOpenDetails}
+      >
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#e6d8c5] bg-[#fbf6f0] text-xs font-semibold text-[#80573f]">
+          {index + 1}
+        </div>
+        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-[16px] border border-[#eee5da] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,246,240,0.92))] p-1.5">
+          <ProductImage className="h-full w-full rounded-[12px]" image={item.image} title={item.title} />
+        </div>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <p className="line-clamp-2 text-sm font-medium leading-5 text-slate-900">{item.title}</p>
+          <p className="line-clamp-2 text-sm leading-5 text-slate-600">{shortReason}</p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+            <span className="font-semibold text-primary">{displayPrice}</span>
+            <span>{getRatingValue(item.rating)?.toFixed(1) || 'No rating'}</span>
+            {item.subtitle ? <span>{item.subtitle}</span> : null}
+          </div>
+        </div>
+      </button>
+      <div className="flex items-center justify-between border-t border-[#f0e7da] bg-[#fdfaf6]/70 px-4 py-2">
+        <button
+          type="button"
+          className="text-xs font-semibold text-primary transition hover:text-primary/80"
+          onClick={onOpenDetails}
+        >
+          View details
+        </button>
+        {item.link ? (
+          <a
+            href={item.link}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-800"
+            onClick={(event) => {
+              event.stopPropagation()
+              onRetailerClick?.()
+            }}
+          >
+            Retailer
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </a>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 export function ResultsSection({
   displayedResults,
   errorMessage,
   hasFinalResults,
   hasStartedSearch,
+  isEnrichmentSettled = false,
   isFinalizing,
   isLoading,
   isRetryReady,
@@ -370,7 +502,7 @@ export function ResultsSection({
             ) : null}
 
             <div
-              className={`mobile-landscape-results-grid mx-auto grid max-w-6xl grid-cols-1 gap-3 transition-all duration-300 sm:gap-5 xl:grid-cols-3 ${
+              className={`mx-auto grid max-w-4xl grid-cols-1 gap-3 transition-all duration-300 ${
                 isFinalizing && !hasFinalResults ? 'scale-[0.995] opacity-80' : 'opacity-100'
               }`}
             >
@@ -394,16 +526,19 @@ export function ResultsSection({
                       ease: [0.22, 1, 0.36, 1],
                     }}
                   >
-                    <ProductCard
-                      {...visibleItem}
-                      onRetailerClick={() =>
-                        onRetailerClick(visibleItem, {
+                    <RankedPickRow
+                      hasFinalResults={hasFinalResults}
+                      index={index}
+                      isEnrichmentSettled={isEnrichmentSettled}
+                      item={visibleItem}
+                      onOpenDetails={() =>
+                        onSelectProduct(visibleItem, {
                           position: index,
                           resultSet: hasFinalResults ? 'final' : 'preview',
                         })
                       }
-                      onSelect={() =>
-                        onSelectProduct(visibleItem, {
+                      onRetailerClick={() =>
+                        onRetailerClick(visibleItem, {
                           position: index,
                           resultSet: hasFinalResults ? 'final' : 'preview',
                         })

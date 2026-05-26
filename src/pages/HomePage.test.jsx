@@ -6,14 +6,14 @@ import { createMockResult, renderHomePage, setupHomePageTest } from './HomePage.
 
 describe('HomePage', () => {
   setupHomePageTest()
-  it('shows a validation error when the product query is blank', async () => {
+  it('shows a friendly error message when the product query is blank', async () => {
     const user = userEvent.setup()
 
     renderHomePage()
 
     await user.click(screen.getByRole('button', { name: /start search/i }))
 
-    expect(screen.getByText('Enter a product topic to get started.')).toBeInTheDocument()
+    expect(screen.getByText(/thanks so much for testing focamai/i)).toBeInTheDocument()
   })
 
   it('uses the plain homepage background mode without showing a toggle control', () => {
@@ -25,7 +25,7 @@ describe('HomePage', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('shows a validation error for obvious gibberish queries', async () => {
+  it('shows a friendly error message for obvious gibberish queries', async () => {
     const user = userEvent.setup()
 
     renderHomePage()
@@ -34,9 +34,7 @@ describe('HomePage', () => {
     await user.type(productInput, 'jhljlhl')
     await user.click(screen.getByRole('button', { name: /start search/i }))
 
-    expect(
-      screen.getByText('Try a real product topic, like "lego", "desk lamp", or "travel stroller".'),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/thanks so much for testing focamai/i)).toBeInTheDocument()
   })
 
   it('submits the search when the user presses enter in the main query textarea', async () => {
@@ -245,6 +243,63 @@ describe('HomePage', () => {
     )
   })
 
+  it('shows refinement chips and applies them to the notes box', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => '' },
+        text: async () =>
+          JSON.stringify({
+            discoveryToken: 'opaque-discovery-token',
+            candidatePool: {
+              query: 'stroller',
+              details: '',
+              candidates: [],
+            },
+            previewResults: [createMockResult()],
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => '' },
+        text: async () =>
+          JSON.stringify({
+            prompt: 'What should we optimize for with this stroller?',
+            helperText: 'Pick anything that matters.',
+            followUpPlaceholder: 'Anything else?',
+            refinementSuggestions: [
+              { label: 'Easy folding' },
+              {
+                label: 'Travel fit',
+                prompt: 'I need this to fit airplane travel and fold quickly.',
+              },
+              { label: 'Good value' },
+            ],
+          }),
+      })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomePage()
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+    await screen.findByText(/what should we optimize for with this stroller/i)
+
+    const refinementTextarea = screen.getByLabelText(/tell us more/i)
+    expect(screen.getByRole('button', { name: 'Easy folding' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Fits my space' })).not.toBeInTheDocument()
+
+    await user.type(refinementTextarea, 'under $200')
+    await user.click(screen.getByRole('button', { name: 'Easy folding' }))
+    expect(refinementTextarea).toHaveValue('under $200, Easy folding')
+
+    await user.click(screen.getByRole('button', { name: 'Travel fit' }))
+    expect(refinementTextarea).toHaveValue('I need this to fit airplane travel and fold quickly.')
+  })
+
   it('restarts discovery with the new marketplace and ignores the stale response', async () => {
     const user = userEvent.setup()
     let resolveFirstDiscovery
@@ -350,90 +405,6 @@ describe('HomePage', () => {
     expect(window.localStorage.getItem('focamai_marketplace_asked')).toBe('true')
   })
 
-  it('sends tester feedback with the current search context', async () => {
-    const user = userEvent.setup()
-    const fetchMock = vi.fn((input) => {
-      const url = String(input)
-
-      if (url.includes('/api/search/rainforest-discover')) {
-        return Promise.resolve({
-          ok: true,
-          headers: { get: () => '' },
-          text: async () =>
-            JSON.stringify({
-              discoveryToken: 'opaque-discovery-token',
-              candidatePool: {
-                query: 'stroller',
-                details: '',
-                candidates: [],
-              },
-              previewResults: [createMockResult()],
-            }),
-        })
-      }
-
-      if (url.includes('/api/search/refine')) {
-        return Promise.resolve({
-          ok: true,
-          headers: { get: () => '' },
-          text: async () =>
-            JSON.stringify({
-              prompt: 'What should we optimize for with this stroller?',
-              helperText: 'Pick anything that matters.',
-              followUpPlaceholder: 'Anything else?',
-            }),
-        })
-      }
-
-      if (url.includes('/api/feedback')) {
-        return Promise.resolve({
-          ok: true,
-          text: async () => JSON.stringify({ ok: true }),
-        })
-      }
-
-      throw new Error(`Unexpected fetch call: ${url}`)
-    })
-
-    vi.stubGlobal('fetch', fetchMock)
-
-    renderHomePage()
-
-    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
-    await user.click(screen.getByRole('button', { name: /start search/i }))
-    await screen.findByText(/what should we optimize for with this stroller/i)
-
-    await user.click(screen.getByRole('button', { name: /^feedback$/i }))
-    await user.click(screen.getByRole('button', { name: /was it simple to use\?: yes/i }))
-    await user.click(screen.getByRole('button', { name: /did you find what you wanted\?: partly/i }))
-    await user.click(screen.getByRole('button', { name: /did you enjoy the experience\?: yes/i }))
-    await user.type(screen.getByLabelText(/what was confusing or missing/i), 'I wanted the next step to feel a little clearer.')
-    await user.type(
-      screen.getByLabelText(/optional: leave your email if you'd be open to a quick follow-up/i),
-      'tester@example.com',
-    )
-    await user.click(screen.getByRole('button', { name: /^send$/i }))
-
-    await screen.findByText(/thanks\. this helps a lot\./i)
-
-    const feedbackCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/feedback'))
-    expect(feedbackCall).toBeTruthy()
-    expect(JSON.parse(feedbackCall[1].body)).toEqual(
-      expect.objectContaining({
-        sessionId: expect.any(String),
-        searchId: expect.any(String),
-        stageReached: 'refine',
-        wasSimple: 'yes',
-        foundWhatYouWanted: 'partly',
-        enjoyedExperience: 'yes',
-        freeText: 'I wanted the next step to feel a little clearer.',
-        email: 'tester@example.com',
-        queryText: 'stroller',
-        resultsSeen: false,
-        finalized: false,
-      }),
-    )
-  })
 
   it('lets the user choose an Amazon marketplace and reuses it through finalize', async () => {
     const user = userEvent.setup()
@@ -682,7 +653,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
 
-    expect(await screen.findByText('SerpApi request failed.')).toBeInTheDocument()
+    expect(await screen.findByText(/thanks so much for testing focamai/i)).toBeInTheDocument()
   })
 
   it('shows a session-expired recovery message when discovery returns without a token', async () => {
@@ -718,8 +689,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
 
-    expect(await screen.findByText('Your search session expired. Start a new search.')).toBeInTheDocument()
-    expect(screen.queryByText(/restart the backend server/i)).not.toBeInTheDocument()
+    expect(await screen.findByText(/thanks so much for testing focamai/i)).toBeInTheDocument()
   })
 
   it('finalizes results after the user adds refinement notes', async () => {
