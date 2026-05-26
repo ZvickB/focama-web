@@ -291,9 +291,9 @@ function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }) {
   return [
     'Choose the best final products.',
     '1. "User context" (below) is the dominant selection signal — weight it above all other factors. If a candidate violates a hard constraint stated in user context (e.g. exceeds a stated budget), exclude it unless no better option exists. When no candidate fully satisfies the constraint, prefer the closest match — for a budget constraint, prefer the cheapest available option over a more expensive one, even if the cheaper option has lower ratings.',
-    '2. Relevance to the product query.',
+    '2. Relevance to the product query. If the query names a specific brand, treat that brand as a strong preference — fill as many slots as possible with candidates from that brand before considering other brands.',
     '3. Quality and trust using rating and review count.',
-    '4. Prefer diversity across style, merchant, or use case when helpful.',
+    '4. Prefer diversity across style or use case when helpful, but do not use brand diversity as a reason to displace a brand the user explicitly named in the query.',
     `Return exactly ${desiredCount} picks from the candidates below.`,
     'Only choose from the provided candidate ids.',
     '',
