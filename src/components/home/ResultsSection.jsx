@@ -21,39 +21,10 @@ import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
 
 const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 const RETRY_CORRECTION_CHIPS = [
-  'Wrong brand',
-  'Wrong product type',
-  'Missing dietary need',
   'Too expensive',
-  'Wrong size/count',
-  'Not available',
+  'Wrong style',
+  'Missing a must-have',
 ]
-const CONSTRAINT_STOP_WORDS = new Set([
-  'a',
-  'an',
-  'and',
-  'any',
-  'asked',
-  'brand',
-  'but',
-  'for',
-  'from',
-  'i',
-  'just',
-  'keep',
-  'me',
-  'need',
-  'needs',
-  'of',
-  'or',
-  'show',
-  'the',
-  'this',
-  'to',
-  'want',
-  'wanted',
-  'with',
-])
 const MotionDiv = motion.div
 
 function handleRetryFeedbackKeyDown(event, { canSubmit, onSubmit }) {
@@ -66,85 +37,6 @@ function handleRetryFeedbackKeyDown(event, { canSubmit, onSubmit }) {
   if (canSubmit) {
     onSubmit()
   }
-}
-
-function normalizeConstraintTag(value) {
-  return String(value || '')
-    .replace(/\b(i asked for|asked for|needs to be|need to be|needs|need|keep|don't show|do not show)\b/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function addConstraintTag(tags, value) {
-  const normalized = normalizeConstraintTag(value)
-
-  if (!normalized || normalized.length < 3) {
-    return
-  }
-
-  const comparable = normalized.toLowerCase()
-
-  if (tags.some((tag) => tag.toLowerCase() === comparable)) {
-    return
-  }
-
-  tags.push(normalized)
-}
-
-function deriveConstraintTags({ followUpNotes, retryFeedback, suggestedRetryQuery, submittedQuery }) {
-  const source = String(suggestedRetryQuery || '').trim()
-  const tags = []
-
-  if (source) {
-    const lowerSource = source.toLowerCase()
-    const chocolateMatch = lowerSource.match(/\b(white|dark|milk)\s+chocolate\s+chips?\b/)
-    const underMatch = source.match(/\bunder\s+\$?\d+[\w\s-]*/i)
-    const words = source
-      .split(/\s+/)
-      .map((word) => word.replace(/[^\w$-]/g, ''))
-      .filter(Boolean)
-
-    if (words[0] && !CONSTRAINT_STOP_WORDS.has(words[0].toLowerCase())) {
-      addConstraintTag(tags, words[0])
-    }
-
-    if (lowerSource.includes('dairy-free') || lowerSource.includes('dairy free') || lowerSource.includes('non dairy')) {
-      addConstraintTag(tags, 'dairy-free')
-    }
-
-    if (chocolateMatch) {
-      addConstraintTag(tags, chocolateMatch[0])
-    }
-
-    if (underMatch) {
-      addConstraintTag(tags, underMatch[0])
-    }
-
-    if (tags.length === 0 && words.length > 0) {
-      addConstraintTag(tags, words.slice(0, Math.min(words.length, 3)).join(' '))
-    }
-  }
-
-  if (tags.length < 3) {
-    const fallbackParts = [submittedQuery, followUpNotes, retryFeedback]
-      .flatMap((value) => String(value || '').split(/[.,;\n]+/))
-      .map(normalizeConstraintTag)
-      .filter(Boolean)
-
-    fallbackParts.forEach((part) => {
-      if (tags.length >= 4) {
-        return
-      }
-
-      const meaningfulWords = part
-        .split(/\s+/)
-        .filter((word) => !CONSTRAINT_STOP_WORDS.has(word.toLowerCase()))
-
-      addConstraintTag(tags, meaningfulWords.length > 0 ? meaningfulWords.join(' ') : part)
-    })
-  }
-
-  return tags.slice(0, 4)
 }
 
 function getRatingValue(rating) {
@@ -293,7 +185,6 @@ export function ResultsSection({
   previousResults = [],
   retryAdvice,
   selectionState,
-  followUpNotes = '',
   retryFeedback,
   showFinalResultBadges,
   showPreviewResults,
@@ -302,14 +193,14 @@ export function ResultsSection({
 }) {
   const retryViewRef = useRef(null)
   const [showRetryView, setShowRetryView] = useState(false)
-  const [selectedCorrectionChips, setSelectedCorrectionChips] = useState([])
-  const [isEditingSuggestedQuery, setIsEditingSuggestedQuery] = useState(false)
   const [editableSuggestedQuery, setEditableSuggestedQuery] = useState('')
-  const [editableSuggestedQuerySource, setEditableSuggestedQuerySource] = useState('')
+  const [hasEditedSuggestedQuery, setHasEditedSuggestedQuery] = useState(false)
   const [retryViewQuery, setRetryViewQuery] = useState('')
-  const isEditingCurrentSuggestion =
-    isEditingSuggestedQuery && editableSuggestedQuerySource === suggestedRetryQuery.trim()
   const isRetryViewVisible = hasFinalResults && showRetryView && retryViewQuery === submittedQuery
+  const normalizedSuggestedRetryQuery = suggestedRetryQuery.trim()
+  const visibleSuggestedQuery = hasEditedSuggestedQuery
+    ? editableSuggestedQuery
+    : normalizedSuggestedRetryQuery
 
   const shouldShowBadgeLabels = !hasFinalResults || showFinalResultBadges
   const orderedResults = displayedResults
@@ -317,58 +208,24 @@ export function ResultsSection({
   const hasDisplayedResults = orderedResults.length > 0
   const shouldShowResultsIntro = !hasDisplayedResults || hasFinalResults
   const orderedPreviousResults = previousResults
-  const hasSelectedCorrectionChips = selectedCorrectionChips.length > 0
-  const canRequestRetryAdvice = Boolean(retryFeedback.trim() || hasSelectedCorrectionChips)
-  const visibleConstraintTags = deriveConstraintTags({
-    followUpNotes,
-    retryFeedback,
-    suggestedRetryQuery,
-    submittedQuery,
-  })
+  const canRequestRetryAdvice = Boolean(retryFeedback.trim())
 
-  function handleCorrectionChipToggle(chipLabel) {
-    setSelectedCorrectionChips((current) => {
-      const next = current.includes(chipLabel)
-        ? current.filter((label) => label !== chipLabel)
-        : [...current, chipLabel]
-
-      return next
-    })
-    onRetryFeedbackChange(retryFeedback)
-  }
-
-  function buildRetryFeedbackPayload() {
-    const feedbackParts = []
-
-    if (selectedCorrectionChips.length > 0) {
-      feedbackParts.push(`Correction type: ${selectedCorrectionChips.join(', ')}`)
-    }
-
-    if (retryFeedback.trim()) {
-      feedbackParts.push(retryFeedback.trim())
-    }
-
-    return feedbackParts.join('\n')
+  function handleCorrectionChipClick(chipLabel) {
+    const nextFeedback = retryFeedback.trim()
+      ? `${retryFeedback.trim()}\n${chipLabel}`
+      : `${chipLabel}\n`
+    onRetryFeedbackChange(nextFeedback)
   }
 
   function handleRetryAdviceSubmit() {
-    onRetryAdviceRequest({ rejectionFeedback: buildRetryFeedbackPayload() })
-  }
-
-  function handleEditSuggestedQuery() {
-    const normalizedSuggestion = suggestedRetryQuery.trim()
-    setEditableSuggestedQuery(normalizedSuggestion)
-    setEditableSuggestedQuerySource(normalizedSuggestion)
-    setIsEditingSuggestedQuery(true)
+    onRetryAdviceRequest({ rejectionFeedback: retryFeedback.trim() })
   }
 
   function handleSearchSuggestedQuery() {
-    const queryToSearch = (isEditingCurrentSuggestion ? editableSuggestedQuery : suggestedRetryQuery).trim()
+    const queryToSearch = visibleSuggestedQuery.trim()
     setShowRetryView(false)
-    setSelectedCorrectionChips([])
-    setIsEditingSuggestedQuery(false)
     setEditableSuggestedQuery('')
-    setEditableSuggestedQuerySource('')
+    setHasEditedSuggestedQuery(false)
     setRetryViewQuery('')
     onRetrySearch(queryToSearch)
   }
@@ -382,10 +239,8 @@ export function ResultsSection({
 
   function handleOpenRetryView() {
     setRetryViewQuery(submittedQuery)
-    setSelectedCorrectionChips([])
-    setIsEditingSuggestedQuery(false)
     setEditableSuggestedQuery('')
-    setEditableSuggestedQuerySource('')
+    setHasEditedSuggestedQuery(false)
     setShowRetryView(true)
   }
 
@@ -586,15 +441,25 @@ export function ResultsSection({
       ) : null}
 
       {hasFinalResults && !isRetryViewVisible ? (
-        <div className="flex justify-center pt-2">
-          <Button
+        <div className="rounded-2xl border border-[#e7dac8] bg-[#fbf7f1] px-4 py-4 shadow-[0_14px_38px_-34px_rgba(120,87,63,0.18)] sm:flex sm:items-center sm:justify-between sm:gap-5 sm:px-5">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#e5dacb] bg-white text-slate-500">
+              <RotateCcw className="h-4 w-4" />
+            </span>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-slate-900">Need a better fit?</p>
+              <p className="text-sm leading-6 text-slate-600">
+                Tell Focamai what felt off and it will prepare a better search.
+              </p>
+            </div>
+          </div>
+          <button
             type="button"
-            variant="outline"
-            className="h-11 rounded-full border-[#dcccc0] bg-white/94 px-6 text-sm text-slate-600 shadow-[0_12px_28px_-24px_rgba(120,87,63,0.2)] hover:border-[#cbb9a3] hover:bg-[#fdfaf6] hover:text-slate-900"
+            className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-full border border-[#dcccc0] bg-white px-4 text-sm font-medium text-slate-700 transition hover:border-[#cbb9a3] hover:bg-[#fdfaf6] hover:text-slate-900 sm:mt-0 sm:w-auto"
             onClick={handleOpenRetryView}
           >
-            Not seeing what you had in mind? Tell us what to correct
-          </Button>
+            Improve picks
+          </button>
         </div>
       ) : null}
 
@@ -610,37 +475,28 @@ export function ResultsSection({
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-[#e6d8c5] bg-white/90 px-3 py-1 text-sm text-[#80573f]">
               <Sparkles className="h-4 w-4" />
-              Let&apos;s find a better direction
+              Improve these picks
             </div>
             <p className="text-xl font-medium text-slate-900">
-              What should Focamai keep or change?
+              What felt off?
             </p>
             <p className="text-sm leading-6 text-slate-600">
-              Add what was missing, what should stay, or what should be replaced.
+              Say what was wrong, missing, too broad, or worth keeping. Focamai will turn it into a better search.
             </p>
           </div>
 
           <div className="mt-5 space-y-4">
             <div className="flex flex-wrap gap-2" aria-label="Quick correction options">
-              {RETRY_CORRECTION_CHIPS.map((chipLabel) => {
-                const isSelected = selectedCorrectionChips.includes(chipLabel)
-
-                return (
-                  <button
-                    key={chipLabel}
-                    type="button"
-                    className={`rounded-full border px-3 py-2 text-sm transition ${
-                      isSelected
-                        ? 'border-primary/35 bg-primary/10 text-primary'
-                        : 'border-[#e5dacb] bg-white text-slate-600 hover:border-[#cbb9a3] hover:text-slate-900'
-                    }`}
-                    aria-pressed={isSelected}
-                    onClick={() => handleCorrectionChipToggle(chipLabel)}
-                  >
-                    {chipLabel}
-                  </button>
-                )
-              })}
+              {RETRY_CORRECTION_CHIPS.map((chipLabel) => (
+                <button
+                  key={chipLabel}
+                  type="button"
+                  className="rounded-full border border-[#e5dacb] bg-white px-3 py-2 text-sm text-slate-600 transition hover:border-[#cbb9a3] hover:text-slate-900"
+                  onClick={() => handleCorrectionChipClick(chipLabel)}
+                >
+                  {chipLabel}
+                </button>
+              ))}
             </div>
 
             <div className="rounded-[22px] border border-[#e5dacb] bg-white p-1 shadow-[0_14px_38px_-32px_rgba(120,87,63,0.16)]">
@@ -660,7 +516,7 @@ export function ResultsSection({
                 }
                 disabled={!isRetryReady || isRetrying || isGeneratingRetryAdvice}
                 className="min-h-32 resize-none rounded-[28px] border-0 bg-transparent px-5 py-4 text-base leading-7 shadow-none placeholder:text-slate-400 focus-visible:ring-0"
-                placeholder="Example: Keep Yupik and white chocolate chips. Needs to be dairy-free. Don't show dark chocolate."
+                placeholder="Example: Too expensive, wrong style, missing one-hand folding..."
               />
             </div>
 
@@ -671,7 +527,7 @@ export function ResultsSection({
                 className="h-12 rounded-[22px] bg-primary px-6 text-sm text-primary-foreground shadow-[0_16px_36px_-26px_rgba(15,97,117,0.34)] hover:bg-primary/90"
                 onClick={handleRetryAdviceSubmit}
               >
-                {isGeneratingRetryAdvice ? 'Finding a better search...' : 'Suggest a better search'}
+                {isGeneratingRetryAdvice ? 'Preparing next search...' : 'Prepare next search'}
               </Button>
             </div>
 
@@ -685,47 +541,30 @@ export function ResultsSection({
                   ) : null}
                   {suggestedRetryQuery.trim() ? (
                     <div className="space-y-3 rounded-[20px] border border-[#e5dacb] bg-white p-4">
-                      <p className="text-sm font-medium text-slate-900">Try this search instead:</p>
-                      {isEditingCurrentSuggestion ? (
-                        <Textarea
-                          aria-label="Edit suggested search"
-                          value={editableSuggestedQuery}
-                          onChange={(event) => setEditableSuggestedQuery(event.target.value)}
-                          className="min-h-20 resize-none rounded-[18px] border-[#e5dacb] bg-white px-4 py-3 text-base leading-6 text-slate-900 shadow-none focus-visible:border-primary/50 focus-visible:ring-[4px] focus-visible:ring-[rgba(15,97,117,0.08)]"
-                        />
-                      ) : (
-                        <p className="rounded-[18px] bg-[#f8f3ed] px-4 py-3 text-base font-medium leading-6 text-slate-900">
-                          {suggestedRetryQuery}
-                        </p>
-                      )}
-                      {visibleConstraintTags.length > 0 ? (
-                        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                          <span>Keeping:</span>
-                          {visibleConstraintTags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="rounded-full border border-[#e5dacb] bg-white px-2.5 py-1 text-slate-600"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
+                      <label
+                        htmlFor="results-retry-suggested-query"
+                        className="text-sm font-medium text-slate-900"
+                      >
+                        Next search
+                      </label>
+                      <Textarea
+                        id="results-retry-suggested-query"
+                        aria-label="Next search"
+                        value={visibleSuggestedQuery}
+                        onChange={(event) => {
+                          setHasEditedSuggestedQuery(true)
+                          setEditableSuggestedQuery(event.target.value)
+                        }}
+                        className="min-h-20 resize-none rounded-[18px] border-[#e5dacb] bg-[#fdfaf6] px-4 py-3 text-base font-medium leading-6 text-slate-900 shadow-none focus-visible:border-primary/50 focus-visible:ring-[4px] focus-visible:ring-[rgba(15,97,117,0.08)]"
+                      />
                       <div className="flex flex-wrap gap-2">
                         <Button
                           type="button"
                           className="h-11 rounded-full bg-primary px-5 text-sm text-primary-foreground shadow-[0_18px_38px_-24px_rgba(15,97,117,0.42)] hover:bg-primary/90"
+                          disabled={!visibleSuggestedQuery.trim()}
                           onClick={handleSearchSuggestedQuery}
                         >
-                          Search this
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-11 rounded-full border-[#dcccc0] bg-white px-5 text-sm text-slate-600 hover:border-[#cbb9a3] hover:bg-[#fdfaf6] hover:text-slate-900"
-                          onClick={handleEditSuggestedQuery}
-                        >
-                          Edit first
+                          Search again
                         </Button>
                       </div>
                     </div>

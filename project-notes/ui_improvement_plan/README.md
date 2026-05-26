@@ -122,12 +122,18 @@ Why this helps:
 - The product identity becomes more consistent across web and mobile.
 
 ## Priority 7: Retry simplification
+Status: implemented in the seventh `new_web_ui` slice.
+
 Mobile retry is simpler: say what felt off, get a suggested next search, edit it if needed, search again.
 
-Proposed web direction:
-- Reduce correction-chip complexity unless it proves useful.
-- Show the suggested query as editable sooner.
-- Keep retry near the results, but make it feel like repair, not a second product browser.
+Implemented web direction:
+- Reduced correction chips to three broad prompts: too expensive, wrong style, and missing a must-have.
+- Kept the freeform correction box as the main input.
+- Renamed the action to `Prepare next search`.
+- Shows the AI `suggestedQuery` as an editable `Next search` field immediately when advice returns.
+- Uses one final action: `Search again`.
+- Removed the `Keeping:` tag reassurance UI and the separate `Search this` / `Edit first` split.
+- Kept the same `/api/search/retry-advice` backend contract.
 
 Why this helps:
 - Less cognitive load after a bad result set.
@@ -140,7 +146,7 @@ Why this helps:
 4. Done: add staged finalize loading.
 5. Done: rework product detail content order.
 6. Done: tighten the visual system.
-7. Simplify retry.
+7. Done: simplify retry.
 
 ## What not to do
 - Do not port React Native components into web.

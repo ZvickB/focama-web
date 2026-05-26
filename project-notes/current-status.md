@@ -34,8 +34,8 @@
 - Final results now render as a single ranked shortlist instead of a marketplace-style grid or side preview.
 - After final results appear, refinement collapses into a compact summary above the ranked shortlist.
 - The product modal keeps enrichment hydrating in place: `fit_reason` and `caveat` fill the high reasoning area when available, while feature bullets/descriptions sit lower as product notes.
-- Retry is currently suggestion-led: the user opens a clearer correction panel, can tap quick correction chips, explains what to keep or change, and `/api/search/retry-advice` proposes a better next query.
-- Retry suggestions now stay in the retry/results area as a confirmation strip with `Search this` and `Edit first`; accepting starts a new guided search from there with a one-request discovery cache refresh instead of silently moving the query into the top search box.
+- Retry is currently suggestion-led: the user opens a clearer correction panel, can tap one of three broad quick prompts, explains what felt off, and `/api/search/retry-advice` proposes a better next query.
+- Retry suggestions now stay in the retry/results area as an immediately editable `Next search` field; `Search again` starts a new guided search from there with a one-request discovery cache refresh instead of silently moving the query into the top search box.
 - Retry advice now tells AI to preserve accumulated must-have constraints from the original query, follow-up notes, and feedback by default, while still allowing the latest feedback to replace or remove a constraint when the user clearly changes direction.
 
 ## Current backend/deployment reality
