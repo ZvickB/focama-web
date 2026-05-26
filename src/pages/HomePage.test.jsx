@@ -4,6 +4,15 @@ import userEvent from '@testing-library/user-event'
 
 import { createMockResult, renderHomePage, setupHomePageTest } from './HomePage.test-utils.jsx'
 
+function createDeferred() {
+  let resolve
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise
+  })
+
+  return { promise, resolve }
+}
+
 describe('HomePage', () => {
   setupHomePageTest()
   it('shows a friendly error message when the product query is blank', async () => {
@@ -694,6 +703,29 @@ describe('HomePage', () => {
 
   it('finalizes results after the user adds refinement notes', async () => {
     const user = userEvent.setup()
+    const finalizeResponse = createDeferred()
+    const finalResultsResponse = {
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          candidatePool: {
+            query: 'stroller',
+            details: 'Notes: comfort matters most',
+            candidates: [],
+          },
+          results: [
+            createMockResult(),
+            createMockResult({
+              id: 'result-2',
+              title: 'Compact airport stroller',
+              price: '$149.99',
+            }),
+          ],
+          selection: {
+            mode: 'ai',
+          },
+        }),
+    }
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -731,28 +763,7 @@ describe('HomePage', () => {
             followUpPlaceholder: 'Anything else?',
           }),
       })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            candidatePool: {
-              query: 'stroller',
-              details: 'Notes: comfort matters most',
-              candidates: [],
-            },
-            results: [
-              createMockResult(),
-              createMockResult({
-                id: 'result-2',
-                title: 'Compact airport stroller',
-                price: '$149.99',
-              }),
-            ],
-            selection: {
-              mode: 'ai',
-            },
-          }),
-      })
+      .mockImplementationOnce(() => finalizeResponse.promise)
 
     vi.stubGlobal('fetch', fetchMock)
 
@@ -764,6 +775,10 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
 
+    expect(
+      await screen.findByText(/we're on it\. your results will be here soon\./i),
+    ).toBeInTheDocument()
+    finalizeResponse.resolve(finalResultsResponse)
     expect(await screen.findByText('Compact airport stroller')).toBeInTheDocument()
     expect(
       screen.getByText(/six picks, chosen around what you told us\./i),

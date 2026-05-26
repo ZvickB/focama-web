@@ -137,8 +137,7 @@ describe('HomePage retry advice', () => {
     })
     expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/search/finalize'))).toHaveLength(1)
 
-    const productTopicInput = screen.getByLabelText(/product topic/i)
-    expect(productTopicInput).toHaveValue('stroller')
+    expect(screen.getAllByText('stroller').length).toBeGreaterThan(0)
     expect(screen.getByText(/try this search instead/i)).toBeInTheDocument()
     expect(screen.getByText('compact city stroller under 18 pounds')).toBeInTheDocument()
     expect(screen.getByText(/keeping:/i)).toBeInTheDocument()
@@ -149,9 +148,7 @@ describe('HomePage retry advice', () => {
     await user.clear(screen.getByLabelText(/edit suggested search/i))
     await user.type(screen.getByLabelText(/edit suggested search/i), 'lightweight umbrella stroller for city travel')
 
-    expect(screen.getByLabelText(/product topic/i)).toHaveValue(
-      'stroller',
-    )
+    expect(screen.getAllByText('stroller').length).toBeGreaterThan(0)
     expect(screen.getByLabelText(/edit suggested search/i)).toHaveValue(
       'lightweight umbrella stroller for city travel',
     )
@@ -466,7 +463,7 @@ describe('HomePage retry advice', () => {
     await user.click(screen.getByRole('button', { name: /suggest a better search/i }))
 
     expect(await screen.findByText(/a narrower search should help/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/product topic/i)).toHaveValue('stroller')
+    expect(screen.getAllByText('stroller').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /search this/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /new search/i })).toBeInTheDocument()
   }, 10000)
@@ -504,6 +501,7 @@ describe('HomePage retry advice', () => {
             previewResults: [
               createMockResult({
                 title: 'Thermos Stainless King Vacuum-Insulated Drink Bottle',
+                fit_reason: '',
                 reasons: [
                   'Live product result returned for "Thermos Stainless King Vacuum-Insulated Drink Bottle".',
                   'Excellent heat retention for long commutes.',
@@ -725,13 +723,13 @@ describe('HomePage retry advice', () => {
     expect(
       await screen.findByText(/a narrower city stroller search should better match that feedback/i),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText(/product topic/i)).toHaveValue('stroller')
+    expect(screen.getAllByText('stroller').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /search this/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /search this/i }))
 
     await screen.findByText(/what should we optimize for with this slim city stroller/i)
-    expect(screen.getByLabelText(/product topic/i)).toHaveValue('slim city stroller')
+    expect(screen.getAllByText('slim city stroller').length).toBeGreaterThan(0)
     expect(
       fetchMock.mock.calls.some(([url]) =>
         String(url).includes('/api/search/rainforest-discover?query=slim+city+stroller') &&

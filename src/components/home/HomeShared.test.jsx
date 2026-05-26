@@ -69,11 +69,11 @@ describe('ProductDetailModal', () => {
     expect(screen.queryByText(/analyzing your pick/i)).not.toBeInTheDocument()
   })
 
-  it('shows an inline affiliate disclosure next to the retailer CTA', () => {
+  it('shows one compact affiliate disclosure next to the retailer CTA', () => {
     renderModal()
 
     expect(
-      screen.getByText(/as an amazon associate i earn from qualifying purchases/i),
+      screen.getByText(/as an amazon associate, focamai may earn from qualifying purchases/i),
     ).toBeInTheDocument()
   })
 })

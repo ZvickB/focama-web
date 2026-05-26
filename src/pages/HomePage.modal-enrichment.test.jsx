@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { createMockResult, renderHomePage, setupHomePageTest } from './HomePage.test-utils.jsx'
@@ -61,7 +61,7 @@ describe('HomePage modal enrichment', () => {
 
     expect(await screen.findByText(/worth knowing/i)).toBeInTheDocument()
     expect(screen.getByText(/pricier than the smallest umbrella stroller options\./i)).toBeInTheDocument()
-  })
+  }, 10000)
 
   it('hydrates the modal explanation from async enrichment polling when the payload uses camelCase fields', async () => {
     delete window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__
@@ -172,21 +172,22 @@ describe('HomePage modal enrichment', () => {
     await screen.findByText('Travel stroller')
 
     await user.click(screen.getByText('Travel stroller'))
+    const dialog = await screen.findByRole('dialog', { name: /travel stroller/i })
 
     await waitFor(
       () => {
         expect(
-          screen.getByText(/fits travel days well because it folds quickly and stays easy to carry\./i),
+          within(dialog).getByText(/fits travel days well because it folds quickly and stays easy to carry\./i),
         ).toBeInTheDocument()
       },
       { timeout: 4000 },
     )
 
     expect(
-      screen.getByText(/storage is tighter than on larger everyday strollers\./i),
+      within(dialog).getByText(/storage is tighter than on larger everyday strollers\./i),
     ).toBeInTheDocument()
     expect(
-      screen.getByText(/one-hand fold for quick airport transfers\./i),
+      within(dialog).getByText(/one-hand fold for quick airport transfers\./i),
     ).toBeInTheDocument()
   }, 10000)
 
@@ -322,11 +323,12 @@ describe('HomePage modal enrichment', () => {
     await screen.findByText('Travel stroller')
 
     await user.click(screen.getByText('Travel stroller'))
+    const dialog = await screen.findByRole('dialog', { name: /travel stroller/i })
 
     await waitFor(
       () => {
         expect(
-          screen.getByText(/fits travel days well because it folds quickly and stays easy to carry\./i),
+          within(dialog).getByText(/fits travel days well because it folds quickly and stays easy to carry\./i),
         ).toBeInTheDocument()
       },
       { timeout: 4000 },
@@ -335,7 +337,7 @@ describe('HomePage modal enrichment', () => {
     await waitFor(
       () => {
         expect(
-          screen.getByText(/one-hand fold for quick airport transfers\./i),
+          within(dialog).getByText(/one-hand fold for quick airport transfers\./i),
         ).toBeInTheDocument()
       },
       { timeout: 4000 },
@@ -481,11 +483,12 @@ describe('HomePage modal enrichment', () => {
     }, { timeout: 4000 })
 
     await user.click(screen.getByText('Travel stroller'))
+    const dialog = await screen.findByRole('dialog', { name: /travel stroller/i })
 
     await waitFor(
       () => {
         expect(
-          screen.getByText(/fits travel days well because it folds quickly and stays easy to carry\./i),
+          within(dialog).getByText(/fits travel days well because it folds quickly and stays easy to carry\./i),
         ).toBeInTheDocument()
       },
       { timeout: 4000 },

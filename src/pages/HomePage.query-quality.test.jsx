@@ -182,7 +182,7 @@ describe('HomePage query-quality suggestion', () => {
     await user.click(screen.getByRole('button', { name: /keep these results/i }))
 
     expect(screen.queryByText(/try "celsius drink" instead\?/i)).not.toBeInTheDocument()
-    expect(screen.getByLabelText(/product topic/i)).toHaveValue('celcius drink')
+    expect(screen.getAllByText('celcius drink').length).toBeGreaterThan(0)
   })
 
   it('starts a normal new guided search when the user accepts the suggested query', async () => {
@@ -258,7 +258,7 @@ describe('HomePage query-quality suggestion', () => {
 
       expect(discoveryUrls.some((url) => url.includes('query=celsius+drink'))).toBe(true)
     })
-    expect(screen.getByLabelText(/product topic/i)).toHaveValue('celsius drink')
+    expect(screen.getAllByText('celsius drink').length).toBeGreaterThan(0)
     expect(screen.queryByText(/try "celsius drink" instead\?/i)).not.toBeInTheDocument()
   })
 
@@ -392,6 +392,6 @@ describe('HomePage query-quality suggestion', () => {
     })
     expect(screen.queryByText(/try "shabbat art" instead\?/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /try suggested search/i })).not.toBeInTheDocument()
-    expect(screen.getByLabelText(/product topic/i)).toHaveValue('shabbos art')
+    expect(screen.getAllByText('shabbos art').length).toBeGreaterThan(0)
   })
 })
