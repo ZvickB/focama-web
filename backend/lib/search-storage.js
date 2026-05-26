@@ -1158,6 +1158,58 @@ export async function recordOxylabsProductFailures(failures = []) {
   }
 }
 
+export async function readCachePoolEntries({ query = '', limit = 25 } = {}) {
+  if (!isSupabaseConfigured()) {
+    return []
+  }
+
+  const supabase = getSupabaseAdminClient()
+
+  if (!supabase) {
+    return []
+  }
+
+  let dbQuery = supabase
+    .from(SEARCH_CACHE_TABLE)
+    .select('product_query, details, candidate_pool, cached_at, source')
+    .order('cached_at', { ascending: false })
+    .limit(limit)
+
+  if (query) {
+    dbQuery = dbQuery.ilike('product_query', `%${query}%`)
+  }
+
+  const { data, error } = await dbQuery
+
+  if (error) {
+    throw error
+  }
+
+  const rows = Array.isArray(data) ? data : []
+
+  return rows.map((row) => {
+    const candidates = Array.isArray(row.candidate_pool?.candidates) ? row.candidate_pool.candidates : []
+    return {
+      productQuery: row.product_query || '',
+      details: row.details || '',
+      cachedAt: row.cached_at || null,
+      source: row.source || null,
+      candidateCount: candidates.length,
+      candidates: candidates.map((c, index) => ({
+        id: c.id ?? null,
+        rank: index + 1,
+        title: c.title || '',
+        price: c.price ?? null,
+        rating: c.rating ?? null,
+        reviewCount: c.reviewCount ?? null,
+        source: c.source || null,
+        attributes: Array.isArray(c.attributes) ? c.attributes.slice(0, 6) : [],
+        description: typeof c.description === 'string' ? c.description.slice(0, 200) : '',
+      })),
+    }
+  })
+}
+
 export async function recordTesterFeedback(feedback) {
   const payload = {
     email: feedback?.email || null,

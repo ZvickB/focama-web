@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import PageShell from '@/components/PageShell.jsx'
 import Seo from '@/components/Seo.jsx'
@@ -18,6 +18,15 @@ function createDashboardError(statusCode, message) {
   const error = new Error(message)
   error.statusCode = statusCode
   return error
+}
+
+async function fetchCachePool({ query }) {
+  const params = new URLSearchParams()
+  if (query) params.set('q', query)
+  const response = await fetch(`${BACKEND_URL}/api/analytics/cache-pool?${params}`)
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw createDashboardError(response.status, payload.error || 'Unable to load cache pool.')
+  return payload
 }
 
 async function fetchAnalyticsDashboard({ days }) {
@@ -87,6 +96,128 @@ function SimpleTable({ columns, rows, emptyMessage }) {
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+function CandidatePoolInspector() {
+  const [inputValue, setInputValue] = useState('')
+  const [submittedQuery, setSubmittedQuery] = useState('')
+  const [expandedIndex, setExpandedIndex] = useState(null)
+  const inputRef = useRef(null)
+
+  const poolQuery = useQuery({
+    queryKey: ['cache-pool', submittedQuery],
+    queryFn: () => fetchCachePool({ query: submittedQuery }),
+    enabled: true,
+    retry: false,
+  })
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    setExpandedIndex(null)
+    setSubmittedQuery(inputValue.trim())
+  }
+
+  const entries = poolQuery.data?.entries || []
+
+  return (
+    <div className="space-y-4">
+      <SectionHeading
+        title="Candidate pool inspector"
+        description="Browse what was sent to Haiku for picking. Shows candidates from the search_cache table, most recent first. Search by query to filter."
+      />
+
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          placeholder="e.g. travel stroller — leave blank to see recent"
+          className="flex-1 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300"
+        />
+        <button
+          type="submit"
+          className="rounded-full bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700 transition"
+        >
+          Inspect
+        </button>
+      </form>
+
+      {poolQuery.isLoading ? (
+        <p className="text-sm text-slate-500">Loading…</p>
+      ) : poolQuery.isError ? (
+        <div className="rounded-[20px] border border-amber-200 bg-amber-50/80 px-4 py-4 text-sm text-amber-900">
+          {poolQuery.error?.message || 'Unable to load cache pool.'}
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="rounded-[20px] border border-dashed border-stone-300 bg-stone-50/70 px-4 py-5 text-sm text-slate-500">
+          {submittedQuery ? `No cache entries found matching "${submittedQuery}".` : 'No cache entries found.'}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {entries.map((entry, index) => {
+            const isOpen = expandedIndex === index
+            return (
+              <div key={`${entry.productQuery}-${entry.cachedAt}`} className="rounded-[20px] border border-stone-200/80 bg-white/90 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setExpandedIndex(isOpen ? null : index)}
+                  className="w-full flex items-center justify-between gap-4 px-4 py-3 text-left hover:bg-stone-50/80 transition"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-800 truncate">{entry.productQuery || '—'}</p>
+                    {entry.details ? (
+                      <p className="mt-0.5 text-xs text-slate-500 truncate">Context: {entry.details}</p>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0 text-xs text-slate-500">
+                    <span>{entry.candidateCount} candidates</span>
+                    <span>{entry.cachedAt ? new Date(entry.cachedAt).toLocaleString() : '—'}</span>
+                    <span className="text-slate-400">{isOpen ? '▲' : '▼'}</span>
+                  </div>
+                </button>
+
+                {isOpen ? (
+                  <div className="border-t border-stone-100 divide-y divide-stone-100">
+                    {entry.candidates.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-slate-400">No candidates stored.</p>
+                    ) : (
+                      entry.candidates.map((c) => (
+                        <div key={c.id ?? c.rank} className="px-4 py-3 text-sm">
+                          <div className="flex items-start gap-3">
+                            <span className="shrink-0 w-6 text-center text-xs font-semibold text-slate-400 mt-0.5">{c.rank}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-slate-800 leading-snug">{c.title || '—'}</p>
+                              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500">
+                                {c.price != null ? <span>{c.price}</span> : null}
+                                {c.rating != null ? <span>{c.rating} ★</span> : null}
+                                {c.reviewCount != null ? <span>{formatNumber(c.reviewCount)} reviews</span> : null}
+                                {c.id != null ? <span className="text-slate-400">id: {c.id}</span> : null}
+                              </div>
+                              {c.attributes.length > 0 ? (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {c.attributes.map((attr, i) => (
+                                    <span key={i} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-slate-600">{attr}</span>
+                                  ))}
+                                </div>
+                              ) : null}
+                              {c.description ? (
+                                <p className="mt-1 text-xs text-slate-400 leading-relaxed">{c.description}</p>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -417,6 +548,8 @@ function AnalyticsPage() {
               ) : null}
             </>
           ) : null}
+
+          <CandidatePoolInspector />
         </div>
       </PageShell>
     </>

@@ -35,6 +35,7 @@ import { fetchOxylabsArtifacts, fetchOxylabsProductDetailsByAsin } from './lib/o
 import {
   isSupabaseConfigured,
   readAnalyticsDashboardData,
+  readCachePoolEntries,
   recordAnalyticsResultClick,
   recordAnalyticsResultImpressions,
   recordAnalyticsSearchEvent,
@@ -2285,6 +2286,36 @@ export async function handleAnalyticsDashboard(request, response) {
   sendJson(response, 200, dashboard)
 }
 
+export async function handleCachePoolInspect(request, response) {
+  if (process.env.NODE_ENV === 'production') {
+    sendJson(response, 404, { error: 'Not found.' })
+    return
+  }
+
+  if (!isSupabaseConfigured()) {
+    sendJson(response, 503, { error: 'Supabase is not configured.' })
+    return
+  }
+
+  const host = readHeaderValue(request.headers, 'host')
+
+  if (!isLocalhostHost(host)) {
+    sendJson(response, 403, { error: 'Cache pool inspector is only available from localhost in development.' })
+    return
+  }
+
+  const requestUrl = new URL(request.url || '/', `http://${request.headers.host || '127.0.0.1'}`)
+  const rawQuery = (requestUrl.searchParams.get('q') || '').trim().slice(0, 200)
+  const limit = clampInteger(requestUrl.searchParams.get('limit'), { defaultValue: 25, min: 1, max: 100 })
+
+  try {
+    const entries = await readCachePoolEntries({ query: rawQuery, limit })
+    sendJson(response, 200, { query: rawQuery || null, count: entries.length, entries })
+  } catch {
+    sendJson(response, 500, { error: 'Failed to read cache pool data.' })
+  }
+}
+
 export function createApiServer() {
   initObservability()
   registerProcessErrorHandlers()
@@ -2357,6 +2388,11 @@ export function createApiServer() {
 
       if (request.method === 'GET' && requestUrl.pathname === '/api/analytics/dashboard') {
         await handleAnalyticsDashboard(request, response)
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/analytics/cache-pool') {
+        await handleCachePoolInspect(request, response)
         return
       }
 
