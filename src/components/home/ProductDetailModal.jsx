@@ -204,7 +204,7 @@ function RetailerDecisionBar({ displayPrice, item, onClose, onRetailerClick, ret
             className="h-12 w-full gap-2 rounded-2xl bg-accent px-5 text-accent-foreground shadow-[0_14px_32px_-24px_rgba(229,155,38,0.38)] hover:bg-accent/90 sm:w-auto"
           >
             <a href={item.link} target="_blank" rel="noreferrer" onClick={onRetailerClick}>
-              View retailer
+              {`View on ${retailerLabel || item.subtitle || 'retailer'}`}
               <ArrowUpRight className="h-4 w-4" />
             </a>
           </Button>
