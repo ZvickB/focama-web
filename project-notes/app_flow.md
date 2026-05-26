@@ -27,13 +27,14 @@
   - the page scrolls toward the active refine/results region
 - Refinement chips use backend suggestions when available and fall back to `Good value`, `Easy to use`, and `Fits my space`; label-only chips append to the notes box, prompt-backed chips fill the notes box with richer text, and selected chips get a subtle selected state.
 - `Show products now` reveals the preview set.
-- `Show focused picks` runs guided finalize and narrows to the final 6; when follow-up notes add hard eligibility constraints such as kosher/Jewish-use, dietary/allergy, safety/material, or compatibility/exclusion needs, the frontend first does one refreshed Rainforest discovery pass with the original query plus notes, then finalizes from that refreshed token.
+- `Show focused picks` runs guided finalize and narrows to the final 6; during that wait, the results area shows staged progress copy for reading the search, applying notes, narrowing to six picks, and getting the shortlist ready. When follow-up notes add hard eligibility constraints such as kosher/Jewish-use, dietary/allergy, safety/material, or compatibility/exclusion needs, the frontend first does one refreshed Rainforest discovery pass with the original query plus notes, then finalizes from that refreshed token.
 - After final picks appear, the refinement panel collapses into a compact summary above the ranked results.
 - `Start a new search` clears the guided state and returns to a fresh search box.
 - After final results appear, the user can open the retry panel and ask for a better search direction.
 - As soon as `HomeExperience` mounts, it prefetches the lazy `ResultsSection` and `ProductDetailModal` chunks so those UI steps are more likely to be ready before the user needs them.
 - Route-level lazy loading shows a visible loading fallback, and chunk-load crashes get a reload-focused recovery message in the top-level error boundary.
 - A tester-facing `Feedback` FAB appears after search starts, or after a short delay on the homepage, and opens a lightweight feedback sheet.
+- The active web UI uses restrained white/cream surfaces, consistent rounded corners, lighter shadows, and teal-first actions with orange reserved for the retailer CTA.
 
 ## Guided backend flow
 - `GET /api/search/rainforest-discover`
@@ -96,10 +97,12 @@
 - Results use a single ranked shortlist layout rather than a marketplace grid or side preview.
 - On smaller screens, results collapse into stacked ranked pick cards.
 - Result rows/cards show reliable product facts first: image, title, provider/source, price, rating, review count, and a deterministic badge when available.
+- Result, retry, and modal surfaces now share a quieter visual system: fewer decorative gradients, smaller shadows, and more consistent 16-28px radii.
 - Selecting a row or the row details action opens the modal.
-- The modal still shows `feature_bullets` immediately when available, then hydrates `fit_reason` and `caveat` from enrichment.
+- The modal is ordered as a decision aid: image and title, an `At a glance` facts card, `Why this pick`, `Worth knowing`, then product notes from `feature_bullets` or description.
+- If enrichment is still pending, the modal reserves the reasoning area with calm pending copy; if enrichment settles without a fit reason, it shows a practical fallback instead of an empty section.
 - Retailer clicks happen from result rows and the modal CTA.
-- The modal now shows a short inline affiliate disclosure directly under the retailer CTA, with a link to the fuller `/affiliate-disclosure` page.
+- The modal bottom bar is the single retailer decision area, showing current price, availability reminder, one `View retailer` CTA, and one compact Amazon Associates disclosure when a link is available.
 
 ## Retry behavior
 - Retry is not an endless-results flow.

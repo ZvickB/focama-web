@@ -30,6 +30,9 @@
 - Priority 1 of that plan is now implemented in a simpler form: final/preview results render as ranked rows, without a side preview.
 - Priority 2 is now implemented in the first pass: the large search stage collapses into compact progress plus a summary after submit, refinement gets its own active panel, and finalized refinement collapses above the ranked results.
 - Priority 3 is now implemented in the first pass: the active refine panel uses the mobile-inspired heading, AI follow-up prompt, up to 3 refinement chips, fallback chips, selected chip state, and chip-to-notes behavior.
+- Priority 4 is now implemented in the first pass: guided finalize shows staged progress copy while it locks the shortlist.
+- Priority 5 is now implemented in the first pass: product detail modal order is image/facts, reasoning/caveat, product notes, and one compact retailer CTA/disclosure area.
+- Priority 6 is now implemented in the first pass: search/refine/results/retry/modal surfaces use fewer gradients, lighter shadows, more consistent radii, teal-first actions, and orange mainly for retailer clickout.
 
 ## Current guided flow
 - `GET /api/search/rainforest-discover` is the main discovery route used by the homepage.
@@ -47,6 +50,7 @@
 - Guided homepage experience: `src/components/home/HomeExperience.jsx`
 - Result UI: `src/components/home/ResultsSection.jsx`
 - Product modal UI: `src/components/home/ProductDetailModal.jsx`
+- Finalize loading UI: `src/components/home/FinalizeLoadingState.jsx`
 - Guided search state/requests: `src/components/home/useGuidedSearch.js`
 - Amazon store context: `src/contexts/AmazonStoreContext.jsx`
 - Render backend entrypoint: `backend/express-server.js`

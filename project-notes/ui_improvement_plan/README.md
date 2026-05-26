@@ -70,13 +70,15 @@ Why this helps:
 - Reduces the feeling that refinement is optional clutter.
 
 ## Priority 4: Better finalize/loading state
+Status: implemented in the fourth `new_web_ui` slice.
+
 Mobile explains what is happening during the wait:
 - Reading your search
 - Applying your notes
 - Narrowing to six picks
 - Getting the shortlist ready
 
-Proposed web direction:
+Implemented web direction:
 - Keep skeleton cards, but wrap them in staged progress copy.
 - Use calm status text instead of generic loading.
 - Make the wait feel like judgment work, not just network delay.
@@ -86,9 +88,11 @@ Why this helps:
 - It reinforces the core promise: fewer, better picks.
 
 ## Priority 5: Product detail decision support
+Status: implemented in the fifth `new_web_ui` slice.
+
 Web can keep a modal or side panel, but the content should borrow mobile's stronger order.
 
-Proposed web direction:
+Implemented web direction:
 - Lead with image and core facts.
 - Put "Why this pick" high and make it feel like the intelligence layer.
 - Keep "Worth knowing" close to the reason.
@@ -101,9 +105,11 @@ Why this helps:
 - The CTA has better trust context.
 
 ## Priority 6: Visual system discipline
+Status: implemented in the sixth `new_web_ui` slice.
+
 Mobile has a clearer visual system: warm ivory background, cream surfaces, teal action, restrained orange, consistent radii, and Manrope-first hierarchy.
 
-Proposed web direction:
+Implemented web direction:
 - Reduce decorative gradients and glow.
 - Use fewer competing card styles.
 - Keep orange as rare emphasis.
@@ -131,9 +137,9 @@ Why this helps:
 1. Done: redesign the results area into a ranked shortlist without a side preview.
 2. Done: adjust the search/refine/picks flow so completed stages collapse into summaries and the current stage owns the workspace.
 3. Done: polish the refine step with chips and stronger copy.
-4. Add staged finalize loading.
-5. Rework product detail content order.
-6. Tighten the visual system.
+4. Done: add staged finalize loading.
+5. Done: rework product detail content order.
+6. Done: tighten the visual system.
 7. Simplify retry.
 
 ## What not to do
