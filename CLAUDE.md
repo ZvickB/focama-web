@@ -99,6 +99,21 @@ VITE_BACKEND_URL         # URL of the Render backend — used by the frontend fo
 ```
 Optional: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SEARCH_CACHE_TTL_MINUTES`, `ALLOWED_ORIGIN`, model overrides above.
 
+## Current Product Direction
+- The homepage at `/` uses the `open` layout — that is the default direction for now.
+- The product should feel calm, focused, mobile-first, and not marketplace-shaped.
+- The guided backend flow is the main product path: `/api/search/discover` → `/api/search/refine` → `/api/search/finalize`
+- `/api/search/live` is the explicit manual/debug combined route.
+- Product shortlists are 6 items end to end.
+- Prefer the PNG wordmark for now instead of forcing a weak SVG recreation.
+- Keep the product vendor-agnostic even if Amazon becomes the strongest affiliate path later.
+
+## Storage and History
+- Supabase-backed cache is supported when configured, with local fallback for development.
+- The current `search_history` table is operational/internal telemetry for cache and debug visibility.
+- The current `search_history` table is **not** a user-facing saved-history feature.
+- If user-facing history is added later, design it explicitly as a separate product feature with its own schema/API.
+
 ## Working Conventions
 
 ### Communication
@@ -108,11 +123,17 @@ Optional: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SEARCH_CACHE_TTL_MINUTES`, `AL
 - For meaningful checkpoints, report what changed, what was verified, and what notes were updated
 
 ### Behavior rules
+- **Do not make changes that weren't part of the requested task.** If you notice a discrepancy or something that looks wrong while doing something else, flag it — don't fix it. When a task is given, carry it out fully; don't hold back on changes that are clearly part of it.
 - **Deviate warning:** If your next action would meaningfully differ from my instruction or preference, say so before proceeding. Briefly state the mismatch and why. Do not silently override my intent. Do not warn for minor details.
 - **If unsure:** Prefer the smallest change that keeps the codebase and notes aligned. Ask before making a product decision with non-obvious consequences. Describe current reality first and label speculation as future/planned.
 - **Keep changes scoped** — finish one feature, fix, or cleanup section cleanly before starting another
 - **No overengineering** — build for what's needed now; no speculative abstractions
 - Treat implemented behavior and planned work as different things — never present a future idea as already decided
+- If active notes and code disagree, treat the code as current reality unless explicitly told otherwise. Flag the mismatch once and update the notes when it's part of the work.
+- Project notes and constraints are guardrails for the assistant, not limits on the user. If the user explicitly wants a direction that conflicts with existing notes or prior guidance, give a clear warning about the tradeoff once, then follow the user's decision.
+- When the user overrides a prior note or planned direction, update the relevant notes so future chats don't keep treating the older direction as active.
+- After any meaningful revision, clean up superseded code, copy, notes, and assets in the same pass when it is safe to do so.
+- Do not let temporary development tooling quietly become product architecture without noting it explicitly.
 
 ### Environment
 - **PowerShell on Windows** — prefer PowerShell-safe commands; never assume Unix-only shell behavior
@@ -129,12 +150,22 @@ Optional: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SEARCH_CACHE_TTL_MINUTES`, `AL
 - `project-notes/current-status.md` — short snapshot for next chat
 - `project-notes/session-handoff.md` — if a fresh chat would otherwise be misled
 - `project-notes/handoff.md` — if remaining work or priorities changed
+- When a provider path is intentionally deferred or temporarily not wired, record the exact re-entry points in active project notes so future chats know what must be switched later.
+- Keep note updates small and accurate. Do not rewrite history just to make notes look cleaner.
+- Prefer concise, de-duplicated active notes, but do not enforce a hard line-count limit. Let canonical source-of-truth notes be as long as needed to preserve guardrails, current/planned clarity, and measurement conclusions.
 
 ### Archive rules
 - Don't leave old strategies, UI paths, dead components, stale notes, or retired assets in active folders
 - Move superseded things to: `project-notes/archive/`, `src/assets/archive/`, `temp-data/archive/`, or a nearby `legacy/` folder
 - Active folders should reflect current product direction only
 - When archiving, leave a short note or filename that makes the status clear
+- Do not move active files just to be tidy. Archive only items that are clearly no longer part of the current product direction.
+
+**Suggested archive locations:**
+- Old notes and planning docs → `project-notes/archive/`
+- Old UI experiments or retired app paths → a nearby `legacy/` or `archive/` folder inside the relevant feature area
+- Retired images, logos, or brand experiments → `src/assets/archive/`
+- Temporary research artifacts or one-off evaluation data that still needs to be kept → `temp-data/archive/`
 
 ### Commit workflow (when user says "commit")
 - Use only the current git diff — no full repo scan
@@ -143,8 +174,15 @@ Optional: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SEARCH_CACHE_TTL_MINUTES`, `AL
 - Then commit AND push
 
 ## Project Notes Reading Order
-When starting a session or touching finalize/latency work, read in this order:
-1. `project-notes/session-handoff.md` — fastest current reset
-2. `project-notes/current-status.md` — immediate snapshot and active constraints
-3. `project-notes/app_flow.md` — current implemented behavior
-4. `project-notes/handoff.md` — medium-term work and open questions
+Read `project-notes/assistant-start.md` first at the start of every session — it gives compact current context and read-routing. Do not read every project note at startup. Open deeper notes only when the user's task requires them.
+
+| Note | When to read |
+|---|---|
+| `project-notes/session-handoff.md` | Need a fuller fresh-chat reset |
+| `project-notes/current-status.md` | Need the current snapshot/changelog |
+| `project-notes/app_flow.md` | Changing or explaining implemented product behavior |
+| `project-notes/search-flow.md` | Changing or explaining search/backend flow |
+| `project-notes/ui_improvement_plan/README.md` | Working on the new web UI direction |
+| `project-notes/handoff.md` | Medium-term work and open product questions |
+| `project-notes/doc_briefs.md` | Product intent, UX direction, and broader decisions |
+| `project-notes/db-needs.md` | Storage/backend table behavior |

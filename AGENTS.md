@@ -8,16 +8,24 @@ Read this file first at the start of every chat.
 - Keep it short, practical, and updated when the workflow changes.
 
 ## First reads
-- Read `project-notes/session-handoff.md` first for the fastest current reset.
-- Read `project-notes/current-status.md` next for the immediate snapshot and active constraints.
-- Read `project-notes/app_flow.md` for current implemented behavior.
+- Read `project-notes/assistant-start.md` first for compact current context.
+- Do not read every project note at startup.
+- Open deeper notes only when the user's task requires them.
+- Read `project-notes/session-handoff.md` only when you need a fuller fresh-chat reset.
+- Read `project-notes/current-status.md` when you need the current snapshot/changelog.
+- Read `project-notes/app_flow.md` when changing or explaining implemented product behavior.
+- Read `project-notes/search-flow.md` when changing or explaining search/backend flow.
+- Read `project-notes/ui_improvement_plan/README.md` when working on the new web UI direction.
 - Read `project-notes/handoff.md` for medium-term work and open product questions.
 - Read `project-notes/doc_briefs.md` for product intent, UX direction, and broader decisions.
-- Read `project-notes/db-needs.md` when you need the plain-language summary of which Supabase tables the current app uses now.
+- Read `project-notes/db-needs.md` when storage/backend table behavior matters.
 
 ## Source of truth
+- `project-notes/assistant-start.md`: compact startup context and read-routing.
 - `project-notes/app_flow.md`: what the app does now.
 - `project-notes/current-status.md`: short snapshot for the next chat.
+- `project-notes/search-flow.md`: search/backend flow details.
+- `project-notes/ui_improvement_plan/README.md`: planned web UI improvements inspired by mobile.
 - `project-notes/handoff.md`: durable remaining work and open questions.
 - `project-notes/doc_briefs.md`: product intent and longer-term direction.
 - `project-notes/db-needs.md`: plain-language summary of the current required Supabase tables.
