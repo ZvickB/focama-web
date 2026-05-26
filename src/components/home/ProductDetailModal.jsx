@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
-import { ArrowUpRight, ChevronDown, Star, X } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { ArrowUpRight, CheckCircle2, Info, Star, X } from 'lucide-react'
 
 import logo from '@/assets/logo_master_version.svg'
 import { resolveAmazonDomainForRequest } from '@/components/home/useGuidedSearch.js'
@@ -19,30 +18,207 @@ function resolveAmazonRetailerLabel(subtitle, selectedAmazonDomain, resolvedAmaz
   return domain.replace(/^amazon\./, 'Amazon.')
 }
 
-function RetailerActions({ className = '', item, onRetailerClick, retailerLabel }) {
+function getRatingValue(rating) {
+  if (rating === null || rating === undefined || rating === '' || typeof rating === 'boolean') {
+    return null
+  }
+
+  const ratingValue = Number(rating)
+  return Number.isFinite(ratingValue) ? ratingValue : null
+}
+
+function formatReviewCount(reviewCount) {
+  const reviewCountValue = Number(reviewCount)
+
+  if (!Number.isFinite(reviewCountValue) || reviewCountValue <= 0) {
+    return 'No reviews'
+  }
+
+  return `${reviewCountValue.toLocaleString()} reviews`
+}
+
+function ProductFacts({ displayPrice, item, retailerLabel }) {
+  const ratingValue = getRatingValue(item.rating)
+  const facts = [
+    ['Shortlist rank', item.badgeLabel || 'Selected pick'],
+    ['Source', retailerLabel || item.subtitle || 'Retailer'],
+    ['Price', displayPrice],
+    ['Rating', ratingValue ? `${ratingValue.toFixed(1)} stars` : 'No rating'],
+    ['Reviews', formatReviewCount(item.reviewCount)],
+  ]
+
   return (
-    <div className={`space-y-2.5 ${className}`}>
-      {item.link ? (
-        <>
+    <section className="rounded-2xl border border-[#eadfce] bg-white/92 p-4 shadow-[0_14px_36px_-30px_rgba(120,87,63,0.2)]">
+      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-[#80573f]">
+        At a glance
+      </p>
+      <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+        {facts.map(([label, value]) => (
+          <div key={label} className="min-w-0 rounded-xl bg-[#fbf7f1] px-3 py-2">
+            <dt className="text-xs font-medium text-slate-400">{label}</dt>
+            <dd className="mt-0.5 truncate font-semibold text-slate-800">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  )
+}
+
+function ReasoningPanel({
+  caveat,
+  fitReason,
+  isEnrichmentSettled,
+}) {
+  if (fitReason) {
+    return (
+      <MotionDiv
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+        className="space-y-3 rounded-2xl border border-[#d9e6e8] bg-white/94 p-4 shadow-[0_14px_36px_-30px_rgba(15,97,117,0.18)]"
+      >
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-primary">
+          <CheckCircle2 className="h-4 w-4" />
+          Why this pick
+        </div>
+        <p className="text-sm leading-6 text-slate-700">{fitReason}</p>
+        {caveat ? (
+          <div className="border-t border-[#d9e6e8] pt-3">
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#80573f]">
+              <Info className="h-4 w-4" />
+              Worth knowing
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{caveat}</p>
+          </div>
+        ) : null}
+      </MotionDiv>
+    )
+  }
+
+  if (isEnrichmentSettled) {
+    return (
+      <div className="rounded-2xl border border-[#e8ddcf] bg-white/88 p-4 text-sm leading-6 text-slate-500">
+        Extra analysis wasn&apos;t available for this pick right now.
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-2xl border border-[#e8ddcf] bg-white/88 p-4 text-sm text-slate-500">
+      <div className="flex items-center gap-2">
+        <span className="relative flex h-2 w-2 shrink-0">
+          <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
+          <span className="relative h-2 w-2 rounded-full bg-primary/60" />
+        </span>
+        <span className="relative inline-block overflow-hidden rounded-full px-0.5">
+          <span className="relative z-10">Checking why this fits your search...</span>
+          <span className="pointer-events-none absolute inset-y-0 left-[-40%] w-[40%] skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/80 to-transparent animate-shimmer" />
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function ProductNotes({
+  bulletsExpanded,
+  displayedBullets,
+  featureBullets,
+  itemId,
+  onExpand,
+  shouldCollapseBullets,
+  userFacingDescription,
+}) {
+  if (featureBullets.length > 0) {
+    return (
+      <section className="space-y-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-400">
+          Product notes
+        </p>
+        <ul className="space-y-1.5">
+          {displayedBullets.map((bullet, index) => (
+            <li
+              key={`${itemId}-feature-bullet-${index}`}
+              className="flex items-start gap-2 text-sm leading-6 text-slate-600"
+            >
+              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#b18c6f]" />
+              <span>{bullet}</span>
+            </li>
+          ))}
+        </ul>
+        {shouldCollapseBullets && !bulletsExpanded ? (
+          <button
+            type="button"
+            className="py-1 text-sm text-slate-500 transition-colors hover:text-slate-700"
+            onClick={onExpand}
+          >
+            Show all details
+          </button>
+        ) : null}
+      </section>
+    )
+  }
+
+  if (!userFacingDescription) {
+    return null
+  }
+
+  return (
+    <section className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-400">
+        Product notes
+      </p>
+      <p className="text-sm leading-6 text-slate-600">{userFacingDescription}</p>
+    </section>
+  )
+}
+
+function RetailerDecisionBar({ displayPrice, item, onClose, onRetailerClick, retailerLabel }) {
+  return (
+    <div className="border-t border-[#eadfd2] bg-white/94 px-4 py-3 sm:px-6 lg:px-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <button
+          type="button"
+          className="order-2 flex items-center gap-1.5 py-1 text-sm text-slate-500 transition-colors hover:text-slate-700 sm:order-1"
+          onClick={onClose}
+        >
+          <span aria-hidden="true">{'<-'}</span>
+          Back to results
+        </button>
+
+        <div className="order-1 flex flex-col gap-3 sm:order-2 sm:flex-row sm:items-center sm:justify-end">
+          <div className="min-w-0 text-left sm:text-right">
+            <p className="text-xs font-medium text-slate-400">Current price</p>
+            <p className="text-lg font-semibold leading-6 text-primary">{displayPrice}</p>
+            <p className="text-xs leading-5 text-slate-400">
+              {retailerLabel || item.subtitle || 'Retailer'} - availability may change
+            </p>
+            {item.link ? (
+              <p className="text-xs leading-5 text-slate-400">
+                As an Amazon Associate, Focamai may earn from qualifying purchases.
+              </p>
+            ) : null}
+          </div>
+          {item.link ? (
           <Button
             asChild
-            className="h-12 w-full gap-2 rounded-2xl bg-accent text-accent-foreground hover:bg-accent/90"
+            className="h-12 w-full gap-2 rounded-2xl bg-accent px-5 text-accent-foreground shadow-[0_14px_32px_-24px_rgba(229,155,38,0.38)] hover:bg-accent/90 sm:w-auto"
           >
             <a href={item.link} target="_blank" rel="noreferrer" onClick={onRetailerClick}>
-              {retailerLabel ? `View on ${retailerLabel}` : 'View on retailer site'}
+              View retailer
               <ArrowUpRight className="h-4 w-4" />
             </a>
           </Button>
-        </>
-      ) : (
-        <Button
-          type="button"
-          disabled
-          className="h-12 w-full gap-2 rounded-2xl bg-[#ede3d6] text-slate-500"
-        >
-          Retailer link unavailable
-        </Button>
-      )}
+          ) : (
+            <Button
+              type="button"
+              disabled
+              className="h-12 w-full gap-2 rounded-2xl bg-[#ede3d6] text-slate-500 sm:w-auto"
+            >
+              Retailer link unavailable
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -51,33 +227,10 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
   const fitReason = item?.fit_reason || item?.fitReason || ''
   const caveat = item?.caveat || ''
   const featureBullets = Array.isArray(item?.feature_bullets) ? item.feature_bullets : []
-  const enrichmentReady = Boolean(fitReason)
   const { selectedAmazonDomain, resolvedAmazonDomain } = useAmazonStore()
   const retailerLabel = resolveAmazonRetailerLabel(item?.subtitle, selectedAmazonDomain, resolvedAmazonDomain)
-  const contentRef = useRef(null)
-  const rightColumnRef = useRef(null)
-  const whyWePickedItRef = useRef(null)
-  const [showScrollHint, setShowScrollHint] = useState(true)
   const [bulletsExpanded, setBulletsExpanded] = useState(false)
   const [imgError, setImgError] = useState(false)
-
-  useEffect(() => {
-    function handleScroll(el) {
-      if (el.scrollTop > 40) setShowScrollHint(false)
-    }
-
-    const mobile = contentRef.current
-    const desktop = rightColumnRef.current
-    const onMobile = () => handleScroll(mobile)
-    const onDesktop = () => handleScroll(desktop)
-
-    mobile?.addEventListener('scroll', onMobile, { passive: true })
-    desktop?.addEventListener('scroll', onDesktop, { passive: true })
-    return () => {
-      mobile?.removeEventListener('scroll', onMobile)
-      desktop?.removeEventListener('scroll', onDesktop)
-    }
-  }, [])
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -127,14 +280,17 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
       onClick={onClose}
     >
       <MotionDiv
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="product-detail-title"
         initial={{ opacity: 0, scale: 0.97, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 8 }}
         transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-        className="flex max-h-[94vh] w-full flex-col overflow-hidden rounded-t-[32px] border border-[#ece1d5] bg-[linear-gradient(180deg,rgba(255,255,255,0.995),rgba(250,246,241,0.97))] shadow-[0_40px_120px_-48px_rgba(70,51,38,0.44)] lg:max-h-[88vh] lg:max-w-4xl lg:rounded-[32px]"
+        className="flex max-h-[94vh] w-full flex-col overflow-hidden rounded-t-[28px] border border-[#ece1d5] bg-white shadow-[0_30px_90px_-54px_rgba(70,51,38,0.36)] lg:max-h-[88vh] lg:max-w-4xl lg:rounded-[28px]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex justify-end border-b border-[#f0e7dc] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(251,247,242,0.96))] px-4 py-2 shadow-[0_12px_28px_-24px_rgba(120,87,63,0.28)] sm:px-5 sm:py-2.5">
+        <div className="sticky top-0 z-10 flex justify-end border-b border-[#f0e7dc] bg-white/96 px-4 py-2 shadow-[0_10px_24px_-22px_rgba(120,87,63,0.22)] sm:px-5 sm:py-2.5">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-x-0 bottom-[-10px] h-[10px]"
@@ -154,15 +310,14 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
         </div>
 
         <div
-          ref={contentRef}
-          className="relative grid flex-1 gap-6 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] sm:gap-8 sm:px-6 lg:min-h-0 lg:grid-cols-[2fr_3fr] lg:grid-rows-[minmax(0,1fr)_auto] lg:gap-8 lg:overflow-hidden lg:px-8"
+          className="relative grid flex-1 gap-6 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] sm:gap-8 sm:px-6 lg:min-h-0 lg:grid-cols-[2fr_3fr] lg:gap-8 lg:overflow-hidden lg:px-8"
           style={{ scrollbarGutter: 'stable' }}
         >
           <div
-            className="flex min-h-[16rem] overflow-hidden rounded-[24px] border border-[#eee5da] shadow-[0_22px_70px_-34px_rgba(120,87,63,0.24)] sm:min-h-[20rem] lg:col-start-1 lg:row-start-1 lg:min-h-0"
+            className="flex min-h-[16rem] overflow-hidden rounded-2xl border border-[#eee5da] bg-[#fbf7f1] shadow-[0_16px_48px_-34px_rgba(120,87,63,0.18)] sm:min-h-[20rem] lg:col-start-1 lg:min-h-0"
             style={{
               background:
-                'radial-gradient(circle at 18% 12%, rgba(229,155,38,0.12), transparent 32%), radial-gradient(circle at 84% 0%, rgba(15,97,117,0.08), transparent 28%), linear-gradient(180deg, rgba(250,246,240,0.86), rgba(255,255,255,0.92))',
+                'linear-gradient(180deg, rgba(250,246,240,0.92), rgba(255,255,255,0.96))',
             }}
           >
             {imgError ? (
@@ -185,8 +340,7 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
           </div>
 
           <div
-            ref={rightColumnRef}
-            className="relative flex flex-col gap-4 pr-2 sm:pr-3 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:min-h-0 lg:overflow-y-auto lg:pr-4"
+            className="relative flex flex-col gap-4 pr-2 sm:pr-3 lg:col-start-2 lg:min-h-0 lg:overflow-y-auto lg:pr-4"
             style={{ scrollbarGutter: 'stable' }}
           >
             <div className="space-y-1.5">
@@ -195,17 +349,19 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
                   {item.subtitle}
                 </p>
               ) : null}
-              <h2 className="text-xl font-semibold leading-snug tracking-tight text-slate-900 sm:text-2xl">
+              <h2
+                id="product-detail-title"
+                className="text-xl font-semibold leading-snug tracking-tight text-slate-900 sm:text-2xl"
+              >
                 {item.title}
               </h2>
-              <p className="text-2xl font-semibold text-primary">{displayPrice}</p>
               <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
                 <div className="flex items-center gap-0.5">
                   {Array.from({ length: 5 }).map((_, index) => (
                     <Star
                       key={index}
                       className={`h-3.5 w-3.5 ${
-                        index < Math.round(item.rating)
+                        index < Math.round(getRatingValue(item.rating) || 0)
                           ? 'fill-current text-amber-500'
                           : 'text-[#d4c5b2]'
                       }`}
@@ -213,122 +369,42 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
                   ))}
                 </div>
                 <span className="text-sm text-slate-500">
-                  {item.rating.toFixed(1)} · {item.reviewCount} reviews
+                  {getRatingValue(item.rating)?.toFixed(1) || 'No rating'} - {formatReviewCount(item.reviewCount)}
                 </span>
                 {item.badgeLabel ? (
-                  <span className="rounded-full border border-[#e6d8c5] bg-[linear-gradient(180deg,rgba(250,245,239,0.98),rgba(255,255,255,0.96))] px-2.5 py-0.5 text-xs font-medium text-[#80573f]">
+                  <span className="rounded-full border border-[#e6d8c5] bg-white/90 px-2.5 py-0.5 text-xs font-medium text-[#80573f]">
                     {item.badgeLabel}
                   </span>
                 ) : null}
               </div>
             </div>
 
-            {featureBullets.length > 0 ? (
-              <div className="space-y-2">
-                <ul className="space-y-1.5">
-                  {displayedBullets.map((bullet, index) => (
-                    <li
-                      key={`${item.id}-feature-bullet-${index}`}
-                      className="flex items-start gap-2 text-sm leading-6 text-slate-600"
-                    >
-                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#b18c6f]" />
-                      <span>{bullet}</span>
-                    </li>
-                  ))}
-                </ul>
-                {shouldCollapseBullets && !bulletsExpanded ? (
-                  <button
-                    type="button"
-                    className="py-1 text-sm text-slate-500 transition-colors hover:text-slate-700"
-                    onClick={() => setBulletsExpanded(true)}
-                  >
-                    Show all details
-                  </button>
-                ) : null}
-              </div>
-            ) : userFacingDescription ? (
-              <p className="text-sm leading-6 text-slate-600">{userFacingDescription}</p>
-            ) : null}
+            <ProductFacts displayPrice={displayPrice} item={item} retailerLabel={retailerLabel} />
 
-            {enrichmentReady ? (
-              <MotionDiv
-                ref={whyWePickedItRef}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                className="space-y-3 rounded-2xl border border-[#e7dac8] bg-[linear-gradient(180deg,rgba(250,246,240,0.96),rgba(255,255,255,0.96))] p-4 shadow-[0_18px_42px_-32px_rgba(120,87,63,0.38)]"
-              >
-                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-[#80573f]">
-                  Why we picked it
-                </p>
-                <p className="text-sm leading-6 text-slate-700">{fitReason}</p>
-                {caveat ? (
-                  <p className="border-t border-[#e9dfd2] pt-2.5 text-sm leading-6 text-slate-500">
-                    <span className="font-medium text-slate-600">Worth knowing: </span>
-                    {caveat}
-                  </p>
-                ) : null}
-              </MotionDiv>
-            ) : isEnrichmentSettled ? (
-              <div className="rounded-2xl border border-[#e8ddcf] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(250,246,240,0.84))] p-4 text-sm leading-6 text-slate-500">
-                Extra analysis wasn&apos;t available for this pick right now.
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-sm text-slate-400">
-                <span className="relative flex h-2 w-2 shrink-0">
-                  <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
-                  <span className="relative h-2 w-2 rounded-full bg-primary/60" />
-                </span>
-                <span className="relative inline-block overflow-hidden rounded-full px-0.5 text-slate-500">
-                  <span className="relative z-10">Analyzing your pick…</span>
-                  <span className="pointer-events-none absolute inset-y-0 left-[-40%] w-[40%] skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/80 to-transparent animate-shimmer" />
-                </span>
-              </div>
-            )}
+            <ReasoningPanel
+              caveat={caveat}
+              fitReason={fitReason}
+              isEnrichmentSettled={isEnrichmentSettled}
+            />
 
-          {showScrollHint ? (
-            <button
-              type="button"
-              aria-label="Scroll to why we picked it"
-              onClick={() => whyWePickedItRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}
-              className="absolute left-1/2 top-[calc(100%-1.25rem)] z-10 flex -translate-x-1/2 justify-center"
-            >
-              <div className="rounded-full border border-stone-200/80 bg-white p-1 shadow-sm transition-shadow hover:shadow-md">
-                <ChevronDown className="h-5 w-5 animate-bounce text-[#9f7f66]" />
-              </div>
-            </button>
-          ) : null}
-          </div>
-
-          <RetailerActions
-            className="lg:col-start-1 lg:row-start-2"
-            item={item}
-            onRetailerClick={onRetailerClick}
-            retailerLabel={retailerLabel}
-          />
-        </div>
-        <div className="border-t border-[#eadfd2] px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
-            <button
-              type="button"
-              className="flex items-center gap-1.5 py-1 text-sm text-slate-500 transition-colors hover:text-slate-700"
-              onClick={onClose}
-            >
-              <span aria-hidden="true">←</span>
-              Back to results
-            </button>
-            <div className="flex flex-col items-end gap-0.5 text-right">
-              {item.link ? (
-                <p className="text-xs leading-5 text-slate-400">
-                  As an Amazon Associate I earn from qualifying purchases.
-                </p>
-              ) : null}
-              <p className="text-xs leading-5 text-slate-400">
-                Prices and availability may change after you leave Focamai.
-              </p>
-            </div>
+            <ProductNotes
+              bulletsExpanded={bulletsExpanded}
+              displayedBullets={displayedBullets}
+              featureBullets={featureBullets}
+              itemId={item.id}
+              onExpand={() => setBulletsExpanded(true)}
+              shouldCollapseBullets={shouldCollapseBullets}
+              userFacingDescription={userFacingDescription}
+            />
           </div>
         </div>
+        <RetailerDecisionBar
+          displayPrice={displayPrice}
+          item={item}
+          onClose={onClose}
+          onRetailerClick={onRetailerClick}
+          retailerLabel={retailerLabel}
+        />
       </MotionDiv>
     </MotionDiv>
   )
