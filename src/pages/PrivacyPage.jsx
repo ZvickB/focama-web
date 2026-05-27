@@ -6,25 +6,25 @@ function PrivacyPage() {
     <>
       <Seo
         title="Privacy Policy"
-        description="Read how Focamai currently handles search inputs, analytics, affiliate tracking, and third-party services in the current version of the site."
+        description="Read how Focamai currently handles search inputs, analytics, affiliate tracking, and third-party services across the site and app."
         path="/privacy"
       />
       <PageShell
         eyebrow="Privacy Policy"
-        title="How information is handled on this site."
-        description="This is a simple privacy policy for the current version of Focamai and can be updated as the site adds more features."
+        title="How information is handled by Focamai."
+        description="This is a simple privacy policy for the current version of Focamai and can be updated as the site and app add more features."
       >
         <p>
-          Focamai currently lets visitors enter product topics and optional refinement notes to
+          Focamai currently lets users enter product topics and optional refinement notes to
           generate shopping shortlists. That information is used to operate the guided search flow,
           help refine the final shortlist, and improve the reliability of the experience.
         </p>
         <p>
-          The site also uses basic analytics and hosting logs, including Vercel Analytics, to
-          understand traffic, diagnose issues, and improve performance. Search requests may also pass
-          through third-party services that power product search, AI refinement, and storage for the
-          app. Depending on the environment, cache and search-history storage may use either
-          Supabase-backed storage or a local development fallback.
+          Focamai also uses basic analytics and hosting logs, including Vercel Analytics on the web
+          experience, to understand traffic, diagnose issues, and improve performance. Search
+          requests may also pass through third-party services that power product search, AI
+          refinement, and storage for the app. Depending on the environment, cache and search-history
+          storage may use either Supabase-backed storage or a local development fallback.
         </p>
         <p>
           Focamai participates in the Amazon Associates affiliate program. When you follow a product
@@ -42,7 +42,7 @@ function PrivacyPage() {
         </p>
         <p>
           Focamai does not currently offer user accounts, and it does not ask users to submit payment
-          information through the site.
+          information through the site or app.
         </p>
       </PageShell>
     </>
