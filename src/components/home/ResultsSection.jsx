@@ -124,10 +124,7 @@ function RankedPickRow({
         className="flex w-full gap-3 p-3 text-left sm:p-4"
         onClick={onOpenDetails}
       >
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#e6d8c5] bg-[#fbf6f0] text-xs font-semibold text-[#80573f]">
-          {index + 1}
-        </div>
-        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-[#eee5da] bg-[#fbf7f1] p-1.5">
+        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-[#eee5da] bg-[#fbf7f1]">
           <ProductImage className="h-full w-full rounded-xl" image={item.image} title={item.title} />
         </div>
         <div className="min-w-0 flex-1 space-y-1.5">
