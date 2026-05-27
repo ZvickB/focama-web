@@ -188,17 +188,17 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
     <button
       type="button"
       aria-label={`Open selected result details: ${item.title}`}
-      className="group sticky top-24 hidden max-h-[calc(100vh-8rem)] overflow-hidden rounded-[28px] border border-[#e7dac8] bg-white/95 p-4 text-left shadow-[0_24px_68px_-54px_rgba(120,87,63,0.24)] transition hover:border-[#d8c9b6] lg:block"
+      className="group sticky top-24 hidden max-h-[calc(100vh-8rem)] overflow-hidden rounded-[28px] border border-[#e7dac8] bg-white/95 text-left shadow-[0_24px_68px_-54px_rgba(120,87,63,0.24)] transition hover:border-[#d8c9b6] lg:block"
       onClick={onOpenDetails}
     >
-      <div className="aspect-square overflow-hidden rounded-[24px] border border-[#eee5da] bg-[#fbf7f1] p-4">
+      <div className="aspect-square overflow-hidden rounded-t-[28px] bg-[#fbf7f1] p-4">
         <ProductImage
           className="h-full w-full rounded-[18px]"
           image={item.image}
           title={item.title}
         />
       </div>
-      <div className="mt-4 space-y-3">
+      <div className="space-y-3 p-4">
         <div className="space-y-2">
           <p className="line-clamp-3 text-lg font-semibold leading-6 text-slate-950">
             {item.title}
@@ -465,21 +465,23 @@ export function ResultsSection({
             >
               {cardView === 'new' ? (
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.25fr)] lg:items-start lg:gap-5">
-                  <SelectedResultPanel
-                    hasFinalResults={hasFinalResults}
-                    isEnrichmentSettled={isEnrichmentSettled}
-                    item={activeResult}
-                    onOpenDetails={() => {
-                      if (!activeResult) return
-                      onSelectProduct(activeResult, {
-                        position: Math.min(activeResultIndex, orderedVisibleResults.length - 1),
-                        resultSet: activeResultSet,
-                      })
-                    }}
-                  />
+                  <div className="lg:pt-0">
+                    <SelectedResultPanel
+                      hasFinalResults={hasFinalResults}
+                      isEnrichmentSettled={isEnrichmentSettled}
+                      item={activeResult}
+                      onOpenDetails={() => {
+                        if (!activeResult) return
+                        onSelectProduct(activeResult, {
+                          position: Math.min(activeResultIndex, orderedVisibleResults.length - 1),
+                          resultSet: activeResultSet,
+                        })
+                      }}
+                    />
+                  </div>
                   <div
                     ref={resultRowsScrollRef}
-                    className="grid grid-cols-1 gap-3 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto lg:pr-1 xl:max-h-[720px]"
+                    className="grid grid-cols-1 gap-3 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto lg:pr-1 lg:pt-0 xl:max-h-[720px]"
                     onScroll={handleResultsListScroll}
                   >
                     {orderedVisibleResults.map((visibleItem, index) => (
