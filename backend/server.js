@@ -85,6 +85,32 @@ const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const RATE_LIMIT_WAIT_MESSAGE = 'Please wait about 10 seconds and try again.'
 const RAINFOREST_FALLBACK_STATUS_CODES = new Set([402, 429, 500, 503])
 
+// In-memory ring buffer for recent finalizations (dev analytics only; resets on server restart).
+const RECENT_FINALIZATIONS_MAX = 25
+const recentFinalizations = []
+
+function recordRecentFinalization({ query, details, results, strategy, model, timestamp }) {
+  recentFinalizations.unshift({
+    query,
+    details: details || '',
+    picks: results.map((r, i) => ({
+      rank: i + 1,
+      id: r.id ?? null,
+      title: r.title || '—',
+      price: r.price ?? null,
+      rating: r.rating ?? null,
+      reviewCount: r.reviewCount ?? null,
+      badge: r.badge ?? null,
+    })),
+    strategy: strategy || null,
+    model: model || null,
+    timestamp,
+  })
+  if (recentFinalizations.length > RECENT_FINALIZATIONS_MAX) {
+    recentFinalizations.length = RECENT_FINALIZATIONS_MAX
+  }
+}
+
 function getRequestedAmazonDomain(value = '') {
   return normalizeAmazonDomain(value)
 }
@@ -1979,6 +2005,17 @@ export async function handleFinalizeSelection(request, response) {
     const selectedCandidateIds = results.map((item) => item.id)
     const usedHaikuSelection = haikuResults.length > 0
 
+    if (process.env.NODE_ENV !== 'production') {
+      recordRecentFinalization({
+        query: sanitizedDiscoveryContext.normalizedQuery,
+        details: refinedDetails || sanitizedDiscoveryContext.latestUserContext || '',
+        results,
+        strategy: selectionStrategy,
+        model: usedHaikuSelection ? haikuResult.model : null,
+        timestamp: new Date().toISOString(),
+      })
+    }
+
     const finalizeFast = buildFinalizeFastResponseContract({
       query: sanitizedDiscoveryContext.normalizedQuery,
       discoveryToken: sanitizedDiscoveryContext.discoveryToken,
@@ -2316,6 +2353,22 @@ export async function handleCachePoolInspect(request, response) {
   }
 }
 
+export function handleFinalizeHistory(request, response) {
+  if (process.env.NODE_ENV === 'production') {
+    sendJson(response, 404, { error: 'Not found.' })
+    return
+  }
+
+  const host = readHeaderValue(request.headers, 'host')
+
+  if (!isLocalhostHost(host)) {
+    sendJson(response, 403, { error: 'Finalize history is only available from localhost in development.' })
+    return
+  }
+
+  sendJson(response, 200, { count: recentFinalizations.length, entries: recentFinalizations })
+}
+
 export function createApiServer() {
   initObservability()
   registerProcessErrorHandlers()
@@ -2393,6 +2446,11 @@ export function createApiServer() {
 
       if (request.method === 'GET' && requestUrl.pathname === '/api/analytics/cache-pool') {
         await handleCachePoolInspect(request, response)
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/analytics/finalize-history') {
+        handleFinalizeHistory(request, response)
         return
       }
 
