@@ -1,81 +1,71 @@
 # Session Handoff
 
 ## Purpose
-- Fastest reset for a fresh Codex chat.
-- Points to the current source-of-truth notes instead of repeating long history.
+- Slightly fuller reset for a fresh Codex chat.
+- Use `project-notes/assistant-start.md` for the normal compact startup.
+- Do not read every project note by default.
 
 ## Startup read order
 1. `AGENTS.md`
-2. `project-notes/current-status.md`
-3. `project-notes/app_flow.md`
-4. `project-notes/handoff.md`
-5. `project-notes/doc_briefs.md`
-6. `project-notes/db-needs.md` when storage/backend work is involved
+2. `project-notes/assistant-start.md`
+3. Open deeper notes only as needed for the task:
+   - implemented app behavior: `project-notes/app_flow.md`
+   - search/backend flow: `project-notes/search-flow.md`
+   - new web UI plan: `project-notes/ui_improvement_plan/README.md`
+   - backlog/open questions: `project-notes/handoff.md`
+   - product intent: `project-notes/doc_briefs.md`
+   - storage tables: `project-notes/db-needs.md`
+   - current snapshot/changelog: `project-notes/current-status.md`
 
 ## Current direction
-- `/` uses the `open` homepage layout.
-- The product should stay calm, focused, mobile-first, and not marketplace-shaped.
+- The current experiment branch is `new_web_ui`.
+- The branch is for borrowing the strongest UI/UX lessons from the mobile app while keeping web optimized for browser and desktop use.
+- The current web homepage at `/` still uses the `open` layout until changed.
+- The product should stay calm, focused, mobile-first/responsive, and not marketplace-shaped.
 - Product shortlists stay at 6 items.
-- The guided backend path is the real product path; `/api/search/live` is not part of the current user flow.
-- The top homepage query field is now a compact 2-line textarea so long natural-language searches and AI-suggested retries fit without truncation.
-- Homepage boot is now shell-first: `/` loads a lightweight `HomeShell` under the existing splash, warms the guided `HomeExperience` chunk during idle time, and only swaps into that guided app after submit.
-- The Amazon marketplace context now persists the last saved marketplace locally, and confident geo detections are cached so later loads can skip `GET /api/geo`.
-- The homepage now includes a one-time inline marketplace prompt after search starts, and active searches restart cleanly if the marketplace changes mid-flight.
+- The guided backend path is the real product path.
+- `/api/search/live` remains a manual/debug combined route, not the normal user flow.
 - The PNG wordmark is the active wordmark.
-- The homepage now gives the hero wordmark higher fetch priority, preconnects Google Fonts plus the configured Render backend origin, and prefetches `ResultsSection` plus `ProductDetailModal` as soon as `HomeExperience` mounts.
-- Public routes now have route-level SEO metadata plus static `robots.txt`, `sitemap.xml`, and `site.webmanifest`.
-- `/install` now gives mobile testers practical add-to-home-screen instructions, and the mobile drawer shows that link only on mobile browsers when the app is not already standalone.
-- Route-level lazy loading now shows visible loading UI, and chunk-load crashes get a reload-focused fallback in the top-level error boundary.
-- Current behavior is canonical in `project-notes/app_flow.md`.
+- The web UI improvement plan lives at `project-notes/ui_improvement_plan/README.md`.
+- Priority 1 of that plan is now implemented in a simpler form: final/preview results render as ranked rows, without a side preview.
+- Priority 2 is now implemented in the first pass: the large search stage collapses into compact progress plus a summary after submit, refinement gets its own active panel, and finalized refinement collapses above the ranked results.
+- Priority 3 is now implemented in the first pass: the active refine panel uses the mobile-inspired heading, AI follow-up prompt, up to 3 refinement chips, fallback chips, selected chip state, and chip-to-notes behavior.
+- Priority 4 is now implemented in the first pass: guided finalize shows staged progress copy while it locks the shortlist.
+- Priority 5 is now implemented in the first pass: product detail modal order is image/facts, reasoning/caveat, product notes, and one compact retailer CTA/disclosure area.
+- Priority 6 is now implemented in the first pass: search/refine/results/retry/modal surfaces use fewer gradients, lighter shadows, more consistent radii, teal-first actions, and orange mainly for retailer clickout.
+- Priority 7 is now implemented in the first pass: retry asks what felt off, uses only three broad quick prompts, shows AI advice as an editable `Next search` field, and has one `Search again` action.
 
 ## Current guided flow
-- `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It tries Rainforest discovery first and falls back to Oxylabs discovery when Rainforest is unavailable, rate-limited, out of credits, or in a provider incident.
-- Retry-accepted discovery requests add `cacheMode=refresh`; the backend bypasses a shared discovery cache hit for that one request, fetches fresh provider evidence, then writes shared cache and token-scoped session snapshots normally.
-- Hard-constraint follow-up notes, including kosher/Jewish-use, dietary/allergy, safety/material, and compatibility/exclusion signals, now trigger one pre-finalize refreshed discovery pass using the original query plus notes. Finalize then uses the refreshed discovery token and the same combined query that created that token.
-- Discovery now runs a background query-quality review after the normal response when OpenAI is configured, storing review state at `selection.queryQuality` on the token-scoped session snapshot.
-- `GET /api/search/query-quality` is the polling endpoint for that stored review, and the homepage can show a small optional suggested-query prompt when the review is ready and high-confidence.
-- `GET /api/search/refine` returns one short follow-up question and refinement chips while discovery runs, using OpenAI mini first with Haiku fallback.
-- `POST /api/search/finalize` rebuilds the candidate pool from guided cache, uses Haiku first, tops partial valid Haiku output up from deterministic fallback when needed, returns shortlist cards, and starts async enrichment work for the final displayed IDs.
-- Repeated same-query searches now reuse shared discovery candidates but get a fresh token-scoped session snapshot for finalize/enrichment, so older context-specific caveats cannot bleed into a new run.
-- Rainforest shared discovery cache is versioned as `rainforest_discovery:v2`; older unversioned Rainforest/provider-era shared cache entries are intentionally not reused.
-- Marketplace listings without a known positive price are now stripped out before guided preview caching, cached-result reuse, and finalize candidate selection so unavailable products do not reach AI or the UI shortlist.
-- Query-quality suggestions are now user-visible through polling only: accepting starts a normal new guided search for the suggested query, rejecting keeps the original results, and there is still no SSE or prewarm path.
-- The shortlisted detail helper now keeps a fast first pass for enrichment and retries failed ASIN detail calls in the background so later cache reads can improve without delaying AI copy further.
-- If a background detail retry succeeds later, the stored enrichment entry is patched with those bullets and the frontend keeps polling long enough for the open modal to pick them up.
-- Backend failures can now report to Sentry when `SENTRY_DSN` is configured, and background async errors are logged/reported instead of being swallowed.
-- Backend rate limiting now uses Supabase `rate_limit_events` when configured, with memory fallback for local/test or storage outages.
-- `GET /api/search/enrichment-stream` is the first enrichment path from the frontend; it is cross-origin enabled for the Render backend, token-scoped to the active search session, and if the stream fails, the frontend falls back to polling.
-- `GET /api/search/enrichment` remains the polling fallback and script-friendly read path, and it is also token-scoped to the active search session.
-- `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist, preserving accumulated must-have constraints unless the latest feedback clearly changes direction.
-- The retry panel now keeps the recovery interaction near the results: clearer collapsed CTA, correction chips, `What should Focamai keep or change?`, inferred `Keeping:` tags where possible, and a suggested-query confirmation strip with `Search this` and `Edit first`; accepting `Search this` refreshes discovery evidence instead of reusing the old shared cache entry.
-- `POST /api/feedback` stores tester feedback from the homepage FAB.
-- The product modal now includes an inline affiliate disclosure beside the retailer clickout flow, while the full disclosure still lives at `/affiliate-disclosure`.
-- `/admin/analytics` is a local-only dev funnel dashboard, backed by localhost `GET /api/analytics/dashboard`.
+- `GET /api/search/rainforest-discover` is the main discovery route used by the homepage.
+- `GET /api/search/refine` returns one short follow-up question and optional refinement chips.
+- `POST /api/search/finalize` rebuilds the candidate pool from guided cache and returns up to 6 shortlist cards.
+- `GET /api/search/enrichment-stream` is the first enrichment path; `GET /api/search/enrichment` is the polling fallback.
+- `GET /api/search/query-quality` exposes polling-based query-quality suggestions.
+- `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist.
+- `POST /api/feedback` stores tester feedback.
 
 ## Key files
-- App route shell: `/src/App.jsx`
-- Homepage entry: `/src/pages/HomePage.jsx`
-- First-load homepage shell: `/src/components/home/HomeShell.jsx`
-- Guided homepage experience: `/src/components/home/HomeExperience.jsx`
-- Result UI: `/src/components/home/ResultsSection.jsx`
-- Product modal UI: `/src/components/home/ProductDetailModal.jsx`
-- Guided search state/requests: `/src/components/home/useGuidedSearch.js`
-- Amazon store context and geo-resolved domain state: `/src/contexts/AmazonStoreContext.jsx`
-- Amazon auto-store UI: `/src/components/AmazonStorePill.jsx`
-- Render backend entrypoint: `/backend/express-server.js`
-- Core route handlers: `/backend/server.js`
-- Cache/storage helpers: `/backend/lib/search-storage.js`
-- Oxylabs detail helper: `/backend/lib/oxylabs-pipeline.js`
-- Internal analytics page: `/src/pages/AnalyticsPage.jsx`
+- App route shell: `src/App.jsx`
+- Homepage entry: `src/pages/HomePage.jsx`
+- First-load homepage shell: `src/components/home/HomeShell.jsx`
+- Guided homepage experience: `src/components/home/HomeExperience.jsx`
+- Result UI: `src/components/home/ResultsSection.jsx`
+- Product modal UI: `src/components/home/ProductDetailModal.jsx`
+- Finalize loading UI: `src/components/home/FinalizeLoadingState.jsx`
+- Guided search state/requests: `src/components/home/useGuidedSearch.js`
+- Amazon store context: `src/contexts/AmazonStoreContext.jsx`
+- Render backend entrypoint: `backend/express-server.js`
+- Core route handlers: `backend/server.js`
+- Cache/storage helpers: `backend/lib/search-storage.js`
 
 ## Deployment reality
 - Frontend is on Vercel.
 - Backend is on Render and starts from `backend/express-server.js`.
 - The frontend calls the Render backend through `VITE_BACKEND_URL`.
-- Render CORS now accepts `https://focamai.com`, `https://www.focamai.com`, and the older `https://focama.vercel.app` origin.
 - `api/geo.js` intentionally stays on Vercel so the UI can read Vercel geolocation headers through a relative `/api/geo` request.
 
 ## If continuing from here
-- Read `app_flow.md` for current behavior questions.
-- Read `handoff.md` for real remaining work.
-- Read `archive/completed-work-2026-05-03.md` only if you need history on recently completed cleanup or archived note movement.
+- For UI redesign work, read `project-notes/ui_improvement_plan/README.md` next.
+- For current behavior questions, read `project-notes/app_flow.md`.
+- For backend/search behavior, read `project-notes/search-flow.md`.
+- For remaining work, read `project-notes/handoff.md`.

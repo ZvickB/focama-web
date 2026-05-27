@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"REMINDER: Do not make changes that were not part of the requested task. When given a task, carry it out fully. But if you notice something unrelated that looks wrong, flag it — do not fix it.\"}}'",
+            "shell": "powershell"
+          }
+        ]
+      }
+    ]
+  }
+}

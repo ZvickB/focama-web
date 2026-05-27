@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import PageShell from '@/components/PageShell.jsx'
 import Seo from '@/components/Seo.jsx'
@@ -18,6 +18,46 @@ function createDashboardError(statusCode, message) {
   const error = new Error(message)
   error.statusCode = statusCode
   return error
+}
+
+async function fetchCachePool({ query, limit = 10 }) {
+  const params = new URLSearchParams()
+  if (query) params.set('q', query)
+  params.set('limit', String(limit))
+  const response = await fetch(`${BACKEND_URL}/api/analytics/cache-pool?${params}`)
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw createDashboardError(response.status, payload.error || 'Unable to load cache pool.')
+  return payload
+}
+
+async function fetchFinalizeHistory() {
+  const response = await fetch(`${BACKEND_URL}/api/analytics/finalize-history`)
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw createDashboardError(response.status, payload.error || 'Unable to load finalize history.')
+  return payload
+}
+
+function buildCopyText(entry) {
+  const lines = [
+    `Product query: ${entry.productQuery || '(none)'}`,
+    `User context: ${entry.details || 'None provided.'}`,
+    '',
+    'Candidates:',
+  ]
+  entry.candidates.forEach((c) => {
+    const meta = [c.price, c.rating != null ? `${c.rating}★` : null, c.reviewCount != null ? `${formatNumber(c.reviewCount)} reviews` : null, c.source].filter(Boolean).join(' | ')
+    lines.push(`${c.rank}. ${c.title || '—'}${meta ? `  —  ${meta}` : ''}`)
+    if (c.attributes.length > 0) lines.push(`   Attributes: ${c.attributes.join(', ')}`)
+    if (c.description) lines.push(`   ${c.description}`)
+  })
+  return lines.join('\n')
+}
+
+function buildCopyAllText(entries) {
+  return entries.map((entry, i) => {
+    const separator = i > 0 ? '\n\n' + '─'.repeat(60) + '\n\n' : ''
+    return separator + buildCopyText(entry)
+  }).join('')
 }
 
 async function fetchAnalyticsDashboard({ days }) {
@@ -47,6 +87,26 @@ function SectionHeading({ title, description }) {
     <div className="space-y-1">
       <h2 className="text-xl font-semibold tracking-tight text-slate-900">{title}</h2>
       <p className="text-sm leading-6 text-slate-500">{description}</p>
+    </div>
+  )
+}
+
+function CollapsibleSection({ title, description, defaultOpen = false, children }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+  return (
+    <div className="rounded-[24px] border border-stone-200/80 bg-white/90 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setIsOpen((v) => !v)}
+        className="w-full flex items-start justify-between gap-4 px-5 py-4 text-left hover:bg-stone-50/80 transition"
+      >
+        <div className="space-y-0.5">
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">{title}</h2>
+          {description ? <p className="text-sm leading-5 text-slate-500">{description}</p> : null}
+        </div>
+        <span className="mt-0.5 shrink-0 text-slate-400 text-sm">{isOpen ? '▲' : '▼'}</span>
+      </button>
+      {isOpen ? <div className="border-t border-stone-100 px-5 py-5 space-y-4">{children}</div> : null}
     </div>
   )
 }
@@ -91,6 +151,240 @@ function SimpleTable({ columns, rows, emptyMessage }) {
   )
 }
 
+function CandidatePoolInspector() {
+  const [inputValue, setInputValue] = useState('')
+  const [submittedQuery, setSubmittedQuery] = useState('')
+  const [expandedIndex, setExpandedIndex] = useState(null)
+  const [copiedIndex, setCopiedIndex] = useState(null)
+  const [copiedAll, setCopiedAll] = useState(false)
+  const inputRef = useRef(null)
+
+  const poolQuery = useQuery({
+    queryKey: ['cache-pool', submittedQuery],
+    queryFn: () => fetchCachePool({ query: submittedQuery }),
+    enabled: true,
+    retry: false,
+  })
+
+  function handleCopy(e, entry, index) {
+    e.stopPropagation()
+    navigator.clipboard.writeText(buildCopyText(entry)).then(() => {
+      setCopiedIndex(index)
+      setTimeout(() => setCopiedIndex(null), 2000)
+    })
+  }
+
+  function handleCopyAll(entries) {
+    navigator.clipboard.writeText(buildCopyAllText(entries)).then(() => {
+      setCopiedAll(true)
+      setTimeout(() => setCopiedAll(false), 2000)
+    })
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    setExpandedIndex(null)
+    setSubmittedQuery(inputValue.trim())
+  }
+
+  const entries = poolQuery.data?.entries || []
+
+  return (
+    <div className="space-y-4">
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          placeholder="e.g. travel stroller — leave blank to see recent"
+          className="flex-1 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300"
+        />
+        <button
+          type="submit"
+          className="rounded-full bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700 transition"
+        >
+          Inspect
+        </button>
+      </form>
+
+      {poolQuery.isLoading ? (
+        <p className="text-sm text-slate-500">Loading…</p>
+      ) : poolQuery.isError ? (
+        <div className="rounded-[20px] border border-amber-200 bg-amber-50/80 px-4 py-4 text-sm text-amber-900">
+          {poolQuery.error?.message || 'Unable to load cache pool.'}
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="rounded-[20px] border border-dashed border-stone-300 bg-stone-50/70 px-4 py-5 text-sm text-slate-500">
+          {submittedQuery ? `No cache entries found matching "${submittedQuery}".` : 'No cache entries found.'}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => handleCopyAll(entries)}
+              className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-stone-50 transition"
+            >
+              {copiedAll ? 'Copied!' : `Copy all ${entries.length}`}
+            </button>
+          </div>
+          {entries.map((entry, index) => {
+            const isOpen = expandedIndex === index
+            return (
+              <div key={`${entry.productQuery}-${entry.cachedAt}`} className="rounded-[20px] border border-stone-200/80 bg-white/90 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setExpandedIndex(isOpen ? null : index)}
+                  className="w-full flex items-center justify-between gap-4 px-4 py-3 text-left hover:bg-stone-50/80 transition"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-800 truncate">{entry.productQuery || '—'}</p>
+                    {entry.details ? (
+                      <p className="mt-0.5 text-xs text-slate-500 truncate">Context: {entry.details}</p>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0 text-xs text-slate-500">
+                    <span>{entry.candidateCount} candidates</span>
+                    <span>{entry.cachedAt ? new Date(entry.cachedAt).toLocaleString() : '—'}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleCopy(e, entry, index)}
+                      className="rounded-full border border-stone-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:bg-stone-50 transition"
+                    >
+                      {copiedIndex === index ? 'Copied!' : 'Copy'}
+                    </button>
+                    <span className="text-slate-400">{isOpen ? '▲' : '▼'}</span>
+                  </div>
+                </button>
+
+                {isOpen ? (
+                  <div className="border-t border-stone-100 divide-y divide-stone-100">
+                    {entry.candidates.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-slate-400">No candidates stored.</p>
+                    ) : (
+                      entry.candidates.map((c) => (
+                        <div key={c.id ?? c.rank} className="px-4 py-3 text-sm">
+                          <div className="flex items-start gap-3">
+                            <span className="shrink-0 w-6 text-center text-xs font-semibold text-slate-400 mt-0.5">{c.rank}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-slate-800 leading-snug">{c.title || '—'}</p>
+                              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500">
+                                {c.price != null ? <span>{c.price}</span> : null}
+                                {c.rating != null ? <span>{c.rating} ★</span> : null}
+                                {c.reviewCount != null ? <span>{formatNumber(c.reviewCount)} reviews</span> : null}
+                                {c.id != null ? <span className="text-slate-400">id: {c.id}</span> : null}
+                              </div>
+                              {c.attributes.length > 0 ? (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {c.attributes.map((attr, i) => (
+                                    <span key={i} className="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-slate-600">{attr}</span>
+                                  ))}
+                                </div>
+                              ) : null}
+                              {c.description ? (
+                                <p className="mt-1 text-xs text-slate-400 leading-relaxed">{c.description}</p>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FinalizeHistoryInspector() {
+  const [expandedIndex, setExpandedIndex] = useState(null)
+
+  const historyQuery = useQuery({
+    queryKey: ['finalize-history'],
+    queryFn: fetchFinalizeHistory,
+    retry: false,
+    refetchInterval: 10000,
+  })
+
+  const entries = historyQuery.data?.entries || []
+
+  return (
+    <div className="space-y-4">
+      {historyQuery.isLoading ? (
+        <p className="text-sm text-slate-500">Loading…</p>
+      ) : historyQuery.isError ? (
+        <div className="rounded-[20px] border border-amber-200 bg-amber-50/80 px-4 py-4 text-sm text-amber-900">
+          {historyQuery.error?.message || 'Unable to load finalize history.'}
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="rounded-[20px] border border-dashed border-stone-300 bg-stone-50/70 px-4 py-5 text-sm text-slate-500">
+          No finalizations recorded yet this session. Run a search through to the picks screen and it will appear here.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {entries.map((entry, index) => {
+            const isOpen = expandedIndex === index
+            const strategyLabel = entry.strategy === 'haiku_lock' ? 'Haiku' : entry.strategy === 'haiku_lock_topped_up' ? 'Haiku + top-up' : entry.strategy === 'rules_fallback' ? 'Rules fallback' : entry.strategy || '—'
+            return (
+              <div key={`${entry.query}-${entry.timestamp}`} className="rounded-[20px] border border-stone-200/80 bg-white/90 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setExpandedIndex(isOpen ? null : index)}
+                  className="w-full flex items-center justify-between gap-4 px-4 py-3 text-left hover:bg-stone-50/80 transition"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-800 truncate">{entry.query || '—'}</p>
+                    {entry.details ? (
+                      <p className="mt-0.5 text-xs text-slate-500 truncate">Context: {entry.details}</p>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0 text-xs text-slate-500">
+                    <span>{entry.picks?.length ?? 0} picks</span>
+                    <span className="rounded-full bg-stone-100 px-2 py-0.5 text-slate-600">{strategyLabel}</span>
+                    <span>{entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '—'}</span>
+                    <span className="text-slate-400">{isOpen ? '▲' : '▼'}</span>
+                  </div>
+                </button>
+
+                {isOpen ? (
+                  <div className="border-t border-stone-100 divide-y divide-stone-100">
+                    {!entry.picks?.length ? (
+                      <p className="px-4 py-3 text-sm text-slate-400">No picks recorded.</p>
+                    ) : (
+                      entry.picks.map((p) => (
+                        <div key={p.rank} className="px-4 py-3 text-sm">
+                          <div className="flex items-start gap-3">
+                            <span className="shrink-0 w-6 text-center text-xs font-semibold text-slate-400 mt-0.5">{p.rank}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-slate-800 leading-snug">{p.title}</p>
+                              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500">
+                                {p.price != null ? <span>{p.price}</span> : null}
+                                {p.rating != null ? <span>{p.rating} ★</span> : null}
+                                {p.reviewCount != null ? <span>{formatNumber(p.reviewCount)} reviews</span> : null}
+                                {p.badge ? <span className="text-indigo-500">{p.badge}</span> : null}
+                                {p.id != null ? <span className="text-slate-400">id: {p.id}</span> : null}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AnalyticsPage() {
   const [days, setDays] = useState(14)
   const hasHydrated = typeof window !== 'undefined'
@@ -118,7 +412,7 @@ function AnalyticsPage() {
         title="Search funnel signals, not just pageviews."
         description="Use this page to see where searches turn into final picks, where people bail out, and which query patterns or result positions deserve attention."
       >
-        <div className="space-y-8">
+        <div className="space-y-4">
           <div className="rounded-[24px] border border-stone-200/80 bg-stone-50/80 p-4 sm:p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="space-y-2">
@@ -166,57 +460,54 @@ function AnalyticsPage() {
 
           {summary ? (
             <>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <MetricCard
-                  label="Searches"
-                  value={formatNumber(summary.searches)}
-                  hint={`${formatNumber(summary.sessions)} sessions in the last ${dashboard.lookbackDays} days`}
-                />
-                <MetricCard
-                  label="Finalize Rate"
-                  value={formatPercent(summary.finalizeRate)}
-                  hint={`${formatNumber(summary.finalizedSearches)} searches made it to focused picks`}
-                />
-                <MetricCard
-                  label="Retailer Click Rate"
-                  value={formatPercent(summary.retailerClickRate)}
-                  hint={`${formatNumber(summary.searchesWithRetailerClick)} searches produced at least one clickout`}
-                />
-                <MetricCard
-                  label="Refinement Usage"
-                  value={formatPercent(summary.refinementRate)}
-                  hint={`${formatNumber(summary.refinedSearches)} searches submitted follow-up notes`}
-                />
-              </div>
+              <CollapsibleSection title="Summary metrics" defaultOpen={true}>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <MetricCard
+                    label="Searches"
+                    value={formatNumber(summary.searches)}
+                    hint={`${formatNumber(summary.sessions)} sessions in the last ${dashboard.lookbackDays} days`}
+                  />
+                  <MetricCard
+                    label="Finalize Rate"
+                    value={formatPercent(summary.finalizeRate)}
+                    hint={`${formatNumber(summary.finalizedSearches)} searches made it to focused picks`}
+                  />
+                  <MetricCard
+                    label="Retailer Click Rate"
+                    value={formatPercent(summary.retailerClickRate)}
+                    hint={`${formatNumber(summary.searchesWithRetailerClick)} searches produced at least one clickout`}
+                  />
+                  <MetricCard
+                    label="Refinement Usage"
+                    value={formatPercent(summary.refinementRate)}
+                    hint={`${formatNumber(summary.refinedSearches)} searches submitted follow-up notes`}
+                  />
+                </div>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <MetricCard
+                    label="Preview Usage"
+                    value={formatPercent(summary.previewRate)}
+                    hint={`${formatNumber(summary.previewSearches)} searches used Show products now`}
+                  />
+                  <MetricCard
+                    label="Card Opens"
+                    value={formatNumber(summary.cardOpens)}
+                    hint={`${formatNumber(summary.searchesWithCardOpen)} searches opened at least one result card`}
+                  />
+                  <MetricCard
+                    label="Retry Advice"
+                    value={formatNumber(summary.retryAdviceSearches)}
+                    hint="Searches that asked for a better next query after rejecting the shortlist"
+                  />
+                  <MetricCard
+                    label="Feedback Responses"
+                    value={formatNumber(summary.feedbackResponses)}
+                    hint="Tester feedback submissions captured during the same lookback window"
+                  />
+                </div>
+              </CollapsibleSection>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <MetricCard
-                  label="Preview Usage"
-                  value={formatPercent(summary.previewRate)}
-                  hint={`${formatNumber(summary.previewSearches)} searches used Show products now`}
-                />
-                <MetricCard
-                  label="Card Opens"
-                  value={formatNumber(summary.cardOpens)}
-                  hint={`${formatNumber(summary.searchesWithCardOpen)} searches opened at least one result card`}
-                />
-                <MetricCard
-                  label="Retry Advice"
-                  value={formatNumber(summary.retryAdviceSearches)}
-                  hint="Searches that asked for a better next query after rejecting the shortlist"
-                />
-                <MetricCard
-                  label="Feedback Responses"
-                  value={formatNumber(summary.feedbackResponses)}
-                  hint="Tester feedback submissions captured during the same lookback window"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <SectionHeading
-                  title="Daily funnel"
-                  description="This is your quick trend line: are people reaching final results, and are those searches ending in outbound intent?"
-                />
+              <CollapsibleSection title="Daily funnel" description="Quick trend line: are people reaching final results, and are those searches ending in outbound intent?">
                 <SimpleTable
                   columns={[
                     { key: 'day', label: 'Day' },
@@ -237,13 +528,9 @@ function AnalyticsPage() {
                   rows={dashboard.dailyFunnel}
                   emptyMessage="No analytics rows were found in this time window yet."
                 />
-              </div>
+              </CollapsibleSection>
 
-              <div className="space-y-3">
-                <SectionHeading
-                  title="Top queries"
-                  description="Look for search topics with lots of starts but weak finalize or clickout rates. Those are usually your highest-leverage product fixes."
-                />
+              <CollapsibleSection title="Top queries" description="Look for topics with lots of starts but weak finalize or clickout rates — usually your highest-leverage product fixes.">
                 <SimpleTable
                   columns={[
                     { key: 'label', label: 'Query' },
@@ -261,13 +548,9 @@ function AnalyticsPage() {
                   rows={dashboard.topQueries}
                   emptyMessage="No query-level data is available yet."
                 />
-              </div>
+              </CollapsibleSection>
 
-              <div className="space-y-3">
-                <SectionHeading
-                  title="Recent searches"
-                  description="The 25 most recent searches within this lookback window, newest first."
-                />
+              <CollapsibleSection title="Recent searches" description="The 25 most recent searches within this lookback window, newest first.">
                 <SimpleTable
                   columns={[
                     {
@@ -287,14 +570,13 @@ function AnalyticsPage() {
                   rows={dashboard.recentSearches || []}
                   emptyMessage="No searches recorded in this window yet."
                 />
-              </div>
+              </CollapsibleSection>
 
               {dashboard.oxylabsFailures ? (
-                <div className="space-y-3">
-                  <SectionHeading
-                    title="Oxylabs product detail failures"
-                    description={`${formatNumber(dashboard.oxylabsFailures.total)} failed ASIN fetches in this window — ${formatNumber(dashboard.oxylabsFailures.byType.timeout)} timeouts, ${formatNumber(dashboard.oxylabsFailures.byType.httpError)} HTTP errors, ${formatNumber(dashboard.oxylabsFailures.byType.unknown)} unknown.`}
-                  />
+                <CollapsibleSection
+                  title="Oxylabs product detail failures"
+                  description={`${formatNumber(dashboard.oxylabsFailures.total)} failed ASIN fetches in this window — ${formatNumber(dashboard.oxylabsFailures.byType.timeout)} timeouts, ${formatNumber(dashboard.oxylabsFailures.byType.httpError)} HTTP errors, ${formatNumber(dashboard.oxylabsFailures.byType.unknown)} unknown.`}
+                >
                   <SimpleTable
                     columns={[
                       { key: 'asin', label: 'ASIN' },
@@ -306,109 +588,113 @@ function AnalyticsPage() {
                     rows={dashboard.oxylabsFailures.topAsins}
                     emptyMessage="No product detail failures recorded in this window."
                   />
-                </div>
+                </CollapsibleSection>
               ) : null}
 
-              <div className="grid gap-6 xl:grid-cols-2">
-                <div className="space-y-3">
-                  <SectionHeading
-                    title="Position performance"
-                    description="This tells you whether ranking order is earning trust. Position 0 should usually be doing real work."
-                  />
-                  <SimpleTable
-                    columns={[
-                      { key: 'resultSet', label: 'Set' },
-                      { key: 'position', label: 'Position', render: (row) => row.position + 1 },
-                      { key: 'impressions', label: 'Impressions', render: (row) => formatNumber(row.impressions) },
-                      { key: 'cardOpenRate', label: 'Card open rate', render: (row) => formatPercent(row.cardOpenRate) },
-                      {
-                        key: 'retailerClickRate',
-                        label: 'Retailer click rate',
-                        render: (row) => formatPercent(row.retailerClickRate),
-                      },
-                    ]}
-                    rows={dashboard.positionPerformance}
-                    emptyMessage="No impression and click data is available yet."
-                  />
-                </div>
+              <CollapsibleSection title="Position &amp; badge performance" description="Whether ranking order and labels are earning trust.">
+                <div className="grid gap-6 xl:grid-cols-2">
+                  <div className="space-y-3">
+                    <SectionHeading
+                      title="Position performance"
+                      description="Position 0 should usually be doing real work."
+                    />
+                    <SimpleTable
+                      columns={[
+                        { key: 'resultSet', label: 'Set' },
+                        { key: 'position', label: 'Position', render: (row) => row.position + 1 },
+                        { key: 'impressions', label: 'Impressions', render: (row) => formatNumber(row.impressions) },
+                        { key: 'cardOpenRate', label: 'Card open rate', render: (row) => formatPercent(row.cardOpenRate) },
+                        {
+                          key: 'retailerClickRate',
+                          label: 'Retailer click rate',
+                          render: (row) => formatPercent(row.retailerClickRate),
+                        },
+                      ]}
+                      rows={dashboard.positionPerformance}
+                      emptyMessage="No impression and click data is available yet."
+                    />
+                  </div>
 
-                <div className="space-y-3">
-                  <SectionHeading
-                    title="Badge performance"
-                    description="Use this to see whether labels like Best match are helping or just decorating the card."
-                  />
-                  <SimpleTable
-                    columns={[
-                      { key: 'badgeType', label: 'Badge' },
-                      { key: 'impressions', label: 'Impressions', render: (row) => formatNumber(row.impressions) },
-                      { key: 'cardOpenRate', label: 'Card open rate', render: (row) => formatPercent(row.cardOpenRate) },
-                      {
-                        key: 'retailerClickRate',
-                        label: 'Retailer click rate',
-                        render: (row) => formatPercent(row.retailerClickRate),
-                      },
-                    ]}
-                    rows={dashboard.badgePerformance}
-                    emptyMessage="No badge-level data is available yet."
-                  />
+                  <div className="space-y-3">
+                    <SectionHeading
+                      title="Badge performance"
+                      description="Whether labels like Best match are helping or just decorating."
+                    />
+                    <SimpleTable
+                      columns={[
+                        { key: 'badgeType', label: 'Badge' },
+                        { key: 'impressions', label: 'Impressions', render: (row) => formatNumber(row.impressions) },
+                        { key: 'cardOpenRate', label: 'Card open rate', render: (row) => formatPercent(row.cardOpenRate) },
+                        {
+                          key: 'retailerClickRate',
+                          label: 'Retailer click rate',
+                          render: (row) => formatPercent(row.retailerClickRate),
+                        },
+                      ]}
+                      rows={dashboard.badgePerformance}
+                      emptyMessage="No badge-level data is available yet."
+                    />
+                  </div>
                 </div>
-              </div>
+              </CollapsibleSection>
 
-              <div className="grid gap-6 xl:grid-cols-3">
-                <div className="space-y-3">
-                  <SectionHeading
-                    title="Found what they wanted"
-                    description="A quick read on whether the shortlist felt successful."
-                  />
-                  <SimpleTable
-                    columns={[
-                      { key: 'label', label: 'Answer' },
-                      { key: 'count', label: 'Responses', render: (row) => formatNumber(row.count) },
-                    ]}
-                    rows={Object.entries(dashboard.feedbackSummary.foundWhatYouWanted || {}).map(([label, count]) => ({
-                      count,
-                      label,
-                    }))}
-                    emptyMessage="No tester feedback has been recorded yet."
-                  />
-                </div>
+              <CollapsibleSection title="Tester feedback" description="Satisfaction signals from tester feedback submissions.">
+                <div className="grid gap-6 xl:grid-cols-3">
+                  <div className="space-y-3">
+                    <SectionHeading
+                      title="Found what they wanted"
+                      description="A quick read on whether the shortlist felt successful."
+                    />
+                    <SimpleTable
+                      columns={[
+                        { key: 'label', label: 'Answer' },
+                        { key: 'count', label: 'Responses', render: (row) => formatNumber(row.count) },
+                      ]}
+                      rows={Object.entries(dashboard.feedbackSummary.foundWhatYouWanted || {}).map(([label, count]) => ({
+                        count,
+                        label,
+                      }))}
+                      emptyMessage="No tester feedback has been recorded yet."
+                    />
+                  </div>
 
-                <div className="space-y-3">
-                  <SectionHeading
-                    title="Enjoyed experience"
-                    description="Useful for separating result quality problems from UX friction problems."
-                  />
-                  <SimpleTable
-                    columns={[
-                      { key: 'label', label: 'Answer' },
-                      { key: 'count', label: 'Responses', render: (row) => formatNumber(row.count) },
-                    ]}
-                    rows={Object.entries(dashboard.feedbackSummary.enjoyedExperience || {}).map(([label, count]) => ({
-                      count,
-                      label,
-                    }))}
-                    emptyMessage="No enjoyment feedback has been recorded yet."
-                  />
-                </div>
+                  <div className="space-y-3">
+                    <SectionHeading
+                      title="Enjoyed experience"
+                      description="Separates result quality problems from UX friction problems."
+                    />
+                    <SimpleTable
+                      columns={[
+                        { key: 'label', label: 'Answer' },
+                        { key: 'count', label: 'Responses', render: (row) => formatNumber(row.count) },
+                      ]}
+                      rows={Object.entries(dashboard.feedbackSummary.enjoyedExperience || {}).map(([label, count]) => ({
+                        count,
+                        label,
+                      }))}
+                      emptyMessage="No enjoyment feedback has been recorded yet."
+                    />
+                  </div>
 
-                <div className="space-y-3">
-                  <SectionHeading
-                    title="Was simple"
-                    description="This is your best lightweight signal for whether the guided flow feels too heavy."
-                  />
-                  <SimpleTable
-                    columns={[
-                      { key: 'label', label: 'Answer' },
-                      { key: 'count', label: 'Responses', render: (row) => formatNumber(row.count) },
-                    ]}
-                    rows={Object.entries(dashboard.feedbackSummary.wasSimple || {}).map(([label, count]) => ({
-                      count,
-                      label,
-                    }))}
-                    emptyMessage="No simplicity feedback has been recorded yet."
-                  />
+                  <div className="space-y-3">
+                    <SectionHeading
+                      title="Was simple"
+                      description="Your best signal for whether the guided flow feels too heavy."
+                    />
+                    <SimpleTable
+                      columns={[
+                        { key: 'label', label: 'Answer' },
+                        { key: 'count', label: 'Responses', render: (row) => formatNumber(row.count) },
+                      ]}
+                      rows={Object.entries(dashboard.feedbackSummary.wasSimple || {}).map(([label, count]) => ({
+                        count,
+                        label,
+                      }))}
+                      emptyMessage="No simplicity feedback has been recorded yet."
+                    />
+                  </div>
                 </div>
-              </div>
+              </CollapsibleSection>
 
               {dashboard.dataQuality?.truncated ? (
                 <div className="rounded-[24px] border border-amber-200 bg-amber-50/80 px-4 py-5 text-sm leading-6 text-amber-900">
@@ -417,6 +703,20 @@ function AnalyticsPage() {
               ) : null}
             </>
           ) : null}
+
+          <CollapsibleSection
+            title="Candidate pool inspector"
+            description="Browse what was sent to Haiku for picking. Shows candidates from the search_cache table, most recent first."
+          >
+            <CandidatePoolInspector />
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Recent AI picks"
+            description="The 6 picks returned by the last finalize calls this session. Resets on server restart. Polls every 10 seconds."
+          >
+            <FinalizeHistoryInspector />
+          </CollapsibleSection>
         </div>
       </PageShell>
     </>

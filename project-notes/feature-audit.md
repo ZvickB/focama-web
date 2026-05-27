@@ -16,9 +16,7 @@ Run an audit by telling Claude: "run an efficiency audit on project-notes/featur
 | Feature | Efficiency / cleanup concern | Status |
 |---|---|---|
 | PWA manifest + service worker | Does SW cache API responses it shouldn't? Caching strategy correct? | ✓ clean |
-| PWA install hook (`usePWAInstall`) | `matchMedia` was called synchronously in `useState` on first render | 🔧 fixed 2026-05-13 |
 | Install link in mobile nav | Hook called unconditionally in `SiteLayout` even on desktop where it's unused | ✓ clean |
-| `/install` page | Lazy-loaded via `React.lazy` ✓ | ✓ clean |
 | Amazon marketplace toast | Toast component mounts a timer on every render of the header — does it clean up correctly if the toast re-mounts? | ✓ clean |
 | Feedback FAB | Is it loaded on every page? Should it be lazy or conditionally mounted? | ⚠ check |
 | Vercel Analytics + Speed Insights | Both in `App.jsx` — do they block or defer? Are they no-ops in dev? | ✓ clean |

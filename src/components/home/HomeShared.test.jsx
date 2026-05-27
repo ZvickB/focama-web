@@ -69,15 +69,14 @@ describe('ProductDetailModal', () => {
     expect(screen.queryByText(/analyzing your pick/i)).not.toBeInTheDocument()
   })
 
-  it('shows an inline affiliate disclosure next to the retailer CTA', () => {
+  it('shows one compact affiliate disclosure next to the retailer CTA', () => {
     renderModal()
 
     expect(
-      screen.getByText(/as an amazon associate i earn from qualifying purchases/i),
+      screen.getByText(/as an amazon associate, focamai may earn from qualifying purchases/i),
     ).toBeInTheDocument()
   })
 })
-
 describe('ResultsSection retry advice', () => {
   it('shows inline suggested-query confirmation and edit controls', () => {
     const handleRetrySearch = vi.fn()
@@ -112,25 +111,22 @@ describe('ResultsSection retry advice', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /not seeing what you had in mind/i }))
+    fireEvent.click(screen.getByRole('button', { name: /improve picks/i }))
 
-    expect(screen.getByText(/try this search instead/i)).toBeInTheDocument()
-    expect(screen.getByText('compact carry on stroller')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /search this/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /edit first/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/next search/i)).toHaveValue('compact carry on stroller')
+    expect(screen.getByRole('button', { name: /search again/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /edit first/i })).not.toBeInTheDocument()
     expect(screen.queryByText(/suggestion loaded above/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/scroll up to edit and try it/i)).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /edit first/i }))
-    fireEvent.change(screen.getByLabelText(/edit suggested search/i), {
+    fireEvent.change(screen.getByLabelText(/next search/i), {
       target: { value: 'compact umbrella stroller' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /search this/i }))
+    fireEvent.click(screen.getByRole('button', { name: /search again/i }))
 
     expect(handleRetrySearch).toHaveBeenCalledWith('compact umbrella stroller')
   })
 })
-
 describe('AmazonStoreProvider', () => {
   it('clears the saved marketplace preference and resets back to auto', () => {
     window.__FOCAMAI_DISABLE_GEO_FETCH__ = true

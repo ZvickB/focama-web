@@ -66,7 +66,7 @@ describe('HomePage constraint-bearing finalize refresh', () => {
         text: async () =>
           JSON.stringify(createDiscoveryPayload({
             discoveryToken: 'constraint-refresh-token',
-            query: 'white chocolate chips kosher pareve',
+            query: 'white chocolate chips kosher',
             title: 'Kosher pareve white chips',
           })),
       })
@@ -75,7 +75,7 @@ describe('HomePage constraint-bearing finalize refresh', () => {
         text: async () =>
           JSON.stringify({
             candidatePool: {
-              query: 'white chocolate chips kosher pareve',
+              query: 'white chocolate chips kosher',
               details: 'Notes: kosher pareve',
               candidates: [],
             },
@@ -110,7 +110,7 @@ describe('HomePage constraint-bearing finalize refresh', () => {
     })
 
     const refreshRequest = fetchMock.mock.calls.find(([url]) =>
-      String(url).includes('/api/search/rainforest-discover?query=white+chocolate+chips+kosher+pareve'),
+      String(url).includes('/api/search/rainforest-discover?query=white+chocolate+chips+kosher'),
     )
     expect(refreshRequest?.[0]).toContain('cacheMode=refresh')
 
@@ -119,7 +119,7 @@ describe('HomePage constraint-bearing finalize refresh', () => {
     )
     expect(JSON.parse(finalizeRequest[1].body)).toEqual(
       expect.objectContaining({
-        query: 'white chocolate chips kosher pareve',
+        query: 'white chocolate chips kosher',
         discoveryToken: 'constraint-refresh-token',
         followUpNotes: 'kosher pareve',
       }),

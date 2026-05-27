@@ -289,16 +289,21 @@ function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }) {
   const desiredCount = Math.min(finalResultLimit, candidatePool.candidates.length)
 
   return [
-    'Choose the best final products.',
-    '1. "User context" (below) is the dominant selection signal — weight it above all other factors. If a candidate violates a hard constraint stated in user context (e.g. exceeds a stated budget), exclude it unless no better option exists. When no candidate fully satisfies the constraint, prefer the closest match — for a budget constraint, prefer the cheapest available option over a more expensive one, even if the cheaper option has lower ratings.',
-    '2. Relevance to the product query. If the query names a specific brand, treat that brand as a strong preference — fill as many slots as possible with candidates from that brand before considering other brands.',
-    '3. Quality and trust using rating and review count.',
-    '4. Prefer diversity across style or use case when helpful, but do not use brand diversity as a reason to displace a brand the user explicitly named in the query.',
+    'Select the final shopping shortlist for a real purchase decision.',
+    'Use an eligibility-first process:',
+    '1. User context defines eligibility. Treat explicit user context as requirements, not soft preferences. This includes quantity, package format, budget, compatibility, size, material, style, diet/allergy/safety needs, exclusions, "must have" features, and similar purchase requirements.',
+    '2. First identify candidates that appear to satisfy the explicit user context. Select final picks from those eligible candidates whenever possible.',
+    '3. A lower-rated eligible candidate beats a higher-rated ineligible candidate. Ratings, review count, trust score, price, and marketplace strength are only tie-breakers after eligibility and product relevance.',
+    '4. If fewer than the requested number of eligible candidates exist, fill the remaining slots with the closest acceptable alternatives. Prefer alternatives that violate the fewest or least important user-context requirements and still clearly match the original product query.',
+    '5. Match the Product query exactly before optimizing quality. Do not reward a high rating if the item is the wrong product type, accessory-only, bundle mismatch, refill/part, or irrelevant variant.',
+    '6. If the query names a brand/model, treat it as a strong preference and fill matching eligible slots first. Only use other brands/models when matching candidates are weak, duplicated, unavailable, or clearly worse for the user context.',
+    '7. Avoid near-duplicate results. Do not pick multiple sizes/colors/sellers of the same product unless that variety is genuinely useful. Use duplicateFamilyKey, title similarity, source, and attributes to spot duplicates.',
+    '8. Build the best set, not just the top individual scores. Add diversity across use case, price tier, or style only after eligibility, relevance, and quality are satisfied.',
     `Return exactly ${desiredCount} picks from the candidates below.`,
-    'Only choose from the provided candidate ids.',
+    'Only choose from the provided candidate ids. Preserve your chosen order from best overall fit to weakest acceptable fit.',
     '',
     `Product query: ${candidatePool.query}`,
-    `User context (top priority — weight above all else): ${candidatePool.details || 'None provided.'}`,
+    `User context (top priority): ${candidatePool.details || 'None provided.'}`,
     '',
     'Candidates:',
     JSON.stringify(buildCandidateSummary(candidatePool)),
@@ -371,6 +376,9 @@ export async function haikuLockWinnersAndBadges(
   const message = await anthropic.messages.create({
     model: DEFAULT_HAIKU_MODEL,
     max_tokens: 256,
+    temperature: 0,
+    system:
+      'You are a careful shopping ranker. Follow user constraints exactly and return only the requested JSON.',
     messages: [{ role: 'user', content: prompt }],
   })
 

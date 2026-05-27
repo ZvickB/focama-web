@@ -11,11 +11,11 @@
 - The homepage now ships in the plain white visual mode by default; the temporary homepage background toggle is no longer part of the active UI.
 - Homepage first load is now split: `HomePage` boots a lightweight `HomeShell`, warms the heavier guided search experience during idle time, and only swaps into that guided experience after the user starts a search.
 - Basic SEO plumbing is now in place: route-level metadata, canonicals, OG/Twitter tags, sitemap, robots, and manifest.
-- A mobile-tester install helper now lives at `/install`; mobile users who are not already running standalone can reach it from the mobile drawer.
 - The homepage now preconnects Google Fonts in `index.html`, preconnects the configured backend origin from `VITE_BACKEND_URL`, gives the hero wordmark higher fetch priority, and prefetches the results plus modal chunks immediately after `HomeExperience` mounts.
 - A local-only internal analytics dashboard now lives at `/admin/analytics` during development and reads a backend funnel summary instead of querying Supabase directly from the browser.
-- The current user path is: search -> short follow-up -> preview or focused shortlist -> modal details -> retailer clickout.
-- The modal clickout step now includes a short inline affiliate disclosure directly under the retailer CTA.
+- The current user path is: search -> collapsed search summary -> active refine panel -> collapsed refine summary/focused ranked shortlist -> modal details -> retailer clickout.
+- The modal detail view now acts more like a decision aid: `At a glance` facts, `Why this pick`, `Worth knowing`, product notes, then one compact bottom retailer CTA/disclosure area.
+- The new web UI slices now share a quieter visual system: mostly white/cream surfaces, lighter shadows, fewer decorative gradients, consistent rounded corners, teal actions, and orange only for the retailer CTA.
 - A tester-only feedback FAB now opens a lightweight sheet for quick product feedback, optional free text, and optional follow-up email.
 - Shortlists are always 6 items.
 - The PNG wordmark is the active wordmark.
@@ -26,13 +26,16 @@
 - The main product query field is now a compact 2-line textarea so longer natural-language searches and AI retry suggestions stay visible without changing the top form layout mid-flow.
 - The existing splash timing is unchanged; the homepage cleanup work reduced boot-path coupling underneath it instead of changing the splash itself.
 - Discovery and the AI follow-up question run in parallel after submit.
+- After search starts, the large search stage collapses into a compact progress line plus summary receipt, and the refine step becomes the active panel.
+- The refine panel now follows the mobile pattern: a clear `What should Focamai keep in mind?` heading, the AI follow-up question, up to 3 refinement chips, and a natural-language notes box. Backend chips replace fallback chips when available; label chips append to notes, while prompt-backed chips fill the notes box.
 - A one-time inline marketplace prompt now appears after search starts until the user chooses an Amazon store or dismisses it.
 - `Show products now` reveals the preview set without finalize.
-- `Show focused picks` runs guided finalize and scrolls directly to the results region. If the follow-up notes include hard eligibility constraints, including kosher/Jewish-use terms, dietary/allergy needs, safety/material exclusions, or compatibility language, the frontend refreshes Rainforest discovery once with the query plus notes before finalizing.
-- Final result cards stay metadata-first on the grid.
-- The product modal shows feature bullets immediately when available, then fills in `fit_reason` and `caveat` when enrichment arrives.
-- Retry is currently suggestion-led: the user opens a clearer correction panel, can tap quick correction chips, explains what to keep or change, and `/api/search/retry-advice` proposes a better next query.
-- Retry suggestions now stay in the retry/results area as a confirmation strip with `Search this` and `Edit first`; accepting starts a new guided search from there with a one-request discovery cache refresh instead of silently moving the query into the top search box.
+- `Show focused picks` runs guided finalize and scrolls directly to the results region. The results area now shows staged finalize progress copy while the shortlist is being locked. If the follow-up notes include hard eligibility constraints, including kosher/Jewish-use terms, dietary/allergy needs, safety/material exclusions, or compatibility language, the frontend refreshes Rainforest discovery once with the query plus notes before finalizing.
+- Final results now render as a single ranked shortlist instead of a marketplace-style grid or side preview.
+- After final results appear, refinement collapses into a compact summary above the ranked shortlist.
+- The product modal keeps enrichment hydrating in place: `fit_reason` and `caveat` fill the high reasoning area when available, while feature bullets/descriptions sit lower as product notes.
+- Retry is currently suggestion-led: the user opens a clearer correction panel, can tap one of three broad quick prompts, explains what felt off, and `/api/search/retry-advice` proposes a better next query.
+- Retry suggestions now stay in the retry/results area as an immediately editable `Next search` field; `Search again` starts a new guided search from there with a one-request discovery cache refresh instead of silently moving the query into the top search box.
 - Retry advice now tells AI to preserve accumulated must-have constraints from the original query, follow-up notes, and feedback by default, while still allowing the latest feedback to replace or remove a constraint when the user clearly changes direction.
 
 ## Current backend/deployment reality
@@ -84,4 +87,4 @@
 - Improve weak-result and low-confidence handling.
 - Watch the polling-based query-quality MVP on weak discovery pools caused by obvious misspellings or brand-query drift. Current known example: `celcius drink` should be able to offer `celsius drink` when the backend review is high-confidence, while meaning-bearing language such as `shabbos art` should stay quiet unless the returned pool is clearly mismatched.
 - Do not add query-quality prewarm unless the MVP proves useful and the user explicitly chooses that next step.
-- Decide how affiliate-ready outbound links and disclosures should appear.
+- Watch whether the compact modal bottom CTA/disclosure feels clear without sounding defensive.
