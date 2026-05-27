@@ -4,6 +4,8 @@ import {
   ArrowUpRight,
   ChevronDown,
   Clock3,
+  LayoutGrid,
+  LayoutList,
   RotateCcw,
   Sparkles,
 } from 'lucide-react'
@@ -193,6 +195,7 @@ export function ResultsSection({
 }) {
   const retryViewRef = useRef(null)
   const [showRetryView, setShowRetryView] = useState(false)
+  const [cardView, setCardView] = useState('new')
   const [editableSuggestedQuery, setEditableSuggestedQuery] = useState('')
   const [hasEditedSuggestedQuery, setHasEditedSuggestedQuery] = useState(false)
   const [retryViewQuery, setRetryViewQuery] = useState('')
@@ -248,12 +251,28 @@ export function ResultsSection({
     <section className="space-y-5">
       {!hasStartedSearch || !shouldShowResultsIntro ? null : (
         <div className="space-y-3">
-          <Badge
-            variant="outline"
-            className="w-fit rounded-full border-[#e6d8c5] bg-white/90 px-3 py-1 text-[#80573f]"
-          >
-            Results
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Badge
+              variant="outline"
+              className="w-fit rounded-full border-[#e6d8c5] bg-white/90 px-3 py-1 text-[#80573f]"
+            >
+              Results
+            </Badge>
+            {hasDisplayedResults ? (
+              <button
+                type="button"
+                onClick={() => setCardView((v) => (v === 'new' ? 'old' : 'new'))}
+                className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-slate-300 bg-white/80 px-2.5 py-1 text-xs text-slate-500 hover:border-slate-400 hover:text-slate-700"
+                title="Toggle card style (dev only)"
+              >
+                {cardView === 'new' ? (
+                  <><LayoutGrid className="h-3 w-3" /> Old cards</>
+                ) : (
+                  <><LayoutList className="h-3 w-3" /> New cards</>
+                )}
+              </button>
+            ) : null}
+          </div>
           <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
             {isLoading && !hasFinalResults
               ? 'Shortlist in progress'
@@ -341,9 +360,11 @@ export function ResultsSection({
             ) : null}
 
             <div
-              className={`mx-auto grid max-w-4xl grid-cols-1 gap-3 transition-all duration-300 ${
-                isFinalizing && !hasFinalResults ? 'scale-[0.995] opacity-80' : 'opacity-100'
-              }`}
+              className={`mx-auto transition-all duration-300 ${
+                cardView === 'new'
+                  ? 'grid max-w-4xl grid-cols-1 gap-3'
+                  : 'mobile-landscape-results-grid grid max-w-6xl grid-cols-1 gap-3 sm:gap-5 xl:grid-cols-3'
+              } ${isFinalizing && !hasFinalResults ? 'scale-[0.995] opacity-80' : 'opacity-100'}`}
             >
               {orderedResults.map((item, index) => {
                 const visibleItem = {
@@ -365,24 +386,44 @@ export function ResultsSection({
                       ease: [0.22, 1, 0.36, 1],
                     }}
                   >
-                    <RankedPickRow
-                      hasFinalResults={hasFinalResults}
-                      index={index}
-                      isEnrichmentSettled={isEnrichmentSettled}
-                      item={visibleItem}
-                      onOpenDetails={() =>
-                        onSelectProduct(visibleItem, {
-                          position: index,
-                          resultSet: hasFinalResults ? 'final' : 'preview',
-                        })
-                      }
-                      onRetailerClick={() =>
-                        onRetailerClick(visibleItem, {
-                          position: index,
-                          resultSet: hasFinalResults ? 'final' : 'preview',
-                        })
-                      }
-                    />
+                    {cardView === 'new' ? (
+                      <RankedPickRow
+                        hasFinalResults={hasFinalResults}
+                        index={index}
+                        isEnrichmentSettled={isEnrichmentSettled}
+                        item={visibleItem}
+                        onOpenDetails={() =>
+                          onSelectProduct(visibleItem, {
+                            position: index,
+                            resultSet: hasFinalResults ? 'final' : 'preview',
+                          })
+                        }
+                        onRetailerClick={() =>
+                          onRetailerClick(visibleItem, {
+                            position: index,
+                            resultSet: hasFinalResults ? 'final' : 'preview',
+                          })
+                        }
+                      />
+                    ) : (
+                      <ProductCard
+                        {...visibleItem}
+                        rating={visibleItem.rating || 0}
+                        reviewCount={visibleItem.reviewCount || 0}
+                        onSelect={() =>
+                          onSelectProduct(visibleItem, {
+                            position: index,
+                            resultSet: hasFinalResults ? 'final' : 'preview',
+                          })
+                        }
+                        onRetailerClick={() =>
+                          onRetailerClick(visibleItem, {
+                            position: index,
+                            resultSet: hasFinalResults ? 'final' : 'preview',
+                          })
+                        }
+                      />
+                    )}
                   </MotionDiv>
                 )
               })}
