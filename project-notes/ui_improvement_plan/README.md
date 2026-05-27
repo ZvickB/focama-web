@@ -15,6 +15,8 @@ Web should move closer to that clarity without becoming a phone app in a browser
 ## Priority 1: Results layout
 Status: implemented in the first `new_web_ui` slice.
 
+Update: desktop results now extend this slice with a mobile-inspired selected-product preview. Wide screens show a large selected product/image panel beside an internally scrolling ranked row list; the selected panel updates from hover/focus and from the top visible row while the list scrolls. Smaller screens keep the stacked ranked cards.
+
 Biggest expected gain.
 
 Current web results still feel close to a product-card marketplace grid. Mobile is stronger because it presents the six picks as a ranked shortlist with one selected pick getting more context.
@@ -22,6 +24,7 @@ Current web results still feel close to a product-card marketplace grid. Mobile 
 Proposed web direction:
 - Use a ranked shortlist instead of only a grid.
 - Use a single ranked list of six picks instead of a side-by-side preview.
+- On desktop, use the available width for a stable selected-product image panel beside the ranked rows.
 - On smaller screens, collapse into stacked ranked cards.
 - Keep all six picks feeling credible. Do not make pick 1 feel like the only real answer.
 - Keep reasoning/caveats in the modal for now so the results screen does not present too much information at once.

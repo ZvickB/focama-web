@@ -94,7 +94,8 @@
 
 ## Final result behavior
 - Result lists show up to 6 ranked picks.
-- Results use a single ranked shortlist layout rather than a marketplace grid or side preview.
+- Results use a ranked shortlist layout rather than a marketplace grid.
+- On desktop, the ranked shortlist uses a large selected-product panel on the left and an internally scrolling row list on the right. Hovering or focusing a row updates the selected panel, and scrolling the internal list updates it to the top visible row.
 - On smaller screens, results collapse into stacked ranked pick cards.
 - Result rows/cards show reliable product facts first: image, title, provider/source, price, rating, review count, and a deterministic badge when available.
 - Result, retry, and modal surfaces now share a quieter visual system: fewer decorative gradients, smaller shadows, and more consistent 16-28px radii.

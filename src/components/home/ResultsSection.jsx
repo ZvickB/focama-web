@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import {
   ArrowUpRight,
@@ -106,9 +106,10 @@ function ProductImage({ className = '', image, title }) {
 
 function RankedPickRow({
   hasFinalResults,
-  index,
+  isActive,
   isEnrichmentSettled,
   item,
+  onActivate,
   onOpenDetails,
   onRetailerClick,
 }) {
@@ -117,12 +118,19 @@ function RankedPickRow({
 
   return (
     <div
-      className="group relative overflow-hidden rounded-2xl border border-[#eadfce] bg-white/96 transition duration-200 hover:border-[#d8c9b6] hover:bg-white"
+      className={`group relative overflow-hidden rounded-2xl border bg-white/96 transition duration-200 hover:border-[#d8c9b6] hover:bg-white ${
+        isActive
+          ? 'border-primary/35 bg-[#fbf7f1] shadow-[0_18px_44px_-34px_rgba(15,97,117,0.28)]'
+          : 'border-[#eadfce]'
+      }`}
     >
+      {isActive ? <div className="absolute bottom-0 left-0 top-0 w-1 bg-primary" /> : null}
       <button
         type="button"
         className="flex w-full gap-3 p-3 text-left sm:p-4"
         onClick={onOpenDetails}
+        onFocus={onActivate}
+        onMouseEnter={onActivate}
       >
         <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-[#eee5da] bg-[#fbf7f1]">
           <ProductImage className="h-full w-full rounded-xl" image={item.image} title={item.title} />
@@ -165,6 +173,52 @@ function RankedPickRow({
   )
 }
 
+function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpenDetails }) {
+  if (!item) {
+    return null
+  }
+
+  const displayPrice = formatDisplayPrice(item.price)
+  const shortReason = getShortReason(item, {
+    hasFinalResults,
+    isEnrichmentSettled,
+  })
+
+  return (
+    <button
+      type="button"
+      aria-label={`Open selected result details: ${item.title}`}
+      className="group sticky top-24 hidden max-h-[calc(100vh-8rem)] overflow-hidden rounded-[28px] border border-[#e7dac8] bg-white/95 p-4 text-left shadow-[0_24px_68px_-54px_rgba(120,87,63,0.24)] transition hover:border-[#d8c9b6] lg:block"
+      onClick={onOpenDetails}
+    >
+      <div className="aspect-square overflow-hidden rounded-[24px] border border-[#eee5da] bg-[#fbf7f1] p-4">
+        <ProductImage
+          className="h-full w-full rounded-[18px]"
+          image={item.image}
+          title={item.title}
+        />
+      </div>
+      <div className="mt-4 space-y-3">
+        <div className="space-y-2">
+          <p className="line-clamp-3 text-lg font-semibold leading-6 text-slate-950">
+            {item.title}
+          </p>
+          <p className="line-clamp-3 text-sm leading-6 text-slate-600">{shortReason}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#f0e7da] pt-3 text-sm">
+          <span className="font-semibold text-primary">{displayPrice}</span>
+          <span className="text-slate-500">{getRatingValue(item.rating)?.toFixed(1) || 'No rating'}</span>
+          {item.subtitle ? <span className="text-slate-500">{item.subtitle}</span> : null}
+        </div>
+        <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition group-hover:text-primary/80">
+          View details
+          <ArrowUpRight className="h-3.5 w-3.5" />
+        </span>
+      </div>
+    </button>
+  )
+}
+
 export function ResultsSection({
   displayedResults,
   errorMessage,
@@ -196,6 +250,8 @@ export function ResultsSection({
   const [editableSuggestedQuery, setEditableSuggestedQuery] = useState('')
   const [hasEditedSuggestedQuery, setHasEditedSuggestedQuery] = useState(false)
   const [retryViewQuery, setRetryViewQuery] = useState('')
+  const [activeResultSelection, setActiveResultSelection] = useState({ index: 0, resultsIdentity: '' })
+  const resultRowsScrollRef = useRef(null)
   const isRetryViewVisible = hasFinalResults && showRetryView && retryViewQuery === submittedQuery
   const normalizedSuggestedRetryQuery = suggestedRetryQuery.trim()
   const visibleSuggestedQuery = hasEditedSuggestedQuery
@@ -206,9 +262,53 @@ export function ResultsSection({
   const orderedResults = displayedResults
   const hasExplicitBadges = shouldShowBadgeLabels && displayedResults.some((item) => item.badgeLabel)
   const hasDisplayedResults = orderedResults.length > 0
+  const orderedResultsIdentity = orderedResults.map((item) => String(item.id || item.title || '')).join('|')
+  const activeResultIndex =
+    activeResultSelection.resultsIdentity === orderedResultsIdentity
+      ? activeResultSelection.index
+      : 0
+  const orderedVisibleResults = orderedResults.map((item, index) => ({
+    ...item,
+    badgeLabel:
+      shouldShowBadgeLabels
+        ? item.badgeLabel || (!hasExplicitBadges && index === 0 ? 'Best match' : '')
+        : '',
+  }))
+  const activeResult =
+    orderedVisibleResults.length > 0
+      ? orderedVisibleResults[Math.min(activeResultIndex, orderedVisibleResults.length - 1)]
+      : null
+  const activeResultSet = hasFinalResults ? 'final' : 'preview'
   const shouldShowResultsIntro = !hasDisplayedResults || hasFinalResults
   const orderedPreviousResults = previousResults
   const canRequestRetryAdvice = Boolean(retryFeedback.trim())
+
+  useEffect(() => {
+    if (resultRowsScrollRef.current) {
+      resultRowsScrollRef.current.scrollTop = 0
+    }
+  }, [orderedResultsIdentity])
+
+  function selectActiveResult(index) {
+    setActiveResultSelection({ index, resultsIdentity: orderedResultsIdentity })
+  }
+
+  function handleResultsListScroll(event) {
+    const scrollContainer = event.currentTarget
+    const containerTop = scrollContainer.getBoundingClientRect().top
+    const rows = Array.from(scrollContainer.querySelectorAll('[data-result-row-index]'))
+      .map((row) => ({
+        index: Number(row.getAttribute('data-result-row-index')),
+        rect: row.getBoundingClientRect(),
+      }))
+      .filter((row) => Number.isFinite(row.index))
+
+    const topVisibleRow = rows.find((row) => row.rect.bottom > containerTop + 8) || rows[0]
+
+    if (topVisibleRow) {
+      selectActiveResult(topVisibleRow.index)
+    }
+  }
 
   function handleCorrectionChipClick(chipLabel) {
     const nextFeedback = retryFeedback.trim()
@@ -359,22 +459,68 @@ export function ResultsSection({
             <div
               className={`mx-auto transition-all duration-300 ${
                 cardView === 'new'
-                  ? 'grid max-w-4xl grid-cols-1 gap-3'
+                  ? 'max-w-6xl'
                   : 'mobile-landscape-results-grid grid max-w-6xl grid-cols-1 gap-3 sm:gap-5 xl:grid-cols-3'
               } ${isFinalizing && !hasFinalResults ? 'scale-[0.995] opacity-80' : 'opacity-100'}`}
             >
-              {orderedResults.map((item, index) => {
-                const visibleItem = {
-                  ...item,
-                  badgeLabel:
-                    shouldShowBadgeLabels
-                      ? item.badgeLabel || (!hasExplicitBadges && index === 0 ? 'Best match' : '')
-                      : '',
-                }
-
-                return (
+              {cardView === 'new' ? (
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.25fr)] lg:items-start lg:gap-5">
+                  <SelectedResultPanel
+                    hasFinalResults={hasFinalResults}
+                    isEnrichmentSettled={isEnrichmentSettled}
+                    item={activeResult}
+                    onOpenDetails={() => {
+                      if (!activeResult) return
+                      onSelectProduct(activeResult, {
+                        position: Math.min(activeResultIndex, orderedVisibleResults.length - 1),
+                        resultSet: activeResultSet,
+                      })
+                    }}
+                  />
+                  <div
+                    ref={resultRowsScrollRef}
+                    className="grid grid-cols-1 gap-3 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto lg:pr-1 xl:max-h-[720px]"
+                    onScroll={handleResultsListScroll}
+                  >
+                    {orderedVisibleResults.map((visibleItem, index) => (
+                      <MotionDiv
+                        data-result-row-index={index}
+                        key={visibleItem.id}
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{
+                          duration: 0.9,
+                          delay: (RESULT_CARD_FADE_DELAYS_MS[index] ?? index * 900) / 1000,
+                          ease: [0.22, 1, 0.36, 1],
+                        }}
+                      >
+                        <RankedPickRow
+                          hasFinalResults={hasFinalResults}
+                          isActive={index === activeResultIndex}
+                          isEnrichmentSettled={isEnrichmentSettled}
+                          item={visibleItem}
+                          onActivate={() => selectActiveResult(index)}
+                          onOpenDetails={() =>
+                            onSelectProduct(visibleItem, {
+                              position: index,
+                              resultSet: activeResultSet,
+                            })
+                          }
+                          onRetailerClick={() =>
+                            onRetailerClick(visibleItem, {
+                              position: index,
+                              resultSet: activeResultSet,
+                            })
+                          }
+                        />
+                      </MotionDiv>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                orderedVisibleResults.map((visibleItem, index) => (
                   <MotionDiv
-                    key={item.id}
+                    key={visibleItem.id}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{
@@ -383,47 +529,26 @@ export function ResultsSection({
                       ease: [0.22, 1, 0.36, 1],
                     }}
                   >
-                    {cardView === 'new' ? (
-                      <RankedPickRow
-                        hasFinalResults={hasFinalResults}
-                        index={index}
-                        isEnrichmentSettled={isEnrichmentSettled}
-                        item={visibleItem}
-                        onOpenDetails={() =>
-                          onSelectProduct(visibleItem, {
-                            position: index,
-                            resultSet: hasFinalResults ? 'final' : 'preview',
-                          })
-                        }
-                        onRetailerClick={() =>
-                          onRetailerClick(visibleItem, {
-                            position: index,
-                            resultSet: hasFinalResults ? 'final' : 'preview',
-                          })
-                        }
-                      />
-                    ) : (
-                      <ProductCard
-                        {...visibleItem}
-                        rating={visibleItem.rating || 0}
-                        reviewCount={visibleItem.reviewCount || 0}
-                        onSelect={() =>
-                          onSelectProduct(visibleItem, {
-                            position: index,
-                            resultSet: hasFinalResults ? 'final' : 'preview',
-                          })
-                        }
-                        onRetailerClick={() =>
-                          onRetailerClick(visibleItem, {
-                            position: index,
-                            resultSet: hasFinalResults ? 'final' : 'preview',
-                          })
-                        }
-                      />
-                    )}
+                    <ProductCard
+                      {...visibleItem}
+                      rating={visibleItem.rating || 0}
+                      reviewCount={visibleItem.reviewCount || 0}
+                      onSelect={() =>
+                        onSelectProduct(visibleItem, {
+                          position: index,
+                          resultSet: activeResultSet,
+                        })
+                      }
+                      onRetailerClick={() =>
+                        onRetailerClick(visibleItem, {
+                          position: index,
+                          resultSet: activeResultSet,
+                        })
+                      }
+                    />
                   </MotionDiv>
-                )
-              })}
+                ))
+              )}
             </div>
           </div>
         </div>

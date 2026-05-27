@@ -7,6 +7,10 @@ import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { ProductDetailModal } from './ProductDetailModal.jsx'
 import { ResultsSection } from './ResultsSection.jsx'
 
+afterEach(() => {
+  cleanup()
+})
+
 function createMockItem(overrides = {}) {
   return {
     id: 'result-1',
@@ -78,6 +82,48 @@ describe('ProductDetailModal', () => {
   })
 })
 describe('ResultsSection retry advice', () => {
+  it('updates the selected desktop result preview on row hover', () => {
+    render(
+      <ResultsSection
+        displayedResults={[
+          createMockItem({ id: 'result-1', title: 'First ice cream maker' }),
+          createMockItem({ id: 'result-2', title: 'Second ice cream maker' }),
+        ]}
+        errorMessage=""
+        hasFinalResults
+        hasStartedSearch
+        isFinalizing={false}
+        isLoading={false}
+        isRetryReady
+        isRetrying={false}
+        isGeneratingRetryAdvice={false}
+        onRetailerClick={vi.fn()}
+        onSelectProduct={vi.fn()}
+        onRetryAdviceRequest={vi.fn()}
+        onRetryFeedbackChange={vi.fn()}
+        previousResults={[]}
+        retryAdvice={null}
+        selectionState={null}
+        retryCount={0}
+        retryFeedback=""
+        showFinalResultBadges={false}
+        showPreviewResults={false}
+        suggestedRetryQuery=""
+        submittedQuery="ice cream maker"
+      />,
+    )
+
+    expect(
+      screen.getByRole('button', { name: /open selected result details: first ice cream maker/i }),
+    ).toBeInTheDocument()
+
+    fireEvent.mouseEnter(screen.getByText('Second ice cream maker').closest('button'))
+
+    expect(
+      screen.getByRole('button', { name: /open selected result details: second ice cream maker/i }),
+    ).toBeInTheDocument()
+  })
+
   it('shows inline suggested-query confirmation and edit controls', () => {
     const handleRetrySearch = vi.fn()
 
