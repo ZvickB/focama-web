@@ -188,12 +188,12 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
     <button
       type="button"
       aria-label={`Open selected result details: ${item.title}`}
-      className="group sticky top-24 hidden max-h-[calc(100vh-8rem)] overflow-hidden rounded-[28px] border border-[#e7dac8] bg-white/95 text-left shadow-[0_24px_68px_-54px_rgba(120,87,63,0.24)] transition hover:border-[#d8c9b6] lg:block"
+      className="group sticky top-24 hidden max-h-[calc(100vh-8rem)] overflow-visible rounded-[28px] bg-white/95 text-left shadow-[0_24px_68px_-54px_rgba(120,87,63,0.24)] lg:block"
       onClick={onOpenDetails}
     >
-      <div className="aspect-square overflow-hidden rounded-t-[28px] bg-[#fbf7f1] p-4">
+      <div className="aspect-square overflow-visible rounded-[28px] bg-[#fbf7f1]">
         <ProductImage
-          className="h-full w-full rounded-[18px]"
+          className="h-full w-full rounded-[28px]"
           image={item.image}
           title={item.title}
         />
@@ -307,6 +307,26 @@ export function ResultsSection({
 
     if (topVisibleRow) {
       selectActiveResult(topVisibleRow.index)
+    }
+  }
+
+  function handleDesktopResultsWheel(event) {
+    const scrollContainer = resultRowsScrollRef.current
+
+    if (!scrollContainer || scrollContainer.scrollHeight <= scrollContainer.clientHeight) {
+      return
+    }
+
+    const isScrollingDown = event.deltaY > 0
+    const isScrollingUp = event.deltaY < 0
+    const atTop = scrollContainer.scrollTop <= 0
+    const atBottom =
+      scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 1
+
+    if ((isScrollingDown && !atBottom) || (isScrollingUp && !atTop)) {
+      event.preventDefault()
+      scrollContainer.scrollTop += event.deltaY
+      handleResultsListScroll({ currentTarget: scrollContainer })
     }
   }
 
@@ -464,7 +484,10 @@ export function ResultsSection({
               } ${isFinalizing && !hasFinalResults ? 'scale-[0.995] opacity-80' : 'opacity-100'}`}
             >
               {cardView === 'new' ? (
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.25fr)] lg:items-start lg:gap-5">
+                <div
+                  className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.25fr)] lg:items-start lg:gap-5"
+                  onWheel={handleDesktopResultsWheel}
+                >
                   <div className="lg:pt-0">
                     <SelectedResultPanel
                       hasFinalResults={hasFinalResults}
