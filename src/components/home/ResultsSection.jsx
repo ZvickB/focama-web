@@ -188,7 +188,7 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
     <button
       type="button"
       aria-label={`Open selected result details: ${item.title}`}
-      className="group sticky top-24 hidden max-h-[calc(100vh-8rem)] overflow-visible rounded-[28px] bg-white/95 text-left shadow-[0_24px_68px_-54px_rgba(120,87,63,0.24)] lg:block"
+      className="group sticky top-24 hidden overflow-visible rounded-[28px] bg-white/95 text-left shadow-[0_24px_68px_-54px_rgba(120,87,63,0.24)] lg:block"
       onClick={onOpenDetails}
     >
       <div className="aspect-square overflow-visible rounded-[28px] bg-[#fbf7f1]">
@@ -200,10 +200,10 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
       </div>
       <div className="space-y-3 p-4">
         <div className="space-y-2">
-          <p className="line-clamp-3 text-lg font-semibold leading-6 text-slate-950">
+          <p className="text-lg font-semibold leading-6 text-slate-950">
             {item.title}
           </p>
-          <p className="line-clamp-3 text-sm leading-6 text-slate-600">{shortReason}</p>
+          <p className="text-sm leading-6 text-slate-600">{shortReason}</p>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#f0e7da] pt-3 text-sm">
           <span className="font-semibold text-primary">{displayPrice}</span>
@@ -463,10 +463,10 @@ export function ResultsSection({
       {hasDisplayedResults ? (
         <div className="space-y-4">
           <div
-            className={`relative overflow-hidden rounded-[30px] transition-all duration-500 ${
+            className={`relative rounded-[30px] transition-all duration-500 ${
               isFinalizing && !hasFinalResults
-                ? 'bg-[#fbf7f1] p-2 sm:p-3'
-                : ''
+                ? 'overflow-hidden bg-[#fbf7f1] p-2 sm:p-3'
+                : 'overflow-visible'
             }`}
           >
             {isFinalizing && !hasFinalResults ? (
