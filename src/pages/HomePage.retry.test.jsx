@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-import { createMockResult, renderHomePage, setupHomePageTest } from './HomePage.test-utils.jsx'
+import {
+  createMockResult,
+  findVisibleResultTitle,
+  renderHomePage,
+  setupHomePageTest,
+} from './HomePage.test-utils.jsx'
 
 describe('HomePage retry advice', () => {
   setupHomePageTest()
@@ -101,7 +106,7 @@ describe('HomePage retry advice', () => {
     await screen.findByText(/what should we optimize for with this stroller/i)
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
-    await screen.findByText('Compact airport stroller')
+    await findVisibleResultTitle('Compact airport stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
     await screen.findByText(/what felt off/i)
 
@@ -239,7 +244,7 @@ describe('HomePage retry advice', () => {
     await screen.findByText(/what should we optimize for with this stroller/i)
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
-    await screen.findByText('Travel stroller')
+    await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
     await screen.findByText(/what felt off/i)
 
@@ -354,7 +359,7 @@ describe('HomePage retry advice', () => {
     await screen.findByText(/what should we optimize for with this stroller/i)
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
-    await screen.findByText('Travel stroller')
+    await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
     await screen.findByText(/what felt off/i)
 
@@ -453,7 +458,7 @@ describe('HomePage retry advice', () => {
     await screen.findByText(/what should we optimize for with this stroller/i)
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
-    await screen.findByText('Travel stroller')
+    await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
     await screen.findByText(/what felt off/i)
     await user.type(document.getElementById('results-retry-feedback'), 'Too bulky')
@@ -529,7 +534,7 @@ describe('HomePage retry advice', () => {
     expect(
       screen.queryByText(/live product result returned for "thermos stainless king/i),
     ).not.toBeInTheDocument()
-    expect(screen.getByText(/excellent heat retention for long commutes\./i)).toBeInTheDocument()
+    expect(screen.getAllByText(/excellent heat retention for long commutes\./i).at(-1)).toBeInTheDocument()
   })
 
   it('shows the simplified retry advice prompt without a visible retry counter', async () => {
@@ -597,7 +602,7 @@ describe('HomePage retry advice', () => {
     await screen.findByText(/what should we optimize for with this stroller/i)
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
-    await screen.findByText('Travel stroller')
+    await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
     await screen.findByText(/what felt off/i)
 
@@ -703,7 +708,7 @@ describe('HomePage retry advice', () => {
     await screen.findByText(/what should we optimize for with this stroller/i)
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
-    await screen.findByText('Travel stroller')
+    await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
     await screen.findByText(/what felt off/i)
 

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 
 import SiteLayout from '@/components/SiteLayout.jsx'
 import { AmazonStoreProvider } from '@/contexts/AmazonStoreContext.jsx'
@@ -23,6 +23,15 @@ export function createMockResult(overrides = {}) {
     link: 'https://example.com/stroller',
     ...overrides,
   }
+}
+
+export async function findVisibleResultTitle(title) {
+  const matches = await screen.findAllByText(title)
+  return matches.at(-1)
+}
+
+export function getVisibleResultTitle(title) {
+  return screen.getAllByText(title).at(-1)
 }
 
 export function renderHomePage() {

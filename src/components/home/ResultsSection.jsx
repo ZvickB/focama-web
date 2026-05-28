@@ -310,26 +310,6 @@ export function ResultsSection({
     }
   }
 
-  function handleDesktopResultsWheel(event) {
-    const scrollContainer = resultRowsScrollRef.current
-
-    if (!scrollContainer || scrollContainer.scrollHeight <= scrollContainer.clientHeight) {
-      return
-    }
-
-    const isScrollingDown = event.deltaY > 0
-    const isScrollingUp = event.deltaY < 0
-    const atTop = scrollContainer.scrollTop <= 0
-    const atBottom =
-      scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 1
-
-    if ((isScrollingDown && !atBottom) || (isScrollingUp && !atTop)) {
-      event.preventDefault()
-      scrollContainer.scrollTop += event.deltaY
-      handleResultsListScroll({ currentTarget: scrollContainer })
-    }
-  }
-
   function handleCorrectionChipClick(chipLabel) {
     const nextFeedback = retryFeedback.trim()
       ? `${retryFeedback.trim()}\n${chipLabel}`
@@ -484,10 +464,7 @@ export function ResultsSection({
               } ${isFinalizing && !hasFinalResults ? 'scale-[0.995] opacity-80' : 'opacity-100'}`}
             >
               {cardView === 'new' ? (
-                <div
-                  className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.25fr)] lg:items-start lg:gap-5"
-                  onWheel={handleDesktopResultsWheel}
-                >
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.25fr)] lg:items-start lg:gap-5">
                   <div className="lg:pt-0">
                     <SelectedResultPanel
                       hasFinalResults={hasFinalResults}

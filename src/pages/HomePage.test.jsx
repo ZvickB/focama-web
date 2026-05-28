@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-import { createMockResult, renderHomePage, setupHomePageTest } from './HomePage.test-utils.jsx'
+import {
+  createMockResult,
+  findVisibleResultTitle,
+  renderHomePage,
+  setupHomePageTest,
+} from './HomePage.test-utils.jsx'
 
 function createDeferred() {
   let resolve
@@ -408,7 +413,7 @@ describe('HomePage', () => {
 
     await user.click(screen.getAllByRole('button', { name: /skip the question and show results/i })[0])
 
-    expect(await screen.findByText('Canada stroller result')).toBeInTheDocument()
+    expect(await findVisibleResultTitle('Canada stroller result')).toBeInTheDocument()
     expect(screen.queryByText('Stale stroller result')).not.toBeInTheDocument()
     expect(window.localStorage.getItem('focamai_marketplace')).toBe('amazon.ca')
     expect(window.localStorage.getItem('focamai_marketplace_asked')).toBe('true')
@@ -779,7 +784,7 @@ describe('HomePage', () => {
       await screen.findByText(/we're on it\. your results will be here soon\./i),
     ).toBeInTheDocument()
     finalizeResponse.resolve(finalResultsResponse)
-    expect(await screen.findByText('Compact airport stroller')).toBeInTheDocument()
+    expect(await findVisibleResultTitle('Compact airport stroller')).toBeInTheDocument()
     expect(
       screen.getByText(/six picks, chosen around what you told us\./i),
     ).toBeInTheDocument()
@@ -859,7 +864,7 @@ describe('HomePage', () => {
     await user.type(refinementTextarea, 'comfort matters most')
     await user.keyboard('{Enter}')
 
-    expect(await screen.findByText('Compact airport stroller')).toBeInTheDocument()
+    expect(await findVisibleResultTitle('Compact airport stroller')).toBeInTheDocument()
   })
 
   it('lets the user show the current product set without AI refinement', async () => {
@@ -911,7 +916,7 @@ describe('HomePage', () => {
     await screen.findByText(/what should we optimize for with this stroller/i)
     await user.click(screen.getAllByRole('button', { name: /skip the question and show results/i })[0])
 
-    expect(await screen.findByText('Travel stroller')).toBeInTheDocument()
+    expect(await findVisibleResultTitle('Travel stroller')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /show focused picks/i })).toBeInTheDocument()
   })
 
@@ -963,7 +968,7 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
     await user.click(screen.getAllByRole('button', { name: /skip the question and show results/i })[0])
-    expect(await screen.findByText('Travel stroller')).toBeInTheDocument()
+    expect(await findVisibleResultTitle('Travel stroller')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /new search/i }))
 

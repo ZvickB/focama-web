@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-import { createMockResult, renderHomePage, setupHomePageTest } from './HomePage.test-utils.jsx'
+import {
+  createMockResult,
+  findVisibleResultTitle,
+  renderHomePage,
+  setupHomePageTest,
+} from './HomePage.test-utils.jsx'
 
 function createDiscoveryPayload({
   discoveryToken = 'opaque-discovery-token',
@@ -102,7 +107,7 @@ describe('HomePage constraint-bearing finalize refresh', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'kosher pareve')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
 
-    expect(await screen.findByText('Kosher pareve white chips')).toBeInTheDocument()
+    expect(await findVisibleResultTitle('Kosher pareve white chips')).toBeInTheDocument()
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([url]) =>
         String(url).includes('/api/search/finalize'),
@@ -170,7 +175,7 @@ describe('HomePage constraint-bearing finalize refresh', () => {
     await user.type(screen.getByLabelText(/tell us more/i), 'something cute and affordable')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
 
-    expect(await screen.findByText('General white chocolate chips')).toBeInTheDocument()
+    expect(await findVisibleResultTitle('General white chocolate chips')).toBeInTheDocument()
 
     await waitFor(() => {
       expect(fetchMock.mock.calls.filter(([url]) =>

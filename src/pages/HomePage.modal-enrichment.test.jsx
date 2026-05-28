@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-import { createMockResult, renderHomePage, setupHomePageTest } from './HomePage.test-utils.jsx'
+import {
+  createMockResult,
+  findVisibleResultTitle,
+  getVisibleResultTitle,
+  renderHomePage,
+  setupHomePageTest,
+} from './HomePage.test-utils.jsx'
 
 describe('HomePage modal enrichment', () => {
   setupHomePageTest()
@@ -57,7 +63,7 @@ describe('HomePage modal enrichment', () => {
 
     expect(screen.queryByText(/pricier than the smallest umbrella stroller options\./i)).not.toBeInTheDocument()
 
-    await user.click(await screen.findByText('Travel stroller'))
+    await user.click(await findVisibleResultTitle('Travel stroller'))
 
     expect(await screen.findByText(/worth knowing/i)).toBeInTheDocument()
     expect(screen.getByText(/pricier than the smallest umbrella stroller options\./i)).toBeInTheDocument()
@@ -169,9 +175,9 @@ describe('HomePage modal enrichment', () => {
     await screen.findByText(/what should we optimize for with this stroller/i)
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
-    await screen.findByText('Travel stroller')
+    await findVisibleResultTitle('Travel stroller')
 
-    await user.click(screen.getByText('Travel stroller'))
+    await user.click(getVisibleResultTitle('Travel stroller'))
     const dialog = await screen.findByRole('dialog', { name: /travel stroller/i })
 
     await waitFor(
@@ -320,9 +326,9 @@ describe('HomePage modal enrichment', () => {
     await screen.findByText(/what should we optimize for with this stroller/i)
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
-    await screen.findByText('Travel stroller')
+    await findVisibleResultTitle('Travel stroller')
 
-    await user.click(screen.getByText('Travel stroller'))
+    await user.click(getVisibleResultTitle('Travel stroller'))
     const dialog = await screen.findByRole('dialog', { name: /travel stroller/i })
 
     await waitFor(
@@ -468,7 +474,7 @@ describe('HomePage modal enrichment', () => {
     await screen.findByText(/what should we optimize for with this stroller/i)
     await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
-    await screen.findByText('Travel stroller')
+    await findVisibleResultTitle('Travel stroller')
 
     expect(eventSources).toHaveLength(1)
 
@@ -482,7 +488,7 @@ describe('HomePage modal enrichment', () => {
       ).toBe(true)
     }, { timeout: 4000 })
 
-    await user.click(screen.getByText('Travel stroller'))
+    await user.click(getVisibleResultTitle('Travel stroller'))
     const dialog = await screen.findByRole('dialog', { name: /travel stroller/i })
 
     await waitFor(
