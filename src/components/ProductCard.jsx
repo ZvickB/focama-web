@@ -7,6 +7,7 @@ import {
 import { getUserFacingDescription, getUserFacingReasons } from '@/components/home/homeContentUtils.js'
 import logo from '@/assets/logo_master_version.svg'
 import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
+import { getProductDisplayTitle } from '@/lib/productTitle.js'
 
 function ProductBadge({ label }) {
   if (!label) {
@@ -49,6 +50,7 @@ function ProductCard({
   const primaryReason = getUserFacingReasons(reasons)[0] || ''
   const userFacingDescription = getUserFacingDescription(description)
   const displayPrice = formatDisplayPrice(price)
+  const displayTitle = getProductDisplayTitle(title)
 
   return (
     <Card
@@ -99,7 +101,7 @@ function ProductCard({
             <img
               className="aspect-square w-full object-contain rounded-[20px] p-4 mix-blend-multiply transition duration-500 group-hover:scale-[1.025]"
               src={image}
-              alt={title}
+              alt={displayTitle || title}
               loading="lazy"
               decoding="async"
               onError={() => setImgError(true)}
@@ -111,7 +113,7 @@ function ProductCard({
         <div className="space-y-2.5">
           {/* TODO (multi-retailer): restore retailer badge here — show subtitle as a pill above the title */}
           <p className="line-clamp-2 text-[15px] leading-6 text-slate-900 sm:text-base">
-            {title}
+            {displayTitle || title}
           </p>
           <p className="text-lg font-semibold text-primary">{displayPrice}</p>
         </div>

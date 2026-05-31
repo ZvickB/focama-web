@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
 import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
+import { getProductDisplayTitle } from '@/lib/productTitle.js'
 
 const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 const RETRY_CORRECTION_CHIPS = [
@@ -114,6 +115,7 @@ function RankedPickRow({
   onRetailerClick,
 }) {
   const displayPrice = formatDisplayPrice(item.price)
+  const displayTitle = getProductDisplayTitle(item.title)
   const shortReason = getShortReason(item, { hasFinalResults, isEnrichmentSettled })
 
   return (
@@ -133,10 +135,10 @@ function RankedPickRow({
         onMouseEnter={onActivate}
       >
         <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-[#eee5da] bg-[#fbf7f1]">
-          <ProductImage className="h-full w-full rounded-xl" image={item.image} title={item.title} />
+          <ProductImage className="h-full w-full rounded-xl" image={item.image} title={displayTitle || item.title} />
         </div>
         <div className="min-w-0 flex-1 space-y-1.5">
-          <p className="line-clamp-2 text-sm font-medium leading-5 text-slate-900">{item.title}</p>
+          <p className="line-clamp-2 text-sm font-medium leading-5 text-slate-900">{displayTitle || item.title}</p>
           <p className="line-clamp-2 text-sm leading-5 text-slate-600">{shortReason}</p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
             <span className="font-semibold text-primary">{displayPrice}</span>
@@ -179,6 +181,7 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
   }
 
   const displayPrice = formatDisplayPrice(item.price)
+  const displayTitle = getProductDisplayTitle(item.title)
   const shortReason = getShortReason(item, {
     hasFinalResults,
     isEnrichmentSettled,
@@ -187,7 +190,7 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
   return (
     <button
       type="button"
-      aria-label={`Open selected result details: ${item.title}`}
+      aria-label={`Open selected result details: ${displayTitle || item.title}`}
       className="group sticky top-24 hidden overflow-visible rounded-[28px] bg-white/95 text-left shadow-[0_24px_68px_-54px_rgba(120,87,63,0.24)] lg:block"
       onClick={onOpenDetails}
     >
@@ -195,13 +198,13 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
         <ProductImage
           className="h-full w-full rounded-[28px]"
           image={item.image}
-          title={item.title}
+          title={displayTitle || item.title}
         />
       </div>
       <div className="space-y-3 p-4">
         <div className="space-y-2">
           <p className="text-lg font-semibold leading-6 text-slate-950">
-            {item.title}
+            {displayTitle || item.title}
           </p>
           <p className="text-sm leading-6 text-slate-600">{shortReason}</p>
         </div>

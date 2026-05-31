@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { ArrowUpRight, CheckCircle2, Info, Star, X } from 'lucide-react'
 
@@ -8,8 +8,17 @@ import { Button } from '@/components/ui/button.jsx'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
 import { getUserFacingDescription } from '@/components/home/homeContentUtils.js'
+import { getProductDisplayTitle } from '@/lib/productTitle.js'
 
 const MotionDiv = motion.div
+const FOCUSABLE_MODAL_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'textarea:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',')
 
 function resolveAmazonRetailerLabel(subtitle, selectedAmazonDomain, resolvedAmazonDomain) {
   if (subtitle !== 'Amazon') return subtitle
@@ -231,21 +240,71 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
   const retailerLabel = resolveAmazonRetailerLabel(item?.subtitle, selectedAmazonDomain, resolvedAmazonDomain)
   const [bulletsExpanded, setBulletsExpanded] = useState(false)
   const [imgError, setImgError] = useState(false)
+  const dialogRef = useRef(null)
+  const previouslyFocusedElementRef = useRef(null)
 
   useEffect(() => {
+    previouslyFocusedElementRef.current = document.activeElement
     document.body.style.overflow = 'hidden'
 
     function handleKeyDown(event) {
       if (event.key === 'Escape') {
         onClose()
+        return
+      }
+
+      if (event.key !== 'Tab' || !dialogRef.current) {
+        return
+      }
+
+      const focusableElements = Array.from(
+        dialogRef.current.querySelectorAll(FOCUSABLE_MODAL_SELECTOR),
+      ).filter(
+        (element) =>
+          element instanceof HTMLElement &&
+          !element.hasAttribute('disabled') &&
+          element.getAttribute('aria-hidden') !== 'true' &&
+          element.offsetParent !== null,
+      )
+
+      if (focusableElements.length === 0) {
+        event.preventDefault()
+        dialogRef.current.focus({ preventScroll: true })
+        return
+      }
+
+      const firstFocusableElement = focusableElements[0]
+      const lastFocusableElement = focusableElements[focusableElements.length - 1]
+
+      if (!dialogRef.current.contains(document.activeElement)) {
+        event.preventDefault()
+        firstFocusableElement.focus()
+        return
+      }
+
+      if (event.shiftKey && document.activeElement === firstFocusableElement) {
+        event.preventDefault()
+        lastFocusableElement.focus()
+        return
+      }
+
+      if (!event.shiftKey && document.activeElement === lastFocusableElement) {
+        event.preventDefault()
+        firstFocusableElement.focus()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
+    window.setTimeout(() => {
+      dialogRef.current?.focus({ preventScroll: true })
+    }, 0)
 
     return () => {
       document.body.style.overflow = ''
       window.removeEventListener('keydown', handleKeyDown)
+      if (previouslyFocusedElementRef.current instanceof HTMLElement) {
+        previouslyFocusedElementRef.current.focus({ preventScroll: true })
+      }
     }
   }, [onClose])
 
@@ -266,6 +325,13 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
 
   const userFacingDescription = getUserFacingDescription(item.description)
   const displayPrice = formatDisplayPrice(item.price)
+  const rawTitle = String(item.title || '').replace(/\s+/g, ' ').trim()
+  const displayTitle = getProductDisplayTitle(rawTitle)
+  const hasCleanedTitle = Boolean(rawTitle && displayTitle && rawTitle !== displayTitle)
+  const fullTitleLabel =
+    retailerLabel && retailerLabel.toLowerCase().startsWith('amazon')
+      ? 'See full Amazon title'
+      : 'See full source title'
   const shouldCollapseBullets = featureBullets.length >= 5
   const displayedBullets =
     shouldCollapseBullets && !bulletsExpanded ? featureBullets.slice(0, 3) : featureBullets
@@ -280,9 +346,11 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
       onClick={onClose}
     >
       <MotionDiv
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="product-detail-title"
+        tabIndex={-1}
         initial={{ opacity: 0, scale: 0.97, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 8 }}
@@ -302,6 +370,7 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
           <Button
             type="button"
             variant="ghost"
+            aria-label="Close product details"
             className="h-8 w-8 rounded-full p-0 text-slate-500 hover:bg-[#f5eee6] hover:text-slate-700 sm:h-9 sm:w-9"
             onClick={onClose}
           >
@@ -332,7 +401,7 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
             ) : (
               <img
                 src={item.image}
-                alt={item.title}
+                alt={displayTitle || item.title}
                 className="h-full w-full object-contain mix-blend-multiply"
                 onError={() => setImgError(true)}
               />
@@ -353,7 +422,7 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
                 id="product-detail-title"
                 className="text-xl font-semibold leading-snug tracking-tight text-slate-900 sm:text-2xl"
               >
-                {item.title}
+                {displayTitle || item.title}
               </h2>
               <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
                 <div className="flex items-center gap-0.5">
@@ -396,6 +465,15 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
               shouldCollapseBullets={shouldCollapseBullets}
               userFacingDescription={userFacingDescription}
             />
+
+            {hasCleanedTitle ? (
+              <details className="rounded-2xl border border-[#eadfce] bg-white/88 p-4 text-sm text-slate-500">
+                <summary className="cursor-pointer font-medium text-slate-600">
+                  {fullTitleLabel}
+                </summary>
+                <p className="mt-3 leading-6">{rawTitle}</p>
+              </details>
+            ) : null}
           </div>
         </div>
         <RetailerDecisionBar
