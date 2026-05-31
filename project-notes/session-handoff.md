@@ -22,6 +22,8 @@
 - The branch is for borrowing the strongest UI/UX lessons from the mobile app while keeping web optimized for browser and desktop use.
 - The current web homepage at `/` still uses the `open` layout until changed.
 - The product should stay calm, focused, mobile-first/responsive, and not marketplace-shaped.
+- Focamai should not feel like an Amazon clone or marketplace wall. Amazon is the current primary commerce path and affiliate target, so frontend copy and UI may say Amazon directly when the active source is Amazon and doing so improves clarity, trust, or conversion.
+- Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible, but do not let future multi-retailer flexibility make today's Amazon-first UX vague.
 - Product shortlists stay at 6 items.
 - The guided backend path is the real product path.
 - `/api/search/live` remains a manual/debug combined route, not the normal user flow.
@@ -31,9 +33,10 @@
 - Priority 2 is now implemented in the first pass: the large search stage collapses into compact progress plus a summary after submit, refinement gets its own active panel, and finalized refinement collapses above the ranked results.
 - Priority 3 is now implemented in the first pass: the active refine panel uses the mobile-inspired heading, AI follow-up prompt, up to 3 refinement chips, fallback chips, selected chip state, and chip-to-notes behavior.
 - Priority 4 is now implemented in the first pass: guided finalize shows staged progress copy while it locks the shortlist.
-- Priority 5 is now implemented in the first pass: product detail modal order is image/facts, reasoning/caveat, product notes, and one compact retailer CTA/disclosure area.
-- Priority 6 is now implemented in the first pass: search/refine/results/retry/modal surfaces use fewer gradients, lighter shadows, more consistent radii, teal-first actions, and orange mainly for retailer clickout.
+- Priority 5 is now implemented in the first pass: product detail modal order is image/facts, reasoning/caveat, product notes, and one compact source-specific CTA/disclosure area.
+- Priority 6 is now implemented in the first pass: search/refine/results/retry/modal surfaces use fewer gradients, lighter shadows, more consistent radii, teal-first actions, and orange mainly for shopping clickout.
 - Priority 7 is now implemented in the first pass: retry asks what felt off, uses only three broad quick prompts, shows AI advice as an editable `Next search` field, and has one `Search again` action.
+- Product titles are normalized for user-facing display across result rows, selected panels, old cards, and modal headings. Raw Amazon/source titles remain in data and are exposed behind a quiet full-title disclosure in details when the display title differs.
 
 ## Current guided flow
 - `GET /api/search/rainforest-discover` is the main discovery route used by the homepage.

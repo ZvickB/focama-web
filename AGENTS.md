@@ -55,7 +55,11 @@ Read this file first at the start of every chat.
 - `/api/search/live` is the explicit manual/debug combined route.
 - Product shortlists are 6 items end to end.
 - Prefer the PNG wordmark for now instead of forcing a weak SVG recreation.
-- Keep the product vendor-agnostic even if Amazon becomes the strongest affiliate path later.
+- Focamai should not feel like a prettier Amazon wall or marketplace clone. It should feel like a focused decision aid that helps the user narrow choices before leaving to shop.
+- Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where that improves clarity, trust, or conversion.
+- Do not force generic labels like `retailer` in user-facing UI when `Amazon` is more accurate for the current experience.
+- Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
+- Do not let future multi-retailer flexibility make today's Amazon-first UX vague. If more retailers become active, revisit frontend labels based on the real source mix.
 
 ## Storage and history
 - Supabase-backed cache is supported when configured, with local fallback for development.

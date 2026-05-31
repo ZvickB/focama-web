@@ -6,7 +6,7 @@
 - Do not read every project note by default. Open deeper notes only when the task needs them.
 
 ## Product summary
-Focamai helps a user describe the product they want, answer one short follow-up when useful, and get a focused shortlist of 6 picks before leaving for a retailer marketplace. The product should feel calm, practical, focused, and vendor-agnostic instead of like a prettier Amazon wall.
+Focamai helps a user describe the product they want, answer one short follow-up when useful, and get a focused shortlist of 6 picks before leaving to shop. The product should feel calm, practical, and focused instead of like a prettier Amazon wall.
 
 ## Current branch context
 - Active branch for the current experiment: `new_web_ui`.
@@ -27,7 +27,11 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Current active web homepage uses the `open` layout.
 - Product shortlists are 6 items end to end.
 - The PNG wordmark is the active wordmark.
-- Keep the product vendor-agnostic, even when Amazon is the strongest near-term provider path.
+- Focamai should not feel like an Amazon clone or marketplace wall. Its product identity is the focused decision aid, not Amazon's browsing experience.
+- Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
+- Do not force generic `retailer` language in user-facing UI when `Amazon` is more accurate for the current experience.
+- Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
+- Do not let future multi-retailer flexibility make today's Amazon-first UX vague. If more retailers become active, revisit frontend labels based on the real source mix.
 - `search_history` is internal telemetry/cache visibility, not a user-facing saved-history feature.
 
 ## Current guided flow

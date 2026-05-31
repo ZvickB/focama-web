@@ -34,7 +34,7 @@
 - As soon as `HomeExperience` mounts, it prefetches the lazy `ResultsSection` and `ProductDetailModal` chunks so those UI steps are more likely to be ready before the user needs them.
 - Route-level lazy loading shows a visible loading fallback, and chunk-load crashes get a reload-focused recovery message in the top-level error boundary.
 - A tester-facing `Feedback` FAB appears after search starts, or after a short delay on the homepage, and opens a lightweight feedback sheet.
-- The active web UI uses restrained white/cream surfaces, consistent rounded corners, lighter shadows, and teal-first actions with orange reserved for the retailer CTA.
+- The active web UI uses restrained white/cream surfaces, consistent rounded corners, lighter shadows, and teal-first actions with orange reserved for the shopping clickout CTA.
 
 ## Guided backend flow
 - `GET /api/search/rainforest-discover`
@@ -98,12 +98,14 @@
 - On desktop, the ranked shortlist uses a large selected-product panel on the left and an internally scrolling row list on the right. Hovering or focusing a row updates the selected panel, and scrolling the internal list updates it to the top visible row.
 - On smaller screens, results collapse into stacked ranked pick cards.
 - Result rows/cards show reliable product facts first: image, title, provider/source, price, rating, review count, and a deterministic badge when available.
+- User-facing result and detail titles are normalized for display so long Amazon keyword-stuffed titles are shortened without changing the raw product data. Long titles with commas keep the first comma chunk; otherwise display titles truncate at a word boundary before 80 characters.
 - Result, retry, and modal surfaces now share a quieter visual system: fewer decorative gradients, smaller shadows, and more consistent 16-28px radii.
 - Selecting a row or the row details action opens the modal.
 - The modal is ordered as a decision aid: image and title, an `At a glance` facts card, `Why this pick`, `Worth knowing`, then product notes from `feature_bullets` or description.
+- If the normalized modal heading differs from the raw title, the modal exposes the original behind a quiet `See full Amazon title`/source-title disclosure.
 - If enrichment is still pending, the modal reserves the reasoning area with calm pending copy; if enrichment settles without a fit reason, it shows a practical fallback instead of an empty section.
 - Retailer clicks happen from result rows and the modal CTA.
-- The modal bottom bar is the single retailer decision area, showing current price, availability reminder, one `View retailer` CTA, and one compact Amazon Associates disclosure when a link is available.
+- The modal bottom bar is the single shopping decision area, showing current price, availability reminder, one source-specific clickout CTA, and one compact Amazon Associates disclosure when an Amazon link is available.
 
 ## Retry behavior
 - Retry is not an endless-results flow.
@@ -156,6 +158,9 @@
 - Tester feedback writes to a dedicated `tester_feedback` table in Supabase when configured, with local file fallback in development.
 
 ## Marketplace direction
-- Focamai narrows choices before the user goes into a retailer marketplace.
-- The normalized product shape should stay vendor-agnostic even if Amazon is the strongest near-term path.
+- Focamai narrows choices before the user leaves to shop, instead of becoming a marketplace wall inside the app.
+- Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
+- Do not force generic labels like `retailer` in user-facing UI when `Amazon` is more accurate for the current experience.
+- Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
+- The normalized product shape should stay provider-flexible, but future multi-retailer flexibility should not make today's Amazon-first UX vague.
 - Rainforest-style Amazon discovery is the main route; SerpApi stays secondary and only matters if deliberately reactivated.

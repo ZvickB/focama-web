@@ -13,9 +13,9 @@
 - Basic SEO plumbing is now in place: route-level metadata, canonicals, OG/Twitter tags, sitemap, robots, and manifest.
 - The homepage now preconnects Google Fonts in `index.html`, preconnects the configured backend origin from `VITE_BACKEND_URL`, gives the hero wordmark higher fetch priority, and prefetches the results plus modal chunks immediately after `HomeExperience` mounts.
 - A local-only internal analytics dashboard now lives at `/admin/analytics` during development and reads a backend funnel summary instead of querying Supabase directly from the browser.
-- The current user path is: search -> collapsed search summary -> active refine panel -> collapsed refine summary/focused ranked shortlist with a desktop selected-product preview -> modal details -> retailer clickout.
-- The modal detail view now acts more like a decision aid: `At a glance` facts, `Why this pick`, `Worth knowing`, product notes, then one compact bottom retailer CTA/disclosure area.
-- The new web UI slices now share a quieter visual system: mostly white/cream surfaces, lighter shadows, fewer decorative gradients, consistent rounded corners, teal actions, and orange only for the retailer CTA.
+- The current user path is: search -> collapsed search summary -> active refine panel -> collapsed refine summary/focused ranked shortlist with a desktop selected-product preview -> modal details -> Amazon/source clickout.
+- The modal detail view now acts more like a decision aid: `At a glance` facts, `Why this pick`, `Worth knowing`, product notes, then one compact bottom source-specific CTA/disclosure area.
+- The new web UI slices now share a quieter visual system: mostly white/cream surfaces, lighter shadows, fewer decorative gradients, consistent rounded corners, teal actions, and orange only for the shopping clickout CTA.
 - A tester-only feedback FAB now opens a lightweight sheet for quick product feedback, optional free text, and optional follow-up email.
 - Shortlists are always 6 items.
 - The PNG wordmark is the active wordmark.
@@ -32,6 +32,7 @@
 - `Show products now` reveals the preview set without finalize.
 - `Show focused picks` runs guided finalize and scrolls directly to the results region. The results area now shows staged finalize progress copy while the shortlist is being locked. If the follow-up notes include hard eligibility constraints, including kosher/Jewish-use terms, dietary/allergy needs, safety/material exclusions, or compatibility language, the frontend refreshes Rainforest discovery once with the query plus notes before finalizing.
 - Final results now render as a ranked shortlist instead of a marketplace-style grid. On desktop, the shortlist has a large selected-product panel on the left and an internally scrolling row list on the right; hover, focus, and the top visible row update the selected panel.
+- Result rows, selected-product panels, old card view, and modal headings now use normalized display titles so Amazon keyword stuffing does not dominate the UI. The raw title is preserved in product data and appears behind a quiet full-title disclosure in the modal when it differs.
 - After final results appear, refinement collapses into a compact summary above the ranked shortlist.
 - The product modal keeps enrichment hydrating in place: `fit_reason` and `caveat` fill the high reasoning area when available, while feature bullets/descriptions sit lower as product notes.
 - Retry is currently suggestion-led: the user opens a clearer correction panel, can tap one of three broad quick prompts, explains what felt off, and `/api/search/retry-advice` proposes a better next query.
@@ -77,7 +78,11 @@
 ## Active constraints
 - Keep the guided flow as the main product path.
 - Keep shortlist count at 6 unless the user explicitly changes it.
-- Keep the product vendor-agnostic in frontend shape and normalized backend responses.
+- Focamai should not feel like an Amazon clone or marketplace wall. Its product identity is the focused decision aid, not Amazon's browsing experience.
+- Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
+- Do not force generic `retailer` language in user-facing UI when `Amazon` is more accurate for the current experience.
+- Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
+- Do not let future multi-retailer flexibility make today's Amazon-first UX vague. If more retailers become active, revisit frontend labels based on the real source mix.
 - Keep `search_history` as internal telemetry, not user-facing saved history.
 - Keep current behavior and future ideas clearly separated in notes.
 

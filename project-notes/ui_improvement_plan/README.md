@@ -99,7 +99,7 @@ Implemented web direction:
 - Lead with image and core facts.
 - Put "Why this pick" high and make it feel like the intelligence layer.
 - Keep "Worth knowing" close to the reason.
-- Keep retailer CTA and affiliate/availability disclosure together.
+- Keep the shopping clickout CTA and affiliate/availability disclosure together. If the active source is Amazon, the CTA can say Amazon directly.
 - Use feature bullets as support, not the whole story.
 
 Why this helps:
@@ -155,7 +155,7 @@ Why this helps:
 - Do not port React Native components into web.
 - Do not make web behave like a mobile stack navigator.
 - Do not add saved/history/profile/compare surfaces as part of this pass.
-- Do not make Amazon feel like the product identity.
+- Amazon can be named clearly as the current shopping destination/source, but it should not become Focamai's brand identity or visual style. The UI should feel like Focamai helping the user decide, not like browsing Amazon inside Focamai.
 - Do not change the backend contract unless a specific UI improvement truly needs it.
 - Do not change the six-pick product rule unless explicitly chosen.
 

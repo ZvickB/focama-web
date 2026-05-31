@@ -35,7 +35,7 @@ flowchart TD
     I -->|rules_fallback| J
 
     J --> L[Cards render immediately
-    image · price · rating · retailer CTA]
+    image · price · rating · source-specific CTA]
 
     J --> M[Async enrichment starts
     after finalize responds]
@@ -68,4 +68,4 @@ flowchart TD
 | Finalize is thin | Haiku locks in the blocking path · product detail stays async |
 | Preview ≠ focused picks | `Just show me results` is not the guided shortlist |
 | Enrichment explains, not reranks | Async work adds fit reasons and caveats · winners don't change |
-| Frontend is vendor-agnostic | Provider path is Amazon-focused · UI and result model are not |
+| Amazon-first UX, flexible internals | Current UI may name Amazon when Amazon is the active source · backend/provider logic and normalized product data stay flexible |

@@ -340,8 +340,9 @@
         <p class="provider-note">
           <strong>Provider reality:</strong> the main homepage route is still
           <code>/api/search/rainforest-discover</code>, but the route currently uses the
-          Oxylabs-backed Amazon path under that Rainforest-named surface. The frontend stays
-          vendor-agnostic, and SerpApi is not part of the active homepage flow.
+          Oxylabs-backed Amazon path under that Rainforest-named surface. The current UX may name
+          Amazon when Amazon is the active source, while backend/provider logic stays flexible.
+          SerpApi is not part of the active homepage flow.
         </p>
 
         <div class="legend">
@@ -647,7 +648,7 @@
               <div class="detail">
                 <strong>Before enrichment</strong>
                 <p>
-                  Title, image, price, rating, retailer CTA, and either feature bullets or the base
+                  Title, image, price, rating, source-specific CTA, and either feature bullets or the base
                   description when bullets are not available yet.
                 </p>
               </div>
@@ -778,10 +779,11 @@
           </article>
           <article class="rule-card">
             <div class="rc-rank">Rule 6</div>
-            <h3>Frontend product shape stays vendor-agnostic</h3>
+            <h3>Amazon-first UX, flexible internals</h3>
             <p>
-              The current provider path is Amazon-focused, but the UI and normalized result model are
-              not supposed to become marketplace-branded.
+              The current UI may name Amazon when Amazon is the active source. Backend/provider logic
+              and normalized product data should stay flexible, without making today's Amazon-first UX
+              vague.
             </p>
           </article>
         </div>

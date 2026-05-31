@@ -1,5 +1,5 @@
 # Focamai
-intent: an app where the user can enter a product description and receive a calmer, more focused shopping shortlist before heading into a retailer marketplace.
+intent: an app where the user can enter a product description and receive a calmer, more focused shopping shortlist before heading out to shop.
 purpose: Large marketplaces are sticky and distracting. Focamai should help users narrow choices before they get pulled into that environment.
 
 ## Flow of app
@@ -24,7 +24,9 @@ purpose: Large marketplaces are sticky and distracting. Focamai should help user
 
 ## Current implementation direction
 - Keep the default homepage on the `open` layout while continuing to polish it.
-- Keep the normalized frontend/backend response shape vendor-agnostic.
+- Amazon is the current primary commerce path and affiliate target. Frontend copy and UI may say Amazon directly when the active source is Amazon and doing so improves clarity, trust, or conversion.
+- Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
+- Do not force generic `retailer` labels in the current Amazon-first UX, and do not let future multi-retailer flexibility make today's frontend vague.
 - Keep the product path centered on guided discovery, short AI refinement, shortlist lock, and later enrichment.
 - Keep persistent caching focused on discovery and reusable product-detail infrastructure, not on storing finalized shortlists as product memory.
 - Avoid overengineering before v1 usage justifies it.
