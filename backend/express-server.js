@@ -1,5 +1,6 @@
 import express from 'express'
 import helmet from 'helmet'
+import multer from 'multer'
 import { attachCorsOrigin, buildInternalErrorPayload, resolveCorsOrigin, sendJson } from './lib/http.js'
 import { initObservability, registerProcessErrorHandlers, reportBackendError } from './lib/observability.js'
 import {
@@ -106,6 +107,50 @@ app.get('/api/analytics/dashboard', async (req, res) => {
 
 app.post('/api/feedback', async (req, res) => {
   await handleFeedbackSubmission(req, res)
+})
+
+// Voice transcription
+const audioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
+
+app.post('/api/transcribe', audioUpload.single('audio'), async (req, res) => {
+  attachCorsOrigin(res, req.headers.origin)
+
+  if (!req.file) {
+    res.status(400).json({ error: 'No audio file received.' })
+    return
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    res.status(500).json({ error: 'Transcription not configured.' })
+    return
+  }
+
+  try {
+    const formData = new FormData()
+    const blob = new Blob([req.file.buffer], { type: req.file.mimetype || 'audio/m4a' })
+    formData.append('file', blob, req.file.originalname || 'recording.m4a')
+    formData.append('model', 'whisper-1')
+
+    const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: formData,
+    })
+
+    if (!whisperRes.ok) {
+      const errorBody = await whisperRes.text()
+      console.error('[transcribe] Whisper API error', { status: whisperRes.status, body: errorBody.slice(0, 200) })
+      res.status(502).json({ error: 'Transcription failed.' })
+      return
+    }
+
+    const { text } = await whisperRes.json()
+    res.json({ text: text?.trim() ?? '' })
+  } catch (error) {
+    reportBackendError(error, { method: 'POST', route: '/api/transcribe', source: 'express_server' })
+    res.status(500).json({ error: 'Transcription failed.' })
+  }
 })
 
 // Health
