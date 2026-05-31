@@ -102,7 +102,7 @@
 - Result, retry, and modal surfaces now share a quieter visual system: fewer decorative gradients, smaller shadows, and more consistent 16-28px radii.
 - Selecting a row or the row details action opens the modal.
 - The modal is ordered as a decision aid: image and title, an `At a glance` facts card, `Why this pick`, `Worth knowing`, then product notes from `feature_bullets` or description.
-- If the normalized modal heading differs from the raw title, the modal exposes the original behind a quiet `See full Amazon title`/source-title disclosure.
+- If the normalized detail heading differs from the raw title, the detail header exposes the original directly under the title behind a quiet `Full Amazon title`/source-title disclosure.
 - If enrichment is still pending, the modal reserves the reasoning area with calm pending copy; if enrichment settles without a fit reason, it shows a practical fallback instead of an empty section.
 - Retailer clicks happen from result rows and the modal CTA.
 - The modal bottom bar is the single shopping decision area, showing current price, availability reminder, one source-specific clickout CTA, and one compact Amazon Associates disclosure when an Amazon link is available.

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
-import { ArrowUpRight, CheckCircle2, Info, Star, X } from 'lucide-react'
+import { ArrowUpRight, CheckCircle2, ChevronDown, Info, Star, X } from 'lucide-react'
 
 import logo from '@/assets/logo_master_version.svg'
 import { resolveAmazonDomainForRequest } from '@/components/home/useGuidedSearch.js'
@@ -239,6 +239,7 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
   const { selectedAmazonDomain, resolvedAmazonDomain } = useAmazonStore()
   const retailerLabel = resolveAmazonRetailerLabel(item?.subtitle, selectedAmazonDomain, resolvedAmazonDomain)
   const [bulletsExpanded, setBulletsExpanded] = useState(false)
+  const [fullTitleExpanded, setFullTitleExpanded] = useState(false)
   const [imgError, setImgError] = useState(false)
   const dialogRef = useRef(null)
   const previouslyFocusedElementRef = useRef(null)
@@ -311,6 +312,7 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
   useEffect(() => {
     const resetTimer = window.setTimeout(() => {
       setBulletsExpanded(false)
+      setFullTitleExpanded(false)
       setImgError(false)
     }, 0)
 
@@ -330,8 +332,8 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
   const hasCleanedTitle = Boolean(rawTitle && displayTitle && rawTitle !== displayTitle)
   const fullTitleLabel =
     retailerLabel && retailerLabel.toLowerCase().startsWith('amazon')
-      ? 'See full Amazon title'
-      : 'See full source title'
+      ? 'Full Amazon title'
+      : 'Full source title'
   const shouldCollapseBullets = featureBullets.length >= 5
   const displayedBullets =
     shouldCollapseBullets && !bulletsExpanded ? featureBullets.slice(0, 3) : featureBullets
@@ -412,7 +414,7 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
             className="relative flex flex-col gap-4 pr-2 sm:pr-3 lg:col-start-2 lg:min-h-0 lg:overflow-y-auto lg:pr-4"
             style={{ scrollbarGutter: 'stable' }}
           >
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               {item.subtitle ? (
                 <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-400">
                   {item.subtitle}
@@ -424,6 +426,26 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
               >
                 {displayTitle || item.title}
               </h2>
+              {hasCleanedTitle ? (
+                <div className="max-w-full">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-full py-0 text-xs font-medium text-slate-500 transition-colors hover:text-slate-700"
+                    aria-expanded={fullTitleExpanded}
+                    onClick={() => setFullTitleExpanded((currentValue) => !currentValue)}
+                  >
+                    {fullTitleExpanded ? 'Hide full title' : fullTitleLabel}
+                    <ChevronDown
+                      className={`h-3 w-3 transition-transform duration-200 ${
+                        fullTitleExpanded ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+                  {fullTitleExpanded ? (
+                    <p className="mt-0.5 text-xs leading-5 text-slate-500">{rawTitle}</p>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
                 <div className="flex items-center gap-0.5">
                   {Array.from({ length: 5 }).map((_, index) => (
@@ -466,14 +488,6 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
               userFacingDescription={userFacingDescription}
             />
 
-            {hasCleanedTitle ? (
-              <details className="rounded-2xl border border-[#eadfce] bg-white/88 p-4 text-sm text-slate-500">
-                <summary className="cursor-pointer font-medium text-slate-600">
-                  {fullTitleLabel}
-                </summary>
-                <p className="mt-3 leading-6">{rawTitle}</p>
-              </details>
-            ) : null}
           </div>
         </div>
         <RetailerDecisionBar
