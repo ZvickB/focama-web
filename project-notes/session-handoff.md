@@ -36,13 +36,15 @@
 - Priority 5 is now implemented in the first pass: product detail modal order is image/facts, reasoning/caveat, product notes, and one compact source-specific CTA/disclosure area.
 - Priority 6 is now implemented in the first pass: search/refine/results/retry/modal surfaces use fewer gradients, lighter shadows, more consistent radii, teal-first actions, and orange mainly for shopping clickout.
 - Priority 7 is now implemented in the first pass: retry asks what felt off, uses only three broad quick prompts, shows AI advice as an editable `Next search` field, and has one `Search again` action.
-- Product titles are normalized for user-facing display across result rows, selected panels, old cards, and modal headings. Raw Amazon/source titles remain in data and are exposed behind a quiet full-title disclosure in details when the display title differs.
+- Product titles are normalized for user-facing display across result rows, selected panels, grid/card view, and modal headings. Raw Amazon/source titles remain in data and are exposed behind a quiet full-title disclosure in details when the display title differs.
 
 ## Current guided flow
 - `GET /api/search/rainforest-discover` is the main discovery route used by the homepage.
 - `GET /api/search/refine` returns one short follow-up question and optional refinement chips.
 - `POST /api/search/finalize` rebuilds the candidate pool from guided cache and returns up to 6 shortlist cards.
+- Haiku shortlist locking now ranks by inferred title fit first, rating/reviews second, and raw Amazon search position (`amazonPosition`) only as a secondary signal.
 - `GET /api/search/enrichment-stream` is the first enrichment path; `GET /api/search/enrichment` is the polling fallback.
+- Mini enrichment now treats the first locked pick as the hero recommendation and later picks as alternatives with distinct tradeoffs.
 - `GET /api/search/query-quality` exposes polling-based query-quality suggestions.
 - `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist.
 - `POST /api/feedback` stores tester feedback.

@@ -32,7 +32,7 @@
 - `Show products now` reveals the preview set without finalize.
 - `Show focused picks` runs guided finalize and scrolls directly to the results region. The results area now shows staged finalize progress copy while the shortlist is being locked. If the follow-up notes include hard eligibility constraints, including kosher/Jewish-use terms, dietary/allergy needs, safety/material exclusions, or compatibility language, the frontend refreshes Rainforest discovery once with the query plus notes before finalizing.
 - Final results now render as a ranked shortlist instead of a marketplace-style grid. On desktop, the shortlist has a large selected-product panel on the left and an internally scrolling row list on the right; hover, focus, and the top visible row update the selected panel.
-- Result rows, selected-product panels, old card view, and modal headings now use normalized display titles so Amazon keyword stuffing does not dominate the UI. The raw title is preserved in product data and appears behind a quiet full-title disclosure in the modal when it differs.
+- Result rows, selected-product panels, grid/card view, and modal headings now use normalized display titles so Amazon keyword stuffing does not dominate the UI. The raw title is preserved in product data and appears behind a quiet full-title disclosure in the modal when it differs.
 - After final results appear, refinement collapses into a compact summary above the ranked shortlist.
 - The product modal keeps enrichment hydrating in place: `fit_reason` and `caveat` fill the high reasoning area when available, while feature bullets/descriptions sit lower as product notes.
 - Retry is currently suggestion-led: the user opens a clearer correction panel, can tap one of three broad quick prompts, explains what felt off, and `/api/search/retry-advice` proposes a better next query.
@@ -66,13 +66,13 @@
 - Finalize rebuilds the candidate pool from guided discovery cache instead of trusting a browser-posted rich pool.
 - Hard-constraint follow-up notes are treated as discovery-changing context before finalize: the frontend detects broad kosher/Jewish-use, dietary/allergy, safety/material, and compatibility/exclusion terms, refreshes discovery at most once for the active search, then sends finalize the refreshed token and the same combined query used for that refreshed discovery.
 - Discovery cache is now split from session state: repeated same-query searches reuse the shared candidate pool, but each run gets its own token-scoped session snapshot for finalize/enrichment.
-- Haiku locks the shortlist first.
+- Haiku locks the shortlist first. Its candidate summary passes `amazonPosition` (raw Amazon search position) instead of an app-derived rank, and the prompt tells Haiku to infer fit from title signals first, then use rating/reviews and Amazon position as tiebreakers.
 - Partial valid Haiku output is treated as recoverable: the backend tops it up from deterministic fallback and returns `selection.strategy: 'haiku_lock_topped_up'`.
 - The current detail helper for shortlisted ASINs is still `fetchOxylabsProductDetailsByAsin`, so discovery can use Rainforest while modal bullets/descriptions still come from Oxylabs.
 - Product details are cached per ASIN before mini enrichment runs, using the final displayed shortlist IDs.
 - Failed shortlisted detail calls now retry once in the background after the fast first pass, so mini enrichment can proceed with partial detail coverage while later cache quality still improves.
 - If that background retry later finds bullets, the active stored enrichment payload is patched and the modal can hydrate those bullets without a fresh finalize run.
-- Mini enrichment writes `fit_reason` and `caveat` back into the token-scoped session snapshot for the exact active `discoveryToken`, then the frontend hydrates the modal via SSE first and polling fallback second.
+- Mini enrichment writes `fit_reason` and `caveat` back into the token-scoped session snapshot for the exact active `discoveryToken`, then the frontend hydrates the modal via SSE first and polling fallback second. The prompt treats the first locked product as the hero recommendation and frames later products as alternatives with distinct tradeoffs.
 - AI prompts have been sharpened to weight user context more heavily when selecting and explaining picks.
 
 ## Active constraints

@@ -54,7 +54,7 @@
 - `POST /api/search/finalize`
   - accepts lightweight context
   - rebuilds the candidate pool server-side from guided cache
-  - locks the shortlist with haiku first
+  - locks the shortlist with haiku first, using title fit as the primary ranking signal and raw Amazon search position only as a secondary tiebreaker
   - if haiku returns a partial valid subset, tops up from deterministic fallback so the response still returns up to 6 eligible products
   - returns shortlist cards immediately
   - starts async product-detail fetch + mini enrichment in the background
@@ -97,6 +97,7 @@
 - Results use a ranked shortlist layout rather than a marketplace grid.
 - On desktop, the ranked shortlist uses a large selected-product panel on the left and an internally scrolling row list on the right. Hovering or focusing a row updates the selected panel, and scrolling the internal list updates it to the top visible row.
 - On smaller screens, results collapse into stacked ranked pick cards.
+- A development-only results-view toggle can switch between the ranked rows view and the older grid/card view.
 - Result rows/cards show reliable product facts first: image, title, provider/source, price, rating, review count, and a deterministic badge when available.
 - User-facing result and detail titles are normalized for display so long Amazon keyword-stuffed titles are shortened without changing the raw product data. Long titles with commas keep the first comma chunk; otherwise display titles truncate at a word boundary before 80 characters.
 - Result, retry, and modal surfaces now share a quieter visual system: fewer decorative gradients, smaller shadows, and more consistent 16-28px radii.
@@ -140,6 +141,7 @@
 - Search cache and operational history use Supabase when configured, with local fallback in development.
 - Product details have a separate per-ASIN cache shared across detail providers.
 - Async mini enrichment is token-scoped when it writes back into the per-session discovery snapshot so older same-query searches cannot leak context-specific `fit_reason` or `caveat` text into newer sessions.
+- Mini enrichment treats the first locked product as the hero recommendation and writes later picks as alternatives that explain who might prefer them over the hero.
 - Oxylabs product-detail fetches use a fast first pass for finalize enrichment and retry failed ASIN detail calls in the background so cache quality can still improve without holding the modal AI copy back longer.
 - When a background detail retry later succeeds, the stored enrichment payload is updated with the new `feature_bullets` and the frontend keeps polling long enough for the open modal to hydrate those bullets in place.
 - Backend observability is now opt-in through Sentry (`SENTRY_DSN`) with sanitized error context, and background async failures are logged/reported instead of disappearing silently.

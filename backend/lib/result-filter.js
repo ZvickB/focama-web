@@ -459,6 +459,7 @@ function buildAiCandidate(item, index, score, matchSignals, reasonFallback) {
     numericPrice: Number.isFinite(Number(item.extracted_price)) ? Number(item.extracted_price) : null,
     rating: normalized.rating,
     reviewCount: normalized.reviewCount,
+    amazonPosition: typeof item.position === 'number' ? item.position : null,
     delivery: item.delivery || '',
     tag: item.tag || '',
     extensions: Array.isArray(item.extensions) ? item.extensions.filter(Boolean) : [],

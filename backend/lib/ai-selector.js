@@ -200,9 +200,9 @@ function getCandidateSummaryDescription(candidate, candidatePoolQuery) {
 }
 
 function buildCandidateSummary(candidatePool) {
-  return candidatePool.candidates.map((candidate, index) => ({
+  return candidatePool.candidates.map((candidate) => ({
     id: candidate.id,
-    rank: index + 1,
+    amazonPosition: candidate.amazonPosition ?? null,
     title: candidate.title,
     description: getCandidateSummaryDescription(candidate, candidatePool.query),
     duplicateFamilyKey: candidate.duplicateFamilyKey || '',
@@ -290,7 +290,21 @@ function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }) {
 
   return [
     'Select the final shopping shortlist for a real purchase decision.',
-    'Use an eligibility-first process:',
+    '',
+    'Ranking approach - apply in this order:',
+    '1. Read the product query and infer what a shopper using those exact words most likely needs.',
+    '   Examples: "travel stroller" -> compact fold, low weight, transit/airline friendly.',
+    '   "jogging stroller" -> all-terrain wheels, stability, jogging-safe frame.',
+    '   "standing desk" -> height-adjustable, motor quality, surface size.',
+    '   "beginner guitar" -> playability, low action, starter-friendly.',
+    '2. Use each candidate\'s title as the primary fit signal - weight, fold type, terrain,',
+    '   size, and use-case claims appear there. Rank #1 as the strongest concrete example',
+    '   of the inferred use case. Do not default to highest-rated when fit signals differ.',
+    '3. Use rating and review count as quality tiebreakers between similar-fit candidates.',
+    '4. Use amazonPosition as a secondary tiebreaker only - a lower number means Amazon ranked',
+    '   it higher for this query, which is a real signal, but does not override fit or quality.',
+    '',
+    'Eligibility rules (apply before ranking):',
     '1. User context defines eligibility. Treat explicit user context as requirements, not soft preferences. This includes quantity, package format, budget, compatibility, size, material, style, diet/allergy/safety needs, exclusions, "must have" features, and similar purchase requirements.',
     '2. First identify candidates that appear to satisfy the explicit user context. Select final picks from those eligible candidates whenever possible.',
     '3. A lower-rated eligible candidate beats a higher-rated ineligible candidate. Ratings, review count, trust score, price, and marketplace strength are only tie-breakers after eligibility and product relevance.',
@@ -299,6 +313,7 @@ function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }) {
     '6. If the query names a brand/model, treat it as a strong preference and fill matching eligible slots first. Only use other brands/models when matching candidates are weak, duplicated, unavailable, or clearly worse for the user context.',
     '7. Avoid near-duplicate results. Do not pick multiple sizes/colors/sellers of the same product unless that variety is genuinely useful. Use duplicateFamilyKey, title similarity, source, and attributes to spot duplicates.',
     '8. Build the best set, not just the top individual scores. Add diversity across use case, price tier, or style only after eligibility, relevance, and quality are satisfied.',
+    'Within the eligible set, final order priority: (1) fit for inferred use case from title, (2) rating and review count, (3) amazonPosition.',
     `Return exactly ${desiredCount} picks from the candidates below.`,
     'Only choose from the provided candidate ids. Preserve your chosen order from best overall fit to weakest acceptable fit.',
     '',
@@ -314,6 +329,9 @@ function buildMiniEnrichmentPrompt({ lockedCandidates, query, details }) {
   return [
     'Write a short explanation for each of these selected products. Write like a trusted assistant, not a salesperson.',
     'The shortlist is already decided. Do not change the order or swap any product.',
+    'The selected products are ordered from best overall fit to weakest acceptable fit.',
+    'Write the first product as the confident hero recommendation: explain why it is the strongest match for the shopper\'s actual need while still keeping the caveat honest.',
+    'For every later product, write it as an alternative to the first product. Explain what kind of shopper would prefer it over the hero, such as a different budget, size, feature tradeoff, style, or use case. Do not merely repeat why it is generally good.',
     'For each product, write two separate fields:',
     '1. fit_reason: One or two sentences explaining why it was picked for this specific need. Lead with what the product actually does for the use case — not with a quote of the user\'s preference. Do not open with "Because you mentioned…" or "Given that you said…". If user context shaped the pick, weave it in naturally, but the sentence should read like a recommendation, not a justification. Avoid superlatives, hype phrases, and generic positives.',
     '2. caveat: One honest drawback or caveat — practical (e.g. exceeds budget, heavier than alternatives) or contextual (e.g. better if X matters more than Y). If the product conflicts with something the user stated (e.g. a different material, higher price), flag it here, not in fit_reason. Do not skip this even if the pick is strong.',

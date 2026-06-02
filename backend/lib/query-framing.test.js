@@ -123,7 +123,7 @@ describe('query framing', () => {
       items: {
         type: 'object',
         properties: {
-          label: { type: 'string', minLength: 1, maxLength: 22 },
+          label: { type: 'string', minLength: 1, maxLength: 30 },
           prompt: { type: 'string', minLength: 1 },
         },
         required: ['label', 'prompt'],
@@ -132,7 +132,7 @@ describe('query framing', () => {
     })
     expect(parsedBody.text.format.schema.properties).not.toHaveProperty('category_hint')
     expect(parsedBody.input[1].content).toContain('exactly 3 short refinement chip labels')
-    expect(parsedBody.input[1].content).toContain('22 characters or fewer')
+    expect(parsedBody.input[1].content).toContain('30 characters or fewer')
   })
 
   it('normalizes and clamps model prompts from response content chunks', async () => {
@@ -156,7 +156,7 @@ describe('query framing', () => {
                   refinement_suggestions: [
                     { label: '  Easy   storage ', prompt: 'I have limited space and need something compact' },
                     { label: 'Quiet operation', prompt: 'I need something that runs quietly' },
-                    { label: 'This label is too long to fit', prompt: 'Some prompt' },
+                    { label: 'This label is definitely too long to fit', prompt: 'Some prompt' },
                     'a plain string that is now ignored',
                   ],
                 }),

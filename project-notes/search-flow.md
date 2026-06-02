@@ -65,7 +65,7 @@ flowchart TD
 |---|---|
 | Candidate pool is server-owned | Browser sends token · finalize reconstructs from snapshot |
 | Shortlist stays at 6 | Preview can be broader · guided output is always 6 |
-| Finalize is thin | Haiku locks in the blocking path · product detail stays async |
+| Finalize is thin | Haiku locks in the blocking path using title-fit first · product detail stays async |
 | Preview ≠ focused picks | `Just show me results` is not the guided shortlist |
-| Enrichment explains, not reranks | Async work adds fit reasons and caveats · winners don't change |
+| Enrichment explains, not reranks | Async work adds hero/alternative fit reasons and caveats · winners don't change |
 | Amazon-first UX, flexible internals | Current UI may name Amazon when Amazon is the active source · backend/provider logic and normalized product data stay flexible |

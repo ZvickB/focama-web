@@ -363,12 +363,12 @@ export function ResultsSection({
                 type="button"
                 onClick={() => setCardView((v) => (v === 'new' ? 'old' : 'new'))}
                 className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-slate-300 bg-white/80 px-2.5 py-1 text-xs text-slate-500 hover:border-slate-400 hover:text-slate-700"
-                title="Toggle card style (dev only)"
+                title="Toggle results view (dev only)"
               >
                 {cardView === 'new' ? (
-                  <><LayoutGrid className="h-3 w-3" /> Old cards</>
+                  <><LayoutGrid className="h-3 w-3" /> Grid view</>
                 ) : (
-                  <><LayoutList className="h-3 w-3" /> New cards</>
+                  <><LayoutList className="h-3 w-3" /> Rows view</>
                 )}
               </button>
             ) : null}

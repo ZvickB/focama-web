@@ -48,10 +48,10 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 ## Important behavior notes
 - Discovery currently tries Rainforest first and falls back to Oxylabs when needed.
 - Finalize rebuilds the candidate pool server-side from guided cache.
-- Haiku locks the shortlist first, with deterministic fallback/top-up when needed.
+- Haiku locks the shortlist first, with deterministic fallback/top-up when needed. Its prompt ranks title-fit first, then quality, with raw Amazon position only as a secondary tiebreaker.
 - Hard-constraint follow-up notes can trigger one refreshed discovery before finalize.
 - Query-quality suggestions are polling-based only. No SSE or prewarm path exists.
-- Modal/detail enrichment hydrates after the first shortlist cards are shown.
+- Modal/detail enrichment hydrates after the first shortlist cards are shown, framing the top pick as the hero recommendation and later picks as alternatives.
 - Marketplace listings without a known positive price are filtered out before preview/finalize.
 - `/api/search/live` and debug/cache routes are not the main user path.
 - `/admin/analytics` is local-only during development.

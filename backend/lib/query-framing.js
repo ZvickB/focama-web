@@ -4,7 +4,7 @@ import { createQueryFramingContract } from './layered-contracts.js'
 import { DEFAULT_HAIKU_MODEL, DEFAULT_REFINEMENT_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
 
 const MAX_PROMPT_LENGTH = 140
-const MAX_REFINEMENT_SUGGESTION_LENGTH = 22
+const MAX_REFINEMENT_SUGGESTION_LENGTH = 30
 const MAX_REFINEMENT_SUGGESTIONS = 3
 
 function clampText(value, maxLength) {
