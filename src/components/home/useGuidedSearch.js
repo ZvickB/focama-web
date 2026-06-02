@@ -29,6 +29,15 @@ const ENRICHMENT_POLL_INTERVAL_MS = 1500
 const ENRICHMENT_POLL_TIMEOUT_MS = 30000
 const QUERY_QUALITY_POLL_INTERVAL_MS = 1500
 const QUERY_QUALITY_POLL_TIMEOUT_MS = 20000
+
+function resolvePollInterval(overrideKey, fallbackMs) {
+  if (typeof window === 'undefined') return fallbackMs
+  const override = window[overrideKey]
+  return typeof override === 'number' && Number.isFinite(override) && override > 0
+    ? override
+    : fallbackMs
+}
+
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const FINALIZE_REQUEST_MODE_REFINED = 'guided_refined'
@@ -744,7 +753,7 @@ export function useGuidedSearch() {
         if (enrichmentPollRef.current.searchId === searchId) {
           schedulePoll()
         }
-      }, ENRICHMENT_POLL_INTERVAL_MS)
+      }, resolvePollInterval('__FOCAMAI_ENRICHMENT_POLL_INTERVAL_MS__', ENRICHMENT_POLL_INTERVAL_MS))
     }
 
     if (typeof EventSource !== 'function') {
@@ -956,7 +965,10 @@ export function useGuidedSearch() {
       if (queryQualityPollRef.current.searchId === searchId) {
         queryQualityPollRef.current.timerId = window.setTimeout(
           poll,
-          QUERY_QUALITY_POLL_INTERVAL_MS,
+          resolvePollInterval(
+            '__FOCAMAI_QUERY_QUALITY_POLL_INTERVAL_MS__',
+            QUERY_QUALITY_POLL_INTERVAL_MS,
+          ),
         )
       }
     }

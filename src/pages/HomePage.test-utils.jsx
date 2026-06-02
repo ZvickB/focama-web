@@ -71,12 +71,16 @@ export function setupHomePageTest() {
     window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__ = true
     window.__FOCAMAI_DISABLE_QUERY_QUALITY_POLLING__ = true
     window.__FOCAMAI_DISABLE_GEO_FETCH__ = true
+    window.__FOCAMAI_ENRICHMENT_POLL_INTERVAL_MS__ = 10
+    window.__FOCAMAI_QUERY_QUALITY_POLL_INTERVAL_MS__ = 10
   })
 
   afterEach(() => {
     delete window.__FOCAMAI_DISABLE_ENRICHMENT_POLLING__
     delete window.__FOCAMAI_DISABLE_QUERY_QUALITY_POLLING__
     delete window.__FOCAMAI_DISABLE_GEO_FETCH__
+    delete window.__FOCAMAI_ENRICHMENT_POLL_INTERVAL_MS__
+    delete window.__FOCAMAI_QUERY_QUALITY_POLL_INTERVAL_MS__
     vi.useRealTimers()
     cleanup()
   })

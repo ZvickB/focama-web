@@ -6,8 +6,8 @@ describe('RouteLoadingFallback', () => {
   it('shows a visible route loading state', () => {
     render(<RouteLoadingFallback />)
 
-    expect(screen.getByRole('status')).toBeTruthy()
-    expect(screen.getByText('Loading Focamai')).toBeTruthy()
-    expect(screen.getByText('Getting the next screen ready.')).toBeTruthy()
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    expect(screen.getByText('Loading Focamai')).toBeInTheDocument()
+    expect(screen.getByText('Getting the next screen ready.')).toBeInTheDocument()
   })
 })

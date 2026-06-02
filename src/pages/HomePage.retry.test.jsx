@@ -120,9 +120,6 @@ describe('HomePage retry advice', () => {
     expect(
       await screen.findByText(/the rejected picks sounded too bulky/i),
     ).toBeInTheDocument()
-    expect(
-      screen.getByText(/the rejected picks sounded too bulky/i),
-    ).toBeInTheDocument()
     expect(screen.queryByText(/retry 2 of 2\./i)).not.toBeInTheDocument()
     const retryAdviceRequest = fetchMock.mock.calls[3]
     expect(retryAdviceRequest[0]).toBe('/api/search/retry-advice')

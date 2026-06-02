@@ -50,9 +50,28 @@ export default defineConfig({
     },
   },
   test: {
-    environment: 'jsdom',
+    // Test files are split by extension: *.test.js runs in Node, while
+    // *.test.jsx gets jsdom and the Testing Library setup.
     fileParallelism: false,
-    setupFiles: './src/test/setup.js',
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'node',
+          environment: 'node',
+          include: ['**/*.test.js'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'jsdom',
+          environment: 'jsdom',
+          include: ['**/*.test.jsx'],
+          setupFiles: './src/test/setup.js',
+        },
+      },
+    ],
   },
   resolve: {
     alias: {

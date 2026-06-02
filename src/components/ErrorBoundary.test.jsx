@@ -20,9 +20,9 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     )
 
-    expect(screen.getByText('Something went wrong.')).toBeTruthy()
-    expect(screen.getByText('Reload page')).toBeTruthy()
-    expect(screen.getByText('Go home')).toBeTruthy()
+    expect(screen.getByText('Something went wrong.')).toBeInTheDocument()
+    expect(screen.getByText('Reload page')).toBeInTheDocument()
+    expect(screen.getByText('Go home')).toBeInTheDocument()
   })
 
   it('uses more helpful copy for route chunk load failures', () => {
@@ -34,7 +34,7 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     )
 
-    expect(screen.getByText('We had trouble loading this part of Focamai.')).toBeTruthy()
-    expect(screen.getByText(/Reloading usually pulls in the newest app files/i)).toBeTruthy()
+    expect(screen.getByText('We had trouble loading this part of Focamai.')).toBeInTheDocument()
+    expect(screen.getByText(/Reloading usually pulls in the newest app files/i)).toBeInTheDocument()
   })
 })
