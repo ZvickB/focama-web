@@ -484,7 +484,7 @@ export function ResultsSection({
                   </div>
                   <div
                     ref={resultRowsScrollRef}
-                    className="grid grid-cols-1 gap-3 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto lg:pb-[min(30vh,14rem)] lg:pr-1 lg:pt-0 xl:max-h-[720px]"
+                    className="grid grid-cols-1 gap-3 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto lg:pb-[min(30vh,16rem)] lg:pr-1 lg:pt-0 xl:max-h-[720px]"
                     onScroll={handleResultsListScroll}
                     style={{ scrollbarGutter: 'stable' }}
                   >
