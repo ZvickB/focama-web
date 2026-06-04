@@ -83,7 +83,6 @@ const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const RATE_LIMIT_WAIT_MESSAGE = 'Please wait about 10 seconds and try again.'
-const RAINFOREST_FALLBACK_STATUS_CODES = new Set([402, 429, 500, 503])
 
 // In-memory ring buffer for recent finalizations (dev analytics only; resets on server restart).
 const RECENT_FINALIZATIONS_MAX = 25
@@ -120,17 +119,6 @@ function getAmazonMarketplaceScope(scope, amazonDomain = '') {
   return normalizedAmazonDomain ? `${scope}:${normalizedAmazonDomain}` : scope
 }
 
-function shouldFallbackFromRainforest(error) {
-  if (!error || typeof error !== 'object') {
-    return true
-  }
-
-  const statusCode = Number(error.providerStatusCode ?? error.statusCode)
-  return Number.isFinite(statusCode)
-    ? RAINFOREST_FALLBACK_STATUS_CODES.has(statusCode)
-    : true
-}
-
 async function fetchDiscoveryArtifactsWithFallback({
   filterConfig,
   productQuery,
@@ -142,68 +130,70 @@ async function fetchDiscoveryArtifactsWithFallback({
   countryCode,
   amazonDomain,
 }) {
-  if (rainforestApiKey) {
-    try {
-      const rainforestResult = await fetchRainforestArtifacts({
-        filterConfig,
-        productQuery,
-        details,
-        reasonFallback,
-        rainforestApiKey,
-        countryCode,
-        amazonDomain,
-      })
+  if (oxylabsUsername && oxylabsPassword) {
+    const oxylabsResult = await fetchOxylabsArtifacts({
+      filterConfig,
+      productQuery,
+      details,
+      reasonFallback,
+      oxylabsUsername,
+      oxylabsPassword,
+      amazonDomain,
+    })
 
-      if (!rainforestResult.error) {
-        return {
-          ...rainforestResult,
-          source: 'rainforest_discovery',
-          fallbackFrom: null,
-        }
-      }
-
-      if (!shouldFallbackFromRainforest(rainforestResult.error) || !oxylabsUsername || !oxylabsPassword) {
-        return {
-          ...rainforestResult,
-          source: 'rainforest_discovery',
-          fallbackFrom: null,
-        }
-      }
-    } catch (error) {
-      if (!oxylabsUsername || !oxylabsPassword) {
-        throw error
+    if (!oxylabsResult.error || !rainforestApiKey) {
+      return {
+        ...oxylabsResult,
+        source: 'oxylabs_discovery',
+        fallbackFrom: null,
       }
     }
   }
 
-  if (!oxylabsUsername || !oxylabsPassword) {
+  if (!rainforestApiKey) {
     return {
       error: {
-        error: rainforestApiKey
-          ? 'Rainforest API request failed and Oxylabs fallback is not configured.'
-          : 'RAINFOREST_API_KEY or OXYLABS_USERNAME and OXYLABS_PASSWORD are required in the root .env file.',
+        error: oxylabsUsername || oxylabsPassword
+          ? 'Oxylabs search request failed and Rainforest API fallback is not configured.'
+          : 'OXYLABS_USERNAME and OXYLABS_PASSWORD or RAINFOREST_API_KEY are required in the root .env file.',
         statusCode: 500,
       },
       artifacts: null,
-      source: 'rainforest_discovery',
+      source: 'oxylabs_discovery',
       fallbackFrom: null,
     }
   }
 
-  const oxylabsResult = await fetchOxylabsArtifacts({
-    filterConfig,
-    productQuery,
-    details,
-    reasonFallback,
-    oxylabsUsername,
-    oxylabsPassword,
-    amazonDomain,
-  })
+  try {
+    const rainforestResult = await fetchRainforestArtifacts({
+      filterConfig,
+      productQuery,
+      details,
+      reasonFallback,
+      rainforestApiKey,
+      countryCode,
+      amazonDomain,
+    })
+
+    return {
+      ...rainforestResult,
+      source: 'rainforest_discovery',
+      fallbackFrom: oxylabsUsername && oxylabsPassword ? 'oxylabs_discovery' : null,
+    }
+  } catch (error) {
+    if (oxylabsUsername && oxylabsPassword) {
+      throw error
+    }
+  }
 
   return {
-    ...oxylabsResult,
-    source: rainforestApiKey ? 'oxylabs_discovery_fallback' : 'oxylabs_discovery',
-    fallbackFrom: rainforestApiKey ? 'rainforest_discovery' : null,
+    error: {
+      error: 'Rainforest API request failed.',
+      statusCode: 502,
+    },
+    artifacts: null,
+    source: 'rainforest_discovery',
+    fallbackFrom: null,
   }
 }
 
@@ -949,7 +939,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
 
   if (!rainforestApiKey && (!oxylabsUsername || !oxylabsPassword)) {
     sendJson(response, 500, {
-      error: 'RAINFOREST_API_KEY or OXYLABS_USERNAME and OXYLABS_PASSWORD are required in the root .env file.',
+      error: 'OXYLABS_USERNAME and OXYLABS_PASSWORD or RAINFOREST_API_KEY are required in the root .env file.',
     })
     return
   }
@@ -1059,7 +1049,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   try {
     const discoveryToken = createDiscoveryToken()
     const discoverySessionScope = getDiscoverySessionScope(discoveryToken)
-    const rainforestStartedAt = nowMs()
+    const providerStartedAt = nowMs()
     const {
       artifacts,
       error: artifactsError,
@@ -1083,7 +1073,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       })
       return
     }
-    const rainforestDuration = nowMs() - rainforestStartedAt
+    const providerDuration = nowMs() - providerStartedAt
 
     runInBackground(
       writeSearchSnapshot({
@@ -1145,7 +1135,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       previewCount: artifacts.results.length,
       cacheMs: roundTimingDuration(cacheLookupDuration),
       fallbackFrom,
-      rainforestMs: roundTimingDuration(rainforestDuration),
+      providerMs: roundTimingDuration(providerDuration),
       source: discoverySource,
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
@@ -1163,7 +1153,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
     }, {
       serverTiming: [
         { name: 'cache', duration: cacheLookupDuration },
-        { name: 'rainforest', duration: rainforestDuration },
+        { name: 'provider', duration: providerDuration },
         { name: 'total', duration: nowMs() - requestStartedAt },
       ],
     })

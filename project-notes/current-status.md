@@ -43,7 +43,7 @@
 - Frontend is deployed on Vercel.
 - Backend is deployed on Render through `backend/express-server.js`.
 - Render CORS now explicitly accepts the current `focamai.com` and `www.focamai.com` frontend origins, while still tolerating the older `focama.vercel.app` origin during transition.
-- `GET /api/search/rainforest-discover` is the primary homepage discovery route. It now tries Rainforest discovery first and falls back to Oxylabs discovery when Rainforest is unavailable, rate-limited, out of credits, or in a provider incident.
+- `GET /api/search/rainforest-discover` is the primary homepage discovery route. It now tries Oxylabs discovery first and falls back to Rainforest API when Oxylabs is unavailable or returns no usable Amazon results.
 - `GET /api/search/rainforest-discover` normally reuses the shared discovery cache when available, but retry-accepted searches and hard-constraint pre-finalize refreshes send `cacheMode=refresh` so the route bypasses the cache hit once, fetches fresh provider evidence, and writes the new shared/session snapshots normally.
 - `GET /api/search/rainforest-discover` now starts a background query-quality review after the normal discovery response when OpenAI is configured, and stores the review state under `selection.queryQuality` on the token-scoped session snapshot.
 - `GET /api/search/query-quality` exposes the stored query-quality review through simple polling. The homepage uses it to show an optional suggested-query prompt only when the backend review says to suggest one.

@@ -914,7 +914,7 @@ describe('server handlers', () => {
     await flushAsyncWork()
   })
 
-  it('uses Rainforest for live discovery when configured', async () => {
+  it('uses Oxylabs for live discovery when both providers are configured', async () => {
     getEnv.mockImplementation((name) => ({
       RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
@@ -957,13 +957,13 @@ describe('server handlers', () => {
     const payload = JSON.parse(response.body)
 
     expect(response.statusCode).toBe(200)
-    expect(payload.source).toBe('rainforest_discovery')
+    expect(payload.source).toBe('oxylabs_discovery')
     expect(payload.fallbackFrom).toBeNull()
     expect(fetch).toHaveBeenCalledTimes(1)
-    expect(fetch.mock.calls[0][0]).toBeInstanceOf(URL)
+    expect(fetch.mock.calls[0][1].method).toBe('POST')
   })
 
-  it('falls back to Oxylabs discovery when Rainforest runs out of credits', async () => {
+  it('falls back to Rainforest discovery when Oxylabs fails', async () => {
     getEnv.mockImplementation((name) => ({
       RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
@@ -983,12 +983,19 @@ describe('server handlers', () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce({
         ok: false,
-        status: 402,
       })
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          results: [{ content: { results: { organic: [{}] } } }],
+          search_results: [
+            {
+              asin: 'one',
+              title: 'Fallback White Chocolate Chips',
+              price: { value: 28.03, raw: '$28.03' },
+              link: 'https://www.amazon.ca/dp/one',
+              image: 'https://example.com/one.jpg',
+            },
+          ],
         }),
       }))
 
@@ -1003,11 +1010,11 @@ describe('server handlers', () => {
     const payload = JSON.parse(response.body)
 
     expect(response.statusCode).toBe(200)
-    expect(payload.source).toBe('oxylabs_discovery_fallback')
-    expect(payload.fallbackFrom).toBe('rainforest_discovery')
+    expect(payload.source).toBe('rainforest_discovery')
+    expect(payload.fallbackFrom).toBe('oxylabs_discovery')
     expect(fetch).toHaveBeenCalledTimes(2)
-    expect(fetch.mock.calls[0][0]).toBeInstanceOf(URL)
-    expect(fetch.mock.calls[1][1].method).toBe('POST')
+    expect(fetch.mock.calls[0][1].method).toBe('POST')
+    expect(fetch.mock.calls[1][0]).toBeInstanceOf(URL)
   })
 
   it('stores query-quality review state on the token-scoped discovery snapshot', async () => {

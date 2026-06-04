@@ -46,7 +46,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Feedback: `POST /api/feedback`.
 
 ## Important behavior notes
-- Discovery currently tries Rainforest first and falls back to Oxylabs when needed.
+- Discovery currently tries Oxylabs first and falls back to Rainforest API when Oxylabs cannot return usable Amazon results.
 - Finalize rebuilds the candidate pool server-side from guided cache.
 - Haiku locks the shortlist first, with deterministic fallback/top-up when needed. Its prompt ranks title-fit first, then quality, with raw Amazon position only as a secondary tiebreaker.
 - Hard-constraint follow-up notes can trigger one refreshed discovery before finalize.
