@@ -1,5 +1,6 @@
 import express from 'express'
 import { createClient } from '@supabase/supabase-js'
+import { resolveCorsOrigin } from '../lib/http.js'
 import { kailaConfig } from './config.js'
 
 const rateLimitBuckets = new Map()
@@ -58,6 +59,14 @@ function askRateLimit(request, response, next) {
 
 export function createKailaRouter() {
   const router = express.Router()
+
+  router.use((request, response, next) => {
+    response.set({
+      'Access-Control-Allow-Origin': resolveCorsOrigin(request.headers.origin),
+      Vary: 'Origin',
+    })
+    next()
+  })
 
   router.use(express.json({ limit: '32kb' }))
 
