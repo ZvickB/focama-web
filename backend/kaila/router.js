@@ -11,8 +11,20 @@ function db() {
   return supabase.schema(kailaConfig.supabaseDbSchema)
 }
 
-function retrieve() {
-  throw new Error('retrieve: not implemented')
+async function retrieve(storeId, productIds) {
+  const { data, error } = await db()
+    .from('passages')
+    .select('id, store_id, product_id, source_type, source_id, text, value, meta')
+    .eq('store_id', storeId)
+    .in('product_id', productIds)
+    .order('created_at', { ascending: true })
+    .limit(kailaConfig.maxPassages)
+
+  if (error) {
+    throw new Error(`retrieve: ${error.message}`)
+  }
+
+  return data || []
 }
 
 function respond() {

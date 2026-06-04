@@ -30,6 +30,7 @@ export const kailaConfig = {
   supabaseUrl: readRequired('KAILA_SUPABASE_URL', 'SUPABASE_URL'),
   supabaseServiceRoleKey: readRequired('KAILA_SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEY'),
   supabaseDbSchema: readOptional('KAILA_SUPABASE_DB_SCHEMA') || 'kaila',
+  maxPassages: readPositiveNumber('KAILA_MAX_PASSAGES', 12),
   maxProductIds: readPositiveNumber('KAILA_MAX_PRODUCT_IDS', 4),
   maxQuestionChars: readPositiveNumber('KAILA_MAX_QUESTION_CHARS', 1000),
   rateLimitWindowMs: readPositiveNumber('KAILA_RATE_LIMIT_WINDOW_MS', 60000),
