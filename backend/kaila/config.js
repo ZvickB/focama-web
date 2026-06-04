@@ -26,6 +26,24 @@ function readPositiveNumber(name, fallback) {
   return value
 }
 
+function readBoolean(name, fallback) {
+  const value = readOptional(name)?.toLowerCase()
+
+  if (!value) {
+    return fallback
+  }
+
+  if (value === 'true') {
+    return true
+  }
+
+  if (value === 'false') {
+    return false
+  }
+
+  throw new Error(`${name} must be true or false`)
+}
+
 export const kailaConfig = {
   supabaseUrl: readRequired('KAILA_SUPABASE_URL', 'SUPABASE_URL'),
   supabaseServiceRoleKey: readRequired('KAILA_SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEY'),
@@ -37,4 +55,5 @@ export const kailaConfig = {
   maxQuestionChars: readPositiveNumber('KAILA_MAX_QUESTION_CHARS', 1000),
   rateLimitWindowMs: readPositiveNumber('KAILA_RATE_LIMIT_WINDOW_MS', 60000),
   rateLimitMax: readPositiveNumber('KAILA_RATE_LIMIT_MAX', 30),
+  demoPassagesEnabled: readBoolean('KAILA_DEMO_PASSAGES_ENABLED', true),
 }

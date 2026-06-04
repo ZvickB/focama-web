@@ -37,3 +37,5 @@ services:
         sync: false
       - key: FINALIZE_ENRICHMENT_MODE
         sync: false
+      - key: KAILA_DEMO_PASSAGES_ENABLED
+        sync: false

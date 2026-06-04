@@ -249,6 +249,21 @@ function isValidAskBody(body) {
   )
 }
 
+function parseProductIds(value) {
+  if (Array.isArray(value)) {
+    return value.flatMap(parseProductIds)
+  }
+
+  if (typeof value !== 'string') {
+    return []
+  }
+
+  return value
+    .split(',')
+    .map((productId) => productId.trim())
+    .filter(Boolean)
+}
+
 function askRateLimit(request, response, next) {
   const now = Date.now()
   const key = request.ip || 'unknown'
@@ -287,6 +302,65 @@ export function createKailaRouter() {
 
   router.get('/health', (request, response) => {
     response.json({ ok: true })
+  })
+
+  router.get('/demo/passages', async (request, response, next) => {
+    if (!kailaConfig.demoPassagesEnabled) {
+      response.status(404).json({ error: 'Not found' })
+      return
+    }
+
+    const storeRef = typeof request.query.storeRef === 'string' ? request.query.storeRef.trim() : ''
+    const productIds = parseProductIds(request.query.productIds)
+
+    if (!storeRef || productIds.length === 0 || productIds.length > kailaConfig.maxProductIds) {
+      response.status(400).json({ error: 'Invalid demo passages request' })
+      return
+    }
+
+    try {
+      const { data: store, error: storeError } = await db()
+        .from('stores')
+        .select('id')
+        .eq('embed_key', storeRef)
+        .maybeSingle()
+
+      if (storeError) {
+        response.status(500).json({ error: 'Unexpected store lookup error' })
+        return
+      }
+
+      if (!store) {
+        response.status(404).json({ error: 'Store not found' })
+        return
+      }
+
+      const { data: passages, error: passagesError } = await db()
+        .from('passages')
+        .select('id, product_id, source_type, source_id, text, value, meta')
+        .eq('store_id', store.id)
+        .in('product_id', productIds)
+        .order('created_at', { ascending: true })
+
+      if (passagesError) {
+        response.status(500).json({ error: 'Unexpected passages lookup error' })
+        return
+      }
+
+      response.json({
+        passages: (passages || []).map((passage) => ({
+          id: passage.id,
+          productId: passage.product_id,
+          sourceType: passage.source_type,
+          sourceId: passage.source_id,
+          text: passage.text,
+          value: passage.value,
+          meta: passage.meta,
+        })),
+      })
+    } catch (error) {
+      next(error)
+    }
   })
 
   router.post('/ask', askRateLimit, async (request, response, next) => {
