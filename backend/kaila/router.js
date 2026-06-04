@@ -113,6 +113,11 @@ export function createKailaRouter() {
         fallbackUrl: null,
       })
     } catch (error) {
+      if (error instanceof Error && error.message.endsWith('not implemented')) {
+        response.status(501).json({ error: error.message })
+        return
+      }
+
       next(error)
     }
   })
