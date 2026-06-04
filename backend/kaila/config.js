@@ -50,6 +50,8 @@ export const kailaConfig = {
   supabaseDbSchema: readOptional('KAILA_SUPABASE_DB_SCHEMA') || 'kaila',
   openaiApiKey: readOptional('KAILA_OPENAI_API_KEY'),
   responseModel: readOptional('KAILA_RESPONSE_MODEL'),
+  embeddingModel: readOptional('KAILA_EMBEDDING_MODEL') || 'text-embedding-3-small',
+  embeddingMinSimilarity: readPositiveNumber('KAILA_EMBEDDING_MIN_SIMILARITY', 0.15),
   maxPassages: readPositiveNumber('KAILA_MAX_PASSAGES', 12),
   maxProductIds: readPositiveNumber('KAILA_MAX_PRODUCT_IDS', 4),
   maxQuestionChars: readPositiveNumber('KAILA_MAX_QUESTION_CHARS', 1000),

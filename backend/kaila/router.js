@@ -96,7 +96,70 @@ function scorePassage(passage, queryTokens) {
   }, 0)
 }
 
-async function retrieve(storeId, productIds, query) {
+async function createEmbedding(input) {
+  if (!kailaConfig.openaiApiKey) {
+    return null
+  }
+
+  const response = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${kailaConfig.openaiApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: kailaConfig.embeddingModel,
+      input,
+      encoding_format: 'float',
+    }),
+  })
+
+  if (!response.ok) {
+    const errorBody = await response.text()
+    console.error('[kaila] OpenAI embedding failed', {
+      status: response.status,
+      body: errorBody.slice(0, 200),
+    })
+    return null
+  }
+
+  const body = await response.json()
+  const embedding = body?.data?.[0]?.embedding
+
+  return Array.isArray(embedding) ? embedding : null
+}
+
+async function retrieveByEmbedding(storeId, productIds, query) {
+  const embedding = await createEmbedding(query)
+
+  if (!embedding) {
+    return null
+  }
+
+  const { data, error } = await db().rpc('match_passage_embeddings', {
+    query_embedding: embedding,
+    match_store_id: storeId,
+    match_product_ids: productIds,
+    match_embedding_model: kailaConfig.embeddingModel,
+    match_count: kailaConfig.maxPassages,
+    min_similarity: kailaConfig.embeddingMinSimilarity,
+  })
+
+  if (error) {
+    console.warn('[kaila] Embedding retrieval unavailable; falling back to keyword retrieval', {
+      message: error.message,
+    })
+    return null
+  }
+
+  if (!Array.isArray(data) || data.length === 0) {
+    return []
+  }
+
+  return data.map(({ similarity, ...passage }) => passage)
+}
+
+async function retrieveByKeyword(storeId, productIds, query) {
   const { data, error } = await db()
     .from('passages')
     .select('id, store_id, product_id, source_type, source_id, text, value, meta')
@@ -121,6 +184,16 @@ async function retrieve(storeId, productIds, query) {
     .map(({ passage }) => passage)
 
   return scoredPassages.slice(0, kailaConfig.maxPassages)
+}
+
+async function retrieve(storeId, productIds, query) {
+  const embeddingPassages = await retrieveByEmbedding(storeId, productIds, query)
+
+  if (embeddingPassages) {
+    return embeddingPassages
+  }
+
+  return retrieveByKeyword(storeId, productIds, query)
 }
 
 function fallbackAnswer(question) {
