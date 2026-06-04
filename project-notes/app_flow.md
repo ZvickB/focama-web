@@ -80,6 +80,7 @@
 - `GET /api/search/debug`, `GET /api/search/cache`, and `/api/search/live`
   - debugging/support routes, not the main product flow
 - Render CORS accepts both live custom frontend origins (`focamai.com` and `www.focamai.com`) and still tolerates the older `focama.vercel.app` origin.
+- The same Render Express process also mounts the KAILA scaffold API at `/kaila` for the separate KAILA Vercel app. This keeps Focamai's existing `/api/...` routes live while exposing `GET /kaila/health` and `POST /kaila/ask`; KAILA retrieve/respond behavior is still intentionally stubbed.
 
 ## Amazon store behavior
 - The store picker defaults to `Auto`.

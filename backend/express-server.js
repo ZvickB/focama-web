@@ -2,6 +2,7 @@ import express from 'express'
 import helmet from 'helmet'
 import multer from 'multer'
 import { attachCorsOrigin, buildInternalErrorPayload, resolveCorsOrigin, sendJson } from './lib/http.js'
+import { createKailaRouter } from './kaila/router.js'
 import { initObservability, registerProcessErrorHandlers, reportBackendError } from './lib/observability.js'
 import {
   handleAnalyticsDashboard,
@@ -56,6 +57,8 @@ app.get('/api/ping', (req, res) => {
   res.set('Access-Control-Allow-Origin', resolveCorsOrigin(req.headers.origin))
   res.json({ ok: true })
 })
+
+app.use('/kaila', createKailaRouter())
 
 // Search routes
 app.get('/api/search/rainforest-discover', async (req, res) => {

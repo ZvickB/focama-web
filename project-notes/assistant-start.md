@@ -21,6 +21,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Backend deploy: Render, starting from `backend/express-server.js`.
 - The frontend calls the backend through `VITE_BACKEND_URL`.
 - `api/geo.js` intentionally stays on Vercel so the UI can use Vercel geolocation headers.
+- The same Render Express service also hosts the separate KAILA scaffold under `/kaila` so KAILA can share the paid service without replacing Focamai.
 
 ## Current product direction
 - The homepage at `/` is the main product experience.
