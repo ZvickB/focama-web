@@ -11,7 +11,90 @@ function db() {
   return supabase.schema(kailaConfig.supabaseDbSchema)
 }
 
-async function retrieve(storeId, productIds) {
+const STOP_WORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'are',
+  'can',
+  'come',
+  'does',
+  'for',
+  'has',
+  'how',
+  'in',
+  'is',
+  'it',
+  'of',
+  'on',
+  'product',
+  'the',
+  'this',
+  'to',
+  'what',
+  'with',
+])
+
+const TOKEN_SYNONYMS = new Map([
+  ['color', ['shade', 'finish', 'appearance']],
+  ['shade', ['color', 'finish', 'appearance']],
+  ['compatible', ['compatibility', 'adapter', 'match']],
+  ['compatibility', ['compatible', 'adapter', 'match']],
+  ['car', ['seat', 'adapter', 'compatible']],
+  ['fold', ['folded', 'compact', 'storage']],
+  ['storage', ['fold', 'folded', 'compact']],
+  ['weight', ['limit', 'lb', 'pound']],
+])
+
+function normalizeToken(token) {
+  if (token.endsWith('ies') && token.length > 4) {
+    return `${token.slice(0, -3)}y`
+  }
+
+  if (token.endsWith('s') && token.length > 3) {
+    return token.slice(0, -1)
+  }
+
+  return token
+}
+
+function tokenize(value) {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9_]+/)
+    .map(normalizeToken)
+    .filter((token) => token.length > 1 && !STOP_WORDS.has(token))
+}
+
+function expandTokens(tokens) {
+  const expanded = new Set(tokens)
+
+  for (const token of tokens) {
+    for (const synonym of TOKEN_SYNONYMS.get(token) || []) {
+      expanded.add(synonym)
+    }
+  }
+
+  return Array.from(expanded)
+}
+
+function scorePassage(passage, queryTokens) {
+  const passageTokens = new Set(
+    tokenize(
+      [
+        passage.text,
+        passage.source_type,
+        passage.value ? JSON.stringify(passage.value) : '',
+      ].join(' ')
+    )
+  )
+
+  return queryTokens.reduce((score, token) => {
+    return passageTokens.has(token) ? score + 1 : score
+  }, 0)
+}
+
+async function retrieve(storeId, productIds, query) {
   const { data, error } = await db()
     .from('passages')
     .select('id, store_id, product_id, source_type, source_id, text, value, meta')
@@ -24,7 +107,18 @@ async function retrieve(storeId, productIds) {
     throw new Error(`retrieve: ${error.message}`)
   }
 
-  return data || []
+  const queryTokens = expandTokens(tokenize(query))
+  const scoredPassages = (data || [])
+    .map((passage, index) => ({
+      passage,
+      index,
+      score: scorePassage(passage, queryTokens),
+    }))
+    .filter(({ score }) => score > 0)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map(({ passage }) => passage)
+
+  return scoredPassages.slice(0, kailaConfig.maxPassages)
 }
 
 function respond(question, passages) {
