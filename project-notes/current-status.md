@@ -42,7 +42,7 @@
 ## Current backend/deployment reality
 - Frontend is deployed on Vercel.
 - Backend is deployed on Render through `backend/express-server.js`.
-- The Render backend also mounts the separate KAILA scaffold API under `/kaila` so KAILA can share the paid Focamai web service without replacing Focamai routes. Current KAILA endpoints are `GET /kaila/health` and `POST /kaila/ask`; retrieve/respond remain intentionally unimplemented.
+- The Render backend also mounts the separate KAILA scaffold API under `/kaila` so KAILA can share the paid Focamai web service without replacing Focamai routes. Current KAILA endpoints are `GET /kaila/health` and `POST /kaila/ask`; the seeded loop now does simple passage retrieval/ranking and grounded deterministic responses, with optional KAILA-only OpenAI response phrasing gated behind `KAILA_OPENAI_API_KEY` and `KAILA_RESPONSE_MODEL`.
 - Render CORS now explicitly accepts the current `focamai.com` and `www.focamai.com` frontend origins, while still tolerating the older `focama.vercel.app` origin during transition.
 - `GET /api/search/rainforest-discover` is the primary homepage discovery route. It now tries Oxylabs discovery first and falls back to Rainforest API when Oxylabs is unavailable or returns no usable Amazon results.
 - `GET /api/search/rainforest-discover` normally reuses the shared discovery cache when available, but retry-accepted searches and hard-constraint pre-finalize refreshes send `cacheMode=refresh` so the route bypasses the cache hit once, fetches fresh provider evidence, and writes the new shared/session snapshots normally.

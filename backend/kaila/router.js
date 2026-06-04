@@ -19,12 +19,14 @@ const STOP_WORDS = new Set([
   'can',
   'come',
   'does',
+  'doe',
   'for',
   'has',
   'how',
   'in',
   'is',
   'it',
+  'much',
   'of',
   'on',
   'product',
@@ -121,23 +123,115 @@ async function retrieve(storeId, productIds, query) {
   return scoredPassages.slice(0, kailaConfig.maxPassages)
 }
 
-function respond(question, passages) {
-  void question
+function fallbackAnswer(question) {
+  const tokens = tokenize(question)
 
-  if (passages.length === 0) {
-    return "I don't know - here's the product page."
+  if (tokens.some((token) => ['weigh', 'weight'].includes(token))) {
+    return "I don't know the product weight from the provided product info."
   }
 
+  if (tokens.some((token) => ['price', 'cost', 'shipping'].includes(token))) {
+    return "I don't know the price or shipping details from the provided product info."
+  }
+
+  if (tokens.some((token) => ['color', 'shade', 'finish'].includes(token))) {
+    return "I don't know the available colors from the provided product info."
+  }
+
+  if (tokens.some((token) => ['compatible', 'compatibility', 'fit'].includes(token))) {
+    return "I don't know the compatibility details from the provided product info."
+  }
+
+  if (tokens.some((token) => ['make', 'work', 'use'].includes(token))) {
+    return "I don't know that from the provided product info."
+  }
+
+  const meaningfulTerms = tokens.filter((token) => !TOKEN_SYNONYMS.has(token))
+  const subject = meaningfulTerms.slice(0, 4).join(' ')
+
+  if (subject) {
+    return `I don't know the ${subject} from the provided product info.`
+  }
+
+  return "I don't know from the provided product info."
+}
+
+function deterministicRespond(question, passages) {
   const citedFacts = passages
     .slice(0, 3)
     .map((passage) => passage.text.trim())
     .filter(Boolean)
 
   if (citedFacts.length === 0) {
-    return "I don't know - here's the product page."
+    return fallbackAnswer(question)
   }
 
   return citedFacts.join('\n\n')
+}
+
+async function aiRespond(question, passages) {
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${kailaConfig.openaiApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: kailaConfig.responseModel,
+      instructions: [
+        'You are KAILA, a concise shopping assistant.',
+        'Answer using only the provided product passages.',
+        'Do not invent product facts, compatibility, colors, prices, dimensions, availability, policies, or safety claims.',
+        'If the passages partially answer the question, answer only the supported part and say what is not provided.',
+        'If the passages do not answer the question, say what specific fact is not in the provided product info.',
+        'Do not mention passage ids.',
+      ].join('\n'),
+      input: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: JSON.stringify({
+                question,
+                passages: passages.map((passage) => ({
+                  sourceType: passage.source_type,
+                  text: passage.text,
+                  value: passage.value,
+                })),
+              }),
+            },
+          ],
+        },
+      ],
+    }),
+  })
+
+  if (!response.ok) {
+    const errorBody = await response.text()
+    console.error('[kaila] OpenAI response failed', {
+      status: response.status,
+      body: errorBody.slice(0, 200),
+    })
+    return deterministicRespond(question, passages)
+  }
+
+  const body = await response.json()
+  const answer = typeof body.output_text === 'string' ? body.output_text.trim() : ''
+
+  return answer || deterministicRespond(question, passages)
+}
+
+async function respond(question, passages) {
+  if (passages.length === 0) {
+    return fallbackAnswer(question)
+  }
+
+  if (!kailaConfig.openaiApiKey || !kailaConfig.responseModel) {
+    return deterministicRespond(question, passages)
+  }
+
+  return aiRespond(question, passages)
 }
 
 function isValidAskBody(body) {
