@@ -156,17 +156,56 @@ function fallbackAnswer(question) {
   return "I don't know from the provided product info."
 }
 
+function labelPassage(passage) {
+  const tokens = new Set(tokenize([passage.text, passage.value ? JSON.stringify(passage.value) : ''].join(' ')))
+
+  if (tokens.has('shade') || tokens.has('color') || tokens.has('available')) {
+    return 'Color options'
+  }
+
+  if (tokens.has('child') && tokens.has('weight') && tokens.has('limit')) {
+    return 'Child weight limit'
+  }
+
+  if (tokens.has('compatible') || tokens.has('adapter') || tokens.has('car')) {
+    return 'Compatibility'
+  }
+
+  if (tokens.has('fold') || tokens.has('compact') || tokens.has('storage')) {
+    return 'Fold and storage'
+  }
+
+  return passage.source_type.charAt(0).toUpperCase() + passage.source_type.slice(1)
+}
+
 function deterministicRespond(question, passages) {
-  const citedFacts = passages
-    .slice(0, 3)
-    .map((passage) => passage.text.trim())
-    .filter(Boolean)
+  const citedFacts = passages.slice(0, 3).reduce((facts, passage) => {
+    const text = passage.text.trim()
+
+    if (!text) {
+      return facts
+    }
+
+    facts.push({
+      label: labelPassage(passage),
+      text,
+    })
+
+    return facts
+  }, [])
 
   if (citedFacts.length === 0) {
     return fallbackAnswer(question)
   }
 
-  return citedFacts.join('\n\n')
+  if (citedFacts.length === 1) {
+    return citedFacts[0].text
+  }
+
+  return [
+    'I found a few relevant details in the provided product info:',
+    ...citedFacts.map((fact) => `- ${fact.label}: ${fact.text}`),
+  ].join('\n')
 }
 
 async function aiRespond(question, passages) {
