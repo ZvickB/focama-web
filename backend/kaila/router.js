@@ -27,8 +27,23 @@ async function retrieve(storeId, productIds) {
   return data || []
 }
 
-function respond() {
-  throw new Error('respond: not implemented')
+function respond(question, passages) {
+  void question
+
+  if (passages.length === 0) {
+    return "I don't know - here's the product page."
+  }
+
+  const citedFacts = passages
+    .slice(0, 3)
+    .map((passage) => passage.text.trim())
+    .filter(Boolean)
+
+  if (citedFacts.length === 0) {
+    return "I don't know - here's the product page."
+  }
+
+  return citedFacts.join('\n\n')
 }
 
 function isValidAskBody(body) {
