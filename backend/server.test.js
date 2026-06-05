@@ -83,7 +83,13 @@ import { haikuLockWinnersAndBadges, miniEnrichSelectedCandidates } from './lib/a
 import { generateQueryQualityReview } from './lib/query-quality-review.js'
 import { generateRetryAdvice } from './lib/retry-advice.js'
 import { getFilteredSearchArtifacts } from './lib/result-filter.js'
-import { getSupabaseHealth, readStoredSearchCacheEntry, recordTesterFeedback, writeStoredSearchCacheEntry } from './lib/search-storage.js'
+import {
+  getSupabaseHealth,
+  readStoredSearchCacheEntry,
+  recordSearchHistory,
+  recordTesterFeedback,
+  writeStoredSearchCacheEntry,
+} from './lib/search-storage.js'
 import {
   getEnv,
 } from './lib/search-data.js'
@@ -708,6 +714,12 @@ describe('server handlers', () => {
       OXYLABS_PASSWORD: 'oxy-pass',
     })[name] || '')
     vi.stubGlobal('fetch', vi.fn())
+    const cachedCandidates = Array.from({ length: 6 }, (_, index) => ({
+      id: `cached-${index + 1}`,
+      title: `Thermos bottle ${index + 1}`,
+      price: '$34.99',
+      numericPrice: 34.99,
+    }))
 
     readStoredSearchCacheEntry.mockResolvedValueOnce({
       cachedAt: '2026-03-17T12:00:00.000Z',
@@ -726,9 +738,13 @@ describe('server handlers', () => {
         combinedSearchText: 'thermos',
         searchState: 'Cached search results',
         similarQueries: [],
-        candidates: [{ id: 'cached-1', title: 'Thermos bottle', price: '$34.99', numericPrice: 34.99 }],
+        candidates: cachedCandidates,
       },
-      results: [{ id: 'cached-1', title: 'Thermos bottle', price: '$34.99' }],
+      results: cachedCandidates.map((candidate) => ({
+        id: candidate.id,
+        title: candidate.title,
+        price: candidate.price,
+      })),
       discoveryToken: 'old-token',
     })
 
@@ -840,6 +856,83 @@ describe('server handlers', () => {
               id: 'fresh-1',
             }),
           ],
+        }),
+      )
+    })
+  })
+
+  it('bypasses thin discovery cache hits so one-result snapshots do not trap normal searches', async () => {
+    getEnv.mockImplementation((name) => ({
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
+    })[name] || '')
+
+    readStoredSearchCacheEntry.mockResolvedValueOnce({
+      cachedAt: '2026-03-17T12:00:00.000Z',
+      expiresAt: '2026-03-17T18:00:00.000Z',
+      source: 'rainforest_discovery',
+      selection: { mode: 'discovery_preview' },
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Thin cached search results',
+        similarQueries: [],
+        candidates: [{ id: 'cached-1', title: 'Bad cached Thermos bottle', price: '$34.99', numericPrice: 34.99 }],
+      },
+      results: [{ id: 'cached-1', title: 'Bad cached Thermos bottle', price: '$34.99', numericPrice: 34.99 }],
+      discoveryToken: 'old-token',
+    })
+    getFilteredSearchArtifacts.mockReturnValue({
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: 'Fresh provider search results',
+        similarQueries: [],
+        candidates: Array.from({ length: 6 }, (_, index) => ({
+          ...createFinalizeCandidate(`fresh-${index + 1}`),
+          title: `Fresh Thermos bottle ${index + 1}`,
+        })),
+      },
+      results: Array.from({ length: 6 }, (_, index) => ({
+        id: `fresh-${index + 1}`,
+        title: `Fresh Thermos bottle ${index + 1}`,
+        price: '$39.99',
+      })),
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        results: [{ content: { results: { organic: [{}] } } }],
+      }),
+    })))
+
+    const response = createResponseRecorder()
+
+    await handleRainforestDiscoverySearch(
+      new URL('http://localhost/api/search/rainforest-discover?query=thermos&amazonDomain=amazon.com'),
+      response,
+      { headers: { 'x-forwarded-for': '203.0.113.21' } },
+    )
+
+    expect(response.statusCode).toBe(200)
+
+    const payload = JSON.parse(response.body)
+    expect(payload.source).toBe('oxylabs_discovery')
+    expect(payload.previewResults).toHaveLength(6)
+    expect(payload.previewResults[0]).toEqual(
+      expect.objectContaining({
+        id: 'fresh-1',
+        title: 'Fresh Thermos bottle 1',
+      }),
+    )
+    expect(fetch).toHaveBeenCalledTimes(1)
+    await waitForExpectation(() => {
+      expect(recordSearchHistory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          productQuery: 'thermos',
+          cacheStatus: 'thin_cache_refresh',
         }),
       )
     })
@@ -1037,7 +1130,10 @@ describe('server handlers', () => {
     })
     readStoredSearchCacheEntry.mockImplementation(async ({ scope }) => {
       if (scope === 'rainforest_discovery:v2:amazon.com') {
-        const cacheEntry = createDiscoveryCacheEntry('celcius drink', [createFinalizeCandidate('one')], {
+        const candidates = Array.from({ length: 6 }, (_, index) => createFinalizeCandidate(
+          index === 0 ? 'one' : `alt-${index + 1}`,
+        ))
+        const cacheEntry = createDiscoveryCacheEntry('celcius drink', candidates, {
           mode: 'discovery_preview',
         }, 'old-token')
 

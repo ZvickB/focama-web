@@ -209,6 +209,22 @@ function shouldRefreshDiscoveryCache(requestUrl) {
   return cacheMode === 'refresh' || bypassCache === 'true'
 }
 
+function isThinDiscoveryCacheHit(cachedEntry, normalizedCachedResults = []) {
+  if (!cachedEntry?.candidatePool || !cachedEntry?.results?.length) {
+    return false
+  }
+
+  const candidateCount = Array.isArray(cachedEntry.candidatePool?.candidates)
+    ? cachedEntry.candidatePool.candidates.length
+    : 0
+  const resultCount = Array.isArray(normalizedCachedResults)
+    ? normalizedCachedResults.length
+    : 0
+  const minimumUsefulCount = LIVE_RESULT_FILTER_CONFIG.finalResultLimit
+
+  return candidateCount < minimumUsefulCount || resultCount < minimumUsefulCount
+}
+
 function resolveAmazonDomain({ requestUrl = null, body = null, countryCode = 'US' } = {}) {
   const requestedAmazonDomain =
     getRequestedAmazonDomain(body?.amazonDomain) ||
@@ -994,8 +1010,10 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   })
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
   const refreshCache = shouldRefreshDiscoveryCache(requestUrl)
+  const thinCacheHit = isThinDiscoveryCacheHit(cachedEntry, normalizedCachedResults)
+  const providerCacheStatus = refreshCache ? 'refresh' : thinCacheHit ? 'thin_cache_refresh' : 'miss'
 
-  if (cachedEntry?.candidatePool && cachedEntry?.results?.length && !refreshCache) {
+  if (cachedEntry?.candidatePool && cachedEntry?.results?.length && !refreshCache && !thinCacheHit) {
     const tokenizedDiscovery = await ensureDiscoverySnapshotToken({
       normalizedQuery,
       normalizedDetails,
@@ -1051,11 +1069,11 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
     return
   }
 
-  if (cachedEntry?.candidatePool && cachedEntry?.results?.length && refreshCache) {
+  if (cachedEntry?.candidatePool && cachedEntry?.results?.length && (refreshCache || thinCacheHit)) {
     logSearchFlowEvent('rainforest_discovery_cache_refresh', {
       route: '/api/search/rainforest-discover',
       query: normalizedQuery,
-      cacheStatus: 'refresh_bypass',
+      cacheStatus: thinCacheHit ? 'thin_cache_bypass' : 'refresh_bypass',
       cachedCandidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
         ? cachedEntry.candidatePool.candidates.length
         : normalizedCachedResults.length,
@@ -1132,7 +1150,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
 
     await recordSearchCacheEvent({
       cacheKey: discoveryCacheKey,
-      cacheStatus: refreshCache ? 'refresh' : 'miss',
+      cacheStatus: providerCacheStatus,
       candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
         ? artifacts.candidatePool.candidates.length
         : 0,
@@ -1146,7 +1164,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
     logSearchFlowEvent('rainforest_discovery_completed', {
       route: '/api/search/rainforest-discover',
       query: normalizedQuery,
-      cacheStatus: refreshCache ? 'refresh' : 'miss',
+      cacheStatus: providerCacheStatus,
       candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
         ? artifacts.candidatePool.candidates.length
         : 0,

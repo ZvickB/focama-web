@@ -43,6 +43,7 @@
   - writes reusable guided discovery cache and creates a separate token-scoped session snapshot for finalize/enrichment
   - honors an explicit one-request cache refresh mode for accepted retry-advice searches, bypassing the shared discovery cache read while still writing fresh provider results back to shared cache and session state
   - also honors that refresh mode for the one-time pre-finalize discovery pass when follow-up notes contain hard constraints
+  - automatically bypasses cached discovery snapshots that are too thin to support the 6-item shortlist, so a one-result cache entry cannot trap normal searches
   - marketplace items without a known positive price are treated as invalid and are removed before preview results or AI candidate-pool caching
   - after the normal response is sent, starts a background query-quality review when OpenAI is configured and stores `selection.queryQuality` on the token-scoped session snapshot
   - query-quality review is checked by the frontend through polling; if a high-confidence suggestion is ready, the homepage shows an optional small prompt without replacing the original results
@@ -141,6 +142,7 @@
 - Finalize remains request-specific and rebuilds from discovery cache.
 - Amazon discovery preserves provider Prime signals as structured `isPrime` data through candidate pools, finalize cards, and final UI results.
 - Cached preview results and cached candidate pools are sanitized on read so stale marketplace entries without a known positive price do not reappear or reach finalize AI selection.
+- Thin cached discovery snapshots are treated as refresh candidates instead of reusable evidence when they have fewer than the shortlist count of cached results or candidates.
 - Partial valid haiku output is recoverable, not final: zero picks still use rules fallback, full valid picks stay `haiku_lock`, and partial valid picks are returned as `haiku_lock_topped_up`.
 - Search cache and operational history use Supabase when configured, with local fallback in development.
 - Product details have a separate per-ASIN cache shared across detail providers.
