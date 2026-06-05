@@ -376,6 +376,7 @@ describe('result filter', () => {
             source: 'Target',
             reviews: 227,
             delivery: 'Free shipping',
+            isPrime: true,
             tag: 'Best seller',
             multiple_sources: true,
             extensions: ['Slim design'],
@@ -402,12 +403,14 @@ describe('result filter', () => {
       title: expect.any(String),
       source: expect.any(String),
       score: expect.any(Number),
+      isPrime: true,
     })
     expect(artifacts.candidatePool.candidates[0].matchSignals).toEqual(
       expect.objectContaining({
         titleMatches: expect.any(Number),
         supportMatches: expect.any(Number),
         detailMatches: expect.any(Number),
+        hasPrimeDelivery: true,
       }),
     )
     expect(artifacts.candidatePool.candidates[0]).toEqual(

@@ -42,6 +42,7 @@ function normalizeRainforestItem(item, { amazonDomain = 'amazon.com' } = {}) {
     snippet: item.description || item.brand || '',
     extensions: [],
     multiple_sources: false,
+    isPrime: Boolean(item.is_prime),
     delivery: item.delivery?.tagline || (item.is_prime ? 'Prime delivery' : ''),
     tag: '',
     source: '',

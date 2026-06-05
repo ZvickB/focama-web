@@ -77,6 +77,17 @@ function getShortReason(item, { hasFinalResults, isEnrichmentSettled }) {
     : 'A credible option from the first pass.'
 }
 
+function PrimeEligibilityPill({ className = '' }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border border-[#cfe1de] bg-[#f5fbf9] px-2 py-0.5 text-[11px] font-semibold leading-4 text-primary ${className}`}
+      title="Prime eligibility when last checked"
+    >
+      Prime
+    </span>
+  )
+}
+
 function ProductImage({ className = '', image, title }) {
   const [imgError, setImgError] = useState(false)
 
@@ -143,6 +154,7 @@ function RankedPickRow({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
             <span className="font-semibold text-primary">{displayPrice}</span>
             <span>{getRatingValue(item.rating)?.toFixed(1) || 'No rating'}</span>
+            {item.isPrime ? <PrimeEligibilityPill /> : null}
             {item.subtitle ? <span>{item.subtitle}</span> : null}
           </div>
         </div>
@@ -211,6 +223,7 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#f0e7da] pt-3 text-sm">
           <span className="font-semibold text-primary">{displayPrice}</span>
           <span className="text-slate-500">{getRatingValue(item.rating)?.toFixed(1) || 'No rating'}</span>
+          {item.isPrime ? <PrimeEligibilityPill /> : null}
           {item.subtitle ? <span className="text-slate-500">{item.subtitle}</span> : null}
         </div>
         <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition group-hover:text-primary/80">

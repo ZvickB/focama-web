@@ -36,6 +36,7 @@ function ProductCard({
   badgeLabel = '',
   description,
   image,
+  isPrime = false,
   link,
   onRetailerClick,
   onSelect,
@@ -115,7 +116,17 @@ function ProductCard({
           <p className="line-clamp-2 text-[15px] leading-6 text-slate-900 sm:text-base">
             {displayTitle || title}
           </p>
-          <p className="text-lg font-semibold text-primary">{displayPrice}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-lg font-semibold text-primary">{displayPrice}</p>
+            {isPrime ? (
+              <span
+                className="inline-flex items-center rounded-full border border-[#cfe1de] bg-[#f5fbf9] px-2 py-0.5 text-[11px] font-semibold leading-4 text-primary"
+                title="Prime eligibility when last checked"
+              >
+                Prime
+              </span>
+            ) : null}
+          </div>
         </div>
         <div className="flex items-center gap-2 text-sm text-amber-600">
           <div className="flex items-center gap-1">

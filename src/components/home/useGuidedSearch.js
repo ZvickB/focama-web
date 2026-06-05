@@ -457,6 +457,7 @@ function mergeFinalizeResults(results, sourceCandidatePool) {
       ...result,
       image: sourceCandidate.image || result.image,
       link: sourceCandidate.link || result.link,
+      isPrime: Boolean(result.isPrime || sourceCandidate.isPrime),
     }
   })
 }

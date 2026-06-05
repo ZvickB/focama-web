@@ -124,7 +124,7 @@ function createFinalizeRequest(body, headers = {}) {
   }
 }
 
-function createFinalizeCandidate(id) {
+function createFinalizeCandidate(id, overrides = {}) {
   return {
     id,
     title: `Candidate ${id}`,
@@ -146,6 +146,7 @@ function createFinalizeCandidate(id) {
       hasDeliveryInfo: true,
       hasTag: false,
     },
+    ...overrides,
   }
 }
 
@@ -1439,6 +1440,75 @@ describe('server handlers', () => {
         }),
       }),
     )
+  })
+
+  it('narrows finalize candidates to Prime-eligible products when Prime delivery is requested', async () => {
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
+      model: 'gpt-5-mini',
+      lockedIds: ['prime-pick'],
+      usage: null,
+    })
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller with prime delivery', [
+        createFinalizeCandidate('regular-pick', {
+          isPrime: false,
+          delivery: '',
+          matchSignals: {
+            titleMatches: 1,
+            supportMatches: 1,
+            detailMatches: 1,
+            exactMatchSearchState: true,
+            hasMultipleSources: true,
+            hasDeliveryInfo: false,
+            hasPrimeDelivery: false,
+            hasTag: false,
+          },
+        }),
+        createFinalizeCandidate('prime-pick', {
+          isPrime: true,
+          delivery: 'Prime delivery',
+          matchSignals: {
+            titleMatches: 1,
+            supportMatches: 1,
+            detailMatches: 1,
+            exactMatchSearchState: true,
+            hasMultipleSources: true,
+            hasDeliveryInfo: true,
+            hasPrimeDelivery: true,
+            hasTag: false,
+          },
+        }),
+      ], {
+        mode: 'discovery_preview',
+      }),
+    )
+
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify({
+          query: 'stroller with prime delivery',
+          discoveryToken: 'opaque-discovery-token',
+          requestMode: 'guided_empty_notes',
+        }),
+        { 'x-forwarded-for': '203.0.113.36' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(haikuLockWinnersAndBadges).toHaveBeenCalledWith({
+      candidatePool: expect.objectContaining({
+        candidates: [expect.objectContaining({ id: 'prime-pick', isPrime: true })],
+      }),
+      finalResultLimit: 6,
+      apiKey: 'claude-key',
+    })
+    expect(JSON.parse(response.body).results).toEqual([
+      expect.objectContaining({ id: 'prime-pick', isPrime: true }),
+    ])
   })
 
   it('caps finalize note length before calling OpenAI', async () => {

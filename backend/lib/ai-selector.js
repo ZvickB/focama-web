@@ -210,6 +210,7 @@ function buildCandidateSummary(candidatePool) {
     price: candidate.price,
     rating: candidate.rating,
     reviewCount: candidate.reviewCount,
+    isPrime: Boolean(candidate.isPrime),
     attributes: Array.isArray(candidate.attributes) ? candidate.attributes.slice(0, 6) : [],
     reasons: getCandidateSummaryReasons(candidate),
     trustScore:

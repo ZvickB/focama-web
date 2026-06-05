@@ -50,6 +50,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Discovery currently tries Oxylabs first and falls back to Rainforest API when Oxylabs cannot return usable Amazon results.
 - Finalize rebuilds the candidate pool server-side from guided cache.
 - Haiku locks the shortlist first, with deterministic fallback/top-up when needed. Its prompt ranks title-fit first, then quality, with raw Amazon position only as a secondary tiebreaker.
+- Provider-confirmed Prime eligibility is preserved as structured `isPrime` data; clear Prime delivery/eligibility requests narrow finalize to Prime-tagged candidates when available, and the UI shows only a quiet in-house Prime marker/fact.
 - Hard-constraint follow-up notes can trigger one refreshed discovery before finalize.
 - Query-quality suggestions are polling-based only. No SSE or prewarm path exists.
 - Modal/detail enrichment hydrates after the first shortlist cards are shown, framing the top pick as the hero recommendation and later picks as alternatives.

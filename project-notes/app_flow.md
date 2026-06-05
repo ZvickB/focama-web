@@ -54,6 +54,7 @@
 - `POST /api/search/finalize`
   - accepts lightweight context
   - rebuilds the candidate pool server-side from guided cache
+  - when the query or user context clearly asks for Prime delivery/eligibility, narrows the candidate pool to provider-confirmed Prime-eligible items when any are available
   - locks the shortlist with haiku first, using title fit as the primary ranking signal and raw Amazon search position only as a secondary tiebreaker
   - if haiku returns a partial valid subset, tops up from deterministic fallback so the response still returns up to 6 eligible products
   - returns shortlist cards immediately
@@ -100,6 +101,7 @@
 - On smaller screens, results collapse into stacked ranked pick cards.
 - A development-only results-view toggle can switch between the ranked rows view and the older grid/card view.
 - Result rows/cards show reliable product facts first: image, title, provider/source, price, rating, review count, and a deterministic badge when available.
+- Provider-confirmed Prime eligibility is preserved as structured product data and shown as a quiet factual `Prime` marker on result rows/cards plus a `Delivery` fact in the modal; Focamai does not use the official Amazon Prime logo or turn Prime into a marketplace-style filter panel.
 - User-facing result and detail titles are normalized for display so long Amazon keyword-stuffed titles are shortened without changing the raw product data. Long titles with commas keep the first comma chunk; otherwise display titles truncate at a word boundary before 80 characters.
 - Result, retry, and modal surfaces now share a quieter visual system: fewer decorative gradients, smaller shadows, and more consistent 16-28px radii.
 - Selecting a row or the row details action opens the modal.
@@ -137,6 +139,7 @@
 - Guided discovery is the reusable persistent cache layer.
 - Rainforest guided discovery uses a versioned shared cache scope (`rainforest_discovery:v2`) so older provider/search-era candidate pools are not reused as current evidence.
 - Finalize remains request-specific and rebuilds from discovery cache.
+- Amazon discovery preserves provider Prime signals as structured `isPrime` data through candidate pools, finalize cards, and final UI results.
 - Cached preview results and cached candidate pools are sanitized on read so stale marketplace entries without a known positive price do not reappear or reach finalize AI selection.
 - Partial valid haiku output is recoverable, not final: zero picks still use rules fallback, full valid picks stay `haiku_lock`, and partial valid picks are returned as `haiku_lock_topped_up`.
 - Search cache and operational history use Supabase when configured, with local fallback in development.

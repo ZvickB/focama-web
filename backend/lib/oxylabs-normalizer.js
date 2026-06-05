@@ -37,6 +37,7 @@ export function normalizeOxylabsSearchResult(item, { amazonDomain = 'amazon.com'
     snippet: '',
     extensions: [],
     multiple_sources: false,
+    isPrime: Boolean(item.is_prime),
     delivery: item.is_prime ? 'Prime delivery' : '',
     tag: '',
     source: 'Amazon',

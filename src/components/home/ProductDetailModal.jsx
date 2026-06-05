@@ -52,6 +52,7 @@ function ProductFacts({ displayPrice, item, retailerLabel }) {
     ['Shortlist rank', item.badgeLabel || 'Selected pick'],
     ['Source', retailerLabel || item.subtitle || 'Retailer'],
     ['Price', displayPrice],
+    ['Delivery', item.isPrime ? 'Prime eligible' : 'Not confirmed'],
     ['Rating', ratingValue ? `${ratingValue.toFixed(1)} stars` : 'No rating'],
     ['Reviews', formatReviewCount(item.reviewCount)],
   ]

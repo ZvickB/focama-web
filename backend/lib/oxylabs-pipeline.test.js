@@ -128,6 +128,7 @@ describe('oxylabs pipeline', () => {
             expect.objectContaining({
               id: 'B001',
               title: 'Ergonomic Office Chair',
+              isPrime: true,
             }),
           ]),
         }),
@@ -136,6 +137,7 @@ describe('oxylabs pipeline', () => {
             id: 'B001',
             title: 'Ergonomic Office Chair',
             price: 'CA$199.99',
+            isPrime: true,
           }),
         ]),
       }),

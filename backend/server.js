@@ -240,6 +240,21 @@ function hasContextAddedFinalizeSignals({
   )
 }
 
+function hasPrimeDeliveryRequirement(...values) {
+  const combined = values
+    .map((value) => (typeof value === 'string' ? value : ''))
+    .join(' ')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!combined) {
+    return false
+  }
+
+  return /\b(amazon\s+prime|prime\s+(eligible|delivery|shipping|only|required|preferred|items?|products?)|with\s+prime|has\s+prime|must\s+have\s+prime)\b/.test(combined)
+}
+
 function roundTimingDuration(value) {
   return Math.round(value * 10) / 10
 }
@@ -447,6 +462,7 @@ function sanitizeFinalizeCandidate(candidate, index) {
       numericPrice,
       rating,
       reviewCount,
+      isPrime: Boolean(candidate.isPrime),
       delivery: truncateText(candidate.delivery, 160),
       tag: truncateText(candidate.tag, 120),
       extensions: sanitizeStringList(candidate.extensions, { maxItems: 6, maxItemLength: 120 }),
@@ -470,6 +486,7 @@ function sanitizeFinalizeCandidate(candidate, index) {
               exactMatchSearchState: Boolean(candidate.matchSignals.exactMatchSearchState),
               hasMultipleSources: Boolean(candidate.matchSignals.hasMultipleSources),
               hasDeliveryInfo: Boolean(candidate.matchSignals.hasDeliveryInfo),
+              hasPrimeDelivery: Boolean(candidate.matchSignals.hasPrimeDelivery),
               hasTag: Boolean(candidate.matchSignals.hasTag),
             }
           : {
@@ -479,6 +496,7 @@ function sanitizeFinalizeCandidate(candidate, index) {
               exactMatchSearchState: false,
               hasMultipleSources: false,
               hasDeliveryInfo: false,
+              hasPrimeDelivery: false,
               hasTag: false,
             },
       attributes: sanitizeStringList(candidate.attributes, { maxItems: 6, maxItemLength: 60 }),
@@ -1878,10 +1896,22 @@ export async function handleFinalizeSelection(request, response) {
 
   const refinedDetails = detailParts.join('. ')
   const exclusionSet = new Set(excludedCandidateIds.map((value) => String(value)))
-  const eligibleCandidates =
+  const candidatesAfterExclusions =
     exclusionSet.size > 0
       ? candidatePool.candidates.filter((candidate) => !exclusionSet.has(String(candidate.id)))
       : candidatePool.candidates
+  const hasPrimeRequirement = hasPrimeDeliveryRequirement(
+    sanitizedDiscoveryContext.normalizedQuery,
+    followUpNotes,
+    rejectionFeedback,
+    priorities.join(' '),
+  )
+  const primeEligibleCandidates = hasPrimeRequirement
+    ? candidatesAfterExclusions.filter((candidate) => candidate.isPrime)
+    : []
+  const eligibleCandidates = primeEligibleCandidates.length > 0
+    ? primeEligibleCandidates
+    : candidatesAfterExclusions
 
   const nextCandidatePool = {
     ...candidatePool,

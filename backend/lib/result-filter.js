@@ -434,6 +434,7 @@ function buildMatchSignals(item, queryTokens, detailsTokens, searchState) {
     exactMatchSearchState: /exact/i.test(searchState || ''),
     hasMultipleSources: Boolean(item.multiple_sources),
     hasDeliveryInfo: Boolean(item.delivery),
+    hasPrimeDelivery: Boolean(item.isPrime),
     hasTag: Boolean(item.tag),
   }
 }
@@ -460,6 +461,7 @@ function buildAiCandidate(item, index, score, matchSignals, reasonFallback) {
     rating: normalized.rating,
     reviewCount: normalized.reviewCount,
     amazonPosition: typeof item.position === 'number' ? item.position : null,
+    isPrime: Boolean(item.isPrime),
     delivery: item.delivery || '',
     tag: item.tag || '',
     extensions: Array.isArray(item.extensions) ? item.extensions.filter(Boolean) : [],
@@ -559,6 +561,7 @@ export function getFilteredSearchArtifacts(
       price: candidate.price,
       rating: candidate.rating,
       reviewCount: candidate.reviewCount,
+      isPrime: Boolean(candidate.isPrime),
       description: candidate.description,
       reasons: candidate.reasons,
       image: candidate.image,

@@ -79,6 +79,7 @@ export function toFinalizeFastCard(candidate) {
     price: truncateText(candidate?.price, 80),
     rating: Number.isFinite(Number(candidate?.rating)) ? Number(candidate.rating) : null,
     reviewCount: Number.isFinite(Number(candidate?.reviewCount)) ? Number(candidate.reviewCount) : null,
+    isPrime: Boolean(candidate?.isPrime),
     description: truncateText(candidate?.description, 1200),
     feature_bullets: compactStringArray(candidate?.feature_bullets, {
       maxItems: 10,

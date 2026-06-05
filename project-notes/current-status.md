@@ -32,6 +32,7 @@
 - `Show products now` reveals the preview set without finalize.
 - `Show focused picks` runs guided finalize and scrolls directly to the results region. The results area now shows staged finalize progress copy while the shortlist is being locked. If the follow-up notes include hard eligibility constraints, including kosher/Jewish-use terms, dietary/allergy needs, safety/material exclusions, or compatibility language, the frontend refreshes Rainforest discovery once with the query plus notes before finalizing.
 - Final results now render as a ranked shortlist instead of a marketplace-style grid. On desktop, the shortlist has a large selected-product panel on the left and an internally scrolling row list on the right; hover, focus, and the top visible row update the selected panel.
+- Prime eligibility is now a structured Amazon result signal. Searches or follow-up notes that clearly ask for Prime delivery/eligibility narrow finalize to Prime-tagged candidates when available, and Prime-enabled picks show a quiet in-house `Prime` marker plus a modal delivery fact.
 - Result rows, selected-product panels, grid/card view, and modal headings now use normalized display titles so Amazon keyword stuffing does not dominate the UI. The raw title is preserved in product data and appears behind a quiet full-title disclosure in the modal when it differs.
 - After final results appear, refinement collapses into a compact summary above the ranked shortlist.
 - The product modal keeps enrichment hydrating in place: `fit_reason` and `caveat` fill the high reasoning area when available, while feature bullets/descriptions sit lower as product notes.
@@ -68,6 +69,7 @@
 - Hard-constraint follow-up notes are treated as discovery-changing context before finalize: the frontend detects broad kosher/Jewish-use, dietary/allergy, safety/material, and compatibility/exclusion terms, refreshes discovery at most once for the active search, then sends finalize the refreshed token and the same combined query used for that refreshed discovery.
 - Discovery cache is now split from session state: repeated same-query searches reuse the shared candidate pool, but each run gets its own token-scoped session snapshot for finalize/enrichment.
 - Haiku locks the shortlist first. Its candidate summary passes `amazonPosition` (raw Amazon search position) instead of an app-derived rank, and the prompt tells Haiku to infer fit from title signals first, then use rating/reviews and Amazon position as tiebreakers.
+- The candidate summary also includes structured `isPrime` eligibility so Prime can act as a user-context eligibility signal without introducing a marketplace filter UI.
 - Partial valid Haiku output is treated as recoverable: the backend tops it up from deterministic fallback and returns `selection.strategy: 'haiku_lock_topped_up'`.
 - The current detail helper for shortlisted ASINs is still `fetchOxylabsProductDetailsByAsin`, so discovery can use Rainforest while modal bullets/descriptions still come from Oxylabs.
 - Product details are cached per ASIN before mini enrichment runs, using the final displayed shortlist IDs.
