@@ -1021,9 +1021,16 @@ describe('server handlers', () => {
         combinedSearchText: 'yupik white chocolate chips',
         searchState: '',
         similarQueries: [],
-        candidates: [{ ...createFinalizeCandidate('one'), title: 'Yupik White Chocolate Chips' }],
+        candidates: Array.from({ length: 6 }, (_, index) => ({
+          ...createFinalizeCandidate(`one-${index + 1}`),
+          title: `Yupik White Chocolate Chips ${index + 1}`,
+        })),
       },
-      results: [{ id: 'one', title: 'Yupik White Chocolate Chips', price: '$28.03' }],
+      results: Array.from({ length: 6 }, (_, index) => ({
+        id: `one-${index + 1}`,
+        title: `Yupik White Chocolate Chips ${index + 1}`,
+        price: '$28.03',
+      })),
     })
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
@@ -1055,6 +1062,82 @@ describe('server handlers', () => {
     expect(payload.fallbackFrom).toBeNull()
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(fetch.mock.calls[0][1].method).toBe('POST')
+  })
+
+  it('falls back to Rainforest discovery when Oxylabs returns too few usable results', async () => {
+    getEnv.mockImplementation((name) => ({
+      RAINFOREST_API_KEY: 'rf-key',
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
+    })[name] || '')
+    getFilteredSearchArtifacts
+      .mockReturnValueOnce({
+        candidatePool: {
+          query: 'thermos',
+          details: '',
+          combinedSearchText: 'thermos',
+          searchState: '',
+          similarQueries: [],
+          candidates: [{ ...createFinalizeCandidate('thin-one'), title: 'Weak Thermos Result' }],
+        },
+        results: [{ id: 'thin-one', title: 'Weak Thermos Result', price: '$28.03' }],
+      })
+      .mockReturnValueOnce({
+        candidatePool: {
+          query: 'thermos',
+          details: '',
+          combinedSearchText: 'thermos',
+          searchState: '',
+          similarQueries: [],
+          candidates: Array.from({ length: 6 }, (_, index) => ({
+            ...createFinalizeCandidate(`rf-${index + 1}`),
+            title: `Rainforest Thermos ${index + 1}`,
+          })),
+        },
+        results: Array.from({ length: 6 }, (_, index) => ({
+          id: `rf-${index + 1}`,
+          title: `Rainforest Thermos ${index + 1}`,
+          price: '$31.99',
+        })),
+      })
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          results: [{ content: { results: { organic: [{}] } } }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          search_results: Array.from({ length: 6 }, (_, index) => ({
+            asin: `rf-${index + 1}`,
+            title: `Rainforest Thermos ${index + 1}`,
+            price: { value: 31.99, raw: '$31.99' },
+            link: `https://www.amazon.ca/dp/rf-${index + 1}`,
+            image: `https://example.com/rf-${index + 1}.jpg`,
+          })),
+        }),
+      }))
+
+    const response = createResponseRecorder()
+
+    await handleRainforestDiscoverySearch(
+      new URL('http://localhost/api/search/rainforest-discover?query=thermos&amazonDomain=amazon.ca'),
+      response,
+      { headers: { 'x-forwarded-for': '203.0.113.25' } },
+    )
+
+    const payload = JSON.parse(response.body)
+
+    expect(response.statusCode).toBe(200)
+    expect(payload.source).toBe('rainforest_discovery')
+    expect(payload.fallbackFrom).toBe('oxylabs_discovery')
+    expect(payload.fallbackReason).toBe('thin_oxylabs_results')
+    expect(payload.previewResults).toHaveLength(6)
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch.mock.calls[0][1].method).toBe('POST')
+    expect(fetch.mock.calls[1][0]).toBeInstanceOf(URL)
   })
 
   it('falls back to Rainforest discovery when Oxylabs fails', async () => {

@@ -82,6 +82,7 @@ const CACHE_SCOPE_DISCOVERY_SESSION = 'guided_discovery_session'
 const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
+const MIN_DISCOVERY_PROVIDER_RESULT_COUNT = LIVE_RESULT_FILTER_CONFIG.finalResultLimit
 const RATE_LIMIT_WAIT_MESSAGE = 'Please wait about 10 seconds and try again.'
 
 // In-memory ring buffer for recent finalizations (dev analytics only; resets on server restart).
@@ -130,6 +131,8 @@ async function fetchDiscoveryArtifactsWithFallback({
   countryCode,
   amazonDomain,
 }) {
+  let shouldFallbackFromThinOxylabs = false
+
   if (oxylabsUsername && oxylabsPassword) {
     const oxylabsResult = await fetchOxylabsArtifacts({
       filterConfig,
@@ -140,8 +143,22 @@ async function fetchDiscoveryArtifactsWithFallback({
       oxylabsPassword,
       amazonDomain,
     })
+    const oxylabsResultCount = Array.isArray(oxylabsResult.artifacts?.results)
+      ? oxylabsResult.artifacts.results.length
+      : 0
+    const oxylabsCandidateCount = Array.isArray(oxylabsResult.artifacts?.candidatePool?.candidates)
+      ? oxylabsResult.artifacts.candidatePool.candidates.length
+      : 0
+    shouldFallbackFromThinOxylabs = Boolean(
+      !oxylabsResult.error &&
+      rainforestApiKey &&
+      (
+        oxylabsResultCount < MIN_DISCOVERY_PROVIDER_RESULT_COUNT ||
+        oxylabsCandidateCount < MIN_DISCOVERY_PROVIDER_RESULT_COUNT
+      ),
+    )
 
-    if (!oxylabsResult.error || !rainforestApiKey) {
+    if ((!oxylabsResult.error && !shouldFallbackFromThinOxylabs) || !rainforestApiKey) {
       return {
         ...oxylabsResult,
         source: 'oxylabs_discovery',
@@ -179,6 +196,7 @@ async function fetchDiscoveryArtifactsWithFallback({
       ...rainforestResult,
       source: 'rainforest_discovery',
       fallbackFrom: oxylabsUsername && oxylabsPassword ? 'oxylabs_discovery' : null,
+      fallbackReason: shouldFallbackFromThinOxylabs ? 'thin_oxylabs_results' : null,
     }
   } catch (error) {
     if (oxylabsUsername && oxylabsPassword) {
@@ -1090,6 +1108,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       artifacts,
       error: artifactsError,
       fallbackFrom,
+      fallbackReason,
       source: discoverySource,
     } = await fetchDiscoveryArtifactsWithFallback({
       filterConfig: LIVE_RESULT_FILTER_CONFIG,
@@ -1127,8 +1146,9 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       }),
       {
         amazonDomain,
-        fallbackFrom,
-        label: 'write_guided_discovery_snapshot',
+      fallbackFrom,
+      fallbackReason,
+      label: 'write_guided_discovery_snapshot',
         query: normalizedQuery,
         route: '/api/search/rainforest-discover',
       },
@@ -1171,6 +1191,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       previewCount: artifacts.results.length,
       cacheMs: roundTimingDuration(cacheLookupDuration),
       fallbackFrom,
+      fallbackReason,
       providerMs: roundTimingDuration(providerDuration),
       source: discoverySource,
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
@@ -1186,6 +1207,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       previewResults: artifacts.results,
       source: discoverySource,
       fallbackFrom,
+      fallbackReason,
     }, {
       serverTiming: [
         { name: 'cache', duration: cacheLookupDuration },

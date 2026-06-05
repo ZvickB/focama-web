@@ -39,7 +39,7 @@
 ## Guided backend flow
 - `GET /api/search/rainforest-discover`
   - primary homepage discovery route
-  - uses Oxylabs for Amazon discovery first, then falls back to Rainforest API when Oxylabs is unavailable or returns no usable Amazon results
+  - uses Oxylabs for Amazon discovery first, then falls back to Rainforest API when Oxylabs is unavailable, returns no usable Amazon results, or returns too few usable items to support the 6-item shortlist while Rainforest is configured
   - writes reusable guided discovery cache and creates a separate token-scoped session snapshot for finalize/enrichment
   - honors an explicit one-request cache refresh mode for accepted retry-advice searches, bypassing the shared discovery cache read while still writing fresh provider results back to shared cache and session state
   - also honors that refresh mode for the one-time pre-finalize discovery pass when follow-up notes contain hard constraints
