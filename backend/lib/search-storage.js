@@ -229,6 +229,8 @@ function mapLocalProductDetailsEntry(entry) {
   const normalized = normalizeCachedProductDetailsEntry({
     feature_bullets: entry?.feature_bullets,
     productDescription: entry?.productDescription,
+    isPrime: entry?.isPrime,
+    delivery: entry?.delivery,
     source: entry?.source,
     needsUpdating: entry?.needsUpdating,
     nextUpdateAt: entry?.nextUpdateAt,
@@ -259,6 +261,8 @@ function writeLocalProductDetailsCacheEntries(entries) {
     nextEntries[asin] = {
       feature_bullets: normalized.feature_bullets,
       productDescription: normalized.productDescription,
+      isPrime: normalized.isPrime,
+      delivery: normalized.delivery,
       source: normalized.source,
       needsUpdating: normalized.needsUpdating,
       nextUpdateAt: normalized.nextUpdateAt,
@@ -503,6 +507,8 @@ export async function writeProductDetailsCacheEntries(entries = []) {
         asin,
         feature_bullets: normalized.feature_bullets,
         productDescription: normalized.productDescription,
+        isPrime: normalized.isPrime,
+        delivery: normalized.delivery,
         source: normalized.source,
         needsUpdating: normalized.needsUpdating,
         nextUpdateAt: normalized.nextUpdateAt,

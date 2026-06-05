@@ -102,7 +102,8 @@
 - On smaller screens, results collapse into stacked ranked pick cards.
 - A development-only results-view toggle can switch between the ranked rows view and the older grid/card view.
 - Result rows/cards show reliable product facts first: image, title, provider/source, price, rating, review count, and a deterministic badge when available.
-- Provider-confirmed Prime eligibility is preserved as structured product data and shown as a quiet factual `Prime` marker on result rows/cards plus a `Delivery` fact in the modal; Focamai does not use the official Amazon Prime logo or turn Prime into a marketplace-style filter panel.
+- Provider-confirmed Prime eligibility is preserved as structured product data and shown as a quiet factual `Prime` marker on result rows/cards plus a modal `Delivery` fact only when Prime is confirmed; Focamai does not show negative/unknown Prime copy, use the official Amazon Prime logo, or turn Prime into a marketplace-style filter panel.
+- Some Oxylabs search rows underreport Prime even when the product page confirms it. Async product-detail enrichment can upgrade a result to `isPrime: true` and hydrate the row/card plus modal fact after the initial shortlist appears.
 - User-facing result and detail titles are normalized for display so long Amazon keyword-stuffed titles are shortened without changing the raw product data. Long titles with commas keep the first comma chunk; otherwise display titles truncate at a word boundary before 80 characters.
 - Result, retry, and modal surfaces now share a quieter visual system: fewer decorative gradients, smaller shadows, and more consistent 16-28px radii.
 - Selecting a row or the row details action opens the modal.
@@ -140,7 +141,7 @@
 - Guided discovery is the reusable persistent cache layer.
 - Rainforest guided discovery uses a versioned shared cache scope (`rainforest_discovery:v2`) so older provider/search-era candidate pools are not reused as current evidence.
 - Finalize remains request-specific and rebuilds from discovery cache.
-- Amazon discovery preserves provider Prime signals as structured `isPrime` data through candidate pools, finalize cards, and final UI results.
+- Amazon discovery and product-detail enrichment preserve provider Prime signals as structured `isPrime` data through candidate pools, finalize/enrichment payloads, and final UI results.
 - Cached preview results and cached candidate pools are sanitized on read so stale marketplace entries without a known positive price do not reappear or reach finalize AI selection.
 - Thin cached discovery snapshots are treated as refresh candidates instead of reusable evidence when they have fewer than the shortlist count of cached results or candidates.
 - Partial valid haiku output is recoverable, not final: zero picks still use rules fallback, full valid picks stay `haiku_lock`, and partial valid picks are returned as `haiku_lock_topped_up`.
@@ -169,6 +170,7 @@
 - Focamai narrows choices before the user leaves to shop, instead of becoming a marketplace wall inside the app.
 - Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
 - Do not force generic labels like `retailer` in user-facing UI when `Amazon` is more accurate for the current experience.
+- Do not add new Amazon/source/retailer fields, badges, or clickout labels as incidental work. Source labeling in result cards or the modal should only change when the user explicitly chooses that UI direction.
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
 - The normalized product shape should stay provider-flexible, but future multi-retailer flexibility should not make today's Amazon-first UX vague.
 - Rainforest-style Amazon discovery is the main route; SerpApi stays secondary and only matters if deliberately reactivated.

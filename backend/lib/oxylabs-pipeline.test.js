@@ -161,13 +161,17 @@ describe('oxylabs pipeline', () => {
       ok: true,
       json: async () => ({
         results: [{
-          content: {
-            asin: 'B001',
-            bullet_points: 'One-hand fold\nCompact enough for overhead bins',
-            description: 'A compact stroller built for airport travel.',
-          },
-        }],
-      }),
+            content: {
+              asin: 'B001',
+              bullet_points: 'One-hand fold\nCompact enough for overhead bins',
+              description: 'A compact stroller built for airport travel.',
+              is_prime_eligible: true,
+              delivery: [
+                { type: 'Prime members', date: { by: 'Tomorrow' } },
+              ],
+            },
+          }],
+        }),
     })
 
     const result = await fetchOxylabsProductDetailsByAsin({
@@ -198,6 +202,8 @@ describe('oxylabs pipeline', () => {
     expect(result.get('B001')).toEqual({
       feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
       productDescription: 'A compact stroller built for airport travel.',
+      isPrime: true,
+      delivery: 'Prime members Tomorrow',
     })
   })
 

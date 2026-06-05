@@ -32,7 +32,7 @@
 - `Show products now` reveals the preview set without finalize.
 - `Show focused picks` runs guided finalize and scrolls directly to the results region. The results area now shows staged finalize progress copy while the shortlist is being locked. If the follow-up notes include hard eligibility constraints, including kosher/Jewish-use terms, dietary/allergy needs, safety/material exclusions, or compatibility language, the frontend refreshes Rainforest discovery once with the query plus notes before finalizing.
 - Final results now render as a ranked shortlist instead of a marketplace-style grid. On desktop, the shortlist has a large selected-product panel on the left and an internally scrolling row list on the right; hover, focus, and the top visible row update the selected panel.
-- Prime eligibility is now a structured Amazon result signal. Searches or follow-up notes that clearly ask for Prime delivery/eligibility narrow finalize to Prime-tagged candidates when available, and Prime-enabled picks show a quiet in-house `Prime` marker plus a modal delivery fact.
+- Prime eligibility is now a structured Amazon result signal. Searches or follow-up notes that clearly ask for Prime delivery/eligibility narrow finalize to Prime-tagged candidates when available, and Prime-enabled picks show a quiet in-house `Prime` marker plus a modal delivery fact only when confirmed. Oxylabs product-detail enrichment can now upgrade a result to Prime when the search row underreports it.
 - Result rows, selected-product panels, grid/card view, and modal headings now use normalized display titles so Amazon keyword stuffing does not dominate the UI. The raw title is preserved in product data and appears behind a quiet full-title disclosure in the modal when it differs.
 - After final results appear, refinement collapses into a compact summary above the ranked shortlist.
 - The product modal keeps enrichment hydrating in place: `fit_reason` and `caveat` fill the high reasoning area when available, while feature bullets/descriptions sit lower as product notes.
@@ -74,7 +74,7 @@
 - The candidate summary also includes structured `isPrime` eligibility so Prime can act as a user-context eligibility signal without introducing a marketplace filter UI.
 - Partial valid Haiku output is treated as recoverable: the backend tops it up from deterministic fallback and returns `selection.strategy: 'haiku_lock_topped_up'`.
 - The current detail helper for shortlisted ASINs is still `fetchOxylabsProductDetailsByAsin`, so discovery can use Rainforest while modal bullets/descriptions still come from Oxylabs.
-- Product details are cached per ASIN before mini enrichment runs, using the final displayed shortlist IDs.
+- Product details are cached per ASIN before mini enrichment runs, using the final displayed shortlist IDs. Positive Prime eligibility from those details is preserved through enrichment and can hydrate the displayed result after the first shortlist response.
 - Failed shortlisted detail calls now retry once in the background after the fast first pass, so mini enrichment can proceed with partial detail coverage while later cache quality still improves.
 - If that background retry later finds bullets, the active stored enrichment payload is patched and the modal can hydrate those bullets without a fresh finalize run.
 - Mini enrichment writes `fit_reason` and `caveat` back into the token-scoped session snapshot for the exact active `discoveryToken`, then the frontend hydrates the modal via SSE first and polling fallback second. The prompt treats the first locked product as the hero recommendation and frames later products as alternatives with distinct tradeoffs.
@@ -86,6 +86,7 @@
 - Focamai should not feel like an Amazon clone or marketplace wall. Its product identity is the focused decision aid, not Amazon's browsing experience.
 - Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
 - Do not force generic `retailer` language in user-facing UI when `Amazon` is more accurate for the current experience.
+- Do not introduce new Amazon/source/retailer labels, facts, badges, or clickout wording as side effects of unrelated features. Result-card and modal source labeling should stay unchanged unless the user explicitly asks to revisit it.
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
 - Do not let future multi-retailer flexibility make today's Amazon-first UX vague. If more retailers become active, revisit frontend labels based on the real source mix.
 - Keep `search_history` as internal telemetry, not user-facing saved history.

@@ -45,6 +45,37 @@ export function normalizeOxylabsSearchResult(item, { amazonDomain = 'amazon.com'
   }
 }
 
+function normalizeDeliveryDetails(value) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return ''
+      }
+
+      return [entry.type, entry.date?.by].filter(Boolean).join(' ')
+    })
+    .filter(Boolean)
+}
+
+function hasPrimeDeliveryDetails(value) {
+  return normalizeDeliveryDetails(value).some((entry) => /\bprime\b/i.test(entry))
+}
+
+function getPrimeDeliveryLabel(item) {
+  const deliveryDetails = [
+    ...normalizeDeliveryDetails(item.delivery),
+    ...(Array.isArray(item.buybox)
+      ? item.buybox.flatMap((offer) => normalizeDeliveryDetails(offer?.delivery_details))
+      : []),
+  ]
+
+  return deliveryDetails.find((entry) => /\bprime\b/i.test(entry)) || ''
+}
+
 /**
  * Maps an Oxylabs amazon_product detail response for enrichment use.
  *
@@ -78,6 +109,13 @@ export function normalizeOxylabsProduct(item, { amazonDomain = 'amazon.com' } = 
     : []
 
   const mainImage = Array.isArray(item.images) && item.images[0] ? item.images[0] : null
+  const primeDeliveryLabel = getPrimeDeliveryLabel(item)
+  const isPrime = Boolean(
+    item.is_prime ||
+    item.is_prime_eligible ||
+    primeDeliveryLabel ||
+    hasPrimeDeliveryDetails(item.delivery),
+  )
 
   return {
     asin: item.asin || null,
@@ -91,5 +129,7 @@ export function normalizeOxylabsProduct(item, { amazonDomain = 'amazon.com' } = 
     specifications,
     description: item.description || '',
     categories: categoryLadder,
+    isPrime,
+    delivery: isPrime ? primeDeliveryLabel || 'Prime delivery' : '',
   }
 }

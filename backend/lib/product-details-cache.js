@@ -35,9 +35,14 @@ export function normalizeCachedProductDetailsEntry(entry) {
     return null
   }
 
+  const delivery = normalizeString(entry.delivery)
+  const isPrime = Boolean(entry.isPrime ?? entry.is_prime)
+
   return {
     feature_bullets: normalizeFeatureBullets(entry.feature_bullets),
     productDescription: normalizeString(entry.productDescription ?? entry.product_description),
+    ...(isPrime ? { isPrime: true } : {}),
+    ...(delivery ? { delivery } : {}),
     source: normalizeString(entry.source),
     needsUpdating: Boolean(entry.needsUpdating ?? entry.needs_updating),
     nextUpdateAt: normalizeNextUpdateAt(entry.nextUpdateAt ?? entry.next_update_at),
@@ -84,7 +89,7 @@ export function shouldRefreshPartialProductDetails(entry, now = Date.now()) {
   return parsed.getTime() <= now
 }
 
-export function buildProductDetailsCacheWriteEntry({ asin, feature_bullets, productDescription, source }) {
+export function buildProductDetailsCacheWriteEntry({ asin, feature_bullets, productDescription, isPrime, delivery, source }) {
   const normalizedAsin = normalizeString(asin).slice(0, 200)
 
   if (!normalizedAsin) {
@@ -94,6 +99,8 @@ export function buildProductDetailsCacheWriteEntry({ asin, feature_bullets, prod
   const normalizedEntry = normalizeCachedProductDetailsEntry({
     feature_bullets,
     productDescription,
+    isPrime,
+    delivery,
     source,
   })
 
@@ -110,6 +117,8 @@ export function buildProductDetailsCacheWriteEntry({ asin, feature_bullets, prod
     asin: normalizedAsin,
     feature_bullets: normalizedEntry.feature_bullets,
     productDescription: normalizedEntry.productDescription,
+    ...(normalizedEntry.isPrime ? { isPrime: true } : {}),
+    ...(normalizedEntry.delivery ? { delivery: normalizedEntry.delivery } : {}),
     source: normalizedEntry.source,
     needsUpdating,
     nextUpdateAt,
@@ -137,6 +146,21 @@ function queueCacheWrite({ entries, writeCache, logLabel }) {
     .catch((error) => {
       logProductDetailsCacheIssue(logLabel, 'Product details cache write failed', error)
     })
+}
+
+function createDetailsValue(entry) {
+  const normalized = normalizeCachedProductDetailsEntry(entry)
+
+  if (!normalized) {
+    return null
+  }
+
+  return {
+    feature_bullets: normalized.feature_bullets,
+    productDescription: normalized.productDescription,
+    ...(normalized.isPrime ? { isPrime: true } : {}),
+    ...(normalized.delivery ? { delivery: normalized.delivery } : {}),
+  }
 }
 
 export async function fetchProductDetailsWithCache({
@@ -180,10 +204,7 @@ export async function fetchProductDetailsWithCache({
       continue
     }
 
-    detailsByAsin.set(asin, {
-      feature_bullets: cachedEntry.feature_bullets,
-      productDescription: cachedEntry.productDescription,
-    })
+    detailsByAsin.set(asin, createDetailsValue(cachedEntry))
 
     if (shouldRefreshPartialProductDetails(cachedEntry)) {
       refreshAsins.push(asin)
@@ -201,6 +222,8 @@ export async function fetchProductDetailsWithCache({
             asin,
             feature_bullets: freshEntries?.get?.(asin)?.feature_bullets,
             productDescription: freshEntries?.get?.(asin)?.productDescription,
+            isPrime: freshEntries?.get?.(asin)?.isPrime,
+            delivery: freshEntries?.get?.(asin)?.delivery,
             source,
           })
 
@@ -231,15 +254,14 @@ export async function fetchProductDetailsWithCache({
         continue
       }
 
-      detailsByAsin.set(asin, {
-        feature_bullets: freshEntry.feature_bullets,
-        productDescription: freshEntry.productDescription,
-      })
+      detailsByAsin.set(asin, createDetailsValue(freshEntry))
 
       const cacheWriteEntry = buildProductDetailsCacheWriteEntry({
         asin,
         feature_bullets: freshEntry.feature_bullets,
         productDescription: freshEntry.productDescription,
+        isPrime: freshEntry.isPrime,
+        delivery: freshEntry.delivery,
         source,
       })
 

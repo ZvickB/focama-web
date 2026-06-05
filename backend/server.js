@@ -949,9 +949,39 @@ function mergeProductDetailsIntoCandidatePool(candidatePool, productDetailsById)
         ...candidate,
         feature_bullets: productDetails.feature_bullets,
         productDescription: productDetails.productDescription,
+        isPrime: Boolean(candidate.isPrime || productDetails.isPrime),
+        delivery: productDetails.delivery || candidate.delivery || '',
       }
     }),
   }
+}
+
+function mergeCandidateFactsIntoEnrichmentEntries(entries, candidatePool) {
+  if (!Array.isArray(entries) || !Array.isArray(candidatePool?.candidates)) {
+    return entries
+  }
+
+  const candidateById = new Map(
+    candidatePool.candidates.map((candidate) => [String(candidate.id), candidate]),
+  )
+
+  return entries.map((entry) => {
+    const candidateId = String(entry?.candidate_id || entry?.candidateId || '')
+    const candidate = candidateById.get(candidateId)
+
+    if (!candidate) {
+      return entry
+    }
+
+    const isPrime = Boolean(entry?.isPrime || candidate.isPrime)
+    const delivery = candidate.delivery || entry?.delivery || ''
+
+    return {
+      ...entry,
+      ...(isPrime ? { isPrime: true } : {}),
+      ...(delivery ? { delivery } : {}),
+    }
+  })
 }
 
 export async function handleCachedSearch(requestUrl, response) {
@@ -1454,7 +1484,7 @@ async function runMiniEnrichmentAsync({
   const updatedSelection = {
     ...(cachedEntry.selection && typeof cachedEntry.selection === 'object' ? cachedEntry.selection : {}),
     enrichment: {
-      entries: miniResult.enriched,
+      entries: mergeCandidateFactsIntoEnrichmentEntries(miniResult.enriched, candidatePool),
       model: miniResult.model,
       generatedAt: new Date().toISOString(),
       preservedOrder: miniResult.preservedOrder,
@@ -1474,13 +1504,13 @@ async function runMiniEnrichmentAsync({
 
   emitEnrichmentReady(
     discoveryToken || cachedEntry.discoveryToken || '',
-    miniResult.enriched,
+    updatedSelection.enrichment.entries,
     miniResult.model,
   )
 
   logSearchFlowEvent('mini_enrichment_stored', {
     query: normalizedQuery,
-    entryCount: miniResult.enriched.length,
+    entryCount: updatedSelection.enrichment.entries.length,
     preservedOrder: miniResult.preservedOrder,
     model: miniResult.model,
   })
@@ -1514,7 +1544,14 @@ function mergeLateProductDetailsIntoEnrichmentEntries(entries, productDetailsByI
         ? entry.featureBullets
         : []
 
-    if (JSON.stringify(currentFeatureBullets) === JSON.stringify(nextFeatureBullets)) {
+    const nextIsPrime = Boolean(entry?.isPrime || productDetails.isPrime)
+    const nextDelivery = productDetails.delivery || entry?.delivery || ''
+
+    if (
+      JSON.stringify(currentFeatureBullets) === JSON.stringify(nextFeatureBullets) &&
+      Boolean(entry?.isPrime) === nextIsPrime &&
+      (entry?.delivery || '') === nextDelivery
+    ) {
       return entry
     }
 
@@ -1523,6 +1560,8 @@ function mergeLateProductDetailsIntoEnrichmentEntries(entries, productDetailsByI
     return {
       ...entry,
       feature_bullets: nextFeatureBullets,
+      ...(nextIsPrime ? { isPrime: true } : {}),
+      ...(nextDelivery ? { delivery: nextDelivery } : {}),
     }
   })
 

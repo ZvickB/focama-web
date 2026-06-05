@@ -410,6 +410,8 @@ function mergeEnrichmentIntoResults(results, enrichmentEntries) {
       ...result,
       fit_reason: entry?.fit_reason || entry?.fitReason || '',
       caveat: entry?.caveat || '',
+      isPrime: Boolean(result.isPrime || entry?.isPrime || entry?.is_prime),
+      delivery: entry?.delivery || result.delivery || '',
       feature_bullets: Array.isArray(entry?.feature_bullets)
         ? entry.feature_bullets
         : Array.isArray(entry?.featureBullets)

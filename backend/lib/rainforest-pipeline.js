@@ -94,6 +94,8 @@ function normalizeRainforestProductDetailPayload(payload, fallbackAsin) {
       product?.product_description ??
       product?.overview,
     ),
+    isPrime: Boolean(product?.is_prime),
+    delivery: product?.delivery?.tagline || (product?.is_prime ? 'Prime delivery' : ''),
   }
 }
 
@@ -211,6 +213,8 @@ export async function fetchRainforestProductDetailsByAsin({
             asin: normalized.asin,
             feature_bullets: normalized.feature_bullets,
             productDescription: normalized.productDescription,
+            isPrime: Boolean(normalized.isPrime),
+            delivery: normalized.delivery || '',
           }
         }),
       )
@@ -225,6 +229,8 @@ export async function fetchRainforestProductDetailsByAsin({
         detailsByAsin.set(settledResult.value.asin, {
           feature_bullets: settledResult.value.feature_bullets,
           productDescription: settledResult.value.productDescription,
+          isPrime: Boolean(settledResult.value.isPrime),
+          delivery: settledResult.value.delivery || '',
         })
       }
 

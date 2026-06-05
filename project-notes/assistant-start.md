@@ -31,6 +31,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Focamai should not feel like an Amazon clone or marketplace wall. Its product identity is the focused decision aid, not Amazon's browsing experience.
 - Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
 - Do not force generic `retailer` language in user-facing UI when `Amazon` is more accurate for the current experience.
+- Do not add new Amazon/source/retailer fields, badges, or clickout labels as incidental work. Any new result-card or modal source labeling should be an explicit product/UI decision from the user, not bundled into unrelated search or data changes.
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
 - Do not let future multi-retailer flexibility make today's Amazon-first UX vague. If more retailers become active, revisit frontend labels based on the real source mix.
 - `search_history` is internal telemetry/cache visibility, not a user-facing saved-history feature.
@@ -50,7 +51,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Discovery currently tries Oxylabs first and falls back to Rainforest API when Oxylabs cannot return usable Amazon results or returns too few usable items to support the 6-item shortlist.
 - Finalize rebuilds the candidate pool server-side from guided cache.
 - Haiku locks the shortlist first, with deterministic fallback/top-up when needed. Its prompt ranks title-fit first, then quality, with raw Amazon position only as a secondary tiebreaker.
-- Provider-confirmed Prime eligibility is preserved as structured `isPrime` data; clear Prime delivery/eligibility requests narrow finalize to Prime-tagged candidates when available, and the UI shows only a quiet in-house Prime marker/fact.
+- Provider-confirmed Prime eligibility is preserved as structured `isPrime` data; clear Prime delivery/eligibility requests narrow finalize to Prime-tagged candidates when available, and the UI shows only a quiet in-house Prime marker/fact. Oxylabs product-detail enrichment can upgrade `isPrime` when search rows underreport Prime.
 - Hard-constraint follow-up notes can trigger one refreshed discovery before finalize.
 - Query-quality suggestions are polling-based only. No SSE or prewarm path exists.
 - Modal/detail enrichment hydrates after the first shortlist cards are shown, framing the top pick as the hero recommendation and later picks as alternatives.

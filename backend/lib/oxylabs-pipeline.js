@@ -46,6 +46,8 @@ async function fetchSingleOxylabsProductDetail({
     asin,
     feature_bullets: Array.isArray(normalized.feature_bullets) ? normalized.feature_bullets : [],
     productDescription: typeof normalized.description === 'string' ? normalized.description : '',
+    isPrime: Boolean(normalized.isPrime),
+    delivery: normalized.delivery || '',
   }
 }
 
@@ -211,6 +213,8 @@ export async function fetchOxylabsProductDetailsByAsin({
         detailsByAsin.set(settledResult.value.asin, {
           feature_bullets: settledResult.value.feature_bullets,
           productDescription: settledResult.value.productDescription,
+          isPrime: Boolean(settledResult.value.isPrime),
+          delivery: settledResult.value.delivery || '',
         })
       }
 
@@ -241,12 +245,16 @@ export async function fetchOxylabsProductDetailsByAsin({
               retryDetailsByAsin.set(retryResult.value.asin, {
                 feature_bullets: retryResult.value.feature_bullets,
                 productDescription: retryResult.value.productDescription,
+                isPrime: Boolean(retryResult.value.isPrime),
+                delivery: retryResult.value.delivery || '',
               })
 
               const retryWrite = buildProductDetailsCacheWriteEntry({
                 asin: retryResult.value.asin,
                 feature_bullets: retryResult.value.feature_bullets,
                 productDescription: retryResult.value.productDescription,
+                isPrime: Boolean(retryResult.value.isPrime),
+                delivery: retryResult.value.delivery || '',
                 source: 'oxylabs',
               })
 

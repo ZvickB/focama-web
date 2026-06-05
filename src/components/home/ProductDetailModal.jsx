@@ -52,10 +52,10 @@ function ProductFacts({ displayPrice, item, retailerLabel }) {
     ['Shortlist rank', item.badgeLabel || 'Selected pick'],
     ['Source', retailerLabel || item.subtitle || 'Retailer'],
     ['Price', displayPrice],
-    ['Delivery', item.isPrime ? 'Prime eligible' : 'Not confirmed'],
+    item.isPrime ? ['Delivery', 'Prime eligible'] : null,
     ['Rating', ratingValue ? `${ratingValue.toFixed(1)} stars` : 'No rating'],
     ['Reviews', formatReviewCount(item.reviewCount)],
-  ]
+  ].filter(Boolean)
 
   return (
     <section className="rounded-2xl border border-[#eadfce] bg-white/92 p-4 shadow-[0_14px_36px_-30px_rgba(120,87,63,0.2)]">
