@@ -883,13 +883,13 @@ function OpenLayout(props) {
                   <button
                     type="button"
                     disabled={!hasDiscoveryResults || status.isFinalizing}
-                    className="text-left text-sm text-slate-500 underline-offset-2 transition-colors hover:text-slate-700 hover:underline disabled:pointer-events-none disabled:opacity-40"
+                    className="rounded-full border border-[#e5dacb] bg-white/90 px-4 py-2 text-left text-sm font-medium text-slate-500 shadow-[0_12px_30px_-24px_rgba(120,87,63,0.35)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#d7c7b3] hover:bg-white hover:text-slate-700 hover:shadow-[0_16px_36px_-24px_rgba(120,87,63,0.44)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:pointer-events-none disabled:opacity-40 disabled:hover:translate-y-0"
                     onClick={actions.showProductsNow}
                   >
                     Skip the question and show results {'->'}
                   </button>
                   <p className="text-left text-xs text-slate-400">
-                    Uses your original search only. Results may be less focused.
+                    Great for simple searches that don't need more detail. Uses your original search only.
                   </p>
                 </div>
                 <div className="order-1 flex flex-col gap-1 sm:order-2 sm:items-end">
