@@ -47,7 +47,18 @@ import {
 import { buildCacheKey, getEnv, validateSearchInput } from './lib/search-data.js'
 import { fetchRainforestArtifacts } from './lib/rainforest-pipeline.js'
 import { normalizeCachedProductDetailsEntry } from './lib/product-details-cache.js'
-import { getAmazonDomainFromCountryCode, normalizeAmazonDomain } from '../shared/amazon-marketplaces.js'
+import {
+  clampInteger,
+  getAmazonMarketplaceScope,
+  getRequestedAmazonDomain,
+  isLocalhostHost,
+  logSearchFlowEvent,
+  nowMs,
+  readHeaderValue,
+  resolveAmazonDomain,
+  roundTimingDuration,
+  runInBackground,
+} from './lib/server-helpers.js'
 
 const PORT = Number(process.env.PORT || 8787)
 const LIVE_RESULT_FILTER_CONFIG = {
@@ -113,14 +124,6 @@ function recordRecentFinalization({ query, details, results, strategy, model, ti
   }
 }
 
-function getRequestedAmazonDomain(value = '') {
-  return normalizeAmazonDomain(value)
-}
-
-function getAmazonMarketplaceScope(scope, amazonDomain = '') {
-  const normalizedAmazonDomain = getRequestedAmazonDomain(amazonDomain)
-  return normalizedAmazonDomain ? `${scope}:${normalizedAmazonDomain}` : scope
-}
 
 function isThinDiscoveryResult(result) {
   const resultCount = Array.isArray(result?.artifacts?.results)
@@ -262,13 +265,6 @@ function isThinDiscoveryCacheHit(cachedEntry, normalizedCachedResults = []) {
   return candidateCount < minimumUsefulCount || resultCount < minimumUsefulCount
 }
 
-function resolveAmazonDomain({ requestUrl = null, body = null, countryCode = 'US' } = {}) {
-  const requestedAmazonDomain =
-    getRequestedAmazonDomain(body?.amazonDomain) ||
-    getRequestedAmazonDomain(requestUrl?.searchParams?.get('amazonDomain') || '')
-
-  return requestedAmazonDomain || getAmazonDomainFromCountryCode(countryCode)
-}
 function getRefinementModel() {
   return getEnv('OPENAI_REFINEMENT_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_REFINEMENT_MODEL
 }
@@ -308,73 +304,6 @@ function hasPrimeDeliveryRequirement(...values) {
   return /\b(amazon\s+prime|prime\s+(eligible|delivery|shipping|only|required|preferred|items?|products?)|with\s+prime|has\s+prime|must\s+have\s+prime)\b/.test(combined)
 }
 
-function roundTimingDuration(value) {
-  return Math.round(value * 10) / 10
-}
-
-function clampInteger(value, { defaultValue, min, max }) {
-  const numericValue = Number(value)
-
-  if (!Number.isFinite(numericValue)) {
-    return defaultValue
-  }
-
-  return Math.min(max, Math.max(min, Math.round(numericValue)))
-}
-
-function readHeaderValue(headers, key) {
-  const rawValue = headers?.[key]
-
-  if (Array.isArray(rawValue)) {
-    return rawValue[0] || ''
-  }
-
-  return typeof rawValue === 'string' ? rawValue : ''
-}
-
-function isLocalhostHost(hostValue = '') {
-  const normalizedHost = hostValue.trim().toLowerCase()
-
-  return (
-    normalizedHost.startsWith('localhost:') ||
-    normalizedHost === 'localhost' ||
-    normalizedHost.startsWith('127.0.0.1:') ||
-    normalizedHost === '127.0.0.1' ||
-    normalizedHost.startsWith('[::1]:') ||
-    normalizedHost === '::1'
-  )
-}
-
-function nowMs() {
-  return performance.now()
-}
-
-function runInBackground(task, context = {}) {
-  Promise.resolve()
-    .then(() => (typeof task === 'function' ? task() : task))
-    .catch((error) => {
-      reportBackendError(error, {
-        ...context,
-        source: context.source || 'background_task',
-      })
-    })
-}
-
-function logSearchFlowEvent(eventName, details = {}) {
-  if (process.env.NODE_ENV === 'test') {
-    return
-  }
-
-  const payload = Object.fromEntries(
-    Object.entries({
-      event: eventName,
-      timestamp: new Date().toISOString(),
-      ...details,
-    }).filter(([, value]) => value !== undefined),
-  )
-
-  console.info('[search-flow]', JSON.stringify(payload))
-}
 
 function buildDiscoveryPreviewSelection(results, extraSelection = {}) {
   return {
