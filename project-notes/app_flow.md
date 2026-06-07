@@ -87,7 +87,7 @@
 - `GET /api/search/debug`, `GET /api/search/cache`, and `/api/search/live`
   - debugging/support routes, not the main product flow
 - Render CORS accepts both live custom frontend origins (`focamai.com` and `www.focamai.com`) and still tolerates the older `focama.vercel.app` origin.
-- The same Render Express process also mounts the KAILA scaffold API at `/kaila` for the separate KAILA Vercel app. This keeps Focamai's existing `/api/...` routes live while exposing `GET /kaila/health` and `POST /kaila/ask`; KAILA retrieve/respond behavior is still intentionally stubbed.
+- The same Render Express process also mounts the KAILA API at `/kaila` for the separate KAILA Vercel app. This keeps Focamai's existing `/api/...` routes live while exposing `GET /kaila/health`, `POST /kaila/ask`, and `POST /kaila/ask/stream`. The KAILA ask routes resolve the public store `embed_key`, retrieve product-scoped passages, and return a grounded answer payload with citations. The stream route emits status-only SSE events (`retrieving`, `answering`, `validating`) before the final `done` payload; it does not stream answer tokens before validation.
 
 ## Amazon store behavior
 - The store picker defaults to `Auto`.

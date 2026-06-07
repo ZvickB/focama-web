@@ -44,7 +44,7 @@
 ## Current backend/deployment reality
 - Frontend is deployed on Vercel.
 - Backend is deployed on Render through `backend/express-server.js`.
-- The Render backend also mounts the separate KAILA scaffold API under `/kaila` so KAILA can share the paid Focamai web service without replacing Focamai routes. Current KAILA endpoints are `GET /kaila/health` and `POST /kaila/ask`; the seeded loop now does simple passage retrieval/ranking and grounded deterministic responses, with optional KAILA-only OpenAI response phrasing gated behind `KAILA_OPENAI_API_KEY` and `KAILA_RESPONSE_MODEL`.
+- The Render backend also mounts the separate KAILA API under `/kaila` so KAILA can share the paid Focamai web service without replacing Focamai routes. Current KAILA endpoints are `GET /kaila/health`, `POST /kaila/ask`, and `POST /kaila/ask/stream`; the ask routes resolve the public store ref, retrieve product-scoped passages, and return grounded answer payloads with citations. `/kaila/ask/stream` sends status-only SSE progress before the final `done` payload, without streaming answer tokens before validation. KAILA OpenAI usage stays gated behind `KAILA_OPENAI_API_KEY` and `KAILA_RESPONSE_MODEL`.
 - Render CORS now explicitly accepts the current `focamai.com` and `www.focamai.com` frontend origins, while still tolerating the older `focama.vercel.app` origin during transition.
 - `GET /api/search/rainforest-discover` is the primary homepage discovery route. It uses Rainforest API first for all Amazon marketplaces when configured.
 - Oxylabs is now the discovery fallback only: it runs when Rainforest errors or returns too few usable items to support the 6-item shortlist. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available.
