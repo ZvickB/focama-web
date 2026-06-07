@@ -43,7 +43,7 @@
 - `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It uses Rainforest API first for Canada (`CA` / `amazon.ca`) with Oxylabs fallback on Rainforest errors or credits exhaustion, while other marketplaces keep Oxylabs-first with Rainforest fallback.
 - `GET /api/search/refine` returns one short follow-up question and optional refinement chips.
 - `POST /api/search/finalize` rebuilds the candidate pool from guided cache and returns up to 6 shortlist cards.
-- Haiku shortlist locking now ranks by inferred title fit first, rating/reviews second, and raw Amazon search position (`amazonPosition`) only as a secondary signal.
+- Haiku shortlist locking now ranks by inferred product fit first, then quality confidence (rating, review count, trustScore, and recognized category brand), price/value, useful shortlist variety, and raw Amazon search position (`amazonPosition`) as the final secondary signal.
 - `GET /api/search/enrichment-stream` is the first enrichment path; `GET /api/search/enrichment` is the polling fallback.
 - Mini enrichment now treats the first locked pick as the hero recommendation and later picks as alternatives with distinct tradeoffs.
 - `GET /api/search/query-quality` exposes polling-based query-quality suggestions.

@@ -57,7 +57,7 @@
   - accepts lightweight context
   - rebuilds the candidate pool server-side from guided cache
   - when the query or user context clearly asks for Prime delivery/eligibility, narrows the candidate pool to provider-confirmed Prime-eligible items when any are available
-  - locks the shortlist with haiku first, using title fit as the primary ranking signal and raw Amazon search position only as a secondary tiebreaker
+  - locks the shortlist with haiku first, ranking inferred product fit before quality confidence, price/value, shortlist variety, and raw Amazon search position
   - if haiku returns a partial valid subset, tops up from deterministic fallback so the response still returns up to 6 eligible products
   - returns shortlist cards immediately
   - starts async product-detail fetch + mini enrichment in the background

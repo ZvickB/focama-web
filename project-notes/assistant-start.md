@@ -51,7 +51,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 ## Important behavior notes
 - Discovery uses Rainforest API first for Canada (`CA` / `amazon.ca`) because Oxylabs Amazon.ca results are weak, but falls back to Oxylabs if Rainforest errors or runs out of credits. Other marketplaces still try Oxylabs first and fall back to Rainforest API when Oxylabs cannot return usable Amazon results or returns too few usable items to support the 6-item shortlist.
 - Finalize rebuilds the candidate pool server-side from guided cache.
-- Haiku locks the shortlist first, with deterministic fallback/top-up when needed. Its prompt ranks title-fit first, then quality, with raw Amazon position only as a secondary tiebreaker.
+- Haiku locks the shortlist first, with deterministic fallback/top-up when needed. Its prompt ranks inferred product fit first, then quality confidence (rating, review count, trustScore, and recognized category brand), price/value, shortlist variety, and raw Amazon position as the final tiebreaker.
 - Provider-confirmed Prime eligibility is preserved as structured `isPrime` data; clear Prime delivery/eligibility requests narrow finalize to Prime-tagged candidates when available, and the UI shows only a quiet in-house Prime marker/fact. Oxylabs product-detail enrichment can upgrade `isPrime` when search rows underreport Prime.
 - Hard-constraint follow-up notes can trigger one refreshed discovery before finalize.
 - Query-quality suggestions are polling-based only. No SSE or prewarm path exists.
