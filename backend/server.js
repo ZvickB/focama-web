@@ -46,6 +46,7 @@ import {
 } from './lib/search-storage.js'
 import { buildCacheKey, getEnv, validateSearchInput } from './lib/search-data.js'
 import { fetchRainforestArtifacts } from './lib/rainforest-pipeline.js'
+import { normalizeCachedProductDetailsEntry } from './lib/product-details-cache.js'
 import { getAmazonDomainFromCountryCode, normalizeAmazonDomain } from '../shared/amazon-marketplaces.js'
 
 const PORT = Number(process.env.PORT || 8787)
@@ -83,6 +84,7 @@ const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 const FINALIZE_REQUEST_MODE_EMPTY_NOTES = 'guided_empty_notes'
 const MIN_DISCOVERY_PROVIDER_RESULT_COUNT = LIVE_RESULT_FILTER_CONFIG.finalResultLimit
+const PRODUCT_DETAILS_ASIN_MAX_LENGTH = 200
 const RATE_LIMIT_WAIT_MESSAGE = 'Please wait about 10 seconds and try again.'
 
 // In-memory ring buffer for recent finalizations (dev analytics only; resets on server restart).
@@ -120,10 +122,20 @@ function getAmazonMarketplaceScope(scope, amazonDomain = '') {
   return normalizedAmazonDomain ? `${scope}:${normalizedAmazonDomain}` : scope
 }
 
-function shouldPreferRainforestDiscovery({ countryCode = 'US', amazonDomain = '' } = {}) {
+function isThinDiscoveryResult(result) {
+  const resultCount = Array.isArray(result?.artifacts?.results)
+    ? result.artifacts.results.length
+    : 0
+  const candidateCount = Array.isArray(result?.artifacts?.candidatePool?.candidates)
+    ? result.artifacts.candidatePool.candidates.length
+    : 0
+
   return (
-    String(countryCode || '').trim().toUpperCase() === 'CA' ||
-    getRequestedAmazonDomain(amazonDomain) === 'amazon.ca'
+    !result?.error &&
+    (
+      resultCount < MIN_DISCOVERY_PROVIDER_RESULT_COUNT ||
+      candidateCount < MIN_DISCOVERY_PROVIDER_RESULT_COUNT
+    )
   )
 }
 
@@ -138,10 +150,9 @@ async function fetchDiscoveryArtifactsWithFallback({
   countryCode,
   amazonDomain,
 }) {
-  let shouldFallbackFromThinOxylabs = false
-  const prefersRainforestDiscovery = shouldPreferRainforestDiscovery({ countryCode, amazonDomain })
+  const hasOxylabsCredentials = Boolean(oxylabsUsername && oxylabsPassword)
 
-  if (prefersRainforestDiscovery && rainforestApiKey) {
+  if (rainforestApiKey) {
     let rainforestResult
 
     try {
@@ -164,7 +175,9 @@ async function fetchDiscoveryArtifactsWithFallback({
       }
     }
 
-    if (!rainforestResult.error || !oxylabsUsername || !oxylabsPassword) {
+    const shouldFallbackFromThinRainforest = hasOxylabsCredentials && isThinDiscoveryResult(rainforestResult)
+
+    if ((!rainforestResult.error && !shouldFallbackFromThinRainforest) || !hasOxylabsCredentials) {
       return {
         ...rainforestResult,
         source: 'rainforest_discovery',
@@ -187,11 +200,11 @@ async function fetchDiscoveryArtifactsWithFallback({
       ...oxylabsResult,
       source: 'oxylabs_discovery',
       fallbackFrom: 'rainforest_discovery',
-      fallbackReason: 'rainforest_error',
+      fallbackReason: shouldFallbackFromThinRainforest ? 'thin_rainforest_results' : 'rainforest_error',
     }
   }
 
-  if (oxylabsUsername && oxylabsPassword) {
+  if (hasOxylabsCredentials) {
     const oxylabsResult = await fetchOxylabsArtifacts({
       filterConfig,
       productQuery,
@@ -201,71 +214,19 @@ async function fetchDiscoveryArtifactsWithFallback({
       oxylabsPassword,
       amazonDomain,
     })
-    const oxylabsResultCount = Array.isArray(oxylabsResult.artifacts?.results)
-      ? oxylabsResult.artifacts.results.length
-      : 0
-    const oxylabsCandidateCount = Array.isArray(oxylabsResult.artifacts?.candidatePool?.candidates)
-      ? oxylabsResult.artifacts.candidatePool.candidates.length
-      : 0
-    shouldFallbackFromThinOxylabs = Boolean(
-      !oxylabsResult.error &&
-      rainforestApiKey &&
-      (
-        oxylabsResultCount < MIN_DISCOVERY_PROVIDER_RESULT_COUNT ||
-        oxylabsCandidateCount < MIN_DISCOVERY_PROVIDER_RESULT_COUNT
-      ),
-    )
 
-    if ((!oxylabsResult.error && !shouldFallbackFromThinOxylabs) || !rainforestApiKey) {
-      return {
-        ...oxylabsResult,
-        source: 'oxylabs_discovery',
-        fallbackFrom: null,
-      }
-    }
-  }
-
-  if (!rainforestApiKey) {
     return {
-      error: {
-        error: oxylabsUsername || oxylabsPassword
-          ? 'Oxylabs search request failed and Rainforest API fallback is not configured.'
-          : 'OXYLABS_USERNAME and OXYLABS_PASSWORD or RAINFOREST_API_KEY are required in the root .env file.',
-        statusCode: 500,
-      },
-      artifacts: null,
+      ...oxylabsResult,
       source: 'oxylabs_discovery',
       fallbackFrom: null,
-    }
-  }
-
-  try {
-    const rainforestResult = await fetchRainforestArtifacts({
-      filterConfig,
-      productQuery,
-      details,
-      reasonFallback,
-      rainforestApiKey,
-      countryCode,
-      amazonDomain,
-    })
-
-    return {
-      ...rainforestResult,
-      source: 'rainforest_discovery',
-      fallbackFrom: oxylabsUsername && oxylabsPassword ? 'oxylabs_discovery' : null,
-      fallbackReason: shouldFallbackFromThinOxylabs ? 'thin_oxylabs_results' : null,
-    }
-  } catch (error) {
-    if (oxylabsUsername && oxylabsPassword) {
-      throw error
+      fallbackReason: null,
     }
   }
 
   return {
     error: {
-      error: 'Rainforest API request failed.',
-      statusCode: 502,
+      error: 'RAINFOREST_API_KEY or OXYLABS_USERNAME and OXYLABS_PASSWORD are required in the root .env file.',
+      statusCode: 500,
     },
     artifacts: null,
     source: 'rainforest_discovery',
@@ -1014,6 +975,33 @@ function mergeProductDetailsIntoCandidatePool(candidatePool, productDetailsById)
   }
 }
 
+function normalizeProductDetailsAsin(value = '') {
+  return String(value || '').trim().slice(0, PRODUCT_DETAILS_ASIN_MAX_LENGTH)
+}
+
+function buildProductDetailsPayload(asin, entry) {
+  const normalizedEntry = normalizeCachedProductDetailsEntry(entry)
+
+  if (!normalizedEntry) {
+    return {
+      asin,
+      ready: false,
+      feature_bullets: [],
+      productDescription: '',
+    }
+  }
+
+  return {
+    asin,
+    ready: normalizedEntry.feature_bullets.length > 0 || normalizedEntry.productDescription.length > 0,
+    feature_bullets: normalizedEntry.feature_bullets,
+    productDescription: normalizedEntry.productDescription,
+    ...(normalizedEntry.isPrime ? { isPrime: true } : {}),
+    ...(normalizedEntry.delivery ? { delivery: normalizedEntry.delivery } : {}),
+    source: normalizedEntry.source,
+  }
+}
+
 function mergeCandidateFactsIntoEnrichmentEntries(entries, candidatePool) {
   if (!Array.isArray(entries) || !Array.isArray(candidatePool?.candidates)) {
     return entries
@@ -1069,6 +1057,66 @@ export async function handleCachedSearch(requestUrl, response) {
     error: 'No cached test results exist for this search yet.',
     details: 'Run the cache script first to save a temporary 6-item SerpApi sample for this query.',
   })
+}
+
+export async function handleProductDetails(requestUrl, response) {
+  const asin = normalizeProductDetailsAsin(
+    requestUrl.searchParams.get('asin') ||
+    requestUrl.searchParams.get('id') ||
+    requestUrl.searchParams.get('productId') ||
+    '',
+  )
+  const amazonDomain = getRequestedAmazonDomain(requestUrl.searchParams.get('amazonDomain') || '') || 'amazon.com'
+
+  if (!asin) {
+    sendJson(response, 400, { error: 'Product ASIN is required.' })
+    return
+  }
+
+  try {
+    const cachedDetails = await readProductDetailsCacheEntries([asin])
+    const cachedEntry = normalizeCachedProductDetailsEntry(cachedDetails?.get?.(asin))
+
+    if (cachedEntry && (cachedEntry.feature_bullets.length > 0 || cachedEntry.productDescription.length > 0)) {
+      sendJson(response, 200, buildProductDetailsPayload(asin, cachedEntry))
+      return
+    }
+
+    const oxylabsUsername = getEnv('OXYLABS_USERNAME')
+    const oxylabsPassword = getEnv('OXYLABS_PASSWORD')
+
+    if (!oxylabsUsername || !oxylabsPassword) {
+      sendJson(response, 200, buildProductDetailsPayload(asin, cachedEntry))
+      return
+    }
+
+    const detailFailures = []
+    const detailsById = await fetchOxylabsProductDetailsByAsin({
+      asins: [asin],
+      oxylabsUsername,
+      oxylabsPassword,
+      amazonDomain,
+      readCache: readProductDetailsCacheEntries,
+      writeCache: writeProductDetailsCacheEntries,
+      onAsinFailure: (failedAsin, failureType, statusCode) => {
+        detailFailures.push({ asin: failedAsin, failureType, statusCode, query: '' })
+      },
+    })
+
+    if (detailFailures.length > 0) {
+      await recordOxylabsProductFailures(detailFailures)
+    }
+
+    sendJson(response, 200, buildProductDetailsPayload(asin, detailsById.get(asin) || cachedEntry))
+  } catch (error) {
+    reportBackendError(error, {
+      amazonDomain,
+      asin,
+      route: '/api/search/product-details',
+      source: 'product_details',
+    })
+    sendJson(response, 500, buildInternalErrorPayload('Unable to load product details.', error))
+  }
 }
 
 export async function handleRainforestDiscoverySearch(requestUrl, response, request = { headers: {} }) {
@@ -2583,6 +2631,11 @@ export function createApiServer() {
 
       if (request.method === 'GET' && requestUrl.pathname === '/api/search/query-quality') {
         await handleQueryQualityPoll(request, response)
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/search/product-details') {
+        await handleProductDetails(requestUrl, response)
         return
       }
 

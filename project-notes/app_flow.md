@@ -26,7 +26,7 @@
   - result skeletons appear below when needed
   - the page scrolls toward the active refine/results region
 - Refinement chips use backend suggestions when available and fall back to `Good value`, `Easy to use`, and `Fits my space`; label-only chips append to the notes box, prompt-backed chips fill the notes box with richer text, and selected chips get a subtle selected state.
-- `Show products now` reveals the preview set.
+- `Show products now` reveals the preview set. Preview rows stay factual and do not show fallback recommendation copy when no user-facing detail exists.
 - `Show focused picks` runs guided finalize and narrows to the final 6; during that wait, the results area shows staged progress copy for reading the search, applying notes, narrowing to six picks, and getting the shortlist ready. When follow-up notes add hard eligibility constraints such as kosher/Jewish-use, dietary/allergy, safety/material, or compatibility/exclusion needs, the frontend first does one refreshed Rainforest discovery pass with the original query plus notes, then finalizes from that refreshed token.
 - After final picks appear, the refinement panel collapses into a compact summary above the ranked results.
 - `Start a new search` clears the guided state and returns to a fresh search box.
@@ -39,8 +39,8 @@
 ## Guided backend flow
 - `GET /api/search/rainforest-discover`
   - primary homepage discovery route
-  - uses Rainforest API first for Canada (`CA` / `amazon.ca`) because Oxylabs Amazon.ca results are weak, but falls back to Oxylabs if Rainforest errors or runs out of credits
-  - for other marketplaces, uses Oxylabs for Amazon discovery first, then falls back to Rainforest API when Oxylabs is unavailable, returns no usable Amazon results, or returns too few usable items to support the 6-item shortlist while Rainforest is configured
+  - uses Rainforest API first for all Amazon marketplaces when configured
+  - falls back to Oxylabs only when Rainforest errors or returns too few usable items to support the 6-item shortlist; if Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available
   - writes reusable guided discovery cache and creates a separate token-scoped session snapshot for finalize/enrichment
   - honors an explicit one-request cache refresh mode for accepted retry-advice searches, bypassing the shared discovery cache read while still writing fresh provider results back to shared cache and session state
   - also honors that refresh mode for the one-time pre-finalize discovery pass when follow-up notes contain hard constraints
@@ -74,6 +74,10 @@
   - returns `ready: false` while the review is pending
   - returns a minimal suggestion payload only when the stored review is high-confidence and user-visible
   - returns `shouldSuggest: false` for quiet no-op reviews, ambiguous language, failures, or skipped reviews
+- `GET /api/search/product-details`
+  - lightweight one-product detail hydration endpoint used when a user opens a skipped-refinement preview product
+  - reads the per-ASIN product details cache first and uses Oxylabs only for cache misses when credentials are configured
+  - returns product detail bullets, product description, Prime, and delivery facts; it does not run AI recommendation analysis
 - `POST /api/search/retry-advice`
   - reads the rejected shortlist plus user feedback
   - returns `recommendation`, `suggestedQuery`, and `rationale`
@@ -109,6 +113,7 @@
 - Result, retry, and modal surfaces now share a quieter visual system: fewer decorative gradients, smaller shadows, and more consistent 16-28px radii.
 - Selecting a row or the row details action opens the modal.
 - The modal is ordered as a decision aid: image and title, an `At a glance` facts card, `Why this pick`, `Worth knowing`, then product notes from `feature_bullets` or description.
+- For skipped-refinement preview products, the modal hides the AI `Why this pick` analysis panel because finalize/enrichment has not run; opening the preview modal lazily hydrates product notes from the per-ASIN cache or Oxylabs.
 - If the normalized detail heading differs from the raw title, the detail header exposes the original directly under the title behind a quiet `Full Amazon title`/source-title disclosure.
 - If enrichment is still pending, result rows/panels and the modal use quiet teal/orange breathing dots instead of visible uncertainty copy; if enrichment settles without a fit reason, the modal shows a practical fallback instead of an empty section.
 - Shopping clickout CTAs happen from result rows/cards and the modal CTA, and derive their visible label from the product source/store (`View on Amazon`, `View on Walmart`, etc.) instead of using generic `retailer` wording when a source name is available.

@@ -12,6 +12,7 @@ import {
   handleEnrichmentStream,
   handleFeedbackSubmission,
   handleFinalizeSelection,
+  handleProductDetails,
   handleQueryQualityPoll,
   handleRainforestDiscoverySearch,
   handleRefinementPrompt,
@@ -76,6 +77,10 @@ app.get('/api/search/debug', async (req, res) => {
 
 app.get('/api/search/cache', async (req, res) => {
   await handleCachedSearch(getRequestUrl(req), res)
+})
+
+app.get('/api/search/product-details', async (req, res) => {
+  await handleProductDetails(getRequestUrl(req), res)
 })
 
 // handleEnrichmentPoll takes (request, response) and constructs its own URL internally

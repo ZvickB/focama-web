@@ -379,6 +379,14 @@ async function fetchEnrichment({ token, query, amazonDomain }) {
   return readJsonResponse(response, requestStartedAt)
 }
 
+async function fetchProductDetails({ asin, amazonDomain }) {
+  const searchParams = new URLSearchParams({ asin })
+  appendAmazonDomain(searchParams, amazonDomain)
+  const requestStartedAt = performance.now()
+  const response = await fetch(`${BACKEND_URL}/api/search/product-details?${searchParams.toString()}`)
+  return readJsonResponse(response, requestStartedAt)
+}
+
 async function fetchQueryQualitySuggestion({ token, query, amazonDomain }) {
   const searchParams = new URLSearchParams({ token, query })
   appendAmazonDomain(searchParams, amazonDomain)
@@ -412,6 +420,7 @@ function mergeEnrichmentIntoResults(results, enrichmentEntries) {
       caveat: entry?.caveat || '',
       isPrime: Boolean(result.isPrime || entry?.isPrime || entry?.is_prime),
       delivery: entry?.delivery || result.delivery || '',
+      productDescription: entry?.productDescription || entry?.product_description || result.productDescription || '',
       feature_bullets: Array.isArray(entry?.feature_bullets)
         ? entry.feature_bullets
         : Array.isArray(entry?.featureBullets)
@@ -419,6 +428,36 @@ function mergeEnrichmentIntoResults(results, enrichmentEntries) {
           : Array.isArray(result?.feature_bullets)
             ? result.feature_bullets
             : [],
+    }
+  })
+}
+
+function mergeProductDetailsIntoResults(results, productId, details) {
+  if (!Array.isArray(results) || !productId || !details?.ready) {
+    return results
+  }
+
+  return results.map((result) => {
+    if (String(result.id) !== String(productId)) {
+      return result
+    }
+
+    const featureBullets = Array.isArray(details.feature_bullets)
+      ? details.feature_bullets
+      : Array.isArray(details.featureBullets)
+        ? details.featureBullets
+        : []
+
+    return {
+      ...result,
+      isPrime: Boolean(result.isPrime || details.isPrime || details.is_prime),
+      delivery: details.delivery || result.delivery || '',
+      productDescription: details.productDescription || details.product_description || result.productDescription || '',
+      feature_bullets: featureBullets.length > 0
+        ? featureBullets
+        : Array.isArray(result.feature_bullets)
+          ? result.feature_bullets
+          : [],
     }
   })
 }
@@ -460,6 +499,7 @@ function mergeFinalizeResults(results, sourceCandidatePool) {
       image: sourceCandidate.image || result.image,
       link: sourceCandidate.link || result.link,
       isPrime: Boolean(result.isPrime || sourceCandidate.isPrime),
+      productDescription: sourceCandidate.productDescription || result.productDescription || '',
     }
   })
 }
@@ -553,6 +593,7 @@ export function useGuidedSearch() {
   const [isApplyingQuerySuggestion, setIsApplyingQuerySuggestion] = useState(false)
   const activeSearchIdRef = useRef(0)
   const enrichmentPollRef = useRef({ source: null, timerId: null, searchId: 0 })
+  const previewDetailsRequestRef = useRef(new Set())
   const queryQualityPollRef = useRef({
     timerId: null,
     searchId: 0,
@@ -1275,6 +1316,7 @@ export function useGuidedSearch() {
     invalidateRetryAdviceRequests()
     constraintRefreshSearchIdRef.current = 0
     constraintRefreshResultRef.current = null
+    previewDetailsRequestRef.current.clear()
 
     if (resetMutationState) {
       finalizeMutation.reset()
@@ -1980,6 +2022,62 @@ export function useGuidedSearch() {
     setSuggestedRetryQuery('')
   }
 
+  async function hydratePreviewProductDetails(item) {
+    const productId = String(item?.id || '').trim()
+
+    if (
+      !productId ||
+      previewDetailsRequestRef.current.has(productId) ||
+      (Array.isArray(item?.feature_bullets) && item.feature_bullets.length > 0) ||
+      String(item?.productDescription || '').trim()
+    ) {
+      return
+    }
+
+    previewDetailsRequestRef.current.add(productId)
+    recordSearchDebugEvent('product-details', 'started', {
+      activeSearchId: activeSearchIdRef.current,
+      amazonDomain: submittedAmazonDomain,
+      productId,
+      query: submittedQuery,
+    })
+
+    try {
+      const payload = await fetchProductDetails({
+        asin: productId,
+        amazonDomain: submittedAmazonDomain,
+      })
+
+      if (!payload.ready) {
+        recordSearchDebugEvent('product-details', 'empty', {
+          activeSearchId: activeSearchIdRef.current,
+          amazonDomain: submittedAmazonDomain,
+          productId,
+          query: submittedQuery,
+        })
+        return
+      }
+
+      setPreviewResults((current) => mergeProductDetailsIntoResults(current, productId, payload))
+      recordSearchDebugEvent('product-details', 'success', {
+        activeSearchId: activeSearchIdRef.current,
+        amazonDomain: submittedAmazonDomain,
+        productId,
+        query: submittedQuery,
+      })
+    } catch (error) {
+      recordSearchDebugEvent('product-details', 'failed', {
+        activeSearchId: activeSearchIdRef.current,
+        amazonDomain: submittedAmazonDomain,
+        error,
+        productId,
+        query: submittedQuery,
+      })
+    } finally {
+      previewDetailsRequestRef.current.delete(productId)
+    }
+  }
+
   function handleSelectProduct(item, { position = 0, resultSet = 'final' } = {}) {
     setSelectedProductState({
       id: item.id,
@@ -2003,6 +2101,10 @@ export function useGuidedSearch() {
       clickTarget: 'card',
       retailerUrl: item.link || '',
     })
+
+    if (resultSet === 'preview') {
+      void hydratePreviewProductDetails(item)
+    }
   }
 
   function handleRetailerClick(item, { position = 0, resultSet = 'final' } = {}) {

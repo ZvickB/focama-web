@@ -71,6 +71,7 @@ import {
   handleEnrichmentStream,
   handleFeedbackSubmission,
   handleFinalizeSelection,
+  handleProductDetails,
   handleQueryQualityPoll,
   handleRainforestDiscoverySearch,
   handleRetryAdvice,
@@ -85,9 +86,11 @@ import { generateRetryAdvice } from './lib/retry-advice.js'
 import { getFilteredSearchArtifacts } from './lib/result-filter.js'
 import {
   getSupabaseHealth,
+  readProductDetailsCacheEntries,
   readStoredSearchCacheEntry,
   recordSearchHistory,
   recordTesterFeedback,
+  writeProductDetailsCacheEntries,
   writeStoredSearchCacheEntry,
 } from './lib/search-storage.js'
 import {
@@ -336,8 +339,79 @@ describe('server handlers', () => {
     })
   })
 
+  it('returns cached product details for a preview product without calling the provider', async () => {
+    readProductDetailsCacheEntries.mockResolvedValueOnce(new Map([
+      ['B001', {
+        feature_bullets: ['Cached bullet'],
+        productDescription: 'Cached product description.',
+        source: 'oxylabs',
+      }],
+    ]))
+    vi.stubGlobal('fetch', vi.fn())
 
+    const response = createResponseRecorder()
 
+    await handleProductDetails(
+      new URL('http://localhost/api/search/product-details?asin=B001&amazonDomain=amazon.com'),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({
+      asin: 'B001',
+      ready: true,
+      feature_bullets: ['Cached bullet'],
+      productDescription: 'Cached product description.',
+      source: 'oxylabs',
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('fetches and caches Oxylabs product details for a preview product cache miss', async () => {
+    getEnv.mockImplementation((name) => ({
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
+    })[name] || '')
+    readProductDetailsCacheEntries.mockResolvedValue(new Map())
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        results: [{
+          content: {
+            bullet_points: 'Fresh bullet one\nFresh bullet two',
+            description: 'Fresh product description.',
+          },
+        }],
+      }),
+    })))
+
+    const response = createResponseRecorder()
+
+    await handleProductDetails(
+      new URL('http://localhost/api/search/product-details?asin=B002&amazonDomain=amazon.com'),
+      response,
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({
+      asin: 'B002',
+      ready: true,
+      feature_bullets: ['Fresh bullet one', 'Fresh bullet two'],
+      productDescription: 'Fresh product description.',
+      source: '',
+    })
+    expect(fetch).toHaveBeenCalledTimes(1)
+    await waitForExpectation(() => {
+      expect(writeProductDetailsCacheEntries).toHaveBeenCalledWith([
+        expect.objectContaining({
+          asin: 'B002',
+          feature_bullets: ['Fresh bullet one', 'Fresh bullet two'],
+          productDescription: 'Fresh product description.',
+          source: 'oxylabs',
+        }),
+      ])
+    })
+  })
 
 
   it('returns retry advice for rejected final picks', async () => {
@@ -1137,7 +1211,7 @@ describe('server handlers', () => {
     expect(fetch.mock.calls[1][1].method).toBe('POST')
   })
 
-  it('falls back to Rainforest discovery when Oxylabs returns too few usable results', async () => {
+  it('falls back to Oxylabs discovery when Rainforest returns too few usable results', async () => {
     getEnv.mockImplementation((name) => ({
       RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
@@ -1163,13 +1237,13 @@ describe('server handlers', () => {
           searchState: '',
           similarQueries: [],
           candidates: Array.from({ length: 6 }, (_, index) => ({
-            ...createFinalizeCandidate(`rf-${index + 1}`),
-            title: `Rainforest Thermos ${index + 1}`,
+            ...createFinalizeCandidate(`oxy-${index + 1}`),
+            title: `Oxylabs Thermos ${index + 1}`,
           })),
         },
         results: Array.from({ length: 6 }, (_, index) => ({
-          id: `rf-${index + 1}`,
-          title: `Rainforest Thermos ${index + 1}`,
+          id: `oxy-${index + 1}`,
+          title: `Oxylabs Thermos ${index + 1}`,
           price: '$31.99',
         })),
       })
@@ -1177,19 +1251,35 @@ describe('server handlers', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          results: [{ content: { results: { organic: [{}] } } }],
+          search_results: [
+            {
+              asin: 'thin-one',
+              title: 'Weak Thermos Result',
+              price: { value: 28.03, raw: '$28.03' },
+              link: 'https://www.amazon.com/dp/thin-one',
+              image: 'https://example.com/thin-one.jpg',
+            },
+          ],
         }),
       })
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          search_results: Array.from({ length: 6 }, (_, index) => ({
-            asin: `rf-${index + 1}`,
-            title: `Rainforest Thermos ${index + 1}`,
-            price: { value: 31.99, raw: '$31.99' },
-            link: `https://www.amazon.ca/dp/rf-${index + 1}`,
-            image: `https://example.com/rf-${index + 1}.jpg`,
-          })),
+          results: [
+            {
+              content: {
+                results: {
+                  organic: Array.from({ length: 6 }, (_, index) => ({
+                    asin: `oxy-${index + 1}`,
+                    title: `Oxylabs Thermos ${index + 1}`,
+                    price: '$31.99',
+                    url: `https://www.amazon.com/dp/oxy-${index + 1}`,
+                    images: [`https://example.com/oxy-${index + 1}.jpg`],
+                  })),
+                },
+              },
+            },
+          ],
         }),
       }))
 
@@ -1204,16 +1294,16 @@ describe('server handlers', () => {
     const payload = JSON.parse(response.body)
 
     expect(response.statusCode).toBe(200)
-    expect(payload.source).toBe('rainforest_discovery')
-    expect(payload.fallbackFrom).toBe('oxylabs_discovery')
-    expect(payload.fallbackReason).toBe('thin_oxylabs_results')
+    expect(payload.source).toBe('oxylabs_discovery')
+    expect(payload.fallbackFrom).toBe('rainforest_discovery')
+    expect(payload.fallbackReason).toBe('thin_rainforest_results')
     expect(payload.previewResults).toHaveLength(6)
     expect(fetch).toHaveBeenCalledTimes(2)
-    expect(fetch.mock.calls[0][1].method).toBe('POST')
-    expect(fetch.mock.calls[1][0]).toBeInstanceOf(URL)
+    expect(fetch.mock.calls[0][0]).toBeInstanceOf(URL)
+    expect(fetch.mock.calls[1][1].method).toBe('POST')
   })
 
-  it('falls back to Rainforest discovery when Oxylabs fails', async () => {
+  it('falls back to Oxylabs discovery when Rainforest fails', async () => {
     getEnv.mockImplementation((name) => ({
       RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
@@ -1237,13 +1327,21 @@ describe('server handlers', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          search_results: [
+          results: [
             {
-              asin: 'one',
-              title: 'Fallback White Chocolate Chips',
-              price: { value: 28.03, raw: '$28.03' },
-              link: 'https://www.amazon.ca/dp/one',
-              image: 'https://example.com/one.jpg',
+              content: {
+                results: {
+                  organic: [
+                    {
+                      asin: 'one',
+                      title: 'Fallback White Chocolate Chips',
+                      price: '$28.03',
+                      url: 'https://www.amazon.com/dp/one',
+                      images: ['https://example.com/one.jpg'],
+                    },
+                  ],
+                },
+              },
             },
           ],
         }),
@@ -1260,11 +1358,12 @@ describe('server handlers', () => {
     const payload = JSON.parse(response.body)
 
     expect(response.statusCode).toBe(200)
-    expect(payload.source).toBe('rainforest_discovery')
-    expect(payload.fallbackFrom).toBe('oxylabs_discovery')
+    expect(payload.source).toBe('oxylabs_discovery')
+    expect(payload.fallbackFrom).toBe('rainforest_discovery')
+    expect(payload.fallbackReason).toBe('rainforest_error')
     expect(fetch).toHaveBeenCalledTimes(2)
-    expect(fetch.mock.calls[0][1].method).toBe('POST')
-    expect(fetch.mock.calls[1][0]).toBeInstanceOf(URL)
+    expect(fetch.mock.calls[0][0]).toBeInstanceOf(URL)
+    expect(fetch.mock.calls[1][1].method).toBe('POST')
   })
 
   it('stores query-quality review state on the token-scoped discovery snapshot', async () => {

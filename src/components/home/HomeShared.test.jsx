@@ -80,6 +80,15 @@ describe('ProductDetailModal', () => {
     expect(screen.getByLabelText(/recommendation details loading/i)).toBeInTheDocument()
   })
 
+  it('hides recommendation analysis for preview products', () => {
+    renderModal({
+      showRecommendationAnalysis: false,
+    })
+
+    expect(screen.queryByLabelText(/recommendation details loading/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/extra analysis wasn't available for this pick right now/i)).not.toBeInTheDocument()
+  })
+
   it('shows one compact affiliate disclosure next to the retailer CTA', () => {
     renderModal()
 
@@ -89,6 +98,44 @@ describe('ProductDetailModal', () => {
   })
 })
 describe('ResultsSection retry advice', () => {
+  it('leaves preview result reason copy blank when no user-facing detail exists', () => {
+    render(
+      <ResultsSection
+        displayedResults={[
+          createMockItem({
+            description: '',
+            feature_bullets: [],
+            reasons: [],
+          }),
+        ]}
+        errorMessage=""
+        hasFinalResults={false}
+        hasStartedSearch
+        isEnrichmentSettled={false}
+        isFinalizing={false}
+        isLoading={false}
+        isRetryReady
+        isRetrying={false}
+        isGeneratingRetryAdvice={false}
+        onRetailerClick={vi.fn()}
+        onSelectProduct={vi.fn()}
+        onRetryAdviceRequest={vi.fn()}
+        onRetryFeedbackChange={vi.fn()}
+        previousResults={[]}
+        retryAdvice={null}
+        selectionState={null}
+        retryCount={0}
+        retryFeedback=""
+        showFinalResultBadges={false}
+        showPreviewResults
+        suggestedRetryQuery=""
+        submittedQuery="ice cream maker"
+      />,
+    )
+
+    expect(screen.queryByText(/a credible option from the first pass/i)).not.toBeInTheDocument()
+  })
+
   it('uses breathing dots instead of uncertain explanation copy while row reasons hydrate', () => {
     render(
       <ResultsSection

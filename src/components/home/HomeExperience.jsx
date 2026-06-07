@@ -1055,6 +1055,7 @@ export function HomeExperience({ initialSearchQuery = '' } = {}) {
           <ProductDetailModal
             item={results.selectedProduct}
             isEnrichmentSettled={status.isEnrichmentSettled}
+            showRecommendationAnalysis={results.selectedProduct?.analyticsMeta?.resultSet !== 'preview'}
             onRetailerClick={() =>
               trackRetailerClick(results.selectedProduct, {
                 position: results.selectedProduct?.analyticsMeta?.position ?? 0,

@@ -46,14 +46,14 @@
 - Backend is deployed on Render through `backend/express-server.js`.
 - The Render backend also mounts the separate KAILA scaffold API under `/kaila` so KAILA can share the paid Focamai web service without replacing Focamai routes. Current KAILA endpoints are `GET /kaila/health` and `POST /kaila/ask`; the seeded loop now does simple passage retrieval/ranking and grounded deterministic responses, with optional KAILA-only OpenAI response phrasing gated behind `KAILA_OPENAI_API_KEY` and `KAILA_RESPONSE_MODEL`.
 - Render CORS now explicitly accepts the current `focamai.com` and `www.focamai.com` frontend origins, while still tolerating the older `focama.vercel.app` origin during transition.
-- `GET /api/search/rainforest-discover` is the primary homepage discovery route. It uses Rainforest API first for Canada (`CA` / `amazon.ca`) because Oxylabs Amazon.ca results are weak, but falls back to Oxylabs if Rainforest errors or runs out of credits.
-- For other marketplaces, discovery tries Oxylabs first and falls back to Rainforest API when Oxylabs is unavailable, returns no usable Amazon results, or returns too few usable items to support the 6-item shortlist.
+- `GET /api/search/rainforest-discover` is the primary homepage discovery route. It uses Rainforest API first for all Amazon marketplaces when configured.
+- Oxylabs is now the discovery fallback only: it runs when Rainforest errors or returns too few usable items to support the 6-item shortlist. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available.
 - `GET /api/search/rainforest-discover` normally reuses the shared discovery cache when available, but retry-accepted searches and hard-constraint pre-finalize refreshes send `cacheMode=refresh` so the route bypasses the cache hit once, fetches fresh provider evidence, and writes the new shared/session snapshots normally.
 - Discovery now also bypasses cached snapshots that are too thin to support the 6-item shortlist, preventing a bad one-result cache entry from trapping common searches such as `thermos`.
 - `GET /api/search/rainforest-discover` now starts a background query-quality review after the normal discovery response when OpenAI is configured, and stores the review state under `selection.queryQuality` on the token-scoped session snapshot.
 - `GET /api/search/query-quality` exposes the stored query-quality review through simple polling. The homepage uses it to show an optional suggested-query prompt only when the backend review says to suggest one.
 - `GET /api/search/refine` now uses OpenAI mini first to generate the short follow-up question and refinement chips, with Haiku as the fallback when OpenAI is unavailable or not configured.
-- `POST /api/search/finalize`, `GET /api/search/enrichment-stream`, `GET /api/search/enrichment`, `GET /api/search/query-quality`, and `POST /api/search/retry-advice` are all active in the Render app.
+- `POST /api/search/finalize`, `GET /api/search/enrichment-stream`, `GET /api/search/enrichment`, `GET /api/search/query-quality`, `GET /api/search/product-details`, and `POST /api/search/retry-advice` are all active in the Render app.
 - `GET /api/analytics/dashboard` is a localhost-only development endpoint for the internal analytics page and returns `404` in production.
 - `GET /api/geo` intentionally stays on Vercel so the frontend can resolve the user’s country from Vercel headers and send an explicit Amazon domain on guided requests when the store picker is left on `Auto`.
 - The Amazon marketplace context now remembers the last saved marketplace in localStorage (`focamai_marketplace`) so repeat visits skip geo lookup when a preference or confident detection already exists.
@@ -61,6 +61,7 @@
 - Discovery cache and operational history use Supabase when configured, with local file fallback in development.
 - Rainforest discovery cache reuse is now scoped under `rainforest_discovery:v2`, which intentionally leaves older shared discovery entries behind so stale provider-era evidence is not treated as current.
 - Product details use a separate provider-agnostic per-ASIN cache, also with Supabase preferred and local fallback available.
+- Skipped-refinement preview modals now hydrate product detail bullets/description one product at a time from that cache or Oxylabs when opened, without showing AI analysis loading dots because finalize/enrichment has not run.
 - Tester feedback stores to a dedicated `tester_feedback` table in Supabase when configured, with local fallback in development.
 - Backend production observability is now wired for opt-in Sentry via `SENTRY_DSN`, with sanitized context and explicit reporting for background async failures plus unhandled server errors.
 - Rate limiting now uses a Supabase-backed `rate_limit_events` event log when Supabase is configured, with process-local memory fallback for local/test or table outages.

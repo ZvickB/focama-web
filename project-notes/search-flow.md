@@ -69,4 +69,4 @@ flowchart TD
 | Preview ≠ focused picks | `Just show me results` is not the guided shortlist |
 | Enrichment explains, not reranks | Async work adds hero/alternative fit reasons and caveats · winners don't change |
 | Amazon-first UX, flexible internals | Current UI may name Amazon when Amazon is the active source · backend/provider logic and normalized product data stay flexible |
-| Canada discovery | `CA` / `amazon.ca` uses Rainforest API first, with Oxylabs fallback on Rainforest errors or credits exhaustion |
+| Amazon discovery provider order | Rainforest API is first for all Amazon marketplaces when configured; Oxylabs runs only when Rainforest errors or returns too few usable items, or as the emergency provider when Rainforest is not configured |

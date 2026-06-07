@@ -45,17 +45,19 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Finalize route: `POST /api/search/finalize`.
 - Enrichment reads: `GET /api/search/enrichment-stream` first, with `GET /api/search/enrichment` as polling fallback.
 - Query-quality polling: `GET /api/search/query-quality`.
+- Preview product detail hydration: `GET /api/search/product-details`.
 - Retry advice: `POST /api/search/retry-advice`.
 - Feedback: `POST /api/feedback`.
 
 ## Important behavior notes
-- Discovery uses Rainforest API first for Canada (`CA` / `amazon.ca`) because Oxylabs Amazon.ca results are weak, but falls back to Oxylabs if Rainforest errors or runs out of credits. Other marketplaces still try Oxylabs first and fall back to Rainforest API when Oxylabs cannot return usable Amazon results or returns too few usable items to support the 6-item shortlist.
+- Discovery uses Rainforest API first for all Amazon marketplaces when configured. Oxylabs is now the discovery fallback only: it runs when Rainforest errors or returns too few usable items to support the 6-item shortlist. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available.
 - Finalize rebuilds the candidate pool server-side from guided cache.
 - Haiku locks the shortlist first, with deterministic fallback/top-up when needed. Its prompt ranks inferred product fit first, then quality confidence (rating, review count, trustScore, and recognized category brand), price/value, shortlist variety, and raw Amazon position as the final tiebreaker.
 - Provider-confirmed Prime eligibility is preserved as structured `isPrime` data; clear Prime delivery/eligibility requests narrow finalize to Prime-tagged candidates when available, and the UI shows only a quiet in-house Prime marker/fact. Oxylabs product-detail enrichment can upgrade `isPrime` when search rows underreport Prime.
 - Hard-constraint follow-up notes can trigger one refreshed discovery before finalize.
 - Query-quality suggestions are polling-based only. No SSE or prewarm path exists.
 - Modal/detail enrichment hydrates after the first shortlist cards are shown, framing the top pick as the hero recommendation and later picks as alternatives.
+- Skipped-refinement preview products do not show AI recommendation analysis. When opened, the modal can lazily hydrate product detail bullets/description from the per-ASIN cache or Oxylabs through `GET /api/search/product-details`.
 - Marketplace listings without a known positive price are filtered out before preview/finalize.
 - Thin discovery cache hits with fewer than 6 cached results or candidates are bypassed and refreshed from the provider.
 - `/api/search/live` and debug/cache routes are not the main user path.

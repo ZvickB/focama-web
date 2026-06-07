@@ -6,7 +6,7 @@ purpose: Large marketplaces are sticky and distracting. Focamai should help user
 1. The user lands on a spacious, search-first homepage.
 2. The user enters the product they are actually looking for.
 3. Discovery and one AI follow-up question run in parallel.
-4. The backend builds and caches a cleaned candidate pool through the Rainforest-named discovery route, which is currently backed by Oxylabs for Amazon data.
+4. The backend builds and caches a cleaned candidate pool through the Rainforest-named discovery route, with Rainforest API as the default Amazon discovery provider and Oxylabs as fallback.
 5. The user can either view the preview set immediately or ask Focamai to narrow to 6 picks.
 6. Finalize locks 6 winners with haiku, returns cards quickly, then async enrichment fills in modal reasoning afterward.
 7. If the picks feel wrong, the retry path suggests a better next search query rather than turning the app into an endless marketplace browser.

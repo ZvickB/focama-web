@@ -242,7 +242,13 @@ function RetailerDecisionBar({ displayPrice, item, onClose, onRetailerClick, ret
   )
 }
 
-export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose, onRetailerClick }) {
+export function ProductDetailModal({
+  item,
+  isEnrichmentSettled = false,
+  showRecommendationAnalysis = true,
+  onClose,
+  onRetailerClick,
+}) {
   const fitReason = item?.fit_reason || item?.fitReason || ''
   const caveat = item?.caveat || ''
   const featureBullets = Array.isArray(item?.feature_bullets) ? item.feature_bullets : []
@@ -339,7 +345,7 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
     return null
   }
 
-  const userFacingDescription = getUserFacingDescription(item.description)
+  const userFacingDescription = getUserFacingDescription(item.productDescription || item.description)
   const displayPrice = formatDisplayPrice(item.price)
   const rawTitle = String(item.title || '').replace(/\s+/g, ' ').trim()
   const displayTitle = getProductDisplayTitle(rawTitle)
@@ -486,11 +492,13 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
 
             <ProductFacts displayPrice={displayPrice} item={item} retailerLabel={retailerLabel} />
 
-            <ReasoningPanel
-              caveat={caveat}
-              fitReason={fitReason}
-              isEnrichmentSettled={isEnrichmentSettled}
-            />
+            {showRecommendationAnalysis ? (
+              <ReasoningPanel
+                caveat={caveat}
+                fitReason={fitReason}
+                isEnrichmentSettled={isEnrichmentSettled}
+              />
+            ) : null}
 
             <ProductNotes
               bulletsExpanded={bulletsExpanded}

@@ -64,7 +64,7 @@ function hasPendingReason({ hasFinalResults, isEnrichmentSettled, item }) {
   const fitReason = String(item?.fit_reason || item?.fitReason || '').trim()
   const caveat = String(item?.caveat || '').trim()
   const primaryReason = getUserFacingReasons(item?.reasons || [])[0] || ''
-  const description = getUserFacingDescription(item?.description)
+  const description = getUserFacingDescription(item?.productDescription || item?.description)
   const featureBullets = getFeatureBullets(item)
 
   return (
@@ -82,7 +82,7 @@ function getShortReason(item, { hasFinalResults }) {
   const fitReason = String(item?.fit_reason || item?.fitReason || '').trim()
   const caveat = String(item?.caveat || '').trim()
   const primaryReason = getUserFacingReasons(item?.reasons || [])[0] || ''
-  const description = getUserFacingDescription(item?.description)
+  const description = getUserFacingDescription(item?.productDescription || item?.description)
   const featureBullets = getFeatureBullets(item)
 
   if (fitReason) return fitReason
@@ -91,9 +91,7 @@ function getShortReason(item, { hasFinalResults }) {
   if (caveat) return caveat
   if (featureBullets[0]) return featureBullets[0]
 
-  return hasFinalResults
-    ? 'Open details for product facts and retailer info.'
-    : 'A credible option from the first pass.'
+  return hasFinalResults ? 'Open details for product facts and retailer info.' : ''
 }
 
 function BreathingDots({ className = '' }) {
@@ -198,9 +196,9 @@ function RankedPickRow({
           <p className="line-clamp-2 text-sm font-medium leading-5 text-slate-900">{displayTitle || item.title}</p>
           {isReasonPending ? (
             <BreathingDots className="py-2" />
-          ) : (
+          ) : shortReason ? (
             <p className="line-clamp-2 text-sm leading-5 text-slate-600">{shortReason}</p>
-          )}
+          ) : null}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
             <span className="font-semibold text-primary">{displayPrice}</span>
             <span>{getRatingValue(item.rating)?.toFixed(1) || 'No rating'}</span>
@@ -271,9 +269,9 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
           </p>
           {isReasonPending ? (
             <BreathingDots className="py-2" />
-          ) : (
+          ) : shortReason ? (
             <p className="text-sm leading-6 text-slate-600">{shortReason}</p>
-          )}
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#f0e7da] pt-3 text-sm">
           <span className="font-semibold text-primary">{displayPrice}</span>
