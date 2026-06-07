@@ -19,8 +19,10 @@ import { ResultSkeleton } from '@/components/home/ResultSkeleton.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
+import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
 import { getProductDisplayTitle } from '@/lib/productTitle.js'
+import { getRetailerDisplayName } from '@/lib/retailerLabel.js'
 
 const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 const RETRY_CORRECTION_CHIPS = [
@@ -58,7 +60,25 @@ function getFeatureBullets(item) {
     : []
 }
 
-function getShortReason(item, { hasFinalResults, isEnrichmentSettled }) {
+function hasPendingReason({ hasFinalResults, isEnrichmentSettled, item }) {
+  const fitReason = String(item?.fit_reason || item?.fitReason || '').trim()
+  const caveat = String(item?.caveat || '').trim()
+  const primaryReason = getUserFacingReasons(item?.reasons || [])[0] || ''
+  const description = getUserFacingDescription(item?.description)
+  const featureBullets = getFeatureBullets(item)
+
+  return (
+    hasFinalResults &&
+    !isEnrichmentSettled &&
+    !fitReason &&
+    !primaryReason &&
+    !description &&
+    !caveat &&
+    !featureBullets[0]
+  )
+}
+
+function getShortReason(item, { hasFinalResults }) {
   const fitReason = String(item?.fit_reason || item?.fitReason || '').trim()
   const caveat = String(item?.caveat || '').trim()
   const primaryReason = getUserFacingReasons(item?.reasons || [])[0] || ''
@@ -70,11 +90,35 @@ function getShortReason(item, { hasFinalResults, isEnrichmentSettled }) {
   if (description) return description
   if (caveat) return caveat
   if (featureBullets[0]) return featureBullets[0]
-  if (hasFinalResults && !isEnrichmentSettled) return 'Checking why this fits your search...'
 
   return hasFinalResults
     ? 'Open details for product facts and retailer info.'
     : 'A credible option from the first pass.'
+}
+
+function BreathingDots({ className = '' }) {
+  const dots = [
+    { className: 'bg-primary', delay: '0ms' },
+    { className: 'bg-accent', delay: '220ms' },
+    { className: 'bg-primary', delay: '440ms' },
+  ]
+
+  return (
+    <span
+      role="status"
+      aria-label="Recommendation details loading"
+      className={`inline-flex items-center gap-1.5 ${className}`}
+    >
+      {dots.map((dot, index) => (
+        <span
+          key={index}
+          aria-hidden="true"
+          className={`h-2 w-2 rounded-full animate-soft-pulse ${dot.className}`}
+          style={{ animationDelay: dot.delay }}
+        />
+      ))}
+    </span>
+  )
 }
 
 function PrimeEligibilityPill({ className = '' }) {
@@ -124,10 +168,12 @@ function RankedPickRow({
   onActivate,
   onOpenDetails,
   onRetailerClick,
+  retailerLabel,
 }) {
   const displayPrice = formatDisplayPrice(item.price)
   const displayTitle = getProductDisplayTitle(item.title)
   const shortReason = getShortReason(item, { hasFinalResults, isEnrichmentSettled })
+  const isReasonPending = hasPendingReason({ hasFinalResults, isEnrichmentSettled, item })
 
   return (
     <div
@@ -150,12 +196,16 @@ function RankedPickRow({
         </div>
         <div className="min-w-0 flex-1 space-y-1.5">
           <p className="line-clamp-2 text-sm font-medium leading-5 text-slate-900">{displayTitle || item.title}</p>
-          <p className="line-clamp-2 text-sm leading-5 text-slate-600">{shortReason}</p>
+          {isReasonPending ? (
+            <BreathingDots className="py-2" />
+          ) : (
+            <p className="line-clamp-2 text-sm leading-5 text-slate-600">{shortReason}</p>
+          )}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
             <span className="font-semibold text-primary">{displayPrice}</span>
             <span>{getRatingValue(item.rating)?.toFixed(1) || 'No rating'}</span>
             {item.isPrime ? <PrimeEligibilityPill /> : null}
-            {item.subtitle ? <span>{item.subtitle}</span> : null}
+            {!retailerLabel && item.subtitle ? <span>{item.subtitle}</span> : null}
           </div>
         </div>
       </button>
@@ -178,7 +228,7 @@ function RankedPickRow({
               onRetailerClick?.()
             }}
           >
-            Retailer
+            {retailerLabel ? `View on ${retailerLabel}` : 'View site'}
             <ArrowUpRight className="h-3.5 w-3.5" />
           </a>
         ) : null}
@@ -198,6 +248,7 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
     hasFinalResults,
     isEnrichmentSettled,
   })
+  const isReasonPending = hasPendingReason({ hasFinalResults, isEnrichmentSettled, item })
 
   return (
     <button
@@ -218,13 +269,16 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
           <p className="text-lg font-semibold leading-6 text-slate-950">
             {displayTitle || item.title}
           </p>
-          <p className="text-sm leading-6 text-slate-600">{shortReason}</p>
+          {isReasonPending ? (
+            <BreathingDots className="py-2" />
+          ) : (
+            <p className="text-sm leading-6 text-slate-600">{shortReason}</p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#f0e7da] pt-3 text-sm">
           <span className="font-semibold text-primary">{displayPrice}</span>
           <span className="text-slate-500">{getRatingValue(item.rating)?.toFixed(1) || 'No rating'}</span>
           {item.isPrime ? <PrimeEligibilityPill /> : null}
-          {item.subtitle ? <span className="text-slate-500">{item.subtitle}</span> : null}
         </div>
         <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition group-hover:text-primary/80">
           View details
@@ -260,6 +314,7 @@ export function ResultsSection({
   suggestedRetryQuery,
   submittedQuery,
 }) {
+  const { selectedAmazonDomain, resolvedAmazonDomain } = useAmazonStore()
   const retryViewRef = useRef(null)
   const [showRetryView, setShowRetryView] = useState(false)
   const [cardView, setCardView] = useState('new')
@@ -298,6 +353,14 @@ export function ResultsSection({
   const shouldShowResultsIntro = !hasDisplayedResults || hasFinalResults
   const orderedPreviousResults = previousResults
   const canRequestRetryAdvice = Boolean(retryFeedback.trim())
+
+  function getItemRetailerLabel(item) {
+    return getRetailerDisplayName({
+      subtitle: item?.subtitle,
+      selectedAmazonDomain,
+      resolvedAmazonDomain,
+    })
+  }
 
   useEffect(() => {
     if (resultRowsScrollRef.current) {
@@ -531,6 +594,7 @@ export function ResultsSection({
                               resultSet: activeResultSet,
                             })
                           }
+                          retailerLabel={getItemRetailerLabel(visibleItem)}
                         />
                       </MotionDiv>
                     ))}
@@ -564,6 +628,7 @@ export function ResultsSection({
                           resultSet: activeResultSet,
                         })
                       }
+                      retailerLabel={getItemRetailerLabel(visibleItem)}
                     />
                   </MotionDiv>
                 ))
@@ -595,6 +660,7 @@ export function ResultsSection({
                       resultSet: 'previous',
                     })
                   }
+                  retailerLabel={getItemRetailerLabel(item)}
                   onSelect={() =>
                     onSelectProduct(item, {
                       position: index,

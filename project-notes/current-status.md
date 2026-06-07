@@ -34,8 +34,9 @@
 - Final results now render as a ranked shortlist instead of a marketplace-style grid. On desktop, the shortlist has a large selected-product panel on the left and an internally scrolling row list on the right; hover, focus, and the top visible row update the selected panel.
 - Prime eligibility is now a structured Amazon result signal. Searches or follow-up notes that clearly ask for Prime delivery/eligibility narrow finalize to Prime-tagged candidates when available, and Prime-enabled picks show a quiet in-house `Prime` marker plus a modal delivery fact only when confirmed. Oxylabs product-detail enrichment can now upgrade a result to Prime when the search row underreports it.
 - Result rows, selected-product panels, grid/card view, and modal headings now use normalized display titles so Amazon keyword stuffing does not dominate the UI. The raw title is preserved in product data and appears behind a quiet full-title disclosure in the modal when it differs.
+- Result row/card and modal shopping clickout CTAs derive their visible label from the product source/store, so Amazon items can say `View on Amazon`/the active Amazon domain while future sources can name their own store.
 - After final results appear, refinement collapses into a compact summary above the ranked shortlist.
-- The product modal keeps enrichment hydrating in place: `fit_reason` and `caveat` fill the high reasoning area when available, while feature bullets/descriptions sit lower as product notes.
+- Enrichment hydrates in place: teal/orange breathing dots hold pending row/panel and modal reasoning slots, `fit_reason` and `caveat` fill the high reasoning area when available, and feature bullets/descriptions sit lower as product notes.
 - Retry is currently suggestion-led: the user opens a clearer correction panel, can tap one of three broad quick prompts, explains what felt off, and `/api/search/retry-advice` proposes a better next query.
 - Retry suggestions now stay in the retry/results area as an immediately editable `Next search` field; `Search again` starts a new guided search from there with a one-request discovery cache refresh instead of silently moving the query into the top search box.
 - Retry advice now tells AI to preserve accumulated must-have constraints from the original query, follow-up notes, and feedback by default, while still allowing the latest feedback to replace or remove a constraint when the user clearly changes direction.
@@ -45,8 +46,8 @@
 - Backend is deployed on Render through `backend/express-server.js`.
 - The Render backend also mounts the separate KAILA scaffold API under `/kaila` so KAILA can share the paid Focamai web service without replacing Focamai routes. Current KAILA endpoints are `GET /kaila/health` and `POST /kaila/ask`; the seeded loop now does simple passage retrieval/ranking and grounded deterministic responses, with optional KAILA-only OpenAI response phrasing gated behind `KAILA_OPENAI_API_KEY` and `KAILA_RESPONSE_MODEL`.
 - Render CORS now explicitly accepts the current `focamai.com` and `www.focamai.com` frontend origins, while still tolerating the older `focama.vercel.app` origin during transition.
-- `GET /api/search/rainforest-discover` is the primary homepage discovery route. It now tries Oxylabs discovery first and falls back to Rainforest API when Oxylabs is unavailable or returns no usable Amazon results.
-- Discovery also treats too-thin Oxylabs result sets as a fallback condition when Rainforest is configured, so a one-result Oxylabs response does not become the whole shortlist.
+- `GET /api/search/rainforest-discover` is the primary homepage discovery route. It uses Rainforest API first for Canada (`CA` / `amazon.ca`) because Oxylabs Amazon.ca results are weak, but falls back to Oxylabs if Rainforest errors or runs out of credits.
+- For other marketplaces, discovery tries Oxylabs first and falls back to Rainforest API when Oxylabs is unavailable, returns no usable Amazon results, or returns too few usable items to support the 6-item shortlist.
 - `GET /api/search/rainforest-discover` normally reuses the shared discovery cache when available, but retry-accepted searches and hard-constraint pre-finalize refreshes send `cacheMode=refresh` so the route bypasses the cache hit once, fetches fresh provider evidence, and writes the new shared/session snapshots normally.
 - Discovery now also bypasses cached snapshots that are too thin to support the 6-item shortlist, preventing a bad one-result cache entry from trapping common searches such as `thermos`.
 - `GET /api/search/rainforest-discover` now starts a background query-quality review after the normal discovery response when OpenAI is configured, and stores the review state under `selection.queryQuality` on the token-scoped session snapshot.
@@ -86,7 +87,7 @@
 - Focamai should not feel like an Amazon clone or marketplace wall. Its product identity is the focused decision aid, not Amazon's browsing experience.
 - Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
 - Do not force generic `retailer` language in user-facing UI when `Amazon` is more accurate for the current experience.
-- Do not introduce new Amazon/source/retailer labels, facts, badges, or clickout wording as side effects of unrelated features. Result-card and modal source labeling should stay unchanged unless the user explicitly asks to revisit it.
+- Do not introduce new Amazon/source/retailer labels, facts, or badges as side effects of unrelated features. Existing clickout wording should stay source-derived unless the user explicitly asks to revisit it.
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
 - Do not let future multi-retailer flexibility make today's Amazon-first UX vague. If more retailers become active, revisit frontend labels based on the real source mix.
 - Keep `search_history` as internal telemetry, not user-facing saved history.

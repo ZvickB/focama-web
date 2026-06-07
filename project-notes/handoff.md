@@ -28,7 +28,7 @@
 - Use the local `/admin/analytics` dashboard during development against live data and decide which weak-query, weak-ranking, or refine-friction fixes to prioritize first.
 
 ## Backend/provider follow-ups
-- Discovery now tries Oxylabs first and falls back to Rainforest API when Oxylabs is unavailable or returns no usable Amazon results; validate this split on live tester searches before removing the fallback.
+- Discovery uses Rainforest API first for Canada (`CA` / `amazon.ca`) because Oxylabs Amazon.ca results are weak, but falls back to Oxylabs if Rainforest errors or runs out of credits. Other marketplaces still try Oxylabs first and fall back to Rainforest API when Oxylabs is unavailable or returns no usable Amazon results; validate this split on live tester searches before removing the fallback.
 - The current shortlist-detail helper is still Oxylabs-backed so modal bullets/descriptions stay on the stronger detail path for now.
 - Keep the SerpApi route inactive unless there is a deliberate reason to reactivate multi-retailer discovery.
 - Create the `rate_limit_events` table in Supabase before public traffic so Render instances share the same rate-limit bucket; the app falls back to process-local limiting if the table is unavailable.

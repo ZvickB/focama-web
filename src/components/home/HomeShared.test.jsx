@@ -73,6 +73,13 @@ describe('ProductDetailModal', () => {
     expect(screen.queryByText(/analyzing your pick/i)).not.toBeInTheDocument()
   })
 
+  it('uses branded breathing dots while recommendation details hydrate', () => {
+    renderModal()
+
+    expect(screen.queryByText(/checking why this fits your search/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/recommendation details loading/i)).toBeInTheDocument()
+  })
+
   it('shows one compact affiliate disclosure next to the retailer CTA', () => {
     renderModal()
 
@@ -82,6 +89,81 @@ describe('ProductDetailModal', () => {
   })
 })
 describe('ResultsSection retry advice', () => {
+  it('uses breathing dots instead of uncertain explanation copy while row reasons hydrate', () => {
+    render(
+      <ResultsSection
+        displayedResults={[
+          createMockItem({
+            description: '',
+            feature_bullets: [],
+            reasons: [],
+          }),
+        ]}
+        errorMessage=""
+        hasFinalResults
+        hasStartedSearch
+        isEnrichmentSettled={false}
+        isFinalizing={false}
+        isLoading={false}
+        isRetryReady
+        isRetrying={false}
+        isGeneratingRetryAdvice={false}
+        onRetailerClick={vi.fn()}
+        onSelectProduct={vi.fn()}
+        onRetryAdviceRequest={vi.fn()}
+        onRetryFeedbackChange={vi.fn()}
+        previousResults={[]}
+        retryAdvice={null}
+        selectionState={null}
+        retryCount={0}
+        retryFeedback=""
+        showFinalResultBadges={false}
+        showPreviewResults={false}
+        suggestedRetryQuery=""
+        submittedQuery="ice cream maker"
+      />,
+    )
+
+    expect(screen.queryByText(/checking why this fits your search/i)).not.toBeInTheDocument()
+    expect(screen.getAllByLabelText(/recommendation details loading/i).length).toBeGreaterThan(0)
+  })
+
+  it('labels retailer clickouts with the product source name', () => {
+    render(
+      <ResultsSection
+        displayedResults={[
+          createMockItem({ id: 'result-1', title: 'First ice cream maker', subtitle: 'Amazon' }),
+          createMockItem({ id: 'result-2', title: 'Second ice cream maker', subtitle: 'AliExpress' }),
+        ]}
+        errorMessage=""
+        hasFinalResults
+        hasStartedSearch
+        isFinalizing={false}
+        isLoading={false}
+        isRetryReady
+        isRetrying={false}
+        isGeneratingRetryAdvice={false}
+        onRetailerClick={vi.fn()}
+        onSelectProduct={vi.fn()}
+        onRetryAdviceRequest={vi.fn()}
+        onRetryFeedbackChange={vi.fn()}
+        previousResults={[]}
+        retryAdvice={null}
+        selectionState={null}
+        retryCount={0}
+        retryFeedback=""
+        showFinalResultBadges={false}
+        showPreviewResults={false}
+        suggestedRetryQuery=""
+        submittedQuery="ice cream maker"
+      />,
+    )
+
+    expect(screen.getByRole('link', { name: /view on amazon/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /view on aliexpress/i })).toBeInTheDocument()
+    expect(screen.getAllByText(/amazon/i)).toHaveLength(1)
+  })
+
   it('updates the selected desktop result preview on row hover', () => {
     render(
       <ResultsSection

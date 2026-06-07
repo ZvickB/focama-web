@@ -39,7 +39,8 @@
 ## Guided backend flow
 - `GET /api/search/rainforest-discover`
   - primary homepage discovery route
-  - uses Oxylabs for Amazon discovery first, then falls back to Rainforest API when Oxylabs is unavailable, returns no usable Amazon results, or returns too few usable items to support the 6-item shortlist while Rainforest is configured
+  - uses Rainforest API first for Canada (`CA` / `amazon.ca`) because Oxylabs Amazon.ca results are weak, but falls back to Oxylabs if Rainforest errors or runs out of credits
+  - for other marketplaces, uses Oxylabs for Amazon discovery first, then falls back to Rainforest API when Oxylabs is unavailable, returns no usable Amazon results, or returns too few usable items to support the 6-item shortlist while Rainforest is configured
   - writes reusable guided discovery cache and creates a separate token-scoped session snapshot for finalize/enrichment
   - honors an explicit one-request cache refresh mode for accepted retry-advice searches, bypassing the shared discovery cache read while still writing fresh provider results back to shared cache and session state
   - also honors that refresh mode for the one-time pre-finalize discovery pass when follow-up notes contain hard constraints
@@ -101,7 +102,7 @@
 - On desktop, the ranked shortlist uses a large selected-product panel on the left and an internally scrolling row list on the right. Hovering or focusing a row updates the selected panel, and scrolling the internal list updates it to the top visible row.
 - On smaller screens, results collapse into stacked ranked pick cards.
 - A development-only results-view toggle can switch between the ranked rows view and the older grid/card view.
-- Result rows/cards show reliable product facts first: image, title, provider/source, price, rating, review count, and a deterministic badge when available.
+- Result rows/cards show reliable product facts first: image, title, price, rating, review count, and a deterministic badge when available. The provider/source name is carried by the shopping clickout CTA when available, not repeated as separate card metadata.
 - Provider-confirmed Prime eligibility is preserved as structured product data and shown as a quiet factual `Prime` marker on result rows/cards plus a modal `Delivery` fact only when Prime is confirmed; Focamai does not show negative/unknown Prime copy, use the official Amazon Prime logo, or turn Prime into a marketplace-style filter panel.
 - Some Oxylabs search rows underreport Prime even when the product page confirms it. Async product-detail enrichment can upgrade a result to `isPrime: true` and hydrate the row/card plus modal fact after the initial shortlist appears.
 - User-facing result and detail titles are normalized for display so long Amazon keyword-stuffed titles are shortened without changing the raw product data. Long titles with commas keep the first comma chunk; otherwise display titles truncate at a word boundary before 80 characters.
@@ -109,8 +110,8 @@
 - Selecting a row or the row details action opens the modal.
 - The modal is ordered as a decision aid: image and title, an `At a glance` facts card, `Why this pick`, `Worth knowing`, then product notes from `feature_bullets` or description.
 - If the normalized detail heading differs from the raw title, the detail header exposes the original directly under the title behind a quiet `Full Amazon title`/source-title disclosure.
-- If enrichment is still pending, the modal reserves the reasoning area with calm pending copy; if enrichment settles without a fit reason, it shows a practical fallback instead of an empty section.
-- Retailer clicks happen from result rows and the modal CTA.
+- If enrichment is still pending, result rows/panels and the modal use quiet teal/orange breathing dots instead of visible uncertainty copy; if enrichment settles without a fit reason, the modal shows a practical fallback instead of an empty section.
+- Shopping clickout CTAs happen from result rows/cards and the modal CTA, and derive their visible label from the product source/store (`View on Amazon`, `View on Walmart`, etc.) instead of using generic `retailer` wording when a source name is available.
 - The modal bottom bar is the single shopping decision area, showing current price, availability reminder, one source-specific clickout CTA, and one compact Amazon Associates disclosure when an Amazon link is available.
 
 ## Retry behavior
@@ -170,7 +171,7 @@
 - Focamai narrows choices before the user leaves to shop, instead of becoming a marketplace wall inside the app.
 - Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
 - Do not force generic labels like `retailer` in user-facing UI when `Amazon` is more accurate for the current experience.
-- Do not add new Amazon/source/retailer fields, badges, or clickout labels as incidental work. Source labeling in result cards or the modal should only change when the user explicitly chooses that UI direction.
+- Do not add new Amazon/source/retailer fields or badges as incidental work. For existing shopping clickout CTAs, the chosen compromise is source-derived wording: Amazon items can say `View on Amazon`/the active Amazon domain, while future non-Amazon sources should use their own source name.
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
 - The normalized product shape should stay provider-flexible, but future multi-retailer flexibility should not make today's Amazon-first UX vague.
 - Rainforest-style Amazon discovery is the main route; SerpApi stays secondary and only matters if deliberately reactivated.

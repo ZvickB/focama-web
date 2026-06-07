@@ -24,6 +24,7 @@
 - The product should stay calm, focused, mobile-first/responsive, and not marketplace-shaped.
 - Focamai should not feel like an Amazon clone or marketplace wall. Amazon is the current primary commerce path and affiliate target, so frontend copy and UI may say Amazon directly when the active source is Amazon and doing so improves clarity, trust, or conversion.
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible, but do not let future multi-retailer flexibility make today's Amazon-first UX vague.
+- Existing shopping clickout CTAs should use source-derived wording: Amazon items can say `View on Amazon` or the active Amazon domain, while future non-Amazon sources can say `View on Walmart`, `View on AliExpress`, etc.
 - Product shortlists stay at 6 items.
 - The guided backend path is the real product path.
 - `/api/search/live` remains a manual/debug combined route, not the normal user flow.
@@ -39,7 +40,7 @@
 - Product titles are normalized for user-facing display across result rows, selected panels, grid/card view, and modal headings. Raw Amazon/source titles remain in data and are exposed behind a quiet full-title disclosure in details when the display title differs.
 
 ## Current guided flow
-- `GET /api/search/rainforest-discover` is the main discovery route used by the homepage.
+- `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It uses Rainforest API first for Canada (`CA` / `amazon.ca`) with Oxylabs fallback on Rainforest errors or credits exhaustion, while other marketplaces keep Oxylabs-first with Rainforest fallback.
 - `GET /api/search/refine` returns one short follow-up question and optional refinement chips.
 - `POST /api/search/finalize` rebuilds the candidate pool from guided cache and returns up to 6 shortlist cards.
 - Haiku shortlist locking now ranks by inferred title fit first, rating/reviews second, and raw Amazon search position (`amazonPosition`) only as a secondary signal.

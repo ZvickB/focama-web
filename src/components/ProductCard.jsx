@@ -43,6 +43,7 @@ function ProductCard({
   price,
   rating,
   reasons = [],
+  retailerLabel,
   reviewCount,
   subtitle,
   title,
@@ -170,7 +171,11 @@ function ProductCard({
               onRetailerClick?.()
             }}
           >
-            {subtitle ? `View on ${subtitle}` : 'View site'}
+            {retailerLabel
+              ? `View on ${retailerLabel}`
+              : subtitle
+                ? `View on ${subtitle}`
+                : 'View site'}
             <ChevronRight className="h-4 w-4 text-slate-400" />
           </a>
         ) : (

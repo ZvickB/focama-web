@@ -3,12 +3,12 @@ import { motion } from 'motion/react'
 import { ArrowUpRight, CheckCircle2, ChevronDown, Info, Star, X } from 'lucide-react'
 
 import logo from '@/assets/logo_master_version.svg'
-import { resolveAmazonDomainForRequest } from '@/components/home/useGuidedSearch.js'
 import { Button } from '@/components/ui/button.jsx'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
 import { getUserFacingDescription } from '@/components/home/homeContentUtils.js'
 import { getProductDisplayTitle } from '@/lib/productTitle.js'
+import { getRetailerDisplayName } from '@/lib/retailerLabel.js'
 
 const MotionDiv = motion.div
 const FOCUSABLE_MODAL_SELECTOR = [
@@ -19,13 +19,6 @@ const FOCUSABLE_MODAL_SELECTOR = [
   'select:not([disabled])',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',')
-
-function resolveAmazonRetailerLabel(subtitle, selectedAmazonDomain, resolvedAmazonDomain) {
-  if (subtitle !== 'Amazon') return subtitle
-  const domain = resolveAmazonDomainForRequest(selectedAmazonDomain, resolvedAmazonDomain)
-  if (!domain || !domain.startsWith('amazon.')) return 'Amazon.com'
-  return domain.replace(/^amazon\./, 'Amazon.')
-}
 
 function getRatingValue(rating) {
   if (rating === null || rating === undefined || rating === '' || typeof rating === 'boolean') {
@@ -44,6 +37,31 @@ function formatReviewCount(reviewCount) {
   }
 
   return `${reviewCountValue.toLocaleString()} reviews`
+}
+
+function BreathingDots({ className = '' }) {
+  const dots = [
+    { className: 'bg-primary', delay: '0ms' },
+    { className: 'bg-accent', delay: '220ms' },
+    { className: 'bg-primary', delay: '440ms' },
+  ]
+
+  return (
+    <span
+      role="status"
+      aria-label="Recommendation details loading"
+      className={`inline-flex items-center gap-1.5 ${className}`}
+    >
+      {dots.map((dot, index) => (
+        <span
+          key={index}
+          aria-hidden="true"
+          className={`h-2.5 w-2.5 rounded-full animate-soft-pulse ${dot.className}`}
+          style={{ animationDelay: dot.delay }}
+        />
+      ))}
+    </span>
+  )
 }
 
 function ProductFacts({ displayPrice, item, retailerLabel }) {
@@ -115,16 +133,7 @@ function ReasoningPanel({
 
   return (
     <div className="rounded-2xl border border-[#e8ddcf] bg-white/88 p-4 text-sm text-slate-500">
-      <div className="flex items-center gap-2">
-        <span className="relative flex h-2 w-2 shrink-0">
-          <span className="absolute inset-0 rounded-full bg-primary/25 animate-soft-pulse" />
-          <span className="relative h-2 w-2 rounded-full bg-primary/60" />
-        </span>
-        <span className="relative inline-block overflow-hidden rounded-full px-0.5">
-          <span className="relative z-10">Checking why this fits your search...</span>
-          <span className="pointer-events-none absolute inset-y-0 left-[-40%] w-[40%] skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/80 to-transparent animate-shimmer" />
-        </span>
-      </div>
+      <BreathingDots />
     </div>
   )
 }
@@ -238,7 +247,11 @@ export function ProductDetailModal({ item, isEnrichmentSettled = false, onClose,
   const caveat = item?.caveat || ''
   const featureBullets = Array.isArray(item?.feature_bullets) ? item.feature_bullets : []
   const { selectedAmazonDomain, resolvedAmazonDomain } = useAmazonStore()
-  const retailerLabel = resolveAmazonRetailerLabel(item?.subtitle, selectedAmazonDomain, resolvedAmazonDomain)
+  const retailerLabel = getRetailerDisplayName({
+    subtitle: item?.subtitle,
+    selectedAmazonDomain,
+    resolvedAmazonDomain,
+  })
   const [bulletsExpanded, setBulletsExpanded] = useState(false)
   const [fullTitleExpanded, setFullTitleExpanded] = useState(false)
   const [imgError, setImgError] = useState(false)

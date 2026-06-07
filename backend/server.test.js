@@ -1008,7 +1008,7 @@ describe('server handlers', () => {
     await flushAsyncWork()
   })
 
-  it('uses Oxylabs for live discovery when both providers are configured', async () => {
+  it('uses Rainforest for Canada discovery when both providers are configured', async () => {
     getEnv.mockImplementation((name) => ({
       RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
@@ -1035,33 +1035,106 @@ describe('server handlers', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       json: async () => ({
-        search_results: [
+        search_results: Array.from({ length: 6 }, (_, index) => (
           {
-            asin: 'one',
-            title: 'Yupik White Chocolate Chips',
+            asin: `one-${index + 1}`,
+            title: `Yupik White Chocolate Chips ${index + 1}`,
             price: { value: 28.03, raw: '$28.03' },
-            link: 'https://www.amazon.ca/dp/one',
-            image: 'https://example.com/one.jpg',
-          },
-        ],
+            link: `https://www.amazon.ca/dp/one-${index + 1}`,
+            image: `https://example.com/one-${index + 1}.jpg`,
+          }
+        )),
       }),
     })))
 
     const response = createResponseRecorder()
 
     await handleRainforestDiscoverySearch(
-      new URL('http://localhost/api/search/rainforest-discover?query=yupik%20white%20chocolate%20chips&amazonDomain=amazon.ca'),
+      new URL('http://localhost/api/search/rainforest-discover?query=yupik%20white%20chocolate%20chips'),
       response,
-      { headers: { 'x-forwarded-for': '203.0.113.23' } },
+      { headers: { 'x-forwarded-for': '203.0.113.23', 'x-vercel-ip-country': 'CA' } },
     )
 
     const payload = JSON.parse(response.body)
 
     expect(response.statusCode).toBe(200)
-    expect(payload.source).toBe('oxylabs_discovery')
+    expect(payload.amazonDomain).toBe('amazon.ca')
+    expect(payload.source).toBe('rainforest_discovery')
     expect(payload.fallbackFrom).toBeNull()
     expect(fetch).toHaveBeenCalledTimes(1)
-    expect(fetch.mock.calls[0][1].method).toBe('POST')
+    expect(fetch.mock.calls[0][0]).toBeInstanceOf(URL)
+    expect(fetch.mock.calls[0][0].searchParams.get('amazon_domain')).toBe('amazon.ca')
+  })
+
+  it('falls back to Oxylabs for Canada discovery when Rainforest fails', async () => {
+    getEnv.mockImplementation((name) => ({
+      RAINFOREST_API_KEY: 'rf-key',
+      OXYLABS_USERNAME: 'oxy-user',
+      OXYLABS_PASSWORD: 'oxy-pass',
+    })[name] || '')
+    getFilteredSearchArtifacts.mockReturnValue({
+      candidatePool: {
+        query: 'yupik white chocolate chips',
+        details: '',
+        combinedSearchText: 'yupik white chocolate chips',
+        searchState: '',
+        similarQueries: [],
+        candidates: Array.from({ length: 6 }, (_, index) => ({
+          ...createFinalizeCandidate(`oxy-${index + 1}`),
+          title: `Oxylabs White Chocolate Chips ${index + 1}`,
+        })),
+      },
+      results: Array.from({ length: 6 }, (_, index) => ({
+        id: `oxy-${index + 1}`,
+        title: `Oxylabs White Chocolate Chips ${index + 1}`,
+        price: '$28.03',
+      })),
+    })
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 402,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              content: {
+                results: {
+                  organic: Array.from({ length: 6 }, (_, index) => ({
+                    asin: `oxy-${index + 1}`,
+                    title: `Oxylabs White Chocolate Chips ${index + 1}`,
+                    price: '$28.03',
+                    url: `https://www.amazon.ca/dp/oxy-${index + 1}`,
+                    images: [`https://example.com/oxy-${index + 1}.jpg`],
+                  })),
+                },
+              },
+            },
+          ],
+        }),
+      }))
+
+    const response = createResponseRecorder()
+
+    await handleRainforestDiscoverySearch(
+      new URL('http://localhost/api/search/rainforest-discover?query=yupik%20white%20chocolate%20chips'),
+      response,
+      { headers: { 'x-forwarded-for': '203.0.113.26', 'x-vercel-ip-country': 'CA' } },
+    )
+
+    const payload = JSON.parse(response.body)
+
+    expect(response.statusCode).toBe(200)
+    expect(payload.amazonDomain).toBe('amazon.ca')
+    expect(payload.source).toBe('oxylabs_discovery')
+    expect(payload.fallbackFrom).toBe('rainforest_discovery')
+    expect(payload.fallbackReason).toBe('rainforest_error')
+    expect(payload.previewResults).toHaveLength(6)
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch.mock.calls[0][0]).toBeInstanceOf(URL)
+    expect(fetch.mock.calls[1][1].method).toBe('POST')
   })
 
   it('falls back to Rainforest discovery when Oxylabs returns too few usable results', async () => {
@@ -1123,7 +1196,7 @@ describe('server handlers', () => {
     const response = createResponseRecorder()
 
     await handleRainforestDiscoverySearch(
-      new URL('http://localhost/api/search/rainforest-discover?query=thermos&amazonDomain=amazon.ca'),
+      new URL('http://localhost/api/search/rainforest-discover?query=thermos&amazonDomain=amazon.com'),
       response,
       { headers: { 'x-forwarded-for': '203.0.113.25' } },
     )
@@ -1179,7 +1252,7 @@ describe('server handlers', () => {
     const response = createResponseRecorder()
 
     await handleRainforestDiscoverySearch(
-      new URL('http://localhost/api/search/rainforest-discover?query=yupik%20white%20chocolate%20chips&amazonDomain=amazon.ca'),
+      new URL('http://localhost/api/search/rainforest-discover?query=yupik%20white%20chocolate%20chips&amazonDomain=amazon.com'),
       response,
       { headers: { 'x-forwarded-for': '203.0.113.24' } },
     )

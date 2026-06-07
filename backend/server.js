@@ -120,6 +120,13 @@ function getAmazonMarketplaceScope(scope, amazonDomain = '') {
   return normalizedAmazonDomain ? `${scope}:${normalizedAmazonDomain}` : scope
 }
 
+function shouldPreferRainforestDiscovery({ countryCode = 'US', amazonDomain = '' } = {}) {
+  return (
+    String(countryCode || '').trim().toUpperCase() === 'CA' ||
+    getRequestedAmazonDomain(amazonDomain) === 'amazon.ca'
+  )
+}
+
 async function fetchDiscoveryArtifactsWithFallback({
   filterConfig,
   productQuery,
@@ -132,6 +139,57 @@ async function fetchDiscoveryArtifactsWithFallback({
   amazonDomain,
 }) {
   let shouldFallbackFromThinOxylabs = false
+  const prefersRainforestDiscovery = shouldPreferRainforestDiscovery({ countryCode, amazonDomain })
+
+  if (prefersRainforestDiscovery && rainforestApiKey) {
+    let rainforestResult
+
+    try {
+      rainforestResult = await fetchRainforestArtifacts({
+        filterConfig,
+        productQuery,
+        details,
+        reasonFallback,
+        rainforestApiKey,
+        countryCode,
+        amazonDomain,
+      })
+    } catch {
+      rainforestResult = {
+        error: {
+          error: 'Rainforest API request failed.',
+          statusCode: 502,
+        },
+        artifacts: null,
+      }
+    }
+
+    if (!rainforestResult.error || !oxylabsUsername || !oxylabsPassword) {
+      return {
+        ...rainforestResult,
+        source: 'rainforest_discovery',
+        fallbackFrom: null,
+        fallbackReason: null,
+      }
+    }
+
+    const oxylabsResult = await fetchOxylabsArtifacts({
+      filterConfig,
+      productQuery,
+      details,
+      reasonFallback,
+      oxylabsUsername,
+      oxylabsPassword,
+      amazonDomain,
+    })
+
+    return {
+      ...oxylabsResult,
+      source: 'oxylabs_discovery',
+      fallbackFrom: 'rainforest_discovery',
+      fallbackReason: 'rainforest_error',
+    }
+  }
 
   if (oxylabsUsername && oxylabsPassword) {
     const oxylabsResult = await fetchOxylabsArtifacts({
