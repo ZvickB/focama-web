@@ -1,5 +1,18 @@
 import { reportBackendError } from './observability.js'
 import { getAmazonDomainFromCountryCode, normalizeAmazonDomain } from '../../shared/amazon-marketplaces.js'
+import { DEFAULT_FILTER_CONFIG } from './result-filter.js'
+
+export const LIVE_RESULT_FILTER_CONFIG = {
+  ...DEFAULT_FILTER_CONFIG,
+  candidatePoolSize: 30,
+  finalResultLimit: 6,
+}
+export const FINALIZE_BODY_LIMIT_BYTES = 32 * 1024
+export const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
+
+// In-memory ring buffer for recent finalizations (dev analytics only; resets on server restart).
+export const RECENT_FINALIZATIONS_MAX = 25
+export const recentFinalizations = []
 
 export function getRequestedAmazonDomain(value = '') {
   return normalizeAmazonDomain(value)

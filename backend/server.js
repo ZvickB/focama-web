@@ -13,8 +13,6 @@ import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, getCountryCode, takeRate
 import { ALLOWED_ORIGIN, attachCorsOrigin, buildInternalErrorPayload, resolveCorsOrigin, sendJson, readJsonBody } from './lib/http.js'
 import { emitEnrichmentReady, enrichmentBus } from './lib/enrichment-bus.js'
 import {
-  sanitizeAnalyticsEventData,
-  sanitizeAnalyticsItems,
   sanitizeStringList,
   truncateText,
 } from './lib/text-sanitizers.js'
@@ -24,7 +22,7 @@ import { createFeedbackHandler } from './lib/handlers/feedback-handler.js'
 import { createSupabaseHealthHandler } from './lib/handlers/supabase-health-handler.js'
 import { generateRefinementPrompt } from './lib/refinement-assistant.js'
 import { generateQueryQualityReview } from './lib/query-quality-review.js'
-import { DEFAULT_FILTER_CONFIG, lacksKnownPositivePrice } from './lib/result-filter.js'
+import { lacksKnownPositivePrice } from './lib/result-filter.js'
 import {
   getValidatedSearchRequest,
   readCachedSearchSnapshot,
@@ -34,20 +32,19 @@ import {
 import { fetchOxylabsArtifacts, fetchOxylabsProductDetailsByAsin } from './lib/oxylabs-pipeline.js'
 import {
   isSupabaseConfigured,
-  readAnalyticsDashboardData,
-  readCachePoolEntries,
-  recordAnalyticsResultClick,
-  recordAnalyticsResultImpressions,
-  recordAnalyticsSearchEvent,
   recordOxylabsProductFailures,
   readProductDetailsCacheEntries,
-  upsertAnalyticsSearchRun,
   writeProductDetailsCacheEntries,
 } from './lib/search-storage.js'
 import { buildCacheKey, getEnv, validateSearchInput } from './lib/search-data.js'
 import { fetchRainforestArtifacts } from './lib/rainforest-pipeline.js'
 import { normalizeCachedProductDetailsEntry } from './lib/product-details-cache.js'
 import {
+  CACHE_SCOPE_DISCOVERY,
+  FINALIZE_BODY_LIMIT_BYTES,
+  LIVE_RESULT_FILTER_CONFIG,
+  RECENT_FINALIZATIONS_MAX,
+  recentFinalizations,
   clampInteger,
   getAmazonMarketplaceScope,
   getRequestedAmazonDomain,
@@ -61,12 +58,6 @@ import {
 } from './lib/server-helpers.js'
 
 const PORT = Number(process.env.PORT || 8787)
-const LIVE_RESULT_FILTER_CONFIG = {
-  ...DEFAULT_FILTER_CONFIG,
-  candidatePoolSize: 30,
-  finalResultLimit: 6,
-}
-const FINALIZE_BODY_LIMIT_BYTES = 32 * 1024
 const RETRY_ADVICE_BODY_LIMIT_BYTES = 16 * 1024
 const FEEDBACK_BODY_LIMIT_BYTES = 16 * 1024
 const FINALIZE_MAX_CANDIDATES = LIVE_RESULT_FILTER_CONFIG.candidatePoolSize
@@ -85,10 +76,7 @@ const FEEDBACK_MAX_QUERY_LENGTH = 200
 const FEEDBACK_MAX_FREE_TEXT_LENGTH = 2000
 const FEEDBACK_MAX_EMAIL_LENGTH = 240
 const FEEDBACK_MAX_SELECTED_PRODUCT_ID_LENGTH = 200
-const ANALYTICS_DASHBOARD_MAX_DAYS = 90
-const ANALYTICS_DASHBOARD_DEFAULT_DAYS = 14
 const ENRICHMENT_STREAM_TIMEOUT_MS = 30000
-const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
 const CACHE_SCOPE_RAINFOREST = 'rainforest_discovery:v2'
 const CACHE_SCOPE_DISCOVERY_SESSION = 'guided_discovery_session'
 const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
@@ -98,9 +86,6 @@ const MIN_DISCOVERY_PROVIDER_RESULT_COUNT = LIVE_RESULT_FILTER_CONFIG.finalResul
 const PRODUCT_DETAILS_ASIN_MAX_LENGTH = 200
 const RATE_LIMIT_WAIT_MESSAGE = 'Please wait about 10 seconds and try again.'
 
-// In-memory ring buffer for recent finalizations (dev analytics only; resets on server restart).
-const RECENT_FINALIZATIONS_MAX = 25
-const recentFinalizations = []
 
 function recordRecentFinalization({ query, details, results, strategy, model, timestamp }) {
   recentFinalizations.unshift({
@@ -1422,70 +1407,6 @@ export const handleFeedbackSubmission = createFeedbackHandler({
 
 export const handleSupabaseHealth = createSupabaseHealthHandler()
 
-export async function handleSearchDebug(requestUrl, response) {
-  const { error, isValid, normalizedDetails, normalizedQuery } = getValidatedSearchRequest(requestUrl)
-
-  if (!isValid) {
-    sendJson(response, 400, { error })
-    return
-  }
-
-  const { cachedEntry: discoveryCachedEntry, normalizedCachedResults: discoveryCachedResults } = await readCachedSearchSnapshot({
-    productQuery: normalizedQuery,
-    details: '',
-    scope: CACHE_SCOPE_DISCOVERY,
-  })
-  const guidedDiscoveryUsesCache =
-    normalizedDetails === '' &&
-    Boolean(discoveryCachedEntry?.candidatePool?.candidates) &&
-    discoveryCachedResults.length > 0
-
-  sendJson(response, 200, {
-    query: normalizedQuery,
-    details: normalizedDetails,
-    cache: {
-      guidedDiscovery: {
-        cacheKey: buildCacheKey(normalizedQuery, '', CACHE_SCOPE_DISCOVERY),
-        hasEntry: Boolean(discoveryCachedEntry),
-        source: discoveryCachedEntry?.source || null,
-        cachedAt: discoveryCachedEntry?.cachedAt || null,
-        expiresAt: discoveryCachedEntry?.expiresAt || null,
-        candidateCount: Array.isArray(discoveryCachedEntry?.candidatePool?.candidates)
-          ? discoveryCachedEntry.candidatePool.candidates.length
-          : 0,
-        previewResultCount: discoveryCachedResults.length,
-        selectionMode: discoveryCachedEntry?.selection?.mode || null,
-      },
-    },
-    environment: {
-      serpApiConfigured: Boolean(getEnv('SERPAPI_API_KEY')),
-      openAiConfigured: Boolean(getEnv('OPENAI_API_KEY')),
-      supabaseConfigured: isSupabaseConfigured(),
-    },
-      architecture: {
-        primaryProductFlow: [
-          '/api/search/rainforest-discover',
-          '/api/search/refine',
-          '/api/search/finalize',
-        ],
-        storageMode: isSupabaseConfigured() ? 'supabase' : 'local_file_fallback',
-        finalizeUsesDiscoveryCache: true,
-        finalizeUsesRequestCandidatePool: false,
-      },
-      flowBehavior: {
-        guidedDiscovery: {
-          usesCache: guidedDiscoveryUsesCache,
-          callsSerpApi: !guidedDiscoveryUsesCache,
-          callsOpenAi: false,
-        },
-        guidedFinalize: {
-          usesCache: true,
-          callsSerpApi: false,
-          callsOpenAi: true,
-        },
-    },
-  })
-}
 
 // Runs mini enrichment after Haiku has locked the shortlist, stores result in the token-scoped session snapshot.
 async function runMiniEnrichmentAsync({
@@ -2328,180 +2249,13 @@ export async function handleFinalizeSelection(request, response) {
   }
 }
 
-export async function handleAnalyticsTrack(request, response) {
-  let body
-
-  try {
-    body = await readJsonBody(request, { maxBytes: FINALIZE_BODY_LIMIT_BYTES })
-  } catch (error) {
-    sendJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid request body.' })
-    return
-  }
-
-  const searchId = truncateText(body?.searchId, 100)
-  const sessionId = truncateText(body?.sessionId, 120)
-  const eventType = truncateText(body?.eventType, 80)
-
-  if (!searchId || !sessionId || !eventType) {
-    sendJson(response, 400, { error: 'searchId, sessionId, and eventType are required.' })
-    return
-  }
-
-  const resultSet = truncateText(body?.resultSet, 40) || 'final'
-
-  switch (eventType) {
-    case 'search_run_upsert': {
-      const productQuery = truncateText(body?.productQuery, 200)
-
-      if (!productQuery) {
-        sendJson(response, 400, { error: 'productQuery is required for search_run_upsert.' })
-        return
-      }
-
-      await upsertAnalyticsSearchRun({
-        searchId,
-        sessionId,
-        productQuery,
-        details: truncateText(body?.details, 500),
-        enteredAiRefinement: Boolean(body?.enteredAiRefinement),
-        usedShowProductsNow: Boolean(body?.usedShowProductsNow),
-        completedFinalize: Boolean(body?.completedFinalize),
-        retryRound: Number.isFinite(Number(body?.retryRound)) ? Number(body.retryRound) : 0,
-        bestResultKey: truncateText(body?.bestResultKey, 200),
-      })
-      break
-    }
-    case 'search_event':
-      await recordAnalyticsSearchEvent({
-        searchId,
-        sessionId,
-        eventType: truncateText(body?.name, 80) || 'unknown',
-        eventData: sanitizeAnalyticsEventData(body?.eventData),
-      })
-      break
-    case 'result_impressions': {
-      const items = sanitizeAnalyticsItems(body?.items, {
-        maxItems: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
-      })
-
-      if (items.length === 0) {
-        sendJson(response, 400, { error: 'At least one result impression item is required.' })
-        return
-      }
-
-      await recordAnalyticsResultImpressions({
-        searchId,
-        sessionId,
-        resultSet,
-        items,
-      })
-      break
-    }
-    case 'result_click':
-      await recordAnalyticsResultClick({
-        searchId,
-        sessionId,
-        resultSet,
-        resultKey: truncateText(body?.resultKey, 200),
-        position: Number.isFinite(Number(body?.position)) ? Number(body.position) : 0,
-        provider: truncateText(body?.provider, 160),
-        badgeType: truncateText(body?.badgeType, 80),
-        isBestPick: Boolean(body?.isBestPick),
-        clickTarget: truncateText(body?.clickTarget, 80),
-        retailerUrl: truncateText(body?.retailerUrl, 1000),
-      })
-      break
-    default:
-      sendJson(response, 400, { error: 'Unsupported analytics event type.' })
-      return
-  }
-
-  sendJson(response, 202, { ok: true })
-}
-
-export async function handleAnalyticsDashboard(request, response) {
-  if (process.env.NODE_ENV === 'production') {
-    sendJson(response, 404, { error: 'Not found.' })
-    return
-  }
-
-  if (!isSupabaseConfigured()) {
-    sendJson(response, 503, {
-      error: 'Supabase is not configured, so the analytics dashboard cannot read stored funnel data.',
-    })
-    return
-  }
-
-  const host = readHeaderValue(request.headers, 'host')
-
-  if (!isLocalhostHost(host)) {
-    sendJson(response, 403, {
-      error: 'Analytics dashboard is only available from localhost in development.',
-    })
-    return
-  }
-
-  const requestUrl = new URL(request.url || '/', `http://${request.headers.host || '127.0.0.1'}`)
-  const days = clampInteger(requestUrl.searchParams.get('days'), {
-    defaultValue: ANALYTICS_DASHBOARD_DEFAULT_DAYS,
-    min: 1,
-    max: ANALYTICS_DASHBOARD_MAX_DAYS,
-  })
-  const dashboard = await readAnalyticsDashboardData({ sinceDays: days })
-
-  if (!dashboard.available) {
-    sendJson(response, 500, { error: 'Unable to read analytics dashboard data right now.' })
-    return
-  }
-
-  sendJson(response, 200, dashboard)
-}
-
-export async function handleCachePoolInspect(request, response) {
-  if (process.env.NODE_ENV === 'production') {
-    sendJson(response, 404, { error: 'Not found.' })
-    return
-  }
-
-  if (!isSupabaseConfigured()) {
-    sendJson(response, 503, { error: 'Supabase is not configured.' })
-    return
-  }
-
-  const host = readHeaderValue(request.headers, 'host')
-
-  if (!isLocalhostHost(host)) {
-    sendJson(response, 403, { error: 'Cache pool inspector is only available from localhost in development.' })
-    return
-  }
-
-  const requestUrl = new URL(request.url || '/', `http://${request.headers.host || '127.0.0.1'}`)
-  const rawQuery = (requestUrl.searchParams.get('q') || '').trim().slice(0, 200)
-  const limit = clampInteger(requestUrl.searchParams.get('limit'), { defaultValue: 25, min: 1, max: 100 })
-
-  try {
-    const entries = await readCachePoolEntries({ query: rawQuery, limit })
-    sendJson(response, 200, { query: rawQuery || null, count: entries.length, entries })
-  } catch {
-    sendJson(response, 500, { error: 'Failed to read cache pool data.' })
-  }
-}
-
-export function handleFinalizeHistory(request, response) {
-  if (process.env.NODE_ENV === 'production') {
-    sendJson(response, 404, { error: 'Not found.' })
-    return
-  }
-
-  const host = readHeaderValue(request.headers, 'host')
-
-  if (!isLocalhostHost(host)) {
-    sendJson(response, 403, { error: 'Finalize history is only available from localhost in development.' })
-    return
-  }
-
-  sendJson(response, 200, { count: recentFinalizations.length, entries: recentFinalizations })
-}
+export {
+  handleAnalyticsTrack,
+  handleAnalyticsDashboard,
+  handleCachePoolInspect,
+  handleFinalizeHistory,
+  handleSearchDebug,
+} from './lib/handlers/analytics-handler.js'
 
 export function createApiServer() {
   initObservability()
