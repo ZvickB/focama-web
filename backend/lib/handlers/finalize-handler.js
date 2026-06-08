@@ -43,13 +43,11 @@ import {
   roundTimingDuration,
   runInBackground,
 } from '../server-helpers.js'
-// Enrichment functions stay in server.js until Task 4 moves them.
-// ESM live bindings resolve this circular import safely at call time.
 import {
   runMiniEnrichmentAsync,
   mergeProductDetailsIntoCandidatePool,
   applyLateProductDetailsToEnrichment,
-} from '../../server.js'
+} from './enrichment-handler.js'
 
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 
