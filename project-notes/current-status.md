@@ -109,3 +109,6 @@
 - `backend/lib/handlers/refine-handler.js` — extracted handleRefinementPrompt, getRefinementModel, getHaikuRefinementModel.
 - `backend/lib/handlers/finalize-handler.js` — extracted handleFinalizeSelection + 10 finalize helpers.
 - `backend/lib/handlers/query-quality-handler.js` — extracted handleQueryQualityPoll, startQueryQualityReview + 3 query-quality helpers. Discovery-handler now imports startQueryQualityReview directly instead of via server.js circular import.
+- `backend/lib/handlers/enrichment-handler.js` — extracted handleEnrichmentPoll, handleEnrichmentStream, runMiniEnrichmentAsync, mergeProductDetailsIntoCandidatePool, applyLateProductDetailsToEnrichment + 2 private helpers.
+- `backend/lib/handlers/product-details-handler.js` — extracted handleProductDetails + normalizeProductDetailsAsin, buildProductDetailsPayload.
+- **Task 4 complete.** server.js is now 220 lines: imports, constants, delegated handler wiring (retry-advice, feedback, supabase-health), re-exports, and createApiServer(). No handler bodies remain. All 17 seam names verified importable. express-server.js unchanged. Suite: 266 passed, 1 pre-existing frontend failure.
