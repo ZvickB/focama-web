@@ -109,6 +109,19 @@ describe('ProductDetailModal', () => {
     expect(screen.getByText(/prime eligible/i)).toBeInTheDocument()
     expect(screen.queryByText(/shortlist rank/i)).not.toBeInTheDocument()
   })
+
+  it('shows free delivery as delivery information without implying Prime', () => {
+    renderModal({
+      item: createMockItem({
+        delivery: 'FREE delivery Sat, Jun 13 on your first order',
+        is_prime: false,
+      }),
+    })
+
+    expect(screen.getByText('Delivery')).toBeInTheDocument()
+    expect(screen.getByText(/free delivery/i)).toBeInTheDocument()
+    expect(screen.queryByText(/prime eligible/i)).not.toBeInTheDocument()
+  })
 })
 describe('ResultsSection retry advice', () => {
   it('shows Prime availability on result surfaces when confirmed', () => {

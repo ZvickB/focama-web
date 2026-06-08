@@ -9,7 +9,7 @@ import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
 import { getUserFacingDescription } from '@/components/home/homeContentUtils.js'
 import { getProductDisplayTitle } from '@/lib/productTitle.js'
 import { getRetailerDisplayName } from '@/lib/retailerLabel.js'
-import { hasPrimeEligibility } from '@/components/home/primeEligibility.js'
+import { getDeliverySignal } from '@/components/home/primeEligibility.js'
 
 const MotionDiv = motion.div
 const FOCUSABLE_MODAL_SELECTOR = [
@@ -40,6 +40,18 @@ function formatReviewCount(reviewCount) {
   return `${reviewCountValue.toLocaleString()} reviews`
 }
 
+function formatQualityFact(rating, reviewCount) {
+  const ratingValue = getRatingValue(rating)
+  const reviewText = formatReviewCount(reviewCount)
+
+  if (ratingValue && reviewText !== 'No reviews') {
+    return `${ratingValue.toFixed(1)} stars · ${reviewText}`
+  }
+
+  if (ratingValue) return `${ratingValue.toFixed(1)} stars`
+  return reviewText
+}
+
 function BreathingDots({ className = '' }) {
   const dots = [
     { className: 'bg-primary', delay: '0ms' },
@@ -65,15 +77,12 @@ function BreathingDots({ className = '' }) {
   )
 }
 
-function ProductFacts({ displayPrice, item, retailerLabel }) {
-  const ratingValue = getRatingValue(item.rating)
-  const isPrimeEligible = hasPrimeEligibility(item)
+function ProductFacts({ displayPrice, item }) {
+  const deliverySignal = getDeliverySignal(item)
   const facts = [
-    ['Source', retailerLabel || item.subtitle || 'Retailer'],
     ['Price', displayPrice],
-    isPrimeEligible ? ['Delivery', 'Prime eligible'] : null,
-    ['Rating', ratingValue ? `${ratingValue.toFixed(1)} stars` : 'No rating'],
-    ['Reviews', formatReviewCount(item.reviewCount)],
+    ['Quality', formatQualityFact(item.rating, item.reviewCount)],
+    deliverySignal ? ['Delivery', deliverySignal.value] : null,
   ].filter(Boolean)
 
   return (
@@ -81,7 +90,7 @@ function ProductFacts({ displayPrice, item, retailerLabel }) {
       <p className="text-xs font-semibold uppercase tracking-[0.15em] text-[#80573f]">
         At a glance
       </p>
-      <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+      <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
         {facts.map(([label, value]) => (
           <div key={label} className="min-w-0 rounded-xl bg-[#fbf7f1] px-3 py-2">
             <dt className="text-xs font-medium text-slate-400">{label}</dt>
@@ -210,7 +219,7 @@ function RetailerDecisionBar({ displayPrice, item, onClose, onRetailerClick, ret
             <p className="text-xs font-medium text-slate-400">Current price</p>
             <p className="text-lg font-semibold leading-6 text-primary">{displayPrice}</p>
             <p className="text-xs leading-5 text-slate-400">
-              {retailerLabel || item.subtitle || 'Retailer'} - availability may change
+              Availability may change
             </p>
             {item.link ? (
               <p className="text-xs leading-5 text-slate-400">
@@ -351,10 +360,7 @@ export function ProductDetailModal({
   const rawTitle = String(item.title || '').replace(/\s+/g, ' ').trim()
   const displayTitle = getProductDisplayTitle(rawTitle)
   const hasCleanedTitle = Boolean(rawTitle && displayTitle && rawTitle !== displayTitle)
-  const fullTitleLabel =
-    retailerLabel && retailerLabel.toLowerCase().startsWith('amazon')
-      ? 'Full Amazon title'
-      : 'Full source title'
+  const fullTitleLabel = 'Full source title'
   const shouldCollapseBullets = featureBullets.length >= 5
   const displayedBullets =
     shouldCollapseBullets && !bulletsExpanded ? featureBullets.slice(0, 3) : featureBullets
@@ -436,11 +442,6 @@ export function ProductDetailModal({
             style={{ scrollbarGutter: 'stable' }}
           >
             <div className="space-y-1">
-              {item.subtitle ? (
-                <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-400">
-                  {item.subtitle}
-                </p>
-              ) : null}
               <h2
                 id="product-detail-title"
                 className="text-xl font-semibold leading-snug tracking-tight text-slate-900 sm:text-2xl"
@@ -491,7 +492,7 @@ export function ProductDetailModal({
               </div>
             </div>
 
-            <ProductFacts displayPrice={displayPrice} item={item} retailerLabel={retailerLabel} />
+            <ProductFacts displayPrice={displayPrice} item={item} />
 
             {showRecommendationAnalysis ? (
               <ReasoningPanel

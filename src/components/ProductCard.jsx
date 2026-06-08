@@ -5,10 +5,25 @@ import {
   CardContent,
 } from '@/components/ui/card.jsx'
 import { getUserFacingDescription, getUserFacingReasons } from '@/components/home/homeContentUtils.js'
-import { hasPrimeEligibility } from '@/components/home/primeEligibility.js'
+import { getDeliverySignal } from '@/components/home/primeEligibility.js'
 import logo from '@/assets/logo_master_version.svg'
 import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
 import { getProductDisplayTitle } from '@/lib/productTitle.js'
+
+function formatQualityText(rating, reviewCount) {
+  const ratingValue = Number(rating)
+  const reviewCountValue = Number(reviewCount)
+  const hasRating = Number.isFinite(ratingValue) && ratingValue > 0
+  const hasReviews = Number.isFinite(reviewCountValue) && reviewCountValue > 0
+
+  if (hasRating && hasReviews) {
+    return `${ratingValue.toFixed(1)} stars · ${reviewCountValue.toLocaleString()} reviews`
+  }
+
+  if (hasRating) return `${ratingValue.toFixed(1)} stars`
+  if (hasReviews) return `${reviewCountValue.toLocaleString()} reviews`
+  return 'No rating'
+}
 
 function ProductBadge({ label }) {
   if (!label) {
@@ -58,7 +73,7 @@ function ProductCard({
   const userFacingDescription = getUserFacingDescription(description)
   const displayPrice = formatDisplayPrice(price)
   const displayTitle = getProductDisplayTitle(title)
-  const isPrimeEligibleForDisplay = hasPrimeEligibility({
+  const deliverySignal = getDeliverySignal({
     delivery,
     isPrime,
     isPrimeEligible,
@@ -131,12 +146,12 @@ function ProductCard({
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-lg font-semibold text-primary">{displayPrice}</p>
-            {isPrimeEligibleForDisplay ? (
+            {deliverySignal ? (
               <span
                 className="inline-flex items-center rounded-full border border-[#cfe1de] bg-[#f5fbf9] px-2 py-0.5 text-[11px] font-semibold leading-4 text-primary"
-                title="Prime eligibility when last checked"
+                title={deliverySignal.title}
               >
-                Prime
+                {deliverySignal.label}
               </span>
             ) : null}
           </div>
@@ -152,8 +167,7 @@ function ProductCard({
               />
             ))}
           </div>
-          <span className="font-medium text-slate-700">{rating.toFixed(1)}</span>
-          <span className="text-slate-500">({reviewCount} reviews)</span>
+          <span className="font-medium text-slate-700">{formatQualityText(rating, reviewCount)}</span>
         </div>
         {userFacingDescription ? (
           <p className="line-clamp-2 text-sm leading-6 text-slate-600">
