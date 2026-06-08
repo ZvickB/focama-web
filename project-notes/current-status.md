@@ -101,3 +101,11 @@
 - Watch the polling-based query-quality MVP on weak discovery pools caused by obvious misspellings or brand-query drift. Current known example: `celcius drink` should be able to offer `celsius drink` when the backend review is high-confidence, while meaning-bearing language such as `shabbos art` should stay quiet unless the returned pool is clearly mismatched.
 - Do not add query-quality prewarm unless the MVP proves useful and the user explicitly chooses that next step.
 - Watch whether the compact modal bottom CTA/disclosure feels clear without sounding defensive.
+
+## server.js decomposition (refactor/server-decomposition branch)
+- `backend/lib/server-helpers.js` — extracted 10 shared helpers + shared constants (LIVE_RESULT_FILTER_CONFIG, FINALIZE_BODY_LIMIT_BYTES, CACHE_SCOPE_DISCOVERY, recentFinalizations).
+- `backend/lib/handlers/analytics-handler.js` — extracted handleAnalyticsTrack, handleAnalyticsDashboard, handleCachePoolInspect, handleFinalizeHistory, handleSearchDebug.
+- `backend/lib/handlers/discovery-handler.js` — extracted handleRainforestDiscoverySearch, handleCachedSearch + 9 discovery helpers.
+- `backend/lib/handlers/refine-handler.js` — extracted handleRefinementPrompt, getRefinementModel, getHaikuRefinementModel.
+- `backend/lib/handlers/finalize-handler.js` — extracted handleFinalizeSelection + 10 finalize helpers.
+- `backend/lib/handlers/query-quality-handler.js` — extracted handleQueryQualityPoll, startQueryQualityReview + 3 query-quality helpers. Discovery-handler now imports startQueryQualityReview directly instead of via server.js circular import.
