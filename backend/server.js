@@ -3,7 +3,34 @@ import { fileURLToPath } from 'node:url'
 import { DEFAULT_RATE_LIMIT_CONFIG } from './lib/rate-limit.js'
 import { attachCorsOrigin, buildInternalErrorPayload, resolveCorsOrigin, sendJson } from './lib/http.js'
 import { initObservability, registerProcessErrorHandlers, reportBackendError } from './lib/observability.js'
-import { getRefinementModel } from './lib/handlers/refine-handler.js'
+import {
+  handleAnalyticsDashboard,
+  handleAnalyticsTrack,
+  handleCachePoolInspect,
+  handleFinalizeHistory,
+  handleSearchDebug,
+} from './lib/handlers/analytics-handler.js'
+import {
+  handleCachedSearch,
+  handleRainforestDiscoverySearch,
+} from './lib/handlers/discovery-handler.js'
+import {
+  getRefinementModel,
+  handleRefinementPrompt,
+} from './lib/handlers/refine-handler.js'
+import { handleFinalizeSelection } from './lib/handlers/finalize-handler.js'
+import {
+  handleQueryQualityPoll,
+  startQueryQualityReview,
+} from './lib/handlers/query-quality-handler.js'
+import {
+  applyLateProductDetailsToEnrichment,
+  handleEnrichmentPoll,
+  handleEnrichmentStream,
+  mergeProductDetailsIntoCandidatePool,
+  runMiniEnrichmentAsync,
+} from './lib/handlers/enrichment-handler.js'
+import { handleProductDetails } from './lib/handlers/product-details-handler.js'
 import { createRetryAdviceHandler } from './lib/handlers/retry-advice-handler.js'
 import { createFeedbackHandler } from './lib/handlers/feedback-handler.js'
 import { createSupabaseHealthHandler } from './lib/handlers/supabase-health-handler.js'
@@ -63,31 +90,19 @@ export {
   handleCachePoolInspect,
   handleFinalizeHistory,
   handleSearchDebug,
-} from './lib/handlers/analytics-handler.js'
-
-export {
   handleCachedSearch,
   handleRainforestDiscoverySearch,
-} from './lib/handlers/discovery-handler.js'
-
-export { handleRefinementPrompt } from './lib/handlers/refine-handler.js'
-
-export { handleFinalizeSelection } from './lib/handlers/finalize-handler.js'
-
-export {
+  handleRefinementPrompt,
+  handleFinalizeSelection,
   handleQueryQualityPoll,
   startQueryQualityReview,
-} from './lib/handlers/query-quality-handler.js'
-
-export {
   handleEnrichmentPoll,
   handleEnrichmentStream,
   runMiniEnrichmentAsync,
   mergeProductDetailsIntoCandidatePool,
   applyLateProductDetailsToEnrichment,
-} from './lib/handlers/enrichment-handler.js'
-
-export { handleProductDetails } from './lib/handlers/product-details-handler.js'
+  handleProductDetails,
+}
 
 export function createApiServer() {
   initObservability()

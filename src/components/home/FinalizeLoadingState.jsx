@@ -43,7 +43,7 @@ export function FinalizeLoadingState({ compact = false }) {
             </p>
           </div>
 
-          <ol className="grid gap-2 sm:grid-cols-2">
+          <ol className="flex flex-wrap gap-1.5">
             {FINALIZE_STAGES.map((stage, index) => {
               const isDone = index < activeStageIndex
               const isActive = index === activeStageIndex
@@ -51,7 +51,7 @@ export function FinalizeLoadingState({ compact = false }) {
               return (
                 <li
                   key={stage}
-                  className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition-colors ${
+                  className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                     isActive
                       ? 'border-primary/30 bg-[#eef7f6] text-primary'
                       : isDone

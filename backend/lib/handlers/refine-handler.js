@@ -4,7 +4,6 @@ import { getValidatedSearchRequest } from '../search-pipeline.js'
 import { getEnv } from '../search-data.js'
 import { generateRefinementPrompt } from '../refinement-assistant.js'
 import {
-  DEFAULT_FINALIZE_MODEL,
   DEFAULT_HAIKU_MODEL,
   DEFAULT_REFINEMENT_MODEL,
 } from '../ai-selector.js'

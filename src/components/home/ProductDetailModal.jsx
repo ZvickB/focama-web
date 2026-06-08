@@ -9,6 +9,7 @@ import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
 import { getUserFacingDescription } from '@/components/home/homeContentUtils.js'
 import { getProductDisplayTitle } from '@/lib/productTitle.js'
 import { getRetailerDisplayName } from '@/lib/retailerLabel.js'
+import { hasPrimeEligibility } from '@/components/home/primeEligibility.js'
 
 const MotionDiv = motion.div
 const FOCUSABLE_MODAL_SELECTOR = [
@@ -66,11 +67,11 @@ function BreathingDots({ className = '' }) {
 
 function ProductFacts({ displayPrice, item, retailerLabel }) {
   const ratingValue = getRatingValue(item.rating)
+  const isPrimeEligible = hasPrimeEligibility(item)
   const facts = [
-    ['Shortlist rank', item.badgeLabel || 'Selected pick'],
     ['Source', retailerLabel || item.subtitle || 'Retailer'],
     ['Price', displayPrice],
-    item.isPrime ? ['Delivery', 'Prime eligible'] : null,
+    isPrimeEligible ? ['Delivery', 'Prime eligible'] : null,
     ['Rating', ratingValue ? `${ratingValue.toFixed(1)} stars` : 'No rating'],
     ['Reviews', formatReviewCount(item.reviewCount)],
   ].filter(Boolean)

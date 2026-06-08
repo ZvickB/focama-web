@@ -4,7 +4,7 @@ import {
 } from '../text-sanitizers.js'
 import {
   resolveDiscoveryContext,
-} from './discovery-handler.js'
+} from '../discovery-context.js'
 import { getRefinementModel } from './refine-handler.js'
 import { generateQueryQualityReview } from '../query-quality-review.js'
 import {

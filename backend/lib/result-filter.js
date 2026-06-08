@@ -562,6 +562,7 @@ export function getFilteredSearchArtifacts(
       rating: candidate.rating,
       reviewCount: candidate.reviewCount,
       isPrime: Boolean(candidate.isPrime),
+      delivery: candidate.delivery || '',
       description: candidate.description,
       reasons: candidate.reasons,
       image: candidate.image,

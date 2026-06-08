@@ -404,7 +404,9 @@ describe('result filter', () => {
       source: expect.any(String),
       score: expect.any(Number),
       isPrime: true,
+      delivery: 'Free shipping',
     })
+    expect(artifacts.results[0]).toEqual(expect.objectContaining({ delivery: 'Free shipping', isPrime: true }))
     expect(artifacts.candidatePool.candidates[0].matchSignals).toEqual(
       expect.objectContaining({
         titleMatches: expect.any(Number),

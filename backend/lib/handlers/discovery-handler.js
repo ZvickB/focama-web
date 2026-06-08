@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { buildInternalErrorPayload, sendJson } from '../http.js'
 import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, getCountryCode, takeRateLimitToken } from '../rate-limit.js'
 import { reportBackendError } from '../observability.js'
-import { truncateText } from '../text-sanitizers.js'
 import {
   getValidatedSearchRequest,
   readCachedSearchSnapshot,
@@ -12,23 +11,23 @@ import {
 import { fetchOxylabsArtifacts } from '../oxylabs-pipeline.js'
 import { buildCacheKey, getEnv } from '../search-data.js'
 import { fetchRainforestArtifacts } from '../rainforest-pipeline.js'
-import { lacksKnownPositivePrice } from '../result-filter.js'
 import {
-  CACHE_SCOPE_DISCOVERY,
-  CACHE_SCOPE_DISCOVERY_SESSION,
   CACHE_SCOPE_LIVE_SEARCH,
   CACHE_SCOPE_RAINFOREST,
   LIVE_RESULT_FILTER_CONFIG,
   MIN_DISCOVERY_PROVIDER_RESULT_COUNT,
   RATE_LIMIT_WAIT_MESSAGE,
   getAmazonMarketplaceScope,
-  getRequestedAmazonDomain,
   logSearchFlowEvent,
   nowMs,
   resolveAmazonDomain,
   roundTimingDuration,
   runInBackground,
 } from '../server-helpers.js'
+import {
+  getDiscoverySessionScope,
+  resolveDiscoveryContext,
+} from '../discovery-context.js'
 import { startQueryQualityReview } from './query-quality-handler.js'
 
 function isThinDiscoveryResult(result) {
@@ -143,11 +142,6 @@ async function fetchDiscoveryArtifactsWithFallback({
   }
 }
 
-function getDiscoverySessionScope(discoveryToken = '') {
-  const truncatedToken = truncateText(discoveryToken, 300)
-  return truncatedToken ? `${CACHE_SCOPE_DISCOVERY_SESSION}:${truncatedToken}` : CACHE_SCOPE_DISCOVERY_SESSION
-}
-
 function shouldRefreshDiscoveryCache(requestUrl) {
   const cacheMode = String(requestUrl?.searchParams?.get('cacheMode') || '').trim().toLowerCase()
   const bypassCache = String(requestUrl?.searchParams?.get('bypassCache') || '').trim().toLowerCase()
@@ -173,61 +167,6 @@ function isThinDiscoveryCacheHit(cachedEntry, normalizedCachedResults = []) {
 
 function createDiscoveryToken() {
   return randomUUID()
-}
-
-async function resolveDiscoveryContext(normalizedQuery, discoveryToken, scopes = [CACHE_SCOPE_DISCOVERY, CACHE_SCOPE_RAINFOREST]) {
-  const truncatedToken = truncateText(discoveryToken, 300)
-
-  if (!truncatedToken) {
-    return {
-      error: 'Your search session expired. Start a new search.',
-      isValid: false,
-      statusCode: 409,
-    }
-  }
-
-  const sessionScope = getDiscoverySessionScope(truncatedToken)
-  const { cachedEntry: sessionEntry } = await readCachedSearchSnapshot({
-    productQuery: normalizedQuery,
-    details: '',
-    scope: sessionScope,
-  })
-
-  if (sessionEntry && truncateText(sessionEntry.discoveryToken, 300) === truncatedToken) {
-    return {
-      cachedEntry: sessionEntry,
-      discoveryScope: sessionScope,
-      isValid: true,
-    }
-  }
-
-  for (const scope of scopes) {
-    const { cachedEntry } = await readCachedSearchSnapshot({
-      productQuery: normalizedQuery,
-      details: '',
-      scope,
-    })
-
-    if (!cachedEntry) {
-      continue
-    }
-
-    if (truncateText(cachedEntry.discoveryToken, 300) !== truncatedToken) {
-      continue
-    }
-
-    return {
-      cachedEntry,
-      discoveryScope: scope,
-      isValid: true,
-    }
-  }
-
-  return {
-    error: 'Your search session expired. Start a new search.',
-    isValid: false,
-    statusCode: 409,
-  }
 }
 
 async function ensureDiscoverySnapshotToken({
@@ -567,8 +506,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   }
 }
 
-// These helpers are also used by other handlers (finalize, enrichment, query-quality)
-// that haven't been extracted yet. Export them so those handlers can import from here.
+// Keep these re-exports stable for handlers and tests that import discovery helpers here.
 export {
   resolveDiscoveryContext,
   getDiscoverySessionScope,

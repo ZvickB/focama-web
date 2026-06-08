@@ -27,8 +27,24 @@ export function getAmazonDomain({ countryCode = 'US', amazonDomain = '' } = {}) 
   return normalizeAmazonDomain(amazonDomain) || getAmazonDomainFromCountryCode(countryCode)
 }
 
+function getRainforestDeliveryTagline(value) {
+  return typeof value?.tagline === 'string' ? value.tagline : ''
+}
+
+function hasRainforestPrimeSignal(value) {
+  const deliveryTagline = getRainforestDeliveryTagline(value?.delivery)
+
+  return Boolean(
+    value?.is_prime ||
+    value?.is_prime_eligible ||
+    /\bprime\b/i.test(deliveryTagline),
+  )
+}
+
 function normalizeRainforestItem(item, { amazonDomain = 'amazon.com' } = {}) {
   const numericPrice = Number.isFinite(Number(item.price?.value)) ? Number(item.price.value) : null
+  const deliveryTagline = getRainforestDeliveryTagline(item.delivery)
+  const isPrime = hasRainforestPrimeSignal(item)
 
   return {
     product_id: item.asin || null,
@@ -42,8 +58,8 @@ function normalizeRainforestItem(item, { amazonDomain = 'amazon.com' } = {}) {
     snippet: item.description || item.brand || '',
     extensions: [],
     multiple_sources: false,
-    isPrime: Boolean(item.is_prime),
-    delivery: item.delivery?.tagline || (item.is_prime ? 'Prime delivery' : ''),
+    isPrime,
+    delivery: deliveryTagline || (isPrime ? 'Prime delivery' : ''),
     tag: '',
     source: '',
     store: 'Amazon',
@@ -81,6 +97,9 @@ function normalizeRainforestProductDetailPayload(payload, fallbackAsin) {
         ? payload.results[0].product
         : payload
 
+  const isPrime = hasRainforestPrimeSignal(product)
+  const deliveryTagline = getRainforestDeliveryTagline(product?.delivery)
+
   return {
     asin: typeof product?.asin === 'string' && product.asin.trim() ? product.asin.trim() : fallbackAsin,
     feature_bullets: normalizeRainforestFeatureBullets(
@@ -94,8 +113,8 @@ function normalizeRainforestProductDetailPayload(payload, fallbackAsin) {
       product?.product_description ??
       product?.overview,
     ),
-    isPrime: Boolean(product?.is_prime),
-    delivery: product?.delivery?.tagline || (product?.is_prime ? 'Prime delivery' : ''),
+    isPrime,
+    delivery: deliveryTagline || (isPrime ? 'Prime delivery' : ''),
   }
 }
 

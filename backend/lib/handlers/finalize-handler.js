@@ -20,7 +20,6 @@ import {
 import { fetchOxylabsProductDetailsByAsin } from '../oxylabs-pipeline.js'
 import {
   resolveDiscoveryContext,
-  getDiscoverySessionScope,
 } from './discovery-handler.js'
 import {
   CACHE_SCOPE_DISCOVERY,

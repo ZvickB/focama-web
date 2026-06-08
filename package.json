@@ -14,7 +14,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:smoke": "SMOKE=1 vitest run backend/smoke.test.js",
+    "test:smoke:e2e": "SMOKE=1 SMOKE_E2E=1 vitest run backend/smoke.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",

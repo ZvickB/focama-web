@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Menu, X } from 'lucide-react'
+import { Menu, RotateCcw, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import logo from '@/assets/logo_header_mark.svg'
 import wordmark from '@/assets/wordmark.PNG'
@@ -96,6 +96,22 @@ const mobileMenuItems = navItems.filter((item) =>
 )
 const HEADER_COLLAPSE_SCROLL_Y = 72
 const HEADER_EXPAND_SCROLL_Y = 20
+const newSearchActionClass =
+  'group inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 underline-offset-4 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-4'
+
+function NewSearchAction({ className = '' }) {
+  return (
+    <button
+      type="button"
+      onClick={() => window.dispatchEvent(new CustomEvent('focamai:new-search'))}
+      className={`${newSearchActionClass} ${className}`}
+    >
+      <RotateCcw className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-rotate-45" />
+      <span>New search</span>
+    </button>
+  )
+}
+
 function WhyFocamaiLabel({ isActive = false }) {
   return (
     <>
@@ -117,7 +133,7 @@ function WhyFocamaiLabel({ isActive = false }) {
 
 function SlidingNav({ items, className = '' }) {
   return (
-    <nav className={`relative flex flex-wrap items-center gap-1.5 rounded-full ${className}`}>
+    <nav className={`relative flex flex-wrap items-center gap-0.5 rounded-full ${className}`}>
       {items.map((item) => (
         <NavLink
           key={item.to}
@@ -125,7 +141,7 @@ function SlidingNav({ items, className = '' }) {
           end={item.end}
           className={({ isActive }) =>
             [
-              'group relative rounded-full px-4 py-2 text-sm transition-colors duration-300',
+              'group relative rounded-full px-2.5 py-1.5 text-[13px] transition-colors duration-300 xl:px-3',
               isActive
                 ? 'text-slate-900'
                 : item.highlight
@@ -146,7 +162,7 @@ function SlidingNav({ items, className = '' }) {
               <span
                 aria-hidden="true"
                 className={`pointer-events-none absolute bottom-[5px] left-1/2 h-[2px] -translate-x-1/2 rounded-full bg-[linear-gradient(90deg,#0F6175_0%,#2F7F8A_58%,#E59B26_100%)] shadow-[0_6px_18px_-12px_rgba(15,97,117,0.8)] transition-all duration-300 ease-out ${
-                  isActive ? 'w-[calc(100%-1.5rem)] scale-x-100 opacity-100' : 'w-[calc(100%-1.5rem)] scale-x-0 opacity-0 group-hover:scale-x-100 group-hover:opacity-70'
+                  isActive ? 'w-[calc(100%-1rem)] scale-x-100 opacity-100' : 'w-[calc(100%-1rem)] scale-x-0 opacity-0 group-hover:scale-x-100 group-hover:opacity-70'
                 }`}
               />
             </>
@@ -162,21 +178,24 @@ function SearchStepIndicator({ progress, isCompact }) {
   if (!hasStartedSearch || !isCompact) return null
 
   return (
-    <div
-      className="text-[11px] font-semibold uppercase tracking-[0.14em] sm:text-[13px]"
-      style={{ fontFamily: '"Instrument Sans", sans-serif' }}
-    >
-      <span className={hasDiscoveryResults ? 'text-slate-400' : 'text-primary'}>Search</span>
-      <span className="px-1.5 text-slate-300">·</span>
-      <span
-        className={
-          hasDiscoveryResults && !hasFinalResults ? 'text-primary' : 'text-slate-400'
-        }
+    <div className="flex items-center gap-5">
+      <div
+        className="text-[11px] font-semibold uppercase tracking-[0.14em] sm:text-[13px]"
+        style={{ fontFamily: '"Instrument Sans", sans-serif' }}
       >
-        Refine
-      </span>
-      <span className="px-1.5 text-slate-300">·</span>
-      <span className={hasFinalResults ? 'text-primary' : 'text-slate-400'}>Get 6 picks</span>
+        <span className={hasDiscoveryResults ? 'text-slate-400' : 'text-primary'}>Search</span>
+        <span className="px-1.5 text-slate-300">·</span>
+        <span
+          className={
+            hasDiscoveryResults && !hasFinalResults ? 'text-primary' : 'text-slate-400'
+          }
+        >
+          Refine
+        </span>
+        <span className="px-1.5 text-slate-300">·</span>
+        <span className={hasFinalResults ? 'text-primary' : 'text-slate-400'}>Get 6 picks</span>
+      </div>
+      <NewSearchAction className="pl-1" />
     </div>
   )
 }
@@ -275,6 +294,9 @@ function SiteLayout() {
                 Calm buying guidance before the marketplace.
               </p>
             </div>
+            {isHomePage && isCompact && progress.hasStartedSearch ? (
+              <NewSearchAction className="mt-1 self-center lg:hidden" />
+            ) : null}
             <button
               type="button"
               aria-expanded={isMobileMenuOpen}
@@ -292,7 +314,7 @@ function SiteLayout() {
           <div className="hidden flex-1 items-center justify-center lg:flex">
             <SearchStepIndicator progress={progress} isCompact={isCompact} />
           </div>
-          <div className="hidden sm:flex sm:items-center sm:gap-3">
+          <div className="hidden sm:flex sm:items-center sm:gap-2">
             {isHomePage ? (
               <div className="relative">
                 <AmazonStorePill variant="header" />

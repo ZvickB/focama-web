@@ -9,7 +9,7 @@ export const LIVE_RESULT_FILTER_CONFIG = {
 }
 export const FINALIZE_BODY_LIMIT_BYTES = 32 * 1024
 export const CACHE_SCOPE_DISCOVERY = 'guided_discovery'
-export const CACHE_SCOPE_RAINFOREST = 'rainforest_discovery:v2'
+export const CACHE_SCOPE_RAINFOREST = 'rainforest_discovery:v3'
 export const CACHE_SCOPE_DISCOVERY_SESSION = 'guided_discovery_session'
 export const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 export const MIN_DISCOVERY_PROVIDER_RESULT_COUNT = LIVE_RESULT_FILTER_CONFIG.finalResultLimit

@@ -23,6 +23,7 @@ import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
 import { getProductDisplayTitle } from '@/lib/productTitle.js'
 import { getRetailerDisplayName } from '@/lib/retailerLabel.js'
+import { hasPrimeEligibility } from '@/components/home/primeEligibility.js'
 
 const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 const RETRY_CORRECTION_CHIPS = [
@@ -202,7 +203,7 @@ function RankedPickRow({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
             <span className="font-semibold text-primary">{displayPrice}</span>
             <span>{getRatingValue(item.rating)?.toFixed(1) || 'No rating'}</span>
-            {item.isPrime ? <PrimeEligibilityPill /> : null}
+            {hasPrimeEligibility(item) ? <PrimeEligibilityPill /> : null}
             {!retailerLabel && item.subtitle ? <span>{item.subtitle}</span> : null}
           </div>
         </div>
@@ -276,7 +277,7 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#f0e7da] pt-3 text-sm">
           <span className="font-semibold text-primary">{displayPrice}</span>
           <span className="text-slate-500">{getRatingValue(item.rating)?.toFixed(1) || 'No rating'}</span>
-          {item.isPrime ? <PrimeEligibilityPill /> : null}
+          {hasPrimeEligibility(item) ? <PrimeEligibilityPill /> : null}
         </div>
         <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition group-hover:text-primary/80">
           View details
