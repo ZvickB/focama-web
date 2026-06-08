@@ -15,6 +15,13 @@ export const CACHE_SCOPE_LIVE_SEARCH = 'live_search'
 export const MIN_DISCOVERY_PROVIDER_RESULT_COUNT = LIVE_RESULT_FILTER_CONFIG.finalResultLimit
 export const RATE_LIMIT_WAIT_MESSAGE = 'Please wait about 10 seconds and try again.'
 
+export const FINALIZE_MAX_CANDIDATES = LIVE_RESULT_FILTER_CONFIG.candidatePoolSize
+export const FINALIZE_MAX_NOTE_LENGTH = 500
+export const FINALIZE_MAX_REJECTION_FEEDBACK_LENGTH = 300
+export const FINALIZE_MAX_PRIORITIES = 8
+export const FINALIZE_MAX_PRIORITY_LENGTH = 80
+export const FINALIZE_MAX_RETRY_COUNT = 2
+
 // In-memory ring buffer for recent finalizations (dev analytics only; resets on server restart).
 export const RECENT_FINALIZATIONS_MAX = 25
 export const recentFinalizations = []
