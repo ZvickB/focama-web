@@ -40,7 +40,7 @@ function formatReviewCount(reviewCount) {
   return `${reviewCountValue.toLocaleString()} reviews`
 }
 
-function formatQualityFact(rating, reviewCount) {
+function formatRatingsReviewsFact(rating, reviewCount) {
   const ratingValue = getRatingValue(rating)
   const reviewText = formatReviewCount(reviewCount)
 
@@ -81,7 +81,7 @@ function ProductFacts({ displayPrice, item }) {
   const deliverySignal = getDeliverySignal(item)
   const facts = [
     ['Price', displayPrice],
-    ['Quality', formatQualityFact(item.rating, item.reviewCount)],
+    ['Ratings/reviews', formatRatingsReviewsFact(item.rating, item.reviewCount)],
     deliverySignal ? ['Delivery', deliverySignal.value] : null,
   ].filter(Boolean)
 

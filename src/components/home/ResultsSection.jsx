@@ -65,7 +65,7 @@ function formatReviewCount(reviewCount) {
   return `${reviewCountValue.toLocaleString()} reviews`
 }
 
-function formatQualityText(item) {
+function formatRatingsReviewsText(item) {
   const ratingValue = getRatingValue(item?.rating)
   const reviewText = formatReviewCount(item?.reviewCount)
 
@@ -226,7 +226,7 @@ function RankedPickRow({
           ) : null}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
             <span className="font-semibold text-primary">{displayPrice}</span>
-            <span>{formatQualityText(item)}</span>
+            <span>{formatRatingsReviewsText(item)}</span>
             <DeliverySignalPill signal={deliverySignal} />
           </div>
         </div>
@@ -300,7 +300,7 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#f0e7da] pt-3 text-sm">
           <span className="font-semibold text-primary">{displayPrice}</span>
-          <span className="text-slate-500">{formatQualityText(item)}</span>
+          <span className="text-slate-500">{formatRatingsReviewsText(item)}</span>
           <DeliverySignalPill signal={deliverySignal} />
         </div>
         <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition group-hover:text-primary/80">

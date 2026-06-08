@@ -10,7 +10,7 @@ import logo from '@/assets/logo_master_version.svg'
 import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
 import { getProductDisplayTitle } from '@/lib/productTitle.js'
 
-function formatQualityText(rating, reviewCount) {
+function formatRatingsReviewsText(rating, reviewCount) {
   const ratingValue = Number(rating)
   const reviewCountValue = Number(reviewCount)
   const hasRating = Number.isFinite(ratingValue) && ratingValue > 0
@@ -167,7 +167,7 @@ function ProductCard({
               />
             ))}
           </div>
-          <span className="font-medium text-slate-700">{formatQualityText(rating, reviewCount)}</span>
+          <span className="font-medium text-slate-700">{formatRatingsReviewsText(rating, reviewCount)}</span>
         </div>
         {userFacingDescription ? (
           <p className="line-clamp-2 text-sm leading-6 text-slate-600">
