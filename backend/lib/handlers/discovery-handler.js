@@ -29,9 +29,7 @@ import {
   roundTimingDuration,
   runInBackground,
 } from '../server-helpers.js'
-// startQueryQualityReview stays in server.js until Task 3 moves it to query-quality-handler.
-// ESM live bindings resolve this circular import safely at call time.
-import { startQueryQualityReview } from '../../server.js'
+import { startQueryQualityReview } from './query-quality-handler.js'
 
 function isThinDiscoveryResult(result) {
   const resultCount = Array.isArray(result?.artifacts?.results)
