@@ -32,7 +32,8 @@
 - After final picks appear, the refinement panel collapses into a compact summary above the ranked results.
 - After final picks appear, the completed search is saved to device-local history in localStorage. History entries dedupe by normalized query plus follow-up notes, so rerunning the same search refreshes the saved entry instead of adding a duplicate.
 - `/history` shows completed searches saved on the current device, newest first. Each entry can expand to show the saved six picks, be deleted, clear all history, or re-run the saved query with follow-up notes prefilled.
-- Auth UI is present but does not gate search or move history storage yet. Email/password and Google sign-in are wired through the Supabase browser client when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are configured; otherwise the modal shows setup copy.
+- Auth UI is present and does not gate search. Email/password and Google sign-in are wired through the Supabase browser client when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are configured; otherwise the modal shows setup copy.
+- When signed out, user-facing search history uses localStorage. When signed in, the active history store switches to Supabase `saved_searches`; local entries are migrated into the account on login and then cleared locally after successful migration.
 - `Start a new search` clears the guided state and returns to a fresh search box.
 - After final results appear, the user can open the retry panel and ask for a better search direction.
 - As soon as `HomeExperience` mounts, it prefetches the lazy `ResultsSection` and `ProductDetailModal` chunks so those UI steps are more likely to be ready before the user needs them.
@@ -156,7 +157,7 @@
 - Thin cached discovery snapshots are treated as refresh candidates instead of reusable evidence when they have fewer than the shortlist count of cached results or candidates.
 - Partial valid haiku output is recoverable, not final: zero picks still use rules fallback, full valid picks stay `haiku_lock`, and partial valid picks are returned as `haiku_lock_topped_up`.
 - Search cache and operational history use Supabase when configured, with local fallback in development.
-- User-facing saved-search history currently uses localStorage under `focamai:searchHistory:v1`; it is device-local only and does not require login yet.
+- User-facing saved-search history uses localStorage under `focamai:searchHistory:v1` for signed-out users and Supabase `saved_searches` for signed-in users.
 - Supabase auth state is handled client-side through `AuthProvider`; the Supabase browser client is lazy-loaded so auth does not inflate the initial search bundle.
 - Product details have a separate per-ASIN cache shared across detail providers.
 - Async mini enrichment is token-scoped when it writes back into the per-session discovery snapshot so older same-query searches cannot leak context-specific `fit_reason` or `caveat` text into newer sessions.
@@ -165,7 +166,7 @@
 - When a background detail retry later succeeds, the stored enrichment payload is updated with the new `feature_bullets` and the frontend keeps polling long enough for the open modal to hydrate those bullets in place.
 - Backend observability is now opt-in through Sentry (`SENTRY_DSN`) with sanitized error context, and background async failures are logged/reported instead of disappearing silently.
 - `search_history` is internal telemetry, not user-facing history.
-- Account-backed saved-search history is not implemented yet. Future DB history should use `saved_searches`, not the existing internal `search_history` table.
+- Account-backed saved-search history uses `saved_searches`, not the existing internal `search_history` table.
 - Rate limiting is a 10-second rolling window with a limit of 15 requests per client IP. In production it uses a shared Supabase `rate_limit_events` event log keyed by a hashed IP value, and falls back to the process-local memory limiter when Supabase is unavailable.
 - Guided routes expose `Server-Timing`.
 - Discovery query-quality review is now a background pass plus frontend polling. It can mark the token-scoped snapshot as pending, skipped, ready, or failed under `selection.queryQuality`, while preserving any existing `selection.enrichment`.

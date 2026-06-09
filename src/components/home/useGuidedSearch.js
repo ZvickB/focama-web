@@ -1054,7 +1054,7 @@ export function useGuidedSearch() {
         followUp: variables.followUpNotes || '',
         query: variables.query,
         results: finalizedResults,
-      })
+      }).catch(() => {})
     }
     setRevealedBadgeResultsKey('')
     setIsEnrichmentReady(hasInlineEnrichment)

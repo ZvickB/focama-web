@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react'
-import { LoaderCircle, LockKeyhole, X } from 'lucide-react'
+import { Eye, EyeOff, LoaderCircle, LockKeyhole, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button.jsx'
 import { useAuth } from '@/contexts/useAuth.js'
@@ -17,6 +17,7 @@ export function AuthModal({ onClose, open }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -30,6 +31,7 @@ export function AuthModal({ onClose, open }) {
 
   function handleClose() {
     setErrorMessage('')
+    setShowPassword(false)
     setStatusMessage('')
     setSubmitting(false)
     onClose()
@@ -167,16 +169,27 @@ export function AuthModal({ onClose, open }) {
             <label htmlFor={passwordId} className="text-sm font-semibold text-slate-700">
               Password
             </label>
-            <input
-              id={passwordId}
-              type="password"
-              autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="h-12 w-full rounded-2xl border border-[#e5dacb] bg-white px-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
-              minLength={6}
-              required
-            />
+            <div className="relative">
+              <input
+                id={passwordId}
+                type={showPassword ? 'text' : 'password'}
+                autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="h-12 w-full rounded-2xl border border-[#e5dacb] bg-white py-0 pl-4 pr-12 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
+                minLength={6}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showPassword}
+                className="absolute right-2 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-stone-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
 
           {errorMessage ? (

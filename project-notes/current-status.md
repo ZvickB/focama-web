@@ -14,7 +14,8 @@
 - The homepage now preconnects Google Fonts in `index.html`, preconnects the configured backend origin from `VITE_BACKEND_URL`, gives the hero wordmark higher fetch priority, and prefetches the results plus modal chunks immediately after `HomeExperience` mounts.
 - A local-only internal analytics dashboard now lives at `/admin/analytics` during development and reads a backend funnel summary instead of querying Supabase directly from the browser.
 - A device-local Search History page now lives at `/history`. Completed finalized searches auto-save to localStorage and can be reopened, deleted, cleared, or re-run.
-- A frontend auth shell now exists: `AuthProvider`, lazy Supabase browser client, sign-in/create-account modal, Google sign-in button, and header sign-in/sign-out UI. Search is still ungated and history remains localStorage-only.
+- A frontend auth shell now exists: `AuthProvider`, lazy Supabase browser client, sign-in/create-account modal, Google sign-in button, and header sign-in/sign-out UI. Search is still ungated.
+- User-facing history now switches by auth state: signed-out users use localStorage; signed-in users use Supabase `saved_searches`. Local entries migrate into the account on login after successful remote upsert.
 - The current user path is: search -> collapsed search summary -> active refine panel -> collapsed refine summary/focused ranked shortlist with a desktop selected-product preview -> modal details -> Amazon/source clickout.
 - The modal detail view now acts more like a decision aid: compact `At a glance` facts, `Why this pick`, `Worth knowing`, product notes, then one compact bottom source-specific CTA/disclosure area. Source/store naming is kept in clickout actions instead of repeated as passive metadata.
 - The new web UI slices now share a quieter visual system: mostly white/cream surfaces, lighter shadows, fewer decorative gradients, consistent rounded corners, teal actions, and orange only for the shopping clickout CTA.
@@ -96,8 +97,8 @@
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
 - Do not let future multi-retailer flexibility make today's Amazon-first UX vague. If more retailers become active, revisit frontend labels based on the real source mix.
 - Keep `search_history` as internal telemetry, not user-facing saved history.
-- Keep user-facing saved history separate from internal `search_history`; the current local history phase is device-only, and account-backed history should use `saved_searches`.
-- Local frontend Supabase env vars were missing when the auth shell was added, so real sign-in/sign-up still needs Supabase dashboard/env setup and browser QA.
+- Keep user-facing saved history separate from internal `search_history`; account-backed history uses `saved_searches`.
+- Live QA is still needed for Supabase auth plus `saved_searches` RLS: sign in, migrate local entries, save a new finalized search while signed in, reload, delete, clear, and verify account history on another browser/device.
 - Keep current behavior and future ideas clearly separated in notes.
 
 ## Recommended next checks
@@ -108,7 +109,7 @@
 - Do not add query-quality prewarm unless the MVP proves useful and the user explicitly chooses that next step.
 - Watch whether the compact modal bottom CTA/disclosure feels clear without sounding defensive.
 - Verify local Search History on real searches: finalized save, duplicate upsert, expand/delete/clear, and re-run with notes prefilled.
-- Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, configure Supabase email/password plus Google OAuth, then verify sign up, sign in, OAuth redirect, session persistence, and sign out.
+- Verify Supabase account history end to end now that the remote store is wired: local-to-account migration, remote save on finalize, list, delete, clear, reload persistence, sign-out fallback to local history.
 
 ## server.js decomposition (refactor/server-decomposition branch)
 - `backend/lib/server-helpers.js` — extracted 10 shared helpers + shared constants (LIVE_RESULT_FILTER_CONFIG, FINALIZE_BODY_LIMIT_BYTES, CACHE_SCOPE_DISCOVERY, recentFinalizations).

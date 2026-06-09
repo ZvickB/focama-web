@@ -1,7 +1,20 @@
 import { localHistoryStore } from '@/lib/history/localHistoryStore.js'
 
+let activeHistoryStore = localHistoryStore
+
+function notifyHistoryStoreChanged() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('focamai:history-store-changed'))
+  }
+}
+
 export function getHistoryStore() {
-  return localHistoryStore
+  return activeHistoryStore
+}
+
+export function setHistoryStore(store = localHistoryStore) {
+  activeHistoryStore = store
+  notifyHistoryStoreChanged()
 }
 
 export const historyStore = {

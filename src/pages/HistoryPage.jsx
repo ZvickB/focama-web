@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 
 import Seo from '@/components/Seo.jsx'
 import { useSearchHistory } from '@/components/history/useSearchHistory.js'
+import { useAuth } from '@/contexts/useAuth.js'
 
 function formatDate(value) {
   if (!value) return ''
@@ -127,8 +128,10 @@ function HistoryEntry({ entry, isOpen, onRemove, onRerun, onToggle }) {
 
 function HistoryPage() {
   const navigate = useNavigate()
-  const { clear, entries, loading, remove } = useSearchHistory()
+  const { clear, entries, error, loading, remove } = useSearchHistory()
+  const { user } = useAuth()
   const [openEntryId, setOpenEntryId] = useState('')
+  const storageLabel = user ? 'Saved to your account' : 'Saved on this device'
 
   function handleRerun(entry) {
     navigate('/', {
@@ -145,14 +148,14 @@ function HistoryPage() {
     <>
       <Seo
         title="Search history | Focamai"
-        description="Review recent Focamai searches saved on this device."
+        description="Review recent Focamai searches."
         path="/history"
       />
       <main className="px-3 pt-4 pb-8 sm:px-6 sm:pt-6 lg:px-8">
         <div className="mx-auto max-w-5xl space-y-6">
           <section className="space-y-3 text-center sm:text-left">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              Saved on this device
+              {storageLabel}
             </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div className="space-y-2">
@@ -178,6 +181,10 @@ function HistoryPage() {
           {loading ? (
             <div className="rounded-[28px] border border-[#e4d7c6] bg-white/90 p-6 text-center text-sm text-slate-500">
               Loading saved searches...
+            </div>
+          ) : error ? (
+            <div className="rounded-[28px] border border-red-200 bg-red-50 p-6 text-center text-sm leading-6 text-red-700">
+              {error}
             </div>
           ) : entries.length ? (
             <div className="space-y-4">

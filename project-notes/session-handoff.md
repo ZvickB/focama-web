@@ -39,7 +39,7 @@
 - Priority 7 is now implemented in the first pass: retry asks what felt off, uses only three broad quick prompts, shows AI advice as an editable `Next search` field, and has one `Search again` action.
 - Product titles are normalized for user-facing display across result rows, selected panels, grid/card view, and modal headings. Raw Amazon/source titles remain in data and are exposed behind a quiet full-title disclosure in details when the display title differs.
 - User-facing search history has started as a localStorage-only phase. `/history` lists completed finalized searches saved on the current device, can expand/delete/clear entries, and can re-run a saved query with follow-up notes prefilled. Account-backed history is still pending and should use `saved_searches`, not internal `search_history`.
-- Frontend auth shell has started: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI are implemented. Search remains ungated and saved history remains local-only. Real auth QA still needs `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and Supabase dashboard/OAuth setup.
+- Frontend auth shell has started: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI are implemented. Search remains ungated. Signed-out history uses localStorage; signed-in history uses Supabase `saved_searches`; local entries migrate into the account on login. Live QA of auth/RLS/history persistence is still pending.
 
 ## Current guided flow
 - `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It uses Rainforest API first for all Amazon marketplaces when configured, with Oxylabs fallback only when Rainforest errors or returns too few usable items. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available.
@@ -64,6 +64,7 @@
 - Finalize loading UI: `src/components/home/FinalizeLoadingState.jsx`
 - Guided search state/requests: `src/components/home/useGuidedSearch.js`
 - Local history helpers: `src/lib/history/`
+- Remote history store: `src/lib/history/remoteHistoryStore.js`
 - Auth provider/hook: `src/contexts/AuthContext.jsx`, `src/contexts/useAuth.js`
 - Supabase browser client: `src/lib/supabase.js`
 - Auth modal: `src/components/auth/AuthModal.jsx`

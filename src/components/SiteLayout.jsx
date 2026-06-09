@@ -474,7 +474,7 @@ function SiteLayout() {
             </p>
             <div className="flex flex-wrap gap-3">
               {navItems
-                .filter((item) => item.to !== '/')
+                .filter((item) => item.to !== '/' && item.to !== '/history')
                 .map((item) => (
                   <NavLink key={item.to} to={item.to} className="hover:text-slate-900">
                     {item.label}

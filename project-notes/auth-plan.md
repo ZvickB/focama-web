@@ -1,7 +1,7 @@
 # Auth & User Features — Implementation Plan
 
 **Written:** 2026-05-07
-**Status:** Frontend auth shell first pass implemented 2026-06-09; Supabase dashboard/env setup and real sign-in QA still pending; saved-search table/API guidance partially superseded
+**Status:** Frontend auth shell and account-backed history store first passes implemented 2026-06-09; live Supabase auth/RLS/history QA pending; saved-search table/API guidance partially superseded
 
 > Note: the user-facing saved-search table guidance in this older plan is superseded by `project-notes/search-history-plan.md`. Do not create a user-facing `search_history` table; that name is already used for internal telemetry/cache visibility. Use `saved_searches` for account-backed saved searches.
 
@@ -36,7 +36,7 @@ Do not use this older plan for the saved-search schema. The user-facing history 
 Current sequence:
 - Phase 1 local history is already started: `/history` reads/writes localStorage on the current device.
 - Auth phase should add login/session UI only; history can remain local during this phase.
-- DB-backed account history comes after auth and should use `saved_searches` with RLS.
+- DB-backed account history uses `saved_searches` with RLS.
 
 ### Existing tables
 `tester_feedback`, discovery cache, and ASIN cache tables are untouched.
@@ -78,16 +78,16 @@ Current sequence:
 ### Step 5 — Saved history integration
 - Do not implement this from the old `/api/history` + `search_history` notes.
 - Follow `project-notes/search-history-plan.md` instead.
-- Recommended sequence:
-  - keep localStorage history working through the auth phase
-  - later add `remoteHistoryStore`
-  - use direct browser-to-Supabase writes with RLS unless there is a clear reason to add backend routes
-  - store account-backed rows in `saved_searches`
+- Implemented sequence:
+  - localStorage history remains for signed-out users
+  - `remoteHistoryStore` writes directly to Supabase with RLS for signed-in users
+  - account-backed rows are stored in `saved_searches`
+  - local entries migrate into the account on login after successful remote upsert
 
 ### Step 6 — History page
-- `/history` already exists for device-local history.
+- `/history` already exists.
 - Do not protect the route during the auth-only phase.
-- After DB-backed history exists, logged-in users should see account history and logged-out users should keep device-local history.
+- Logged-in users see account history and logged-out users keep device-local history.
 
 ### Step 7 — Gated feature stubs
 - Establish the pattern before building the features

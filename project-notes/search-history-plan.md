@@ -1,7 +1,7 @@
 # Search History — Implementation Plan
 
 **Written:** 2026-06-09
-**Status:** Phase 0/1 first pass implemented 2026-06-09; frontend auth shell started 2026-06-09; DB history phase not started
+**Status:** Phase 0/1 first pass implemented 2026-06-09; frontend auth shell started 2026-06-09; DB history store first pass implemented 2026-06-09, live Supabase QA pending
 **Sequence:** localStorage → auth → DB (each phase ships on its own)
 
 ---
@@ -101,7 +101,7 @@ No UI yet. This is pure plumbing the next phases build on.
 
 **Goal:** users can sign in; nothing about history storage changes yet (still localStorage).
 
-First-pass frontend shell exists: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI. Real Supabase sign-in QA still requires frontend env vars and dashboard/OAuth setup.
+First-pass frontend shell exists: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI.
 
 **New files**
 - `src/lib/supabase.js` — single browser client from `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`. (Anon key only in the browser — never the secret key.)
@@ -181,10 +181,12 @@ await supabase.from('saved_searches').upsert(
 (If you prefer server-side: add `/api/history` GET/POST/DELETE behind `requireAuth` and have `remoteHistoryStore` call those instead. Same interface either way.)
 
 **Modified files**
-- `src/lib/history/historyStore.js` — selector returns `remoteHistoryStore` when `useAuth().user` exists, else `localHistoryStore`. This is the whole swap. The history page and the finalize save hook are untouched.
+- `src/lib/history/historyStore.js` — `AuthProvider` switches the active implementation to `remoteHistoryStore` when a user is signed in, and back to `localHistoryStore` when signed out.
 
 ### One-time migration on first login (recommended)
 On the auth state flipping to signed-in: read local entries, upsert any whose `queryKey` isn't already in the account, then clear the local store. Idempotent because of the unique index.
+
+First pass implemented in `AuthProvider`: local entries are upserted into the remote store on login, then local history is cleared after successful migration. If migration fails, local history is left intact.
 
 **Ship gate:** logged-in history persists in Supabase and appears on a second device; logged-out history still works locally; the merge runs once and doesn't duplicate.
 

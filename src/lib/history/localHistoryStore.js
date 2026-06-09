@@ -7,7 +7,7 @@ function canUseLocalStorage() {
   return typeof window !== 'undefined' && Boolean(window.localStorage)
 }
 
-function readEntries() {
+export function readLocalHistoryEntries() {
   if (!canUseLocalStorage()) return []
 
   try {
@@ -25,7 +25,7 @@ function readEntries() {
   }
 }
 
-function writeEntries(entries) {
+export function writeLocalHistoryEntries(entries) {
   if (!canUseLocalStorage()) return
 
   try {
@@ -37,12 +37,12 @@ function writeEntries(entries) {
 
 export const localHistoryStore = {
   async list() {
-    return readEntries()
+    return readLocalHistoryEntries()
   },
 
   async save(entryInput) {
     const entry = createHistoryEntry(entryInput)
-    const entries = readEntries()
+    const entries = readLocalHistoryEntries()
     const existingEntry = entries.find((item) => item.queryKey === entry.queryKey)
     const savedEntry = {
       ...entry,
@@ -55,16 +55,16 @@ export const localHistoryStore = {
       ...entries.filter((item) => item.queryKey !== entry.queryKey),
     ].slice(0, MAX_HISTORY_ENTRIES)
 
-    writeEntries(nextEntries)
+    writeLocalHistoryEntries(nextEntries)
     return savedEntry
   },
 
   async remove(id) {
     const entryId = String(id || '')
-    writeEntries(readEntries().filter((entry) => entry.id !== entryId))
+    writeLocalHistoryEntries(readLocalHistoryEntries().filter((entry) => entry.id !== entryId))
   },
 
   async clear() {
-    writeEntries([])
+    writeLocalHistoryEntries([])
   },
 }
