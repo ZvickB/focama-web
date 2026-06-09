@@ -41,8 +41,9 @@ function PrivacyPage() {
           .
         </p>
         <p>
-          Focamai does not currently offer user accounts, and it does not ask users to submit payment
-          information through the site or app.
+          Focamai is adding optional user accounts for features such as saved searches. Search stays
+          available without an account, and Focamai does not ask users to submit payment information
+          through the site or app.
         </p>
       </PageShell>
     </>

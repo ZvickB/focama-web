@@ -1,7 +1,7 @@
 # Search History — Implementation Plan
 
 **Written:** 2026-06-09
-**Status:** Phase 0/1 first pass implemented 2026-06-09; auth/DB phases not started
+**Status:** Phase 0/1 first pass implemented 2026-06-09; frontend auth shell started 2026-06-09; DB history phase not started
 **Sequence:** localStorage → auth → DB (each phase ships on its own)
 
 ---
@@ -100,6 +100,8 @@ No UI yet. This is pure plumbing the next phases build on.
 ## Phase 2 — Auth (Supabase)
 
 **Goal:** users can sign in; nothing about history storage changes yet (still localStorage).
+
+First-pass frontend shell exists: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI. Real Supabase sign-in QA still requires frontend env vars and dashboard/OAuth setup.
 
 **New files**
 - `src/lib/supabase.js` — single browser client from `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`. (Anon key only in the browser — never the secret key.)

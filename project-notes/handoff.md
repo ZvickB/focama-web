@@ -27,6 +27,8 @@
 - Keep trimming `backend/server.js` so route orchestration and flow logic do not keep growing in one file.
 - Use the local `/admin/analytics` dashboard during development against live data and decide which weak-query, weak-ranking, or refine-friction fixes to prioritize first.
 - Finish the saved-search sequence: verify local history on real finalized searches, then add Supabase auth, then move logged-in history to a separate `saved_searches` table with local-to-account migration.
+- Finish auth setup/QA: add local and Vercel `VITE_SUPABASE_URL` plus `VITE_SUPABASE_ANON_KEY`, enable Supabase email/password, configure Google OAuth redirect URLs, then verify sign up, sign in, OAuth return, session persistence, and sign out.
+- After auth is verified, move logged-in history to a separate `saved_searches` table with local-to-account migration.
 
 ## Backend/provider follow-ups
 - Discovery uses Rainforest API first for all Amazon marketplaces when configured. Oxylabs is now the discovery fallback only: it runs when Rainforest errors or returns too few usable items to support the 6-item shortlist. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available; validate this Rainforest-first order on live tester searches.
@@ -39,6 +41,7 @@
 - Keep the guided flow as the main experience.
 - Keep shortlists at 6 unless the user explicitly changes that product decision.
 - Keep user-facing saved history separate from internal `search_history`.
+- Search must remain ungated; auth should unlock sync/account features instead of becoming a wall.
 - Keep provider-specific implementation details out of the core product identity.
 
 ## Later, not now

@@ -272,7 +272,7 @@ function SiteLayout() {
         />
         <div
           className={`relative mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 transition-all duration-300 ease-out sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8 ${
-            isCompact ? 'py-2' : 'py-3'
+            isCompact ? 'py-0' : 'py-2'
           }`}
         >
           <div className="flex w-full items-start justify-between gap-4 lg:w-auto">
@@ -290,7 +290,7 @@ function SiteLayout() {
                 <img
                   src={wordmark}
                   alt="Focamai"
-                  className={`h-7 w-auto object-contain transition-all duration-300 ease-out ${isCompact ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                  className={`w-auto object-contain transition-all duration-300 ease-out ${isCompact ? 'h-[18px] sm:h-[22px] opacity-100' : 'h-0 opacity-0 pointer-events-none'}`}
                 />
               </NavLink>
               <p
@@ -455,12 +455,11 @@ function SiteLayout() {
           }}
         />
         <div className="relative mx-auto grid w-full max-w-7xl gap-6 text-sm text-slate-600 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-2">
+          <div className="max-w-sm space-y-2">
             <p className="text-base font-semibold text-slate-900">Focamai</p>
             <p>
-              Focamai offers calm buying guidance before you head to a marketplace. The current app
-              focuses on guided product search, AI-assisted shortlist refinement, and clear trust
-              pages while the broader product continues to evolve.
+              Focamai helps you decide what to buy — not browse endlessly. Tell us what you
+              need, and we&apos;ll narrow it down to six focused picks with honest reasoning.
             </p>
             <p className="text-xs text-slate-400">
               As an Amazon Associate I earn from qualifying purchases.{' '}
