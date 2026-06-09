@@ -43,7 +43,7 @@ export function FinalizeLoadingState({ compact = false }) {
             </p>
           </div>
 
-          <ol className="flex flex-wrap gap-1.5">
+          <ol className="grid grid-cols-2 gap-1.5">
             {FINALIZE_STAGES.map((stage, index) => {
               const isDone = index < activeStageIndex
               const isActive = index === activeStageIndex

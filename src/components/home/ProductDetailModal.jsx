@@ -216,11 +216,7 @@ function RetailerDecisionBar({ displayPrice, item, onClose, onRetailerClick, ret
 
         <div className="order-1 flex flex-col gap-3 sm:order-2 sm:flex-row sm:items-center sm:justify-end">
           <div className="min-w-0 text-left sm:text-right">
-            <p className="text-xs font-medium text-slate-400">Current price</p>
             <p className="text-lg font-semibold leading-6 text-primary">{displayPrice}</p>
-            <p className="text-xs leading-5 text-slate-400">
-              Availability may change
-            </p>
             {item.link ? (
               <p className="text-xs leading-5 text-slate-400">
                 As an Amazon Associate, Focamai may earn from qualifying purchases.
