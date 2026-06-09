@@ -14,7 +14,7 @@
 - The homepage now preconnects Google Fonts in `index.html`, preconnects the configured backend origin from `VITE_BACKEND_URL`, gives the hero wordmark higher fetch priority, and prefetches the results plus modal chunks immediately after `HomeExperience` mounts.
 - A local-only internal analytics dashboard now lives at `/admin/analytics` during development and reads a backend funnel summary instead of querying Supabase directly from the browser.
 - The current user path is: search -> collapsed search summary -> active refine panel -> collapsed refine summary/focused ranked shortlist with a desktop selected-product preview -> modal details -> Amazon/source clickout.
-- The modal detail view now acts more like a decision aid: `At a glance` facts, `Why this pick`, `Worth knowing`, product notes, then one compact bottom source-specific CTA/disclosure area.
+- The modal detail view now acts more like a decision aid: compact `At a glance` facts, `Why this pick`, `Worth knowing`, product notes, then one compact bottom source-specific CTA/disclosure area. Source/store naming is kept in clickout actions instead of repeated as passive metadata.
 - The new web UI slices now share a quieter visual system: mostly white/cream surfaces, lighter shadows, fewer decorative gradients, consistent rounded corners, teal actions, and orange only for the shopping clickout CTA.
 - A tester-only feedback FAB now opens a lightweight sheet for quick product feedback, optional free text, and optional follow-up email.
 - Shortlists are always 6 items.
@@ -32,7 +32,8 @@
 - `Show products now` reveals the preview set without finalize.
 - `Show focused picks` runs guided finalize and scrolls directly to the results region. The results area now shows staged finalize progress copy while the shortlist is being locked. If the follow-up notes include hard eligibility constraints, including kosher/Jewish-use terms, dietary/allergy needs, safety/material exclusions, or compatibility language, the frontend refreshes Rainforest discovery once with the query plus notes before finalizing.
 - Final results now render as a ranked shortlist instead of a marketplace-style grid. On desktop, the shortlist has a large selected-product panel on the left and an internally scrolling row list on the right; hover, focus, and the top visible row update the selected panel.
-- Prime eligibility is now a structured Amazon result signal. Searches or follow-up notes that clearly ask for Prime delivery/eligibility narrow finalize to Prime-tagged candidates when available, and Prime-enabled picks show a quiet in-house `Prime` marker plus a modal delivery fact only when confirmed. Oxylabs product-detail enrichment can now upgrade a result to Prime when the search row underreports it.
+- Prime eligibility is now a structured Amazon result signal. Searches or follow-up notes that clearly ask for Prime delivery/eligibility narrow finalize to Prime-tagged candidates when available, and Prime-enabled picks show a quiet in-house `Prime` marker plus a modal delivery fact only when confirmed. Plain free-delivery text can show as `Free delivery` without implying Prime. Rainforest search rows promote positive Prime delivery text into `isPrime`, and Oxylabs product-detail enrichment can still upgrade a result to Prime when the search row underreports it.
+- Result rows/cards and modal facts now combine rating plus review count into one ratings/reviews signal, leaving room for at most one delivery signal and avoiding marketplace-style metadata clutter.
 - Result rows, selected-product panels, grid/card view, and modal headings now use normalized display titles so Amazon keyword stuffing does not dominate the UI. The raw title is preserved in product data and appears behind a quiet full-title disclosure in the modal when it differs.
 - Result row/card and modal shopping clickout CTAs derive their visible label from the product source/store, so Amazon items can say `View on Amazon`/the active Amazon domain while future sources can name their own store.
 - After final results appear, refinement collapses into a compact summary above the ranked shortlist.
@@ -59,7 +60,7 @@
 - The Amazon marketplace context now remembers the last saved marketplace in localStorage (`focamai_marketplace`) so repeat visits skip geo lookup when a preference or confident detection already exists.
 - If the effective marketplace changes while a search is in flight or already active, discovery/refine restart for the current submitted query and stale older responses are ignored.
 - Discovery cache and operational history use Supabase when configured, with local file fallback in development.
-- Rainforest discovery cache reuse is now scoped under `rainforest_discovery:v2`, which intentionally leaves older shared discovery entries behind so stale provider-era evidence is not treated as current.
+- Rainforest discovery cache reuse is now scoped under `rainforest_discovery:v3`, which intentionally leaves older shared discovery entries behind so stale provider-era evidence and pre-Prime-delivery-normalization rows are not treated as current.
 - Product details use a separate provider-agnostic per-ASIN cache, also with Supabase preferred and local fallback available.
 - Skipped-refinement preview modals now hydrate product detail bullets/description one product at a time from that cache or Oxylabs when opened, without showing AI analysis loading dots because finalize/enrichment has not run.
 - Tester feedback stores to a dedicated `tester_feedback` table in Supabase when configured, with local fallback in development.
@@ -101,3 +102,14 @@
 - Watch the polling-based query-quality MVP on weak discovery pools caused by obvious misspellings or brand-query drift. Current known example: `celcius drink` should be able to offer `celsius drink` when the backend review is high-confidence, while meaning-bearing language such as `shabbos art` should stay quiet unless the returned pool is clearly mismatched.
 - Do not add query-quality prewarm unless the MVP proves useful and the user explicitly chooses that next step.
 - Watch whether the compact modal bottom CTA/disclosure feels clear without sounding defensive.
+
+## server.js decomposition (refactor/server-decomposition branch)
+- `backend/lib/server-helpers.js` — extracted 10 shared helpers + shared constants (LIVE_RESULT_FILTER_CONFIG, FINALIZE_BODY_LIMIT_BYTES, CACHE_SCOPE_DISCOVERY, recentFinalizations).
+- `backend/lib/handlers/analytics-handler.js` — extracted handleAnalyticsTrack, handleAnalyticsDashboard, handleCachePoolInspect, handleFinalizeHistory, handleSearchDebug.
+- `backend/lib/handlers/discovery-handler.js` — extracted handleRainforestDiscoverySearch, handleCachedSearch + 9 discovery helpers.
+- `backend/lib/handlers/refine-handler.js` — extracted handleRefinementPrompt, getRefinementModel, getHaikuRefinementModel.
+- `backend/lib/handlers/finalize-handler.js` — extracted handleFinalizeSelection + 10 finalize helpers.
+- `backend/lib/handlers/query-quality-handler.js` — extracted handleQueryQualityPoll, startQueryQualityReview + 3 query-quality helpers. Discovery-handler now imports startQueryQualityReview directly instead of via server.js circular import.
+- `backend/lib/handlers/enrichment-handler.js` — extracted handleEnrichmentPoll, handleEnrichmentStream, runMiniEnrichmentAsync, mergeProductDetailsIntoCandidatePool, applyLateProductDetailsToEnrichment + 2 private helpers.
+- `backend/lib/handlers/product-details-handler.js` — extracted handleProductDetails + normalizeProductDetailsAsin, buildProductDetailsPayload.
+- **Task 4 complete.** server.js is now 220 lines: imports, constants, delegated handler wiring (retry-advice, feedback, supabase-health), re-exports, and createApiServer(). No handler bodies remain. All 17 seam names verified importable. express-server.js unchanged. Suite: 266 passed, 1 pre-existing frontend failure.

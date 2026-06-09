@@ -14,43 +14,82 @@ describe('HomePage modal enrichment', () => {
   setupHomePageTest()
   it('keeps tradeoffs out of the result grid and shows them only in the modal', async () => {
     const user = userEvent.setup()
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            discoveryToken: 'opaque-discovery-token',
-            candidatePool: {
-              query: 'stroller',
-              details: '',
-              candidates: [
-                {
-                  id: 'result-1',
-                  title: 'Travel stroller',
-                  source: 'Target',
-                  price: '$129.99',
-                  rating: 4.4,
-                  reviewCount: 87,
-                  description: 'Lightweight and easy to fold.',
-                  reasons: ['Available from Target'],
-                  image: 'https://example.com/stroller.jpg',
-                  link: 'https://example.com/stroller',
-                },
-              ],
-            },
-            previewResults: [createMockResult()],
-          }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            prompt: 'What should we optimize for with this stroller?',
-            helperText: 'Pick anything that matters.',
-            followUpPlaceholder: 'Anything else?',
-          }),
-      })
+    const finalizedResult = createMockResult()
+    const fetchMock = vi.fn((input) => {
+      const url = String(input)
+
+      if (url.includes('/api/search/rainforest-discover')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              discoveryToken: 'opaque-discovery-token',
+              candidatePool: {
+                query: 'stroller',
+                details: '',
+                candidates: [
+                  {
+                    id: 'result-1',
+                    title: 'Travel stroller',
+                    source: 'Target',
+                    price: '$129.99',
+                    rating: 4.4,
+                    reviewCount: 87,
+                    description: 'Lightweight and easy to fold.',
+                    reasons: ['Available from Target'],
+                    image: 'https://example.com/stroller.jpg',
+                    link: 'https://example.com/stroller',
+                  },
+                ],
+              },
+              previewResults: [createMockResult()],
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/refine')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              prompt: 'What should we optimize for with this stroller?',
+              helperText: 'Pick anything that matters.',
+              followUpPlaceholder: 'Anything else?',
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/finalize')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () =>
+            JSON.stringify({
+              candidatePool: {
+                query: 'stroller',
+                details: 'Notes: comfort matters most',
+                candidates: [],
+              },
+              results: [finalizedResult],
+              selection: {
+                mode: 'ai',
+              },
+            }),
+        })
+      }
+
+      if (url.includes('/api/search/enrichment')) {
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => '' },
+          text: async () => JSON.stringify({ ready: false }),
+        })
+      }
+
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
 
     vi.stubGlobal('fetch', fetchMock)
 
@@ -59,11 +98,13 @@ describe('HomePage modal enrichment', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.click(screen.getAllByRole('button', { name: /skip the question and show results/i })[0])
+    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
+    await user.click(screen.getByRole('button', { name: /show focused picks/i }))
 
+    await findVisibleResultTitle('Travel stroller')
     expect(screen.queryByText(/pricier than the smallest umbrella stroller options\./i)).not.toBeInTheDocument()
 
-    await user.click(await findVisibleResultTitle('Travel stroller'))
+    await user.click(getVisibleResultTitle('Travel stroller'))
 
     expect(await screen.findByText(/worth knowing/i)).toBeInTheDocument()
     expect(screen.getByText(/pricier than the smallest umbrella stroller options\./i)).toBeInTheDocument()

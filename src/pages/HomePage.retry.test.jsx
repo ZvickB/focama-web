@@ -122,7 +122,7 @@ describe('HomePage retry advice', () => {
     ).toBeInTheDocument()
     expect(screen.queryByText(/retry 2 of 2\./i)).not.toBeInTheDocument()
     const retryAdviceRequest = fetchMock.mock.calls[3]
-    expect(retryAdviceRequest[0]).toBe('/api/search/retry-advice')
+    expect(retryAdviceRequest[0]).toContain('/api/search/retry-advice')
     expect(retryAdviceRequest[1]).toEqual(
       expect.objectContaining({
         method: 'POST',

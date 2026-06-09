@@ -96,8 +96,70 @@ describe('ProductDetailModal', () => {
       screen.getByText(/as an amazon associate, focamai may earn from qualifying purchases/i),
     ).toBeInTheDocument()
   })
+
+  it('shows confirmed Prime eligibility without showing shortlist rank metadata', () => {
+    renderModal({
+      item: createMockItem({
+        badgeLabel: 'Best match',
+        is_prime: true,
+      }),
+    })
+
+    expect(screen.getByText('Delivery')).toBeInTheDocument()
+    expect(screen.getByText(/prime eligible/i)).toBeInTheDocument()
+    expect(screen.queryByText(/shortlist rank/i)).not.toBeInTheDocument()
+  })
+
+  it('shows free delivery as delivery information without implying Prime', () => {
+    renderModal({
+      item: createMockItem({
+        delivery: 'FREE delivery Sat, Jun 13 on your first order',
+        is_prime: false,
+      }),
+    })
+
+    expect(screen.getByText('Delivery')).toBeInTheDocument()
+    expect(screen.getByText(/free delivery/i)).toBeInTheDocument()
+    expect(screen.queryByText(/prime eligible/i)).not.toBeInTheDocument()
+  })
 })
 describe('ResultsSection retry advice', () => {
+  it('shows Prime availability on result surfaces when confirmed', () => {
+    render(
+      <ResultsSection
+        displayedResults={[
+          createMockItem({
+            is_prime: true,
+          }),
+        ]}
+        errorMessage=""
+        hasFinalResults
+        hasStartedSearch
+        isEnrichmentSettled
+        isFinalizing={false}
+        isLoading={false}
+        isRetryReady
+        isRetrying={false}
+        isGeneratingRetryAdvice={false}
+        onRetailerClick={vi.fn()}
+        onSelectProduct={vi.fn()}
+        onRetryAdviceRequest={vi.fn()}
+        onRetryFeedbackChange={vi.fn()}
+        previousResults={[]}
+        retryAdvice={null}
+        selectionState={null}
+        retryCount={0}
+        retryFeedback=""
+        showFinalResultBadges={false}
+        showPreviewResults={false}
+        suggestedRetryQuery=""
+        submittedQuery="ice cream maker"
+      />,
+    )
+
+    expect(screen.getAllByText('Prime').length).toBeGreaterThan(0)
+  })
+
   it('leaves preview result reason copy blank when no user-facing detail exists', () => {
     render(
       <ResultsSection

@@ -924,7 +924,7 @@ describe('server handlers', () => {
         expect.objectContaining({
           productQuery: 'thermos',
           discoveryToken: '',
-          scope: 'rainforest_discovery:v2:amazon.com',
+          scope: 'rainforest_discovery:v3:amazon.com',
           results: [
             expect.objectContaining({
               id: 'fresh-1',
@@ -1384,7 +1384,7 @@ describe('server handlers', () => {
       generatedAt: '2026-03-17T12:00:02.000Z',
     })
     readStoredSearchCacheEntry.mockImplementation(async ({ scope }) => {
-      if (scope === 'rainforest_discovery:v2:amazon.com') {
+      if (scope === 'rainforest_discovery:v3:amazon.com') {
         const candidates = Array.from({ length: 6 }, (_, index) => createFinalizeCandidate(
           index === 0 ? 'one' : `alt-${index + 1}`,
         ))

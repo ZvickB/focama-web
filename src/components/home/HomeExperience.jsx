@@ -529,6 +529,20 @@ function OpenLayout(props) {
     return undefined
   }, [hasFinalResults])
 
+  const resetToNewSearchRef = useRef(actions.resetToNewSearch)
+  resetToNewSearchRef.current = actions.resetToNewSearch
+
+  useEffect(() => {
+    function handleNewSearch() {
+      resetToNewSearchRef.current()
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      window.setTimeout(() => searchInputRef.current?.focus(), 400)
+    }
+
+    window.addEventListener('focamai:new-search', handleNewSearch)
+    return () => window.removeEventListener('focamai:new-search', handleNewSearch)
+  }, [])
+
   function handleSelectProduct(product, analyticsMeta) {
     setHasOpenedModal(true)
     actions.selectProduct(product, analyticsMeta)

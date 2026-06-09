@@ -73,6 +73,57 @@ describe('getAmazonDomain', () => {
     )
   })
 
+  it('promotes Rainforest delivery Prime text into structured Prime data', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        search_results: [
+          {
+            asin: 'B001',
+            title: 'Apple AirPods 4',
+            price: {
+              value: 119,
+              raw: '$119.00',
+            },
+            rating: 4.6,
+            ratings_total: 1200,
+            image: 'https://example.com/airpods.jpg',
+            link: 'https://www.amazon.com/dp/B001',
+            is_prime: false,
+            delivery: {
+              tagline: 'Join Prime to get FREE delivery Tomorrow',
+            },
+            position: 1,
+          },
+        ],
+        related_searches: [],
+      }),
+    })
+
+    const result = await fetchRainforestArtifacts({
+      productQuery: 'airpods',
+      reasonFallback: 'Returned by the Rainforest API search route',
+      rainforestApiKey: 'rf-key',
+      amazonDomain: 'amazon.com',
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.artifacts.results[0]).toEqual(
+      expect.objectContaining({
+        id: 'B001',
+        isPrime: true,
+        delivery: 'Join Prime to get FREE delivery Tomorrow',
+      }),
+    )
+    expect(result.artifacts.candidatePool.candidates[0]).toEqual(
+      expect.objectContaining({
+        id: 'B001',
+        isPrime: true,
+        delivery: 'Join Prime to get FREE delivery Tomorrow',
+      }),
+    )
+  })
+
   it('preserves the Rainforest provider status when the request fails', async () => {
     fetch.mockResolvedValue({
       ok: false,

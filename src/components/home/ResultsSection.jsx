@@ -23,6 +23,7 @@ import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { formatDisplayPrice } from '@/lib/formatDisplayPrice.js'
 import { getProductDisplayTitle } from '@/lib/productTitle.js'
 import { getRetailerDisplayName } from '@/lib/retailerLabel.js'
+import { getDeliverySignal } from '@/components/home/primeEligibility.js'
 
 const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 const RETRY_CORRECTION_CHIPS = [
@@ -52,6 +53,25 @@ function getRatingValue(rating) {
   const ratingValue = Number(rating)
 
   return Number.isFinite(ratingValue) ? ratingValue : null
+}
+
+function formatReviewCount(reviewCount) {
+  const reviewCountValue = Number(reviewCount)
+
+  if (!Number.isFinite(reviewCountValue) || reviewCountValue <= 0) {
+    return ''
+  }
+
+  return `${reviewCountValue.toLocaleString()} reviews`
+}
+
+function formatRatingsReviewsText(item) {
+  const ratingValue = getRatingValue(item?.rating)
+  const reviewText = formatReviewCount(item?.reviewCount)
+
+  if (ratingValue && reviewText) return `${ratingValue.toFixed(1)} stars · ${reviewText}`
+  if (ratingValue) return `${ratingValue.toFixed(1)} stars`
+  return reviewText || 'No rating'
 }
 
 function getFeatureBullets(item) {
@@ -119,13 +139,17 @@ function BreathingDots({ className = '' }) {
   )
 }
 
-function PrimeEligibilityPill({ className = '' }) {
+function DeliverySignalPill({ signal, className = '' }) {
+  if (!signal) {
+    return null
+  }
+
   return (
     <span
       className={`inline-flex items-center rounded-full border border-[#cfe1de] bg-[#f5fbf9] px-2 py-0.5 text-[11px] font-semibold leading-4 text-primary ${className}`}
-      title="Prime eligibility when last checked"
+      title={signal.title}
     >
-      Prime
+      {signal.label}
     </span>
   )
 }
@@ -172,6 +196,7 @@ function RankedPickRow({
   const displayTitle = getProductDisplayTitle(item.title)
   const shortReason = getShortReason(item, { hasFinalResults, isEnrichmentSettled })
   const isReasonPending = hasPendingReason({ hasFinalResults, isEnrichmentSettled, item })
+  const deliverySignal = getDeliverySignal(item)
 
   return (
     <div
@@ -201,9 +226,8 @@ function RankedPickRow({
           ) : null}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
             <span className="font-semibold text-primary">{displayPrice}</span>
-            <span>{getRatingValue(item.rating)?.toFixed(1) || 'No rating'}</span>
-            {item.isPrime ? <PrimeEligibilityPill /> : null}
-            {!retailerLabel && item.subtitle ? <span>{item.subtitle}</span> : null}
+            <span>{formatRatingsReviewsText(item)}</span>
+            <DeliverySignalPill signal={deliverySignal} />
           </div>
         </div>
       </button>
@@ -247,6 +271,7 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
     isEnrichmentSettled,
   })
   const isReasonPending = hasPendingReason({ hasFinalResults, isEnrichmentSettled, item })
+  const deliverySignal = getDeliverySignal(item)
 
   return (
     <button
@@ -275,8 +300,8 @@ function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item, onOpe
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#f0e7da] pt-3 text-sm">
           <span className="font-semibold text-primary">{displayPrice}</span>
-          <span className="text-slate-500">{getRatingValue(item.rating)?.toFixed(1) || 'No rating'}</span>
-          {item.isPrime ? <PrimeEligibilityPill /> : null}
+          <span className="text-slate-500">{formatRatingsReviewsText(item)}</span>
+          <DeliverySignalPill signal={deliverySignal} />
         </div>
         <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition group-hover:text-primary/80">
           View details
