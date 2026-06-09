@@ -11,6 +11,7 @@ import {
   writeSearchSnapshot,
 } from '../search-pipeline.js'
 import { getEnv, validateSearchInput } from '../search-data.js'
+import { reportBackendError } from '../observability.js'
 import {
   CACHE_SCOPE_DISCOVERY,
   CACHE_SCOPE_RAINFOREST,
@@ -63,6 +64,23 @@ function buildStoredQueryQualityReview({
     reason: truncateText(review?.reason, 180),
     shouldSuggest: Boolean(review?.shouldSuggest),
     reviewedAt: review?.generatedAt || now,
+  }
+}
+
+function getQueryQualityErrorContext(error) {
+  const cause = error?.cause
+
+  return {
+    errorName: error instanceof Error ? error.name : 'NonErrorThrow',
+    errorMessage: error instanceof Error ? error.message : String(error),
+    errorCauseName: cause instanceof Error ? cause.name : error?.errorCauseName || '',
+    errorCauseMessage: cause instanceof Error ? cause.message : error?.errorCauseMessage || '',
+    errorCode: error?.errorCode || error?.code || cause?.code || '',
+    externalServiceName: error?.externalServiceName || '',
+    externalUrl: error?.externalUrl || '',
+    externalDurationMs: Number.isFinite(Number(error?.durationMs))
+      ? roundTimingDuration(Number(error.durationMs))
+      : undefined,
   }
 }
 
@@ -162,6 +180,25 @@ async function runQueryQualityReviewAsync({
       reviewMs: roundTimingDuration(nowMs() - reviewStartedAt),
     })
   } catch (error) {
+    const errorContext = getQueryQualityErrorContext(error)
+
+    logSearchFlowEvent('query_quality_review_failed', {
+      route: '/api/search/rainforest-discover',
+      query: normalizedQuery,
+      reviewMs: roundTimingDuration(nowMs() - reviewStartedAt),
+      ...errorContext,
+    })
+
+    reportBackendError(error, {
+      amazonDomain,
+      label: 'query_quality_review_async',
+      query: normalizedQuery,
+      route: '/api/search/rainforest-discover',
+      source: 'background_task',
+      reviewMs: roundTimingDuration(nowMs() - reviewStartedAt),
+      ...errorContext,
+    })
+
     await writeQueryQualityState({
       normalizedQuery,
       discoveryToken,
@@ -172,15 +209,6 @@ async function runQueryQualityReviewAsync({
         error: error instanceof Error ? error.message : 'Unknown error',
       }),
     })
-
-    logSearchFlowEvent('query_quality_review_failed', {
-      route: '/api/search/rainforest-discover',
-      query: normalizedQuery,
-      reviewMs: roundTimingDuration(nowMs() - reviewStartedAt),
-      error: error instanceof Error ? error.message : 'Unknown error',
-    })
-
-    throw error
   }
 }
 

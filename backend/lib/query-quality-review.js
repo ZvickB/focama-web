@@ -6,6 +6,7 @@ const MAX_TITLE_LENGTH = 160
 const MAX_CANDIDATE_ITEMS = 12
 const MAX_PREVIEW_ITEMS = 6
 const MAX_SIMILAR_QUERIES = 8
+const QUERY_QUALITY_REVIEW_TIMEOUT_MS = 20000
 
 const CLASSIFICATIONS = new Set(['ok', 'likely_typo', 'weak_pool', 'ambiguous_language'])
 const SUGGESTABLE_CLASSIFICATIONS = new Set(['likely_typo', 'weak_pool'])
@@ -89,6 +90,46 @@ function createNoSuggestionReview({
     usage,
     generatedAt: new Date().toISOString(),
   }
+}
+
+function getErrorDetails(error) {
+  const cause = error?.cause
+
+  return {
+    name: error instanceof Error ? error.name : 'NonErrorThrow',
+    message: error instanceof Error ? error.message : String(error),
+    causeName: cause instanceof Error ? cause.name : '',
+    causeMessage: cause instanceof Error ? cause.message : '',
+    code: typeof error?.code === 'string'
+      ? error.code
+      : typeof cause?.code === 'string'
+        ? cause.code
+        : '',
+  }
+}
+
+function buildExternalRequestError(error, {
+  durationMs,
+  serviceName,
+  url,
+}) {
+  const details = getErrorDetails(error)
+  const message = details.name === 'TimeoutError'
+    ? `${serviceName} query_quality_review request timed out after ${Math.round(durationMs)}ms.`
+    : `${serviceName} query_quality_review request failed: ${details.message}`
+  const wrappedError = new Error(message, { cause: error instanceof Error ? error : undefined })
+
+  wrappedError.name = details.name === 'TimeoutError' ? 'ExternalRequestTimeoutError' : 'ExternalRequestError'
+  wrappedError.externalServiceName = serviceName
+  wrappedError.externalUrl = url
+  wrappedError.durationMs = durationMs
+  wrappedError.errorName = details.name
+  wrappedError.errorMessage = details.message
+  wrappedError.errorCauseName = details.causeName
+  wrappedError.errorCauseMessage = details.causeMessage
+  wrappedError.errorCode = details.code
+
+  return wrappedError
 }
 
 function buildQueryQualityReviewSchema() {
@@ -253,43 +294,61 @@ export async function generateQueryQualityReview(
     similarQueries,
   })
 
-  const response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      store: false,
-      reasoning: {
-        effort: 'minimal',
+  const requestStartedAt = performance.now()
+  let response
+
+  try {
+    response = await fetchImpl(OPENAI_RESPONSES_ENDPOINT, {
+      method: 'POST',
+      signal: AbortSignal.timeout(QUERY_QUALITY_REVIEW_TIMEOUT_MS),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
       },
-      input: [
-        {
-          role: 'system',
-          content:
-            'You help shoppers identify weak search results without overriding intentional language. Return only structured output.',
+      body: JSON.stringify({
+        model,
+        store: false,
+        reasoning: {
+          effort: 'minimal',
         },
-        {
-          role: 'user',
-          content: input,
+        input: [
+          {
+            role: 'system',
+            content:
+              'You help shoppers identify weak search results without overriding intentional language. Return only structured output.',
+          },
+          {
+            role: 'user',
+            content: input,
+          },
+        ],
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'query_quality_review',
+            strict: true,
+            schema: buildQueryQualityReviewSchema(),
+          },
         },
-      ],
-      text: {
-        format: {
-          type: 'json_schema',
-          name: 'query_quality_review',
-          strict: true,
-          schema: buildQueryQualityReviewSchema(),
-        },
-      },
-    }),
-  })
+      }),
+    })
+  } catch (error) {
+    throw buildExternalRequestError(error, {
+      durationMs: performance.now() - requestStartedAt,
+      serviceName: 'OpenAI Responses API',
+      url: OPENAI_RESPONSES_ENDPOINT,
+    })
+  }
 
   if (!response.ok) {
     const errorText = await response.text()
-    throw new Error(`OpenAI query_quality_review failed: ${errorText.slice(0, 300)}`)
+    const error = new Error(`OpenAI query_quality_review failed with status ${response.status}: ${errorText.slice(0, 300)}`)
+    error.statusCode = response.status
+    throw buildExternalRequestError(error, {
+      durationMs: performance.now() - requestStartedAt,
+      serviceName: 'OpenAI Responses API',
+      url: OPENAI_RESPONSES_ENDPOINT,
+    })
   }
 
   const payload = await response.json()
@@ -309,4 +368,3 @@ export async function generateQueryQualityReview(
     return createNoSuggestionReview({ usage })
   }
 }
-
