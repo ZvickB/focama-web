@@ -36,6 +36,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
 - Do not let future multi-retailer flexibility make today's Amazon-first UX vague. If more retailers become active, revisit frontend labels based on the real source mix.
 - `search_history` is internal telemetry/cache visibility, not a user-facing saved-history feature.
+- User-facing search history has started as a localStorage-only feature at `/history`; finalized searches auto-save on the current device and can be expanded, deleted, cleared, or re-run. Account-backed history is still pending and should use `saved_searches`, not internal `search_history`.
 
 ## Current guided flow
 - User enters a product query.

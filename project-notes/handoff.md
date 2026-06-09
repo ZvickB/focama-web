@@ -9,7 +9,7 @@
 - Frontend is on Vercel; backend is on Render.
 - The product path is `rainforest-discover -> refine -> finalize -> enrichment`.
 - Retry currently suggests a better next search instead of showing endless same-pool results.
-- Discovery cache, search history, analytics, and product-details cache are the main active storage paths.
+- Discovery cache, internal operational `search_history`, local saved-search history, analytics, and product-details cache are the main active storage paths.
 
 ## Real remaining work
 - Verify the live golden path in the browser and confirm cards arrive quickly while modal AI copy hydrates later.
@@ -26,6 +26,7 @@
 - Watch whether the new inline clickout disclosure feels clear and trust-building, and adjust the wording if testers read it as friction or legal copy.
 - Keep trimming `backend/server.js` so route orchestration and flow logic do not keep growing in one file.
 - Use the local `/admin/analytics` dashboard during development against live data and decide which weak-query, weak-ranking, or refine-friction fixes to prioritize first.
+- Finish the saved-search sequence: verify local history on real finalized searches, then add Supabase auth, then move logged-in history to a separate `saved_searches` table with local-to-account migration.
 
 ## Backend/provider follow-ups
 - Discovery uses Rainforest API first for all Amazon marketplaces when configured. Oxylabs is now the discovery fallback only: it runs when Rainforest errors or returns too few usable items to support the 6-item shortlist. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available; validate this Rainforest-first order on live tester searches.
@@ -42,6 +43,6 @@
 
 ## Later, not now
 - Accounts/login only if persistence becomes a real product need.
-- Saved searches as an explicit user-facing feature, not by repurposing `search_history`.
+- Account-backed saved searches as an explicit user-facing feature in `saved_searches`, not by repurposing internal `search_history`.
 - Preference learning only after the core shortlist experience proves useful.
 - Subscriber-tier expansion only after the free core flow is solid.

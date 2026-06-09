@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import Seo from '@/components/Seo.jsx'
 import { HomeShell } from '@/components/home/HomeShell.jsx'
 import { preconnectToUrl, scheduleIdleTask } from '@/lib/resourceHints.js'
@@ -16,7 +17,12 @@ const HomeExperience = lazy(() =>
 )
 
 function HomePage() {
-  const [initialSearchQuery, setInitialSearchQuery] = useState('')
+  const location = useLocation()
+  const historySearch = location.state?.historySearch
+  const historySearchQuery = String(historySearch?.query || '').trim()
+  const historySearchFollowUp = String(historySearch?.followUp || '').trim()
+  const [initialSearchQuery, setInitialSearchQuery] = useState(historySearchQuery)
+  const [initialSearchFollowUp, setInitialSearchFollowUp] = useState(historySearchFollowUp)
   const hasStartedSearch = Boolean(initialSearchQuery)
 
   useEffect(() => {
@@ -32,6 +38,11 @@ function HomePage() {
       void loadHomeExperience()
     })
   }, [hasStartedSearch])
+
+  function handleSearchStart(query) {
+    setInitialSearchFollowUp('')
+    setInitialSearchQuery(query)
+  }
 
   return (
     <>
@@ -66,10 +77,13 @@ function HomePage() {
             />
           }
         >
-          <HomeExperience initialSearchQuery={initialSearchQuery} />
+          <HomeExperience
+            initialSearchFollowUp={initialSearchFollowUp}
+            initialSearchQuery={initialSearchQuery}
+          />
         </Suspense>
       ) : (
-        <HomeShell onSearchStart={setInitialSearchQuery} />
+        <HomeShell onSearchStart={handleSearchStart} />
       )}
     </>
   )

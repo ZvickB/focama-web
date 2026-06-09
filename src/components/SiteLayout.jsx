@@ -86,12 +86,13 @@ function MarketplacePillToast({ domain, onConfirm, onChooseStore, onDismiss }) {
 
 const navItems = [
   { to: '/why', label: 'Why Focamai', highlight: true },
+  { to: '/history', label: 'History' },
   { to: '/contact', label: 'Contact' },
   ...(import.meta.env.DEV ? [{ to: '/admin/analytics', label: 'Analytics' }] : []),
 ]
 
 const mobileMenuItems = navItems.filter((item) =>
-  ['/why', '/contact'].includes(item.to),
+  ['/why', '/history', '/contact'].includes(item.to),
 )
 const HEADER_COLLAPSE_SCROLL_Y = 72
 const HEADER_EXPAND_SCROLL_Y = 20

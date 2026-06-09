@@ -17,6 +17,7 @@ import {
 } from '@/components/home/searchAnalytics.js'
 import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
+import { historyStore } from '@/lib/history/historyStore.js'
 import { MAX_PRODUCT_QUERY_LENGTH, validateSearchInput } from '../../../shared/search-input.js'
 
 export { AMAZON_MARKETPLACE_AUTO }
@@ -1047,6 +1048,14 @@ export function useGuidedSearch() {
     setCandidatePool(variables.originalCandidatePool || null)
     setPreviousResults(previousDisplayResults)
     setResults(finalizedResults)
+    if (finalizedResults.length > 0) {
+      void historyStore.save({
+        amazonDomain: variables.amazonDomain || submittedAmazonDomain,
+        followUp: variables.followUpNotes || '',
+        query: variables.query,
+        results: finalizedResults,
+      })
+    }
     setRevealedBadgeResultsKey('')
     setIsEnrichmentReady(hasInlineEnrichment)
     setIsEnrichmentSettled(hasInlineEnrichment)

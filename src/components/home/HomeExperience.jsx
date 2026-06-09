@@ -530,7 +530,10 @@ function OpenLayout(props) {
   }, [hasFinalResults])
 
   const resetToNewSearchRef = useRef(actions.resetToNewSearch)
-  resetToNewSearchRef.current = actions.resetToNewSearch
+
+  useEffect(() => {
+    resetToNewSearchRef.current = actions.resetToNewSearch
+  }, [actions.resetToNewSearch])
 
   useEffect(() => {
     function handleNewSearch() {
@@ -998,13 +1001,14 @@ function OpenLayout(props) {
   )
 }
 
-export function HomeExperience({ initialSearchQuery = '' } = {}) {
+export function HomeExperience({ initialSearchFollowUp = '', initialSearchQuery = '' } = {}) {
   const guided = useGuidedSearch()
   const { actions, query, results, status } = guided
   const { beginGuidedSearch, trackRetailerClick } = actions
-  const { productQuery, setProductQuery } = query
+  const { productQuery, setFollowUpNotes, setProductQuery } = query
   const initialSearchQueryText = String(initialSearchQuery || '').trim()
-  const initialSearchRef = useRef({ query: '', status: 'idle' })
+  const initialSearchFollowUpText = String(initialSearchFollowUp || '').trim()
+  const initialSearchRef = useRef({ followUp: '', query: '', status: 'idle' })
   const showTimingPanel = shouldShowTimingPanel()
 
   useEffect(() => {
@@ -1024,9 +1028,14 @@ export function HomeExperience({ initialSearchQuery = '' } = {}) {
       return
     }
 
-    initialSearchRef.current = { query: initialSearchQueryText, status: 'set-query' }
+    initialSearchRef.current = {
+      followUp: initialSearchFollowUpText,
+      query: initialSearchQueryText,
+      status: 'set-query',
+    }
     setProductQuery(initialSearchQueryText)
-  }, [initialSearchQueryText, setProductQuery])
+    setFollowUpNotes(initialSearchFollowUpText)
+  }, [initialSearchFollowUpText, initialSearchQueryText, setFollowUpNotes, setProductQuery])
 
   useEffect(() => {
     const initialSearch = initialSearchRef.current
@@ -1042,7 +1051,11 @@ export function HomeExperience({ initialSearchQuery = '' } = {}) {
     }
 
     const startTimer = window.setTimeout(() => {
-      initialSearchRef.current = { query: initialSearchQueryText, status: 'started' }
+      initialSearchRef.current = {
+        followUp: initialSearchFollowUpText,
+        query: initialSearchQueryText,
+        status: 'started',
+      }
       beginGuidedSearch({ preventDefault() {} })
     }, 0)
 
@@ -1052,6 +1065,7 @@ export function HomeExperience({ initialSearchQuery = '' } = {}) {
   }, [
     beginGuidedSearch,
     status.hasStartedSearch,
+    initialSearchFollowUpText,
     initialSearchQueryText,
     productQuery,
   ])

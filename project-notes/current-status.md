@@ -13,6 +13,7 @@
 - Basic SEO plumbing is now in place: route-level metadata, canonicals, OG/Twitter tags, sitemap, robots, and manifest.
 - The homepage now preconnects Google Fonts in `index.html`, preconnects the configured backend origin from `VITE_BACKEND_URL`, gives the hero wordmark higher fetch priority, and prefetches the results plus modal chunks immediately after `HomeExperience` mounts.
 - A local-only internal analytics dashboard now lives at `/admin/analytics` during development and reads a backend funnel summary instead of querying Supabase directly from the browser.
+- A device-local Search History page now lives at `/history`. Completed finalized searches auto-save to localStorage and can be reopened, deleted, cleared, or re-run.
 - The current user path is: search -> collapsed search summary -> active refine panel -> collapsed refine summary/focused ranked shortlist with a desktop selected-product preview -> modal details -> Amazon/source clickout.
 - The modal detail view now acts more like a decision aid: compact `At a glance` facts, `Why this pick`, `Worth knowing`, product notes, then one compact bottom source-specific CTA/disclosure area. Source/store naming is kept in clickout actions instead of repeated as passive metadata.
 - The new web UI slices now share a quieter visual system: mostly white/cream surfaces, lighter shadows, fewer decorative gradients, consistent rounded corners, teal actions, and orange only for the shopping clickout CTA.
@@ -36,6 +37,7 @@
 - Result rows/cards and modal facts now combine rating plus review count into one ratings/reviews signal, leaving room for at most one delivery signal and avoiding marketplace-style metadata clutter.
 - Result rows, selected-product panels, grid/card view, and modal headings now use normalized display titles so Amazon keyword stuffing does not dominate the UI. The raw title is preserved in product data and appears behind a quiet full-title disclosure in the modal when it differs.
 - Result row/card and modal shopping clickout CTAs derive their visible label from the product source/store, so Amazon items can say `View on Amazon`/the active Amazon domain while future sources can name their own store.
+- After finalize returns the focused shortlist, the frontend saves one local history entry keyed by normalized query plus follow-up notes. Duplicate searches update the existing entry and move it to the top.
 - After final results appear, refinement collapses into a compact summary above the ranked shortlist.
 - Enrichment hydrates in place: teal/orange breathing dots hold pending row/panel and modal reasoning slots, `fit_reason` and `caveat` fill the high reasoning area when available, and feature bullets/descriptions sit lower as product notes.
 - Retry is currently suggestion-led: the user opens a clearer correction panel, can tap one of three broad quick prompts, explains what felt off, and `/api/search/retry-advice` proposes a better next query.
@@ -93,6 +95,7 @@
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
 - Do not let future multi-retailer flexibility make today's Amazon-first UX vague. If more retailers become active, revisit frontend labels based on the real source mix.
 - Keep `search_history` as internal telemetry, not user-facing saved history.
+- Keep user-facing saved history separate from internal `search_history`; the current local history phase is device-only, and account-backed history should use `saved_searches`.
 - Keep current behavior and future ideas clearly separated in notes.
 
 ## Recommended next checks
@@ -102,6 +105,7 @@
 - Watch the polling-based query-quality MVP on weak discovery pools caused by obvious misspellings or brand-query drift. Current known example: `celcius drink` should be able to offer `celsius drink` when the backend review is high-confidence, while meaning-bearing language such as `shabbos art` should stay quiet unless the returned pool is clearly mismatched.
 - Do not add query-quality prewarm unless the MVP proves useful and the user explicitly chooses that next step.
 - Watch whether the compact modal bottom CTA/disclosure feels clear without sounding defensive.
+- Verify local Search History on real searches: finalized save, duplicate upsert, expand/delete/clear, and re-run with notes prefilled.
 
 ## server.js decomposition (refactor/server-decomposition branch)
 - `backend/lib/server-helpers.js` — extracted 10 shared helpers + shared constants (LIVE_RESULT_FILTER_CONFIG, FINALIZE_BODY_LIMIT_BYTES, CACHE_SCOPE_DISCOVERY, recentFinalizations).

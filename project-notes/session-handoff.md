@@ -38,6 +38,7 @@
 - Priority 6 is now implemented in the first pass: search/refine/results/retry/modal surfaces use fewer gradients, lighter shadows, more consistent radii, teal-first actions, and orange mainly for shopping clickout.
 - Priority 7 is now implemented in the first pass: retry asks what felt off, uses only three broad quick prompts, shows AI advice as an editable `Next search` field, and has one `Search again` action.
 - Product titles are normalized for user-facing display across result rows, selected panels, grid/card view, and modal headings. Raw Amazon/source titles remain in data and are exposed behind a quiet full-title disclosure in details when the display title differs.
+- User-facing search history has started as a localStorage-only phase. `/history` lists completed finalized searches saved on the current device, can expand/delete/clear entries, and can re-run a saved query with follow-up notes prefilled. Account-backed history is still pending and should use `saved_searches`, not internal `search_history`.
 
 ## Current guided flow
 - `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It uses Rainforest API first for all Amazon marketplaces when configured, with Oxylabs fallback only when Rainforest errors or returns too few usable items. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available.
@@ -54,12 +55,14 @@
 ## Key files
 - App route shell: `src/App.jsx`
 - Homepage entry: `src/pages/HomePage.jsx`
+- Search history page: `src/pages/HistoryPage.jsx`
 - First-load homepage shell: `src/components/home/HomeShell.jsx`
 - Guided homepage experience: `src/components/home/HomeExperience.jsx`
 - Result UI: `src/components/home/ResultsSection.jsx`
 - Product modal UI: `src/components/home/ProductDetailModal.jsx`
 - Finalize loading UI: `src/components/home/FinalizeLoadingState.jsx`
 - Guided search state/requests: `src/components/home/useGuidedSearch.js`
+- Local history helpers: `src/lib/history/`
 - Amazon store context: `src/contexts/AmazonStoreContext.jsx`
 - Render backend entrypoint: `backend/express-server.js`
 - Core route handlers: `backend/server.js`

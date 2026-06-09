@@ -15,7 +15,7 @@
  *   2. Real .env with valid API keys
  */
 
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
 const SMOKE = process.env.SMOKE === '1'
 const BASE = process.env.SMOKE_URL || 'http://localhost:8787'
@@ -133,7 +133,7 @@ describeSmoke('External services', () => {
 
 describeSmoke('Core endpoints', () => {
   it('GET /api/search/rainforest-discover returns 400 without query', async () => {
-    const { status, body } = await get('/api/search/rainforest-discover')
+    const { status } = await get('/api/search/rainforest-discover')
     // Should reject missing query, not 500
     expect(status).toBeLessThan(500)
     expect(status).toBeGreaterThanOrEqual(400)

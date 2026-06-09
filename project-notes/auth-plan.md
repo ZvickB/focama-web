@@ -3,6 +3,8 @@
 **Written:** 2026-05-07
 **Status:** Not started
 
+> Note: the user-facing saved-search table guidance in this older plan is superseded by `project-notes/search-history-plan.md`. Do not create a user-facing `search_history` table; that name is already used for internal telemetry/cache visibility. Use `saved_searches` for account-backed saved searches.
+
 ---
 
 ## Product decisions (locked)
