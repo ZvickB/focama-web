@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Menu, RotateCcw, X } from 'lucide-react'
+import { LogOut, Menu, RotateCcw, UserCircle, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import logo from '@/assets/logo_header_mark.svg'
 import wordmark from '@/assets/wordmark.PNG'
 import { AmazonStorePill } from '@/components/AmazonStorePill.jsx'
+import AuthModal from '@/components/auth/AuthModal.jsx'
 import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
+import { useAuth } from '@/contexts/useAuth.js'
 import { useSearchProgress } from '@/contexts/useSearchProgress.js'
 
 const MARKETPLACE_DISPLAY = {
@@ -87,12 +89,11 @@ function MarketplacePillToast({ domain, onConfirm, onChooseStore, onDismiss }) {
 const navItems = [
   { to: '/why', label: 'Why Focamai', highlight: true },
   { to: '/history', label: 'History' },
-  { to: '/contact', label: 'Contact' },
   ...(import.meta.env.DEV ? [{ to: '/admin/analytics', label: 'Analytics' }] : []),
 ]
 
 const mobileMenuItems = navItems.filter((item) =>
-  ['/why', '/history', '/contact'].includes(item.to),
+  ['/why', '/history'].includes(item.to),
 )
 const HEADER_COLLAPSE_SCROLL_Y = 72
 const HEADER_EXPAND_SCROLL_Y = 20
@@ -202,6 +203,7 @@ function SearchStepIndicator({ progress, isCompact }) {
 
 function SiteLayout() {
   const [isCompact, setIsCompact] = useState(false)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [mobileMenuOpenPath, setMobileMenuOpenPath] = useState(null)
   const location = useLocation()
   const isMobileMenuOpen = mobileMenuOpenPath === location.pathname
@@ -214,6 +216,9 @@ function SiteLayout() {
     resolvedAmazonDomain,
     setSelectedAmazonDomain,
   } = useAmazonStore()
+  const { loading: isAuthLoading, signOut, user } = useAuth()
+  const userEmail = user?.email || ''
+  const userInitial = userEmail ? userEmail.charAt(0).toUpperCase() : ''
 
   const showMarketplaceToast =
     isHomePage && progress.hasStartedSearch && !hasAskedMarketplacePreference
@@ -227,6 +232,10 @@ function SiteLayout() {
   function handleToastChooseStore() {
     markMarketplacePromptHandled()
     window.dispatchEvent(new CustomEvent('focamai:open-store-picker'))
+  }
+
+  async function handleSignOut() {
+    await signOut()
   }
 
   useEffect(() => {
@@ -332,6 +341,34 @@ function SiteLayout() {
               </div>
             ) : null}
             <SlidingNav items={navItems} />
+            {user ? (
+              <div className="flex items-center gap-1.5 rounded-full border border-white/70 bg-white/78 px-2 py-1 text-sm text-slate-600 shadow-[0_12px_30px_-22px_rgba(15,23,42,0.28)]">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#eef7f6] text-xs font-semibold text-primary">
+                  {userInitial || <UserCircle className="h-4 w-4" />}
+                </span>
+                <span className="hidden max-w-[140px] truncate text-xs font-medium xl:inline">
+                  {userEmail}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  aria-label="Sign out"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-stone-100 hover:text-slate-700"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsAuthModalOpen(true)}
+                disabled={isAuthLoading}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-white/70 bg-white/78 px-3 text-sm font-medium text-slate-600 shadow-[0_12px_30px_-22px_rgba(15,23,42,0.28)] transition hover:border-[#d9e6e8] hover:bg-white hover:text-slate-900 disabled:pointer-events-none disabled:opacity-60"
+              >
+                <UserCircle className="h-4 w-4" />
+                Sign in
+              </button>
+            )}
           </div>
         </div>
         <div
@@ -368,6 +405,32 @@ function SiteLayout() {
                 )}
               </NavLink>
             ))}
+            {user ? (
+              <div className="flex items-center justify-between gap-3 rounded-[22px] border border-white/70 bg-white/72 px-3 py-2.5 text-sm text-slate-600 shadow-[0_14px_34px_-28px_rgba(15,23,42,0.22)]">
+                <span className="min-w-0 truncate font-medium">{userEmail}</span>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-full px-3 text-sm font-medium text-slate-500 transition hover:bg-stone-100 hover:text-slate-800"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpenPath(null)
+                  setIsAuthModalOpen(true)
+                }}
+                disabled={isAuthLoading}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-[22px] border border-white/70 bg-white/82 px-4 text-sm font-semibold text-slate-700 shadow-[0_14px_34px_-28px_rgba(15,23,42,0.22)] transition hover:border-[#d9e6e8] hover:bg-white hover:text-slate-900 disabled:pointer-events-none disabled:opacity-60"
+              >
+                <UserCircle className="h-4 w-4" />
+                Sign in
+              </button>
+            )}
             {isHomePage ? (
               <div className="flex items-center justify-between gap-3 rounded-[22px] border border-white/70 bg-white/72 px-3 py-2.5 text-xs text-slate-500 shadow-[0_14px_34px_-28px_rgba(15,23,42,0.22)]">
                 <span className="font-medium uppercase tracking-[0.12em] text-slate-400">Amazon store</span>
@@ -418,12 +481,14 @@ function SiteLayout() {
                     {item.label}
                   </NavLink>
                 ))}
+              <NavLink to="/contact" className="hover:text-slate-900">Contact</NavLink>
               <NavLink to="/privacy" className="hover:text-slate-900">Privacy</NavLink>
               <NavLink to="/affiliate-disclosure" className="hover:text-slate-900">Affiliate Disclosure</NavLink>
             </div>
           </div>
         </div>
       </footer>
+      <AuthModal open={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
     </div>
   )
 }
