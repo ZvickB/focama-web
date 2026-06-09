@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
 import { generateQueryQualityReview } from './query-quality-review.js'
 
 describe('query quality review', () => {
@@ -52,6 +53,8 @@ describe('query quality review', () => {
     const [, request] = fetchMock.mock.calls[0]
     const parsedBody = JSON.parse(request.body)
 
+    expect(fetchMock.mock.calls[0][0]).toBe(OPENAI_RESPONSES_ENDPOINT)
+    expect(request.signal).toBeInstanceOf(AbortSignal)
     expect(parsedBody.reasoning.effort).toBe('minimal')
     expect(parsedBody.text.format.name).toBe('query_quality_review')
     expect(parsedBody.text.format.schema.required).toEqual([
@@ -250,5 +253,30 @@ describe('query quality review', () => {
       shouldSuggest: false,
     })
   })
-})
 
+  it('wraps fetch failures with external request metadata', async () => {
+    const cause = new Error('Headers Timeout Error')
+    cause.name = 'HeadersTimeoutError'
+    cause.code = 'UND_ERR_HEADERS_TIMEOUT'
+    const fetchError = new TypeError('fetch failed', { cause })
+    const fetchMock = vi.fn().mockRejectedValue(fetchError)
+
+    await expect(generateQueryQualityReview(
+      {
+        originalQuery: 'replacement parts for step 2 whisper cruiser rider',
+        apiKey: 'test-key',
+      },
+      fetchMock,
+    )).rejects.toMatchObject({
+      name: 'ExternalRequestError',
+      externalServiceName: 'OpenAI Responses API',
+      externalUrl: OPENAI_RESPONSES_ENDPOINT,
+      errorName: 'TypeError',
+      errorMessage: 'fetch failed',
+      errorCauseName: 'HeadersTimeoutError',
+      errorCauseMessage: 'Headers Timeout Error',
+      errorCode: 'UND_ERR_HEADERS_TIMEOUT',
+      durationMs: expect.any(Number),
+    })
+  })
+})

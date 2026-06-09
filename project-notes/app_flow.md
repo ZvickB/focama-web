@@ -46,7 +46,7 @@
   - also honors that refresh mode for the one-time pre-finalize discovery pass when follow-up notes contain hard constraints
   - automatically bypasses cached discovery snapshots that are too thin to support the 6-item shortlist, so a one-result cache entry cannot trap normal searches
   - marketplace items without a known positive price are treated as invalid and are removed before preview results or AI candidate-pool caching
-  - after the normal response is sent, starts a background query-quality review when OpenAI is configured and stores `selection.queryQuality` on the token-scoped session snapshot
+  - after the normal response is sent, starts a timed background query-quality review when OpenAI is configured, stores `selection.queryQuality` on the token-scoped session snapshot, and treats review failures as non-blocking telemetry
   - query-quality review is checked by the frontend through polling; if a high-confidence suggestion is ready, the homepage shows an optional small prompt without replacing the original results
   - there is still no query-quality SSE or suggested-query prewarm path
 - `GET /api/search/refine`
