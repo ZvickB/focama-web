@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import { Eye, EyeOff, LoaderCircle, LockKeyhole, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button.jsx'
@@ -12,7 +12,7 @@ function getAuthErrorMessage(error) {
 export function AuthModal({ onClose, open }) {
   const emailId = useId()
   const passwordId = useId()
-  const { configured, loading: authLoading, signIn, signInWithGoogle, signUp, user } = useAuth()
+  const { configured, loading: authLoading, signIn, signInWithGoogle, signUp } = useAuth()
   const [mode, setMode] = useState('sign-in')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -21,21 +21,28 @@ export function AuthModal({ onClose, open }) {
   const [statusMessage, setStatusMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    if (open && user) {
-      onClose()
-    }
-  }, [onClose, open, user])
-
-  if (!open) return null
-
-  function handleClose() {
+  const handleClose = useCallback(() => {
     setErrorMessage('')
     setShowPassword(false)
     setStatusMessage('')
     setSubmitting(false)
     onClose()
-  }
+  }, [onClose])
+
+  useEffect(() => {
+    if (!open) return undefined
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        handleClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleClose, open])
+
+  if (!open) return null
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -91,10 +98,10 @@ export function AuthModal({ onClose, open }) {
     <div
       aria-labelledby="auth-modal-title"
       aria-modal="true"
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-[rgba(51,39,30,0.22)] px-4 py-8 backdrop-blur-[2px]"
+      className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-[rgba(51,39,30,0.22)] px-4 py-6 backdrop-blur-[2px] sm:items-center sm:py-8"
       role="dialog"
     >
-      <div className="w-full max-w-md rounded-[28px] border border-[#e4d7c6] bg-white p-5 shadow-[0_30px_100px_-48px_rgba(15,23,42,0.45)] sm:p-6">
+      <div className="my-auto w-full max-w-md rounded-[24px] border border-[#e4d7c6] bg-white p-5 shadow-[0_30px_100px_-48px_rgba(15,23,42,0.45)] sm:rounded-[28px] sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eef7f6] text-primary">
@@ -105,7 +112,7 @@ export function AuthModal({ onClose, open }) {
                 {title}
               </h2>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                Search stays open. Accounts will let you sync saved searches across devices.
+                Search stays open. Your saved searches can follow you across devices.
               </p>
             </div>
           </div>
@@ -119,7 +126,7 @@ export function AuthModal({ onClose, open }) {
           </button>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 rounded-full bg-stone-100 p-1">
+        <div className="mt-5 grid grid-cols-2 rounded-full bg-stone-100 p-1" role="tablist" aria-label="Authentication mode">
           {[
             ['sign-in', 'Sign in'],
             ['sign-up', 'Create account'],
@@ -127,6 +134,8 @@ export function AuthModal({ onClose, open }) {
             <button
               key={nextMode}
               type="button"
+              role="tab"
+              aria-selected={mode === nextMode}
               onClick={() => {
                 setMode(nextMode)
                 setErrorMessage('')
@@ -145,7 +154,7 @@ export function AuthModal({ onClose, open }) {
 
         {!configured ? (
           <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
-            Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to the frontend environment before sign in can run.
+            Add the Supabase frontend URL and anon key before sign in can run.
           </div>
         ) : null}
 

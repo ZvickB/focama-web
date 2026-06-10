@@ -259,6 +259,16 @@ function SiteLayout() {
     }
   }, [])
 
+  useEffect(() => {
+    function handleOpenAuth() {
+      setMobileMenuOpenPath(null)
+      setIsAuthModalOpen(true)
+    }
+
+    window.addEventListener('focamai:open-auth', handleOpenAuth)
+    return () => window.removeEventListener('focamai:open-auth', handleOpenAuth)
+  }, [])
+
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-50 border-b border-[var(--site-shell-border)] bg-[var(--site-header-bg)] backdrop-blur transition-all duration-300 ease-out">
@@ -373,7 +383,7 @@ function SiteLayout() {
         </div>
         <div
           className={`overflow-hidden border-t border-[var(--site-shell-border)] bg-[var(--site-mobile-menu-bg)] transition-all duration-300 ease-out sm:hidden ${
-            isMobileMenuOpen ? 'max-h-80 opacity-100' : 'max-h-0 opacity-0'
+            isMobileMenuOpen ? 'max-h-[28rem] opacity-100' : 'max-h-0 opacity-0'
           }`}
         >
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-4">
@@ -381,6 +391,7 @@ function SiteLayout() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                onClick={() => setMobileMenuOpenPath(null)}
                 className={({ isActive }) =>
                   [
                     'relative overflow-hidden rounded-[24px] border px-4 py-3.5 text-sm transition duration-300',

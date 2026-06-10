@@ -43,7 +43,7 @@ export function FinalizeLoadingState({ compact = false }) {
             </p>
           </div>
 
-          <ol className="grid grid-cols-2 gap-1.5">
+          <ol className="inline-grid grid-cols-2 gap-1.5">
             {FINALIZE_STAGES.map((stage, index) => {
               const isDone = index < activeStageIndex
               const isActive = index === activeStageIndex
@@ -51,7 +51,7 @@ export function FinalizeLoadingState({ compact = false }) {
               return (
                 <li
                   key={stage}
-                  className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium whitespace-nowrap transition-colors ${
                     isActive
                       ? 'border-primary/30 bg-[#eef7f6] text-primary'
                       : isDone
