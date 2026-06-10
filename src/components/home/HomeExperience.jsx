@@ -7,6 +7,21 @@ import wordmark from '@/assets/wordmark.PNG'
 import { ResultSkeleton } from '@/components/home/ResultSkeleton.jsx'
 import { FinalizeLoadingState } from '@/components/home/FinalizeLoadingState.jsx'
 import {
+  addChipToNotes,
+  applyPlainBackgroundMode,
+  buildRefinementCopy,
+  clampFollowUpNotes,
+  formatTimingValue,
+  handleNewSearchClick,
+  handleProductQueryTextareaKeyDown,
+  handleRefinementTextareaKeyDown,
+  normalizeRefinementChips,
+  scrollElementNearTop,
+  shouldShowCharCounter,
+  shouldShowTimingPanel,
+  smoothScrollIntoView,
+} from '@/components/home/home-helpers.js'
+import {
   RESULT_CARD_SLOTS,
   useGuidedSearch,
 } from '@/components/home/useGuidedSearch.js'
@@ -31,15 +46,6 @@ const DEFAULT_REFINEMENT_CHIPS = [
   { label: 'Easy to use' },
   { label: 'Fits my space' },
 ]
-const MAX_REFINEMENT_CHIPS = 3
-
-function applyPlainBackgroundMode() {
-  if (typeof document === 'undefined') {
-    return
-  }
-
-  document.documentElement.dataset.bgMode = 'plain'
-}
 
 function CharCounter({ current, max }) {
   if (current === 0) return null
@@ -52,95 +58,6 @@ function CharCounter({ current, max }) {
       {remaining} characters left
     </span>
   )
-}
-function shouldShowCharCounter(current, max) {
-  return current > 0 && max - current <= 20
-}
-
-function shouldShowTimingPanel() {
-  if (import.meta.env.DEV) {
-    return true
-  }
-
-  if (typeof window === 'undefined') {
-    return false
-  }
-
-  const searchParams = new URLSearchParams(window.location.search)
-  return searchParams.get('timing') === '1'
-}
-
-function handleRefinementTextareaKeyDown(event, { canSubmit, onSubmit }) {
-  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) {
-    return
-  }
-
-  event.preventDefault()
-
-  if (canSubmit) {
-    onSubmit()
-  }
-}
-
-function handleProductQueryTextareaKeyDown(event, { canSubmit, onSubmit }) {
-  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) {
-    return
-  }
-
-  event.preventDefault()
-
-  if (canSubmit) {
-    onSubmit()
-  }
-}
-
-function smoothScrollIntoView(element) {
-  if (!element || typeof element.scrollIntoView !== 'function') {
-    return
-  }
-
-  element.scrollIntoView({
-    behavior: 'smooth',
-    block: 'start',
-  })
-}
-
-function scrollElementNearTop(element, offset = 24) {
-  if (!element || typeof window === 'undefined') {
-    return
-  }
-
-  const nextTop = Math.max(0, window.scrollY + element.getBoundingClientRect().top - offset)
-
-  window.scrollTo({
-    top: nextTop,
-    behavior: 'smooth',
-  })
-}
-
-function handleNewSearchClick(event, resetToNewSearch) {
-  event.preventDefault()
-  resetToNewSearch()
-}
-
-function formatTimingValue(value) {
-  return Number.isFinite(value) ? `${value.toFixed(1)} ms` : 'n/a'
-}
-
-function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
-  const suggestedQuestion =
-    prompt?.prompt || `What should we optimize for with this ${submittedQuery}?`
-
-  return {
-      helper:
-        prompt?.helperText ||
-        'Or write whatever is important to you. Feel free to write in natural language.',
-    placeholder:
-      prompt?.followUpPlaceholder ||
-      'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
-    titleEyebrow: isGeneratingPrompt ? 'You can add more detail right away' : 'Focamai asks:',
-    titleQuestion: isGeneratingPrompt ? '' : suggestedQuestion,
-  }
 }
 
 function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
@@ -181,53 +98,6 @@ function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
       </div>
     </div>
   )
-}
-
-function clampFollowUpNotes(value) {
-  return String(value ?? '').slice(0, MAX_DETAILS_LENGTH)
-}
-
-function addChipToNotes(currentNotes, chipLabel) {
-  const trimmedNotes = String(currentNotes ?? '').trim()
-
-  if (!trimmedNotes) {
-    return clampFollowUpNotes(chipLabel)
-  }
-
-  if (trimmedNotes.toLowerCase().includes(String(chipLabel).toLowerCase())) {
-    return currentNotes
-  }
-
-  return clampFollowUpNotes(`${trimmedNotes}, ${chipLabel}`)
-}
-
-function normalizeRefinementChips(refinementPrompt) {
-  const suggestedRefinements =
-    refinementPrompt?.refinementSuggestions ||
-    refinementPrompt?.refinement_suggestions ||
-    refinementPrompt?.suggestedRefinements ||
-    []
-
-  if (!Array.isArray(suggestedRefinements)) {
-    return []
-  }
-
-  return suggestedRefinements
-    .map((chip) => {
-      if (typeof chip === 'string') {
-        return { label: chip.trim() }
-      }
-
-      if (typeof chip?.label === 'string') {
-        const label = chip.label.trim()
-        const prompt = typeof chip.prompt === 'string' ? chip.prompt.trim() : ''
-        return prompt ? { label, prompt } : { label }
-      }
-
-      return null
-    })
-    .filter((chip) => chip?.label)
-    .slice(0, MAX_REFINEMENT_CHIPS)
 }
 
 function RefinementChips({
