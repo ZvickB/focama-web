@@ -1,125 +1,36 @@
-import { createClient } from '@supabase/supabase-js'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   buildCacheKey,
-  getEnv,
   readSearchCache,
   writeSearchCacheEntry as writeLocalSearchCacheEntry,
 } from './search-data.js'
 import { normalizeCachedProductDetailsEntry } from './product-details-cache.js'
 import { memoryGet, memorySet } from './memory-cache.js'
+import {
+  ANALYTICS_RESULT_CLICKS_TABLE,
+  ANALYTICS_RESULT_IMPRESSIONS_TABLE,
+  ANALYTICS_SEARCH_EVENTS_TABLE,
+  ANALYTICS_SEARCH_RUNS_TABLE,
+  getCacheEntryTtlMs,
+  getCacheTtlMinutes,
+  getSupabaseAdminClient,
+  isExpiredCacheEntry,
+  isSupabaseConfigured,
+  logStorageWarning,
+  OXYLABS_PRODUCT_FAILURES_TABLE,
+  PRODUCT_DETAILS_CACHE_TABLE,
+  readSupabaseRowsSince,
+  SEARCH_CACHE_TABLE,
+  SEARCH_HISTORY_TABLE,
+  TESTER_FEEDBACK_TABLE,
+} from './storage/supabase-client.js'
+import { normalizeFeedbackValue, recordTesterFeedback } from './storage/feedback-storage.js'
 
-const SEARCH_CACHE_TABLE = 'search_cache'
-const SEARCH_HISTORY_TABLE = 'search_history'
-const PRODUCT_DETAILS_CACHE_TABLE = 'product_details_cache'
-const ANALYTICS_SEARCH_RUNS_TABLE = 'analytics_search_runs'
-const ANALYTICS_SEARCH_EVENTS_TABLE = 'analytics_search_events'
-const ANALYTICS_RESULT_IMPRESSIONS_TABLE = 'analytics_result_impressions'
-const ANALYTICS_RESULT_CLICKS_TABLE = 'analytics_result_clicks'
-const TESTER_FEEDBACK_TABLE = 'tester_feedback'
-const OXYLABS_PRODUCT_FAILURES_TABLE = 'oxylabs_product_failures'
-const RATE_LIMIT_EVENTS_TABLE = 'rate_limit_events'
-const DEFAULT_CACHE_TTL_MINUTES = 1440
+export { isSupabaseConfigured }
+export { recordTesterFeedback }
+
 const PRODUCT_DETAILS_CACHE_PATH = resolve(process.cwd(), 'temp-data', 'product-details-cache.json')
-const TESTER_FEEDBACK_PATH = resolve(process.cwd(), 'temp-data', 'tester-feedback.json')
-
-let supabaseAdminClient = null
-
-function getCacheTtlMinutes() {
-  const configuredValue = Number.parseInt(getEnv('SEARCH_CACHE_TTL_MINUTES') || '', 10)
-
-  if (Number.isFinite(configuredValue) && configuredValue > 0) {
-    return configuredValue
-  }
-
-  return DEFAULT_CACHE_TTL_MINUTES
-}
-
-function getSupabaseConfig() {
-  const url = getEnv('SUPABASE_URL')?.trim() || ''
-  const secretKey = getEnv('SUPABASE_SECRET_KEY')?.trim() || ''
-  const serviceRoleKey = getEnv('SUPABASE_SERVICE_ROLE_KEY')?.trim() || ''
-  const serverKey = secretKey || serviceRoleKey
-
-  return {
-    serverKey,
-    url,
-  }
-}
-
-export function isSupabaseConfigured() {
-  const { serverKey, url } = getSupabaseConfig()
-  return Boolean(url && serverKey)
-}
-
-function getSupabaseAdminClient() {
-  if (supabaseAdminClient) {
-    return supabaseAdminClient
-  }
-
-  const { serverKey, url } = getSupabaseConfig()
-
-  if (!url || !serverKey) {
-    return null
-  }
-
-  supabaseAdminClient = createClient(url, serverKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
-
-  return supabaseAdminClient
-}
-
-function getExpirationTimestamp(cachedAt, expiresAt) {
-  if (expiresAt) {
-    const explicitExpiration = new Date(expiresAt)
-
-    if (!Number.isNaN(explicitExpiration.getTime())) {
-      return explicitExpiration
-    }
-  }
-
-  if (cachedAt) {
-    const derivedExpiration = new Date(cachedAt)
-
-    if (!Number.isNaN(derivedExpiration.getTime())) {
-      derivedExpiration.setMinutes(derivedExpiration.getMinutes() + getCacheTtlMinutes())
-      return derivedExpiration
-    }
-  }
-
-  return null
-}
-
-function isExpiredCacheEntry(entry) {
-  const expiration = getExpirationTimestamp(entry?.cachedAt, entry?.expiresAt)
-
-  if (!expiration) {
-    return false
-  }
-
-  return expiration.getTime() <= Date.now()
-}
-
-function getCacheEntryTtlMs(entry) {
-  const explicitExpirationMs = new Date(entry?.expiresAt || '').getTime()
-
-  if (Number.isFinite(explicitExpirationMs)) {
-    return explicitExpirationMs - Date.now()
-  }
-
-  const cachedAtMs = new Date(entry?.cachedAt || '').getTime()
-
-  if (!Number.isFinite(cachedAtMs)) {
-    return 0
-  }
-
-  return cachedAtMs + getCacheTtlMinutes() * 60 * 1000 - Date.now()
-}
 
 function mapSupabaseCacheRow(row) {
   if (!row) {
@@ -173,17 +84,6 @@ function readLocalCacheEntry(cacheKey) {
     selection: entry.selection ?? null,
     source: entry.source || 'local_file_cache',
   }
-}
-
-function logStorageWarning(message, error) {
-  const errorMessage = error instanceof Error ? error.message : ''
-
-  if (errorMessage) {
-    console.warn(`[search-storage] ${message}: ${errorMessage}`)
-    return
-  }
-
-  console.warn(`[search-storage] ${message}`)
 }
 
 function readLocalProductDetailsCacheFile() {
@@ -321,25 +221,6 @@ export async function readStoredSearchCacheEntry({ productQuery, details, scope 
   }
 
   return localEntry
-}
-
-function readLocalTesterFeedbackFile() {
-  if (!existsSync(TESTER_FEEDBACK_PATH)) {
-    return { entries: [] }
-  }
-
-  try {
-    const fileContents = readFileSync(TESTER_FEEDBACK_PATH, 'utf8')
-    const parsed = JSON.parse(fileContents)
-
-    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.entries)) {
-      return { entries: [] }
-    }
-
-    return parsed
-  } catch {
-    return { entries: [] }
-  }
 }
 
 export async function writeStoredSearchCacheEntry({
@@ -724,58 +605,6 @@ function safeRate(part, whole) {
   }
 
   return Math.round((part / whole) * 1000) / 10
-}
-
-function normalizeFeedbackValue(value) {
-  if (typeof value !== 'string') {
-    return 'unknown'
-  }
-
-  const normalized = value.trim().toLowerCase()
-  return normalized || 'unknown'
-}
-
-async function readSupabaseRowsSince(table, columns, sinceIso, pageSize = 1000, maxPages = 10) {
-  const supabase = getSupabaseAdminClient()
-
-  if (!supabase) {
-    return {
-      rows: [],
-      truncated: false,
-    }
-  }
-
-  const rows = []
-
-  for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
-    const from = pageIndex * pageSize
-    const to = from + pageSize - 1
-    const { data, error } = await supabase
-      .from(table)
-      .select(columns)
-      .gte('created_at', sinceIso)
-      .order('created_at', { ascending: false })
-      .range(from, to)
-
-    if (error) {
-      throw error
-    }
-
-    const nextRows = Array.isArray(data) ? data : []
-    rows.push(...nextRows)
-
-    if (nextRows.length < pageSize) {
-      return {
-        rows,
-        truncated: false,
-      }
-    }
-  }
-
-  return {
-    rows,
-    truncated: true,
-  }
 }
 
 export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit = 12 } = {}) {
@@ -1216,107 +1045,4 @@ export async function readCachePoolEntries({ query = '', limit = 25 } = {}) {
   })
 }
 
-export async function recordTesterFeedback(feedback) {
-  const payload = {
-    email: feedback?.email || null,
-    finalized: Boolean(feedback?.finalized),
-    found_what_you_wanted: feedback?.foundWhatYouWanted || null,
-    free_text: feedback?.freeText || null,
-    enjoyed_experience: feedback?.enjoyedExperience || null,
-    metadata:
-      feedback?.metadata && typeof feedback.metadata === 'object' && !Array.isArray(feedback.metadata)
-        ? feedback.metadata
-        : {},
-    page: feedback?.page || '/',
-    query_text: feedback?.queryText || null,
-    results_seen: Boolean(feedback?.resultsSeen),
-    search_id: feedback?.searchId || null,
-    selected_product_id: feedback?.selectedProductId || null,
-    session_id: feedback?.sessionId || null,
-    stage_reached: feedback?.stageReached || 'home',
-    was_simple: feedback?.wasSimple || null,
-  }
-
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = getSupabaseAdminClient()
-      const { error } = await supabase.from(TESTER_FEEDBACK_TABLE).insert(payload)
-
-      if (!error) {
-        return
-      }
-
-      throw error
-    } catch (error) {
-      logStorageWarning('Tester feedback write fell back to local storage', error)
-    }
-  }
-
-  try {
-    mkdirSync(resolve(process.cwd(), 'temp-data'), { recursive: true })
-    const existingFeedback = readLocalTesterFeedbackFile()
-    const entries = Array.isArray(existingFeedback.entries) ? existingFeedback.entries : []
-    entries.push({
-      ...payload,
-      created_at: new Date().toISOString(),
-    })
-
-    writeFileSync(
-      TESTER_FEEDBACK_PATH,
-      JSON.stringify({ entries }, null, 2),
-    )
-  } catch (error) {
-    logStorageWarning('Tester feedback local write failed', error)
-  }
-}
-
-async function checkSupabaseTable(supabase, tableName, columnName) {
-  const { error } = await supabase.from(tableName).select(columnName, { head: true, count: 'exact' }).limit(1)
-
-  return {
-    error: error ? error.message : null,
-    ok: !error,
-    table: tableName,
-  }
-}
-
-export async function getSupabaseHealth() {
-  const { serverKey, url } = getSupabaseConfig()
-
-  if (!url || !serverKey) {
-    return {
-      configured: false,
-      ok: false,
-      tables: [],
-    }
-  }
-
-  try {
-    const supabase = getSupabaseAdminClient()
-    const tableChecks = await Promise.all([
-      checkSupabaseTable(supabase, SEARCH_CACHE_TABLE, 'cache_key'),
-      checkSupabaseTable(supabase, SEARCH_HISTORY_TABLE, 'id'),
-      checkSupabaseTable(supabase, PRODUCT_DETAILS_CACHE_TABLE, 'asin'),
-      checkSupabaseTable(supabase, TESTER_FEEDBACK_TABLE, 'id'),
-      checkSupabaseTable(supabase, ANALYTICS_SEARCH_RUNS_TABLE, 'search_id'),
-      checkSupabaseTable(supabase, ANALYTICS_SEARCH_EVENTS_TABLE, 'search_id'),
-      checkSupabaseTable(supabase, ANALYTICS_RESULT_IMPRESSIONS_TABLE, 'search_id'),
-      checkSupabaseTable(supabase, ANALYTICS_RESULT_CLICKS_TABLE, 'search_id'),
-      checkSupabaseTable(supabase, OXYLABS_PRODUCT_FAILURES_TABLE, 'asin'),
-      checkSupabaseTable(supabase, RATE_LIMIT_EVENTS_TABLE, 'rate_key'),
-    ])
-
-    return {
-      configured: true,
-      ok: tableChecks.every((table) => table.ok),
-      tables: tableChecks,
-    }
-  } catch (error) {
-    return {
-      configured: true,
-      ok: false,
-      tables: [],
-      error: error instanceof Error ? error.message : 'Unknown Supabase error',
-    }
-  }
-}
+export { getSupabaseHealth } from './storage/supabase-client.js'
