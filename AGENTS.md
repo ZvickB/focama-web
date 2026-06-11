@@ -75,6 +75,15 @@ Read this file first at the start of every chat.
 - Follow-up notes are truncated before being sent to AI.
 - Vercel API wrappers should preserve forwarded headers so IP-based rate limiting works in production.
 
+## File organization — cohesion over size
+- Organize code by **responsibility**, not by line count. Length alone is never a reason to split; shortness is never a reason to merge.
+- Default to leaving files as they are. A handful of small fragments is worse than one cohesive file.
+- **Split when** there's a real seam: a pure side-effect-free layer (helpers, constants, transforms), a god module doing multiple unrelated jobs, or a self-contained component reused by more than one file.
+- **Don't split** when: it's a cohesive single-purpose module (long ≠ wrong), a stateful hook whose `useState`/`useRef` threads through most of the body, an orchestrator that wires children together, or the split would produce single-function files or force state-threading just to hit a line count.
+- Size is a prompt to look, not a limit to enforce. If a file grows past a few hundred lines, ask "is this still one job?" — if yes, leave it.
+- When you do split, preserve the seam: same names, same signatures, no logic changes in the same step. Re-export moved names from the original file so callers don't change.
+- Bias toward less. If you're debating whether to extract, it usually isn't worth it yet.
+
 ## Notes update rules
 - After a meaningful backend or product-flow change, update:
   - `project-notes/app_flow.md`
