@@ -85,6 +85,10 @@ describe('server-helpers characterization tests', () => {
     it('returns empty for empty input', () => {
       expect(helpers.getRequestedAmazonDomain('')).toBeFalsy()
     })
+
+    it('returns empty for supported Amazon domains without configured affiliate tags', () => {
+      expect(helpers.getRequestedAmazonDomain('amazon.co.uk')).toBe('')
+    })
   })
 
   describe('getAmazonMarketplaceScope', () => {
@@ -92,21 +96,31 @@ describe('server-helpers characterization tests', () => {
       expect(helpers.getAmazonMarketplaceScope('guided_discovery', '')).toBe('guided_discovery')
     })
 
-    it('appends normalized domain when provided', () => {
+    it('appends normalized tagged domain when provided', () => {
       const result = helpers.getAmazonMarketplaceScope('guided_discovery', 'amazon.ca')
-      expect(result).toContain('guided_discovery:')
+      expect(result).toBe('guided_discovery:amazon.ca')
+    })
+
+    it('does not append untagged marketplace domains', () => {
+      const result = helpers.getAmazonMarketplaceScope('guided_discovery', 'amazon.co.uk')
+      expect(result).toBe('guided_discovery')
     })
   })
 
   describe('resolveAmazonDomain', () => {
     it('defaults to US domain when no arguments', () => {
       const result = helpers.resolveAmazonDomain()
-      expect(result).toBeTruthy()
+      expect(result).toBe('amazon.com')
     })
 
-    it('uses body amazonDomain when provided', () => {
+    it('uses tagged body amazonDomain when provided', () => {
       const result = helpers.resolveAmazonDomain({ body: { amazonDomain: 'amazon.ca' } })
-      expect(result).toBeTruthy()
+      expect(result).toBe('amazon.ca')
+    })
+
+    it('falls back to a tagged domain when country domain is untagged', () => {
+      const result = helpers.resolveAmazonDomain({ countryCode: 'GB' })
+      expect(result).toBe('amazon.com')
     })
   })
 

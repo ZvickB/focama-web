@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { AMAZON_MARKETPLACE_AUTO } from './amazonStoreConstants.js'
 import { AmazonStoreContext } from './useAmazonStore.js'
 import {
-  AMAZON_MARKETPLACES,
-  normalizeAmazonDomain,
+  AFFILIATE_SUPPORTED_AMAZON_MARKETPLACES,
+  normalizeAffiliateSupportedAmazonDomain,
 } from '../../shared/amazon-marketplaces.js'
 
 const MARKETPLACE_STORAGE_KEYS = {
@@ -24,7 +24,7 @@ function readStoredMarketplacePreference() {
     return AMAZON_MARKETPLACE_AUTO
   }
 
-  const normalizedDomain = normalizeAmazonDomain(storedValue)
+  const normalizedDomain = normalizeAffiliateSupportedAmazonDomain(storedValue)
   return normalizedDomain || null
 }
 
@@ -42,7 +42,7 @@ function getConfidentMarketplaceFromCountryCode(countryCode = '') {
   }
 
   const normalizedCountryCode = countryCode.trim().toUpperCase()
-  const marketplace = AMAZON_MARKETPLACES.find(
+  const marketplace = AFFILIATE_SUPPORTED_AMAZON_MARKETPLACES.find(
     ({ countryCode: marketplaceCountryCode }) => marketplaceCountryCode === normalizedCountryCode,
   )
 
@@ -61,7 +61,7 @@ function normalizeMarketplaceSelection(value) {
     return AMAZON_MARKETPLACE_AUTO
   }
 
-  return normalizeAmazonDomain(value) || AMAZON_MARKETPLACE_AUTO
+  return normalizeAffiliateSupportedAmazonDomain(value) || AMAZON_MARKETPLACE_AUTO
 }
 
 export function AmazonStoreProvider({ children }) {

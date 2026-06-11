@@ -1,5 +1,8 @@
 import { reportBackendError } from './observability.js'
-import { getAmazonDomainFromCountryCode, normalizeAmazonDomain } from '../../shared/amazon-marketplaces.js'
+import {
+  getAffiliateSupportedAmazonDomainFromCountryCode,
+  normalizeAffiliateSupportedAmazonDomain,
+} from '../../shared/amazon-marketplaces.js'
 import { DEFAULT_FILTER_CONFIG } from './result-filter.js'
 
 export const LIVE_RESULT_FILTER_CONFIG = {
@@ -27,7 +30,7 @@ export const RECENT_FINALIZATIONS_MAX = 25
 export const recentFinalizations = []
 
 export function getRequestedAmazonDomain(value = '') {
-  return normalizeAmazonDomain(value)
+  return normalizeAffiliateSupportedAmazonDomain(value)
 }
 
 export function getAmazonMarketplaceScope(scope, amazonDomain = '') {
@@ -40,7 +43,7 @@ export function resolveAmazonDomain({ requestUrl = null, body = null, countryCod
     getRequestedAmazonDomain(body?.amazonDomain) ||
     getRequestedAmazonDomain(requestUrl?.searchParams?.get('amazonDomain') || '')
 
-  return requestedAmazonDomain || getAmazonDomainFromCountryCode(countryCode)
+  return requestedAmazonDomain || getAffiliateSupportedAmazonDomainFromCountryCode(countryCode)
 }
 
 export function roundTimingDuration(value) {

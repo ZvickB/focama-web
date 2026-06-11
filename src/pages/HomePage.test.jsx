@@ -143,7 +143,7 @@ describe('HomePage', () => {
     const user = userEvent.setup()
 
     // Pre-set a detected marketplace preference (simulates geo detection from a previous visit)
-    window.localStorage.setItem('focamai_marketplace', 'amazon.co.uk')
+    window.localStorage.setItem('focamai_marketplace', 'amazon.ca')
 
     const fetchMock = vi.fn((input) => {
       const url = String(input)
@@ -189,7 +189,7 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /start search/i }))
 
     expect(
-      await screen.findByText(/looks like you're in the uk/i),
+      await screen.findByText(/looks like you're in canada/i),
     ).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /dismiss/i }))

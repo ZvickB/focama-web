@@ -99,6 +99,8 @@
 - `api/geo.js` returns a country code from Vercel headers.
 - The marketplace context now persists the user's marketplace choice in localStorage under `focamai_marketplace`.
 - The one-time marketplace prompt state is tracked separately in localStorage under `focamai_marketplace_asked`.
+- Only Amazon marketplaces with a configured Associates tracking tag are active commerce/store choices. As of the current code, that means `amazon.com` and `amazon.ca`; untagged marketplaces such as `amazon.co.uk` fall back to `amazon.com` instead of producing untagged Amazon Special Links.
+- Amazon result-link generation fails closed for unsupported or mismatched Amazon domains: the backend will not emit an untagged Amazon clickout URL.
 - If a saved marketplace preference exists, the frontend skips geo detection on load and uses that saved value immediately.
 - If there is no saved preference, the frontend resolves the geo country code to an explicit Amazon domain, sends it on guided requests when `Auto` is selected, and saves confident detections for future loads.
 - After the first search starts, the homepage shows a lightweight one-time inline marketplace prompt inside the search card until the user chooses a store or dismisses it.
@@ -154,6 +156,7 @@
 - Finalize remains request-specific and rebuilds from discovery cache.
 - Amazon discovery and product-detail enrichment preserve provider Prime signals, including Rainforest delivery text with Prime availability, as structured `isPrime` data through candidate pools, finalize/enrichment payloads, and final UI results.
 - Cached preview results and cached candidate pools are sanitized on read so stale marketplace entries without a known positive price do not reappear or reach finalize AI selection.
+- Cached Amazon result and candidate links are also retagged or blanked on read so older cache entries cannot leak untagged or mismatched Amazon Special Links back into the UI.
 - Thin cached discovery snapshots are treated as refresh candidates instead of reusable evidence when they have fewer than the shortlist count of cached results or candidates.
 - Partial valid haiku output is recoverable, not final: zero picks still use rules fallback, full valid picks stay `haiku_lock`, and partial valid picks are returned as `haiku_lock_topped_up`.
 - Search cache and operational history use Supabase when configured, with local fallback in development.
@@ -183,6 +186,7 @@
 ## Marketplace direction
 - Focamai narrows choices before the user leaves to shop, instead of becoming a marketplace wall inside the app.
 - Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
+- Amazon-first UX is currently limited to marketplaces with valid configured Associates tracking tags (`amazon.com`, `amazon.ca`). Add new locale tracking IDs before re-enabling additional Amazon domains in the store picker or backend domain resolution.
 - Do not force generic labels like `retailer` in user-facing UI when `Amazon` is more accurate for the current experience.
 - Do not add new Amazon/source/retailer fields or badges as incidental work. For existing shopping clickout CTAs, the chosen compromise is source-derived wording: Amazon items can say `View on Amazon`/the active Amazon domain, while future non-Amazon sources should use their own source name.
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.

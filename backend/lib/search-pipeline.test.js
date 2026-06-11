@@ -60,15 +60,26 @@ describe('search pipeline helpers', () => {
       details: '',
       candidatePool: {
         query: 'travel stroller',
+        amazonDomain: 'amazon.ca',
         candidates: [
           createProduct({ id: 'missing-price', price: 'Price unavailable' }),
           createProduct({ id: 'zero-price', price: '$0.00', extracted_price: 0 }),
-          createProduct({ id: 'valid-candidate', numericPrice: 129.99 }),
+          createProduct({
+            id: 'valid-candidate',
+            numericPrice: 129.99,
+            link: 'https://www.amazon.ca/dp/B001',
+          }),
+          createProduct({
+            id: 'mismatched-candidate',
+            numericPrice: 139.99,
+            link: 'https://www.amazon.co.uk/dp/B002',
+          }),
         ],
       },
       results: [
         createProduct({ id: 'stale-result', price: 'Price unavailable' }),
-        createProduct({ id: 'valid-result', price: '$129.99' }),
+        createProduct({ id: 'valid-result', price: '$129.99', link: 'https://www.amazon.ca/dp/B001' }),
+        createProduct({ id: 'mismatched-result', price: '$139.99', link: 'https://www.amazon.co.uk/dp/B002' }),
       ],
       source: 'supabase_cache',
     })
@@ -79,12 +90,23 @@ describe('search pipeline helpers', () => {
       scope: 'guided_discovery',
     })
 
-    expect(snapshot.cachedEntry.results.map((item) => item.id)).toEqual(['valid-result'])
+    expect(snapshot.cachedEntry.results.map((item) => item.id)).toEqual([
+      'valid-result',
+      'mismatched-result',
+    ])
     expect(snapshot.cachedEntry.candidatePool.candidates.map((item) => item.id)).toEqual([
       'valid-candidate',
+      'mismatched-candidate',
     ])
+    expect(snapshot.cachedEntry.results[0].link).toBe('https://www.amazon.ca/dp/B001?tag=focamai4203-20')
+    expect(snapshot.cachedEntry.results[1].link).toBe('')
+    expect(snapshot.cachedEntry.candidatePool.candidates[0].link).toBe(
+      'https://www.amazon.ca/dp/B001?tag=focamai4203-20',
+    )
+    expect(snapshot.cachedEntry.candidatePool.candidates[1].link).toBe('')
     expect(snapshot.normalizedCachedResults).toEqual([
       expect.objectContaining({ id: 'valid-result', badgeLabel: 'Best match' }),
+      expect.objectContaining({ id: 'mismatched-result', badgeLabel: '' }),
     ])
   })
 

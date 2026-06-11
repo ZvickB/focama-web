@@ -24,7 +24,7 @@ export const AMAZON_MARKETPLACES = [
 ]
 
 const DOMAIN_TO_AFFILIATE_TAG = {
-  'amazon.com': 'focamai42-20',
+  'amazon.com': 'focamai-20',
   'amazon.ca': 'focamai4203-20',
 }
 
@@ -46,12 +46,35 @@ export function normalizeAmazonDomain(value = '') {
   return SUPPORTED_AMAZON_DOMAINS.has(normalized) ? normalized : ''
 }
 
+export function getAmazonAffiliateTag(domain = 'amazon.com') {
+  const normalizedDomain = normalizeAmazonDomain(domain)
+  return normalizedDomain ? DOMAIN_TO_AFFILIATE_TAG[normalizedDomain] || '' : ''
+}
+
+export function hasAmazonAffiliateTag(domain = 'amazon.com') {
+  return Boolean(getAmazonAffiliateTag(domain))
+}
+
+export const AFFILIATE_SUPPORTED_AMAZON_MARKETPLACES = AMAZON_MARKETPLACES.filter(({ domain }) =>
+  hasAmazonAffiliateTag(domain),
+)
+
+export function normalizeAffiliateSupportedAmazonDomain(value = '') {
+  const normalizedDomain = normalizeAmazonDomain(value)
+  return hasAmazonAffiliateTag(normalizedDomain) ? normalizedDomain : ''
+}
+
 export function isSupportedAmazonDomain(value = '') {
   return Boolean(normalizeAmazonDomain(value))
 }
 
 export function getAmazonDomainFromCountryCode(countryCode = 'US') {
   return COUNTRY_TO_AMAZON_DOMAIN[countryCode] ?? 'amazon.com'
+}
+
+export function getAffiliateSupportedAmazonDomainFromCountryCode(countryCode = 'US') {
+  const domain = getAmazonDomainFromCountryCode(countryCode)
+  return normalizeAffiliateSupportedAmazonDomain(domain) || 'amazon.com'
 }
 
 export function getOxylabsDomainFromAmazonDomain(domain = 'amazon.com') {
@@ -71,15 +94,23 @@ export function getAmazonPricePrefix(domain = 'amazon.com') {
 
 export function appendAffiliateTag(url, domain = 'amazon.com') {
   if (!url) return url
-  const normalizedDomain = normalizeAmazonDomain(domain) || 'amazon.com'
-  const tag = DOMAIN_TO_AFFILIATE_TAG[normalizedDomain]
-  if (!tag) return url
+  const normalizedDomain = normalizeAmazonDomain(domain)
+  const tag = getAmazonAffiliateTag(normalizedDomain)
+  if (!tag) return ''
   try {
     const u = new URL(url)
+    const urlDomain = u.hostname.toLowerCase().replace(/^www\./, '')
+    const normalizedUrlDomain = normalizeAmazonDomain(urlDomain)
+    if (!normalizedUrlDomain) {
+      return url
+    }
+    if (normalizedUrlDomain && normalizedUrlDomain !== normalizedDomain) {
+      return ''
+    }
     u.searchParams.set('tag', tag)
     return u.toString()
   } catch {
-    return url
+    return ''
   }
 }
 

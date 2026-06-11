@@ -16,6 +16,7 @@
 - Audit modal AI tone and tighten any copy that sounds too promotional or vague.
 - Verify route chunk-load recovery and the guided search transition states in the live browser once the next frontend deploy is available.
 - Watch whether the new inline marketplace prompt feels helpful or distracting, and adjust its timing/copy if testers treat it as friction.
+- Before reapplying to Amazon Associates, verify the new or appealed account's current tracking IDs, update the configured domain-to-tag map if Amazon changes them, deploy, then click live result-card and modal CTAs to confirm every active Amazon link includes the expected `tag=`. Only re-enable additional Amazon marketplaces after adding valid tracking IDs for those locales.
 - Watch the new polling-based query-quality suggestion MVP. It stores `selection.queryQuality`, polls it from the homepage, shows a small optional suggested-query prompt for high-confidence weak-result reviews, and starts a normal new guided search when accepted.
 - Verify query-quality behavior against real provider runs: `celcius drink` should be able to suggest `celsius drink`, `shabbos art` should usually stay quiet, and normal searches such as `travel stroller for airplane` should not show a prompt.
 - Query-quality SSE and suggested-query prewarm remain intentionally unimplemented. Add them only if the polling MVP proves useful and the user explicitly chooses that next step.
@@ -32,6 +33,7 @@
 
 ## Backend/provider follow-ups
 - Discovery uses Rainforest API first for all Amazon marketplaces when configured. Oxylabs is now the discovery fallback only: it runs when Rainforest errors or returns too few usable items to support the 6-item shortlist. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available; validate this Rainforest-first order on live tester searches.
+- Active Amazon discovery is currently constrained to affiliate-tagged marketplaces (`amazon.com`, `amazon.ca`) for Associates compliance; broader Amazon marketplace support is deferred until valid tracking IDs exist.
 - The current shortlist-detail helper is still Oxylabs-backed so modal bullets/descriptions stay on the stronger detail path for now.
 - Keep the SerpApi route inactive unless there is a deliberate reason to reactivate multi-retailer discovery.
 - Create the `rate_limit_events` table in Supabase before public traffic so Render instances share the same rate-limit bucket; the app falls back to process-local limiting if the table is unavailable.

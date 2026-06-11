@@ -39,6 +39,7 @@
 - Result rows/cards and modal facts now combine rating plus review count into one ratings/reviews signal, leaving room for at most one delivery signal and avoiding marketplace-style metadata clutter.
 - Result rows, selected-product panels, grid/card view, and modal headings now use normalized display titles so Amazon keyword stuffing does not dominate the UI. The raw title is preserved in product data and appears behind a quiet full-title disclosure in the modal when it differs.
 - Result row/card and modal shopping clickout CTAs derive their visible label from the product source/store, so Amazon items can say `View on Amazon`/the active Amazon domain while future sources can name their own store.
+- Amazon store/domain handling now fails closed for Associates compliance: only marketplaces with configured tracking tags are active commerce choices (`amazon.com`, `amazon.ca` currently), and unsupported Amazon domains fall back to `amazon.com` instead of emitting untagged Amazon Special Links.
 - After finalize returns the focused shortlist, the frontend saves one local history entry keyed by normalized query plus follow-up notes. Duplicate searches update the existing entry and move it to the top.
 - After final results appear, refinement collapses into a compact summary above the ranked shortlist.
 - Enrichment hydrates in place: teal/orange breathing dots hold pending row/panel and modal reasoning slots, `fit_reason` and `caveat` fill the high reasoning area when available, and feature bullets/descriptions sit lower as product notes.
@@ -62,6 +63,7 @@
 - `GET /api/analytics/dashboard` is a localhost-only development endpoint for the internal analytics page and returns `404` in production.
 - `GET /api/geo` intentionally stays on Vercel so the frontend can resolve the user’s country from Vercel headers and send an explicit Amazon domain on guided requests when the store picker is left on `Auto`.
 - The Amazon marketplace context now remembers the last saved marketplace in localStorage (`focamai_marketplace`) so repeat visits skip geo lookup when a preference or confident detection already exists.
+- Saved marketplace preferences are accepted only when their Amazon domain has a configured Associates tracking tag; stale preferences for untagged marketplaces are treated like `Auto`.
 - If the effective marketplace changes while a search is in flight or already active, discovery/refine restart for the current submitted query and stale older responses are ignored.
 - Discovery cache and operational history use Supabase when configured, with local file fallback in development.
 - Rainforest discovery cache reuse is now scoped under `rainforest_discovery:v3`, which intentionally leaves older shared discovery entries behind so stale provider-era evidence and pre-Prime-delivery-normalization rows are not treated as current.
@@ -92,6 +94,7 @@
 - Keep shortlist count at 6 unless the user explicitly changes it.
 - Focamai should not feel like an Amazon clone or marketplace wall. Its product identity is the focused decision aid, not Amazon's browsing experience.
 - Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
+- Keep active Amazon marketplaces aligned with valid Associates tracking IDs. Do not re-enable more Amazon domains until their store/tracking IDs are configured and verified.
 - Do not force generic `retailer` language in user-facing UI when `Amazon` is more accurate for the current experience.
 - Do not introduce new Amazon/source/retailer labels, facts, or badges as side effects of unrelated features. Existing clickout wording should stay source-derived unless the user explicitly asks to revisit it.
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
@@ -110,6 +113,7 @@
 - Watch whether the compact modal bottom CTA/disclosure feels clear without sounding defensive.
 - Verify local Search History on real searches: finalized save, duplicate upsert, expand/delete/clear, and re-run with notes prefilled.
 - Verify Supabase account history end to end now that the remote store is wired: local-to-account migration, remote save on finalize, list, delete, clear, reload persistence, sign-out fallback to local history.
+- Before reapplying to Amazon Associates, verify live production clickouts from result cards and modals show the current account's `tag=` value for every active Amazon store choice.
 
 ## server.js decomposition (refactor/server-decomposition branch)
 - `backend/lib/server-helpers.js` — extracted 10 shared helpers + shared constants (LIVE_RESULT_FILTER_CONFIG, FINALIZE_BODY_LIMIT_BYTES, CACHE_SCOPE_DISCOVERY, recentFinalizations).

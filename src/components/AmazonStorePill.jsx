@@ -3,7 +3,7 @@ import { ChevronDown } from 'lucide-react'
 
 import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
-import { AMAZON_MARKETPLACES } from '../../shared/amazon-marketplaces.js'
+import { AFFILIATE_SUPPORTED_AMAZON_MARKETPLACES } from '../../shared/amazon-marketplaces.js'
 
 function countryCodeToFlag(code) {
   return [...code.toUpperCase()]
@@ -44,7 +44,7 @@ export function AmazonStorePill({ variant = 'default' }) {
   }, [isOpen])
 
   const isAuto = selectedAmazonDomain === AMAZON_MARKETPLACE_AUTO
-  const selectedMarketplace = AMAZON_MARKETPLACES.find((m) => m.domain === selectedAmazonDomain)
+  const selectedMarketplace = AFFILIATE_SUPPORTED_AMAZON_MARKETPLACES.find((m) => m.domain === selectedAmazonDomain)
 
   let pillFlag, pillLabel
   if (isAuto) {
@@ -62,9 +62,9 @@ export function AmazonStorePill({ variant = 'default' }) {
 
   const primaryMarketplaceDomains = ['amazon.com', 'amazon.ca', 'amazon.co.uk']
   const primaryMarketplaces = primaryMarketplaceDomains
-    .map((domain) => AMAZON_MARKETPLACES.find((marketplace) => marketplace.domain === domain))
+    .map((domain) => AFFILIATE_SUPPORTED_AMAZON_MARKETPLACES.find((marketplace) => marketplace.domain === domain))
     .filter(Boolean)
-  const additionalMarketplaces = AMAZON_MARKETPLACES.filter(
+  const additionalMarketplaces = AFFILIATE_SUPPORTED_AMAZON_MARKETPLACES.filter(
     (marketplace) => !primaryMarketplaceDomains.includes(marketplace.domain),
   )
 

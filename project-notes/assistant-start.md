@@ -30,6 +30,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - The PNG wordmark is the active wordmark.
 - Focamai should not feel like an Amazon clone or marketplace wall. Its product identity is the focused decision aid, not Amazon's browsing experience.
 - Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
+- Active Amazon marketplaces must have configured Associates tracking tags. The current code only enables `amazon.com` and `amazon.ca`; untagged domains fall back to `amazon.com` and should not produce Amazon clickouts without `tag=`.
 - Do not force generic `retailer` language in user-facing UI when `Amazon` is more accurate for the current experience.
 - Existing shopping clickout CTAs should derive their visible label from the product source/store: Amazon items can say `View on Amazon` or the active Amazon domain, and future non-Amazon sources can say `View on Walmart`, `View on AliExpress`, etc.
 - Do not add new Amazon/source/retailer fields or badges as incidental work. Any new result-card or modal source labeling beyond the existing source-derived clickout CTA should be an explicit product/UI decision from the user, not bundled into unrelated search or data changes.

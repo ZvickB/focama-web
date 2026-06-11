@@ -23,6 +23,7 @@
 - The current web homepage at `/` still uses the `open` layout until changed.
 - The product should stay calm, focused, mobile-first/responsive, and not marketplace-shaped.
 - Focamai should not feel like an Amazon clone or marketplace wall. Amazon is the current primary commerce path and affiliate target, so frontend copy and UI may say Amazon directly when the active source is Amazon and doing so improves clarity, trust, or conversion.
+- Amazon marketplace choices are currently limited to domains with configured Associates tracking tags (`amazon.com`, `amazon.ca`). Untagged domains fall back to `amazon.com` and should not create Amazon Special Links without `tag=`.
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible, but do not let future multi-retailer flexibility make today's Amazon-first UX vague.
 - Existing shopping clickout CTAs should use source-derived wording: Amazon items can say `View on Amazon` or the active Amazon domain, while future non-Amazon sources can say `View on Walmart`, `View on AliExpress`, etc.
 - Product shortlists stay at 6 items.
