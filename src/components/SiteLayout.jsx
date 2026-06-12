@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { LogOut, Menu, RotateCcw, UserCircle, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
@@ -171,6 +171,71 @@ function SlidingNav({ items, className = '' }) {
         </NavLink>
       ))}
     </nav>
+  )
+}
+
+function AvatarDropdown({ userInitial, userEmail, onSignOut }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const dropdownRef = useRef(null)
+
+  const close = useCallback(() => setIsOpen(false), [])
+
+  useEffect(() => {
+    if (!isOpen) return
+    function handleClickOutside(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) close()
+    }
+    function handleEscape(e) {
+      if (e.key === 'Escape') close()
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [isOpen, close])
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen((v) => !v)}
+        aria-label="Account menu"
+        aria-expanded={isOpen}
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eef7f6] text-xs font-semibold text-primary ring-1 ring-white/70 transition hover:ring-[#d9e6e8] shadow-[0_12px_30px_-22px_rgba(15,23,42,0.28)]"
+      >
+        {userInitial || <UserCircle className="h-4 w-4" />}
+      </button>
+      <AnimatePresence>
+        {isOpen && (
+          <MotionDiv
+            initial={{ opacity: 0, y: -8, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.96 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            style={{ transformOrigin: 'top right' }}
+            className="absolute right-0 top-full z-50 mt-2 w-56 rounded-2xl border border-stone-200 bg-white py-2 shadow-[0_8px_32px_-8px_rgba(15,23,42,0.18)]"
+          >
+            <div className="px-4 py-2">
+              <p className="truncate text-sm font-medium text-slate-800">{userEmail}</p>
+            </div>
+            <div className="mx-2 border-t border-stone-100" />
+            <button
+              type="button"
+              onClick={() => {
+                close()
+                onSignOut()
+              }}
+              className="mx-2 mt-1 flex w-[calc(100%-1rem)] items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-slate-600 transition hover:bg-stone-50 hover:text-slate-900"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
+          </MotionDiv>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 
@@ -352,22 +417,7 @@ function SiteLayout() {
             ) : null}
             <SlidingNav items={navItems} />
             {user ? (
-              <div className="flex items-center gap-1.5 rounded-full border border-white/70 bg-white/78 px-2 py-1 text-sm text-slate-600 shadow-[0_12px_30px_-22px_rgba(15,23,42,0.28)]">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#eef7f6] text-xs font-semibold text-primary">
-                  {userInitial || <UserCircle className="h-4 w-4" />}
-                </span>
-                <span className="hidden max-w-[140px] truncate text-xs font-medium xl:inline">
-                  {userEmail}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  aria-label="Sign out"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-stone-100 hover:text-slate-700"
-                >
-                  <LogOut className="h-4 w-4" />
-                </button>
-              </div>
+              <AvatarDropdown userInitial={userInitial} userEmail={userEmail} onSignOut={handleSignOut} />
             ) : (
               <button
                 type="button"
@@ -418,11 +468,16 @@ function SiteLayout() {
             ))}
             {user ? (
               <div className="flex items-center justify-between gap-3 rounded-[22px] border border-white/70 bg-white/72 px-3 py-2.5 text-sm text-slate-600 shadow-[0_14px_34px_-28px_rgba(15,23,42,0.22)]">
-                <span className="min-w-0 truncate font-medium">{userEmail}</span>
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#eef7f6] text-xs font-semibold text-primary">
+                    {userInitial || <UserCircle className="h-4 w-4" />}
+                  </span>
+                  <span className="min-w-0 truncate text-sm font-medium text-slate-700">{userEmail}</span>
+                </div>
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-full px-3 text-sm font-medium text-slate-500 transition hover:bg-stone-100 hover:text-slate-800"
+                  className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-3 text-sm font-medium text-slate-500 transition hover:bg-stone-100 hover:text-slate-800"
                 >
                   <LogOut className="h-4 w-4" />
                   Sign out
