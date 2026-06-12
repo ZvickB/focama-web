@@ -53,6 +53,7 @@
 - `GET /api/search/query-quality` exposes polling-based query-quality suggestions.
 - `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist.
 - `POST /api/feedback` stores tester feedback.
+- Search diagnostics now run outside Sentry. The frontend search ID is the support code; failed searches show that code, `Copy debug info`, and an optional filter/VPN selector. Frontend/backend lifecycle events write to Supabase `search_attempts` and `search_events` when those tables exist. `/admin/analytics` has a Search reliability section for failed support codes and provider/network patterns.
 
 ## Key files
 - App route shell: `src/App.jsx`
@@ -64,6 +65,7 @@
 - Product modal UI: `src/components/home/ProductDetailModal.jsx`
 - Finalize loading UI: `src/components/home/FinalizeLoadingState.jsx`
 - Guided search state/requests: `src/components/home/useGuidedSearch.js`
+- Search diagnostics helper: `src/lib/searchDiagnostics.js`
 - Local history helpers: `src/lib/history/`
 - Remote history store: `src/lib/history/remoteHistoryStore.js`
 - Auth provider/hook: `src/contexts/AuthContext.jsx`, `src/contexts/useAuth.js`
@@ -73,6 +75,7 @@
 - Render backend entrypoint: `backend/express-server.js`
 - Core route handlers: `backend/server.js`
 - Cache/storage helpers: `backend/lib/search-storage.js`
+- Search diagnostics storage: `backend/lib/storage/search-diagnostics-storage.js`
 
 ## Deployment reality
 - Frontend is on Vercel.

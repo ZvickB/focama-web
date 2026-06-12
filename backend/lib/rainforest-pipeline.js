@@ -180,12 +180,26 @@ export async function fetchRainforestArtifacts({
         statusCode: 404,
       },
       artifacts: null,
+      diagnostics: {
+        rawResultCount: rawItems.length,
+        normalizedResultCount: normalizedItems.length,
+        resultCountAfterInternalFilters: 0,
+        candidateCountAfterInternalFilters: 0,
+      },
     }
   }
 
   return {
     error: null,
     artifacts,
+    diagnostics: {
+      rawResultCount: rawItems.length,
+      normalizedResultCount: normalizedItems.length,
+      resultCountAfterInternalFilters: artifacts.results.length,
+      candidateCountAfterInternalFilters: Array.isArray(artifacts.candidatePool?.candidates)
+        ? artifacts.candidatePool.candidates.length
+        : 0,
+    },
   }
 }
 

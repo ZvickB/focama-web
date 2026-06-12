@@ -14,6 +14,7 @@ import { lacksKnownPositivePrice } from '../result-filter.js'
 import { getEnv, validateSearchInput } from '../search-data.js'
 import {
   readProductDetailsCacheEntries,
+  recordSearchDiagnosticEvent,
   recordOxylabsProductFailures,
   writeProductDetailsCacheEntries,
 } from '../search-storage.js'
@@ -49,6 +50,22 @@ import {
 } from './enrichment-handler.js'
 
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
+
+function recordFinalizeDiagnosticEvent(body = {}, event = {}) {
+  const searchId = truncateText(body?.searchId, 120)
+
+  if (!searchId) {
+    return
+  }
+
+  void recordSearchDiagnosticEvent({
+    searchId,
+    sessionId: truncateText(body?.sessionId, 120),
+    platform: 'web',
+    provider: 'rainforest',
+    ...event,
+  })
+}
 
 export function recordRecentFinalization({ query, details, results, strategy, model, timestamp }) {
   recentFinalizations.unshift({
@@ -415,6 +432,13 @@ export async function handleFinalizeSelection(request, response) {
     requestMode: typeof body?.requestMode === 'string' ? body.requestMode : null,
     bodyReadDuration: body?.bodyReadDuration,
   })
+  recordFinalizeDiagnosticEvent(body, {
+    stage: 'backend_received',
+    status: 'finalize_started',
+    query: typeof body?.query === 'string' ? body.query : '',
+    amazonDomain: getRequestedAmazonDomain(body?.amazonDomain),
+    retryCount: Number.isFinite(Number(body?.retryCount)) ? Number(body.retryCount) : 0,
+  })
 
   const sanitizedDiscoveryContext = sanitizeFinalizeDiscoveryContext(body)
 
@@ -423,6 +447,15 @@ export async function handleFinalizeSelection(request, response) {
       route: '/api/search/finalize',
       query: typeof body?.query === 'string' ? body.query : '',
       error: sanitizedDiscoveryContext.error,
+    })
+    recordFinalizeDiagnosticEvent(body, {
+      stage: 'backend_response_sent',
+      status: 'failed',
+      query: typeof body?.query === 'string' ? body.query : '',
+      amazonDomain: getRequestedAmazonDomain(body?.amazonDomain),
+      finalStatus: 'frontend_error',
+      errorMessage: sanitizedDiscoveryContext.error,
+      durationMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
     sendJson(response, 400, { error: sanitizedDiscoveryContext.error })
     return
@@ -445,6 +478,15 @@ export async function handleFinalizeSelection(request, response) {
       query: sanitizedDiscoveryContext.normalizedQuery,
       error: resolvedDiscoveryContext.error,
     })
+    recordFinalizeDiagnosticEvent(body, {
+      stage: 'backend_response_sent',
+      status: 'failed',
+      query: sanitizedDiscoveryContext.normalizedQuery,
+      amazonDomain: sanitizedDiscoveryContext.amazonDomain,
+      finalStatus: 'frontend_error',
+      errorMessage: resolvedDiscoveryContext.error,
+      durationMs: roundTimingDuration(nowMs() - requestStartedAt),
+    })
     sendJson(response, resolvedDiscoveryContext.statusCode, { error: resolvedDiscoveryContext.error })
     return
   }
@@ -456,6 +498,15 @@ export async function handleFinalizeSelection(request, response) {
       route: '/api/search/finalize',
       query: sanitizedDiscoveryContext.normalizedQuery,
       error: resolvedCandidatePool.error,
+    })
+    recordFinalizeDiagnosticEvent(body, {
+      stage: 'backend_response_sent',
+      status: 'failed',
+      query: sanitizedDiscoveryContext.normalizedQuery,
+      amazonDomain: sanitizedDiscoveryContext.amazonDomain,
+      finalStatus: 'empty',
+      errorMessage: resolvedCandidatePool.error,
+      durationMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
     sendJson(response, resolvedCandidatePool.statusCode, { error: resolvedCandidatePool.error })
     return
@@ -568,6 +619,16 @@ export async function handleFinalizeSelection(request, response) {
         { name: 'cache', duration: cacheLookupDuration },
         { name: 'total', duration: nowMs() - requestStartedAt },
       ],
+    })
+    recordFinalizeDiagnosticEvent(body, {
+      stage: 'backend_response_sent',
+      status: 'retry_exhausted',
+      query: sanitizedDiscoveryContext.normalizedQuery,
+      amazonDomain: sanitizedDiscoveryContext.amazonDomain,
+      durationMs: roundTimingDuration(nowMs() - requestStartedAt),
+      finalStatus: 'empty',
+      resultCountAfterInternalFilters: 0,
+      retryCount,
     })
     return
   }
@@ -727,6 +788,16 @@ export async function handleFinalizeSelection(request, response) {
         { name: 'total', duration: totalDuration },
       ],
     })
+    recordFinalizeDiagnosticEvent(body, {
+      stage: 'backend_response_sent',
+      status: 'success',
+      query: sanitizedDiscoveryContext.normalizedQuery,
+      amazonDomain: sanitizedDiscoveryContext.amazonDomain,
+      durationMs: roundTimingDuration(totalDuration),
+      finalStatus: 'success',
+      resultCountAfterInternalFilters: results.length,
+      retryCount,
+    })
 
     // Fire off product details and mini enrichment async; do not block the response.
     if (usedHaikuSelection) {
@@ -815,6 +886,17 @@ export async function handleFinalizeSelection(request, response) {
       route: '/api/search/finalize',
       source: 'guided_finalize',
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+    })
+    recordFinalizeDiagnosticEvent(body, {
+      stage: 'backend_response_sent',
+      status: 'failed',
+      query: sanitizedDiscoveryContext.normalizedQuery,
+      amazonDomain: sanitizedDiscoveryContext.amazonDomain,
+      durationMs: roundTimingDuration(nowMs() - requestStartedAt),
+      finalStatus: 'provider_error',
+      errorType: error?.name || 'Error',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      retryCount,
     })
     sendJson(response, 500, buildInternalErrorPayload('Unable to finalize the product selection.', error))
   }

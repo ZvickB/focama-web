@@ -8,16 +8,21 @@ import {
   handleAnalyticsDashboard,
   handleAnalyticsTrack,
   handleCachedSearch,
+  handleCachePoolInspect,
+  handleConnectivityDiagnostic,
   handleEnrichmentPoll,
   handleEnrichmentStream,
   handleFeedbackSubmission,
   handleFinalizeSelection,
+  handleFinalizeHistory,
+  handleHealth,
   handleProductDetails,
   handleQueryQualityPoll,
   handleRainforestDiscoverySearch,
   handleRefinementPrompt,
   handleRetryAdvice,
   handleSearchDebug,
+  handleSearchDiagnosticEvent,
   handleSupabaseHealth,
 } from './server.js'
 
@@ -113,6 +118,18 @@ app.get('/api/analytics/dashboard', async (req, res) => {
   await handleAnalyticsDashboard(req, res)
 })
 
+app.get('/api/analytics/cache-pool', async (req, res) => {
+  await handleCachePoolInspect(req, res)
+})
+
+app.get('/api/analytics/finalize-history', async (req, res) => {
+  handleFinalizeHistory(req, res)
+})
+
+app.post('/api/search/diagnostics/event', async (req, res) => {
+  await handleSearchDiagnosticEvent(req, res)
+})
+
 app.post('/api/feedback', async (req, res) => {
   await handleFeedbackSubmission(req, res)
 })
@@ -164,6 +181,14 @@ app.post('/api/transcribe', audioUpload.single('audio'), async (req, res) => {
 // Health
 app.get('/api/health/supabase', async (req, res) => {
   await handleSupabaseHealth(res)
+})
+
+app.get('/api/health', (req, res) => {
+  handleHealth(res)
+})
+
+app.get('/api/diagnostics/connectivity', (req, res) => {
+  handleConnectivityDiagnostic(res)
 })
 
 app.use((error, req, res, next) => {

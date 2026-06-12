@@ -387,6 +387,7 @@ function FinalizeHistoryInspector() {
 
 function AnalyticsPage() {
   const [days, setDays] = useState(14)
+  const [diagnosticFilter, setDiagnosticFilter] = useState('')
   const hasHydrated = typeof window !== 'undefined'
 
   const dashboardQuery = useQuery({
@@ -398,6 +399,29 @@ function AnalyticsPage() {
 
   const dashboard = dashboardQuery.data
   const summary = dashboard?.summary
+  const diagnostics = dashboard?.searchDiagnostics
+  const normalizedDiagnosticFilter = diagnosticFilter.trim().toLowerCase()
+  const filteredDiagnosticFailures = (diagnostics?.recentFailures || []).filter((row) => {
+    if (!normalizedDiagnosticFilter) {
+      return true
+    }
+
+    return [
+      row.searchId,
+      row.status,
+      row.stage,
+      row.platform,
+      row.query,
+      row.amazonDomain,
+      row.provider,
+      row.reportedFilterType,
+      row.error,
+      row.backendReachable === true ? 'backend reachable' : 'backend not reachable',
+      row.connectivityOk === true ? 'connectivity ok' : 'connectivity failed',
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(normalizedDiagnosticFilter))
+  })
 
   return (
     <>
@@ -506,6 +530,129 @@ function AnalyticsPage() {
                   />
                 </div>
               </CollapsibleSection>
+
+              {diagnostics?.available ? (
+                <CollapsibleSection
+                  title="Search reliability"
+                  description="Failed search attempts, provider failures, backend reachability, and tester-reported filters/VPNs by support code."
+                  defaultOpen={true}
+                >
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <MetricCard
+                      label="Failed Searches"
+                      value={formatNumber(diagnostics.summary?.failures)}
+                      hint={`${formatNumber(diagnostics.summary?.attempts)} diagnostic attempts in this window`}
+                    />
+                    <MetricCard
+                      label="Rainforest Timeouts"
+                      value={formatNumber(diagnostics.summary?.rainforestTimeouts)}
+                      hint={`${formatNumber(diagnostics.summary?.rainforestErrors)} Rainforest error events`}
+                    />
+                    <MetricCard
+                      label="Empty Results"
+                      value={formatNumber(diagnostics.summary?.emptyResults)}
+                      hint="Provider returned data, but no usable shortlist survived"
+                    />
+                    <MetricCard
+                      label="Never Reached Backend"
+                      value={formatNumber(diagnostics.summary?.neverReachedBackend)}
+                      hint={`${formatNumber(diagnostics.summary?.backendReachableFailures)} failures still had backend health pass`}
+                    />
+                  </div>
+
+                  <div className="grid gap-6 xl:grid-cols-3">
+                    <div className="space-y-3">
+                      <SectionHeading title="Filter/VPN reports" description="Tester-selected network filtering context on failed attempts." />
+                      <SimpleTable
+                        columns={[
+                          { key: 'label', label: 'Reported type' },
+                          { key: 'count', label: 'Failures', render: (row) => formatNumber(row.count) },
+                        ]}
+                        rows={Object.entries(diagnostics.byFilterType || {}).map(([label, count]) => ({ label, count }))}
+                        emptyMessage="No filter/VPN reports yet."
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <SectionHeading title="Platforms" description="Where failures are being reported." />
+                      <SimpleTable
+                        columns={[
+                          { key: 'label', label: 'Platform' },
+                          { key: 'count', label: 'Failures', render: (row) => formatNumber(row.count) },
+                        ]}
+                        rows={Object.entries(diagnostics.byPlatform || {}).map(([label, count]) => ({ label, count }))}
+                        emptyMessage="No platform failures yet."
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <SectionHeading title="Marketplaces" description="Selected Amazon region/domain on failed attempts." />
+                      <SimpleTable
+                        columns={[
+                          { key: 'label', label: 'Marketplace' },
+                          { key: 'count', label: 'Failures', render: (row) => formatNumber(row.count) },
+                        ]}
+                        rows={Object.entries(diagnostics.byMarketplace || {}).map(([label, count]) => ({ label: label || 'unknown', count }))}
+                        emptyMessage="No marketplace failures yet."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                      <SectionHeading
+                        title="Recent failed searches"
+                        description="Search by support code, status, platform, query, marketplace, provider, filter/VPN type, or health result."
+                      />
+                      <label className="flex w-full flex-col gap-1 text-sm text-slate-600 sm:w-80">
+                        <span className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Filter</span>
+                        <input
+                          value={diagnosticFilter}
+                          onChange={(event) => setDiagnosticFilter(event.target.value)}
+                          placeholder="support code, Techloq, timeout..."
+                          className="h-10 rounded-full border border-stone-200 bg-white px-4 text-sm text-slate-900 outline-none focus:border-slate-400"
+                        />
+                      </label>
+                    </div>
+                    <SimpleTable
+                      columns={[
+                        {
+                          key: 'time',
+                          label: 'Time',
+                          render: (row) => row.time ? new Date(row.time).toLocaleString() : '—',
+                        },
+                        { key: 'searchId', label: 'Support code' },
+                        { key: 'status', label: 'Status' },
+                        { key: 'stage', label: 'Last stage' },
+                        { key: 'query', label: 'Query' },
+                        { key: 'platform', label: 'Platform' },
+                        { key: 'amazonDomain', label: 'Region' },
+                        { key: 'reportedFilterType', label: 'Filter/VPN' },
+                        {
+                          key: 'backendReachable',
+                          label: 'Backend health',
+                          render: (row) => row.backendReachable === true ? 'Passed' : row.backendReachable === false ? 'Failed' : '—',
+                        },
+                        {
+                          key: 'durationMs',
+                          label: 'Duration',
+                          render: (row) => Number.isFinite(Number(row.durationMs)) ? `${Math.round(Number(row.durationMs))} ms` : '—',
+                        },
+                        { key: 'error', label: 'Safe error' },
+                      ]}
+                      rows={filteredDiagnosticFailures}
+                      emptyMessage="No failed diagnostic attempts match this filter."
+                    />
+                  </div>
+                </CollapsibleSection>
+              ) : (
+                <CollapsibleSection
+                  title="Search reliability"
+                  description="Create the search_attempts and search_events tables to enable support-code diagnostics."
+                >
+                  <div className="rounded-[22px] border border-amber-200 bg-amber-50/80 px-4 py-4 text-sm text-amber-900">
+                    Search diagnostics are not available yet.
+                  </div>
+                </CollapsibleSection>
+              )}
 
               <CollapsibleSection title="Daily funnel" description="Quick trend line: are people reaching final results, and are those searches ending in outbound intent?">
                 <SimpleTable

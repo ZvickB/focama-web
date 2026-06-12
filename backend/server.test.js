@@ -281,12 +281,12 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(200)
     expect(JSON.parse(response.body)).toEqual({
       results: [
-        { id: '1', price: '$10.00', badgeLabel: 'Best match' },
-        { id: '2', price: '$11.00', badgeLabel: '' },
-        { id: '3', price: '$12.00', badgeLabel: '' },
-        { id: '4', price: '$13.00', badgeLabel: '' },
-        { id: '5', price: '$14.00', badgeLabel: '' },
-        { id: '6', price: '$15.00', badgeLabel: '' },
+        { id: '1', price: '$10.00', badgeLabel: 'Best match', link: '' },
+        { id: '2', price: '$11.00', badgeLabel: '', link: '' },
+        { id: '3', price: '$12.00', badgeLabel: '', link: '' },
+        { id: '4', price: '$13.00', badgeLabel: '', link: '' },
+        { id: '5', price: '$14.00', badgeLabel: '', link: '' },
+        { id: '6', price: '$15.00', badgeLabel: '', link: '' },
       ],
       source: 'cache',
       cachedAt: '2026-03-17T12:00:00.000Z',
@@ -309,7 +309,7 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(200)
     expect(JSON.parse(response.body)).toEqual({
       results: [
-        { id: 'live', title: 'Travel Stroller', price: '$129.99', badgeLabel: 'Best match' },
+        { id: 'live', title: 'Travel Stroller', price: '$129.99', badgeLabel: 'Best match', link: '' },
       ],
       source: 'cache',
       cachedAt: '2026-03-17T12:00:00.000Z',
@@ -332,7 +332,7 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(200)
     expect(JSON.parse(response.body)).toEqual({
       results: [
-        { id: 'live', title: 'Travel Stroller', price: '$129.99', badgeLabel: 'Best match' },
+        { id: 'live', title: 'Travel Stroller', price: '$129.99', badgeLabel: 'Best match', link: '' },
       ],
       source: 'cache',
       cachedAt: '2026-03-17T12:00:00.000Z',

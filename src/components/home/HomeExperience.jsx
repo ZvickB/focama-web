@@ -61,7 +61,7 @@ function OpenLayout(props) {
     guided,
     showTimingPanel,
   } = props
-  const { actions, query, querySuggestion, results, retry, status } = guided
+  const { actions, diagnostics, query, querySuggestion, results, retry, status } = guided
   const displayedResults = results.displayed
   const errorMessage = status.errorMessage
   const hasFinalResults = results.hasFinalResults
@@ -531,6 +531,7 @@ function OpenLayout(props) {
               <Suspense fallback={<ResultsSectionFallback showFinalizeStatus={status.isFinalizing} />}>
                 <ResultsSection
                   displayedResults={displayedResults}
+                  diagnostics={diagnostics}
                   errorMessage={errorMessage}
                   hasFinalResults={hasFinalResults}
                   hasStartedSearch={hasStartedSearch}

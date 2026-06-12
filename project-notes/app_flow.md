@@ -168,6 +168,8 @@
 - Oxylabs product-detail fetches use a fast first pass for finalize enrichment and retry failed ASIN detail calls in the background so cache quality can still improve without holding the modal AI copy back longer.
 - When a background detail retry later succeeds, the stored enrichment payload is updated with the new `feature_bullets` and the frontend keeps polling long enough for the open modal to hydrate those bullets in place.
 - Backend observability is now opt-in through Sentry (`SENTRY_DSN`) with sanitized error context, and background async failures are logged/reported instead of disappearing silently.
+- Search reliability diagnostics now use the existing frontend search ID as a user-facing support code. Frontend discovery/finalize failures show the support code, offer a safe `Copy debug info` action, ask testers whether they use a filter/VPN, run lightweight `/api/health` and `/api/diagnostics/connectivity` checks, and write best-effort lifecycle rows to Supabase `search_attempts` / `search_events` when those tables exist.
+- The diagnostic lifecycle covers frontend search start, backend request start/receive, Rainforest start/success/error/timeout, app filter counts, empty results, backend response sent, frontend response/display success, frontend error, backend health, and connectivity checks.
 - `search_history` is internal telemetry, not user-facing history.
 - Account-backed saved-search history uses `saved_searches`, not the existing internal `search_history` table.
 - Rate limiting is a 10-second rolling window with a limit of 15 requests per client IP. In production it uses a shared Supabase `rate_limit_events` event log keyed by a hashed IP value, and falls back to the process-local memory limiter when Supabase is unavailable.
@@ -182,6 +184,7 @@
   - aggregates search runs, events, impressions, clicks, and tester feedback server-side
   - not part of the deployed public product surface
 - Tester feedback writes to a dedicated `tester_feedback` table in Supabase when configured, with local file fallback in development.
+- `/admin/analytics` now includes a local-only Search reliability section sourced from diagnostic rows, with failure totals, Rainforest timeouts/errors, empty-result counts, attempts that never reached the search backend, backend-health outcomes, filter/VPN reports, platform/marketplace grouping, and recent failed support-code rows.
 
 ## Marketplace direction
 - Focamai narrows choices before the user leaves to shop, instead of becoming a marketplace wall inside the app.

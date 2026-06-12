@@ -27,6 +27,7 @@
 - Watch whether the new inline clickout disclosure feels clear and trust-building, and adjust the wording if testers read it as friction or legal copy.
 - Keep trimming `backend/server.js` so route orchestration and flow logic do not keep growing in one file.
 - Use the local `/admin/analytics` dashboard during development against live data and decide which weak-query, weak-ranking, or refine-friction fixes to prioritize first.
+- Create the Supabase `search_attempts` and `search_events` tables from `project-notes/db-needs.md`, then verify a live failed search writes a support-code event path and appears in `/admin/analytics` under Search reliability.
 - Finish the saved-search sequence: verify local history on real finalized searches, then add Supabase auth, then move logged-in history to a separate `saved_searches` table with local-to-account migration.
 - Finish auth/history QA: verify sign up, sign in, OAuth return if Google is enabled, session persistence, sign out, local-to-account history migration, remote save on finalize, reload persistence, delete, clear, and second browser/device account history.
 - If live QA passes, decide whether to add a small post-finalize nudge telling logged-out users that sign-in syncs history across devices.
@@ -38,6 +39,7 @@
 - Keep the SerpApi route inactive unless there is a deliberate reason to reactivate multi-retailer discovery.
 - Create the `rate_limit_events` table in Supabase before public traffic so Render instances share the same rate-limit bucket; the app falls back to process-local limiting if the table is unavailable.
 - Add the real `SENTRY_DSN` and confirm events arrive in production once the Render environment is updated.
+- Keep Sentry as a useful backend exception channel, but do not rely on it as the only search-failure visibility path; search support-code diagnostics now write to Supabase separately when configured.
 
 ## Product guardrails
 - Keep the guided flow as the main experience.

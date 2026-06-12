@@ -51,6 +51,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Preview product detail hydration: `GET /api/search/product-details`.
 - Retry advice: `POST /api/search/retry-advice`.
 - Feedback: `POST /api/feedback`.
+- Search diagnostics: `POST /api/search/diagnostics/event`, `GET /api/health`, `GET /api/diagnostics/connectivity`.
 
 ## Important behavior notes
 - Discovery uses Rainforest API first for all Amazon marketplaces when configured. Oxylabs is now the discovery fallback only: it runs when Rainforest errors or returns too few usable items to support the 6-item shortlist. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available.
@@ -66,6 +67,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Thin discovery cache hits with fewer than 6 cached results or candidates are bypassed and refreshed from the provider.
 - `/api/search/live` and debug/cache routes are not the main user path.
 - `/admin/analytics` is local-only during development.
+- `/admin/analytics` includes a Search reliability section when Supabase `search_attempts` and `search_events` exist; it shows failed support codes, Rainforest timeout/error/empty-result patterns, backend reachability, filter/VPN reports, platform, and marketplace grouping.
 
 ## Key files
 - App route shell: `src/App.jsx`
@@ -79,6 +81,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Backend route handlers: `backend/server.js`
 - Render backend entry: `backend/express-server.js`
 - Search storage/cache helpers: `backend/lib/search-storage.js`
+- Search diagnostics helper/storage: `src/lib/searchDiagnostics.js`, `backend/lib/storage/search-diagnostics-storage.js`
 
 ## Read deeper only when relevant
 - Current implemented behavior: `project-notes/app_flow.md`

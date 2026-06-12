@@ -52,6 +52,11 @@ import {
 } from '@/components/home/guided-search/result-merge.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { historyStore } from '@/lib/history/historyStore.js'
+import {
+  buildSearchDebugInfoText,
+  reportSearchDiagnosticEvent,
+  runSearchFailureDiagnostics,
+} from '@/lib/searchDiagnostics.js'
 import { MAX_PRODUCT_QUERY_LENGTH, validateSearchInput } from '../../../shared/search-input.js'
 
 export { AMAZON_MARKETPLACE_AUTO }
@@ -74,6 +79,7 @@ export function useGuidedSearch() {
   const [submittedAmazonDomain, setSubmittedAmazonDomain] = useState('')
   const [selectedProductState, setSelectedProductState] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
+  const [failureDiagnostics, setFailureDiagnostics] = useState(null)
   const [hasStartedSearch, setHasStartedSearch] = useState(false)
   const [submittedQuery, setSubmittedQuery] = useState('')
   const [discoveryToken, setDiscoveryToken] = useState('')
@@ -155,6 +161,135 @@ export function useGuidedSearch() {
     trackResultClickAnalytics(eventData, getAnalyticsIds(explicitIds))
   }
 
+  function recordDiagnostic(stage, data = {}, explicitIds = {}) {
+    const ids = getAnalyticsIds(explicitIds)
+
+    if (!ids.searchId) {
+      return
+    }
+
+    reportSearchDiagnosticEvent({
+      searchId: ids.searchId,
+      sessionId: ids.sessionId,
+      stage,
+      amazonDomain: data.amazonDomain ?? submittedAmazonDomain,
+      query: data.query ?? submittedQuery,
+      retryCount,
+      ...data,
+    })
+  }
+
+  function createFailureDiagnostics({
+    amazonDomain = submittedAmazonDomain,
+    durationMs = null,
+    error,
+    fallbackUsed = false,
+    query = submittedQuery,
+    searchStatus = 'frontend_error',
+    supportSearchId = analyticsSearchIdRef.current,
+  } = {}) {
+    const safeError = {
+      errorType: error?.name || 'Error',
+      errorMessage: error instanceof Error ? error.message : String(error || 'Unknown error'),
+    }
+
+    return {
+      amazonDomain,
+      apiBaseHost: '',
+      backendHealth: null,
+      connectivity: null,
+      durationMs,
+      fallbackUsed,
+      query,
+      reportedFilterType: '',
+      retryCount,
+      searchId: supportSearchId,
+      searchStatus,
+      time: new Date().toISOString(),
+      ...safeError,
+    }
+  }
+
+  function setFailureFromError(options = {}) {
+    const nextDiagnostics = createFailureDiagnostics(options)
+
+    setFailureDiagnostics(nextDiagnostics)
+
+    const { searchId, query, amazonDomain, errorType, errorMessage, searchStatus } = nextDiagnostics
+    recordDiagnostic('frontend_error', {
+      amazonDomain,
+      errorMessage,
+      errorType,
+      finalStatus: searchStatus,
+      query,
+      status: 'failed',
+    }, { searchId, sessionId: analyticsSessionIdRef.current })
+
+    void runSearchFailureDiagnostics({
+      amazonDomain,
+      error: options.error,
+      query,
+      retryCount,
+      searchId,
+      sessionId: analyticsSessionIdRef.current,
+    }).then((diagnostics) => {
+      setFailureDiagnostics((current) => {
+        if (!current || current.searchId !== searchId) {
+          return current
+        }
+
+        const backendReachable = diagnostics.backendHealth?.ok === true
+        const connectivityOk = diagnostics.connectivity?.ok === true
+        const searchStatusWithNetwork =
+          !backendReachable && !connectivityOk
+            ? 'network_blocked_possible'
+            : current.searchStatus
+
+        return {
+          ...current,
+          ...diagnostics,
+          searchStatus: searchStatusWithNetwork,
+        }
+      })
+    })
+  }
+
+  async function copyFailureDebugInfo() {
+    if (!failureDiagnostics) {
+      return false
+    }
+
+    const text = buildSearchDebugInfoText(failureDiagnostics)
+
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  function updateReportedFilterType(nextValue) {
+    setFailureDiagnostics((current) => {
+      if (!current) {
+        return current
+      }
+
+      const reportedFilterType = String(nextValue || '').trim()
+      recordDiagnostic('connectivity_diagnostic_success', {
+        amazonDomain: current.amazonDomain,
+        query: current.query,
+        reportedFilterType,
+        status: 'filter_reported',
+      }, { searchId: current.searchId, sessionId: analyticsSessionIdRef.current })
+
+      return {
+        ...current,
+        reportedFilterType,
+      }
+    })
+  }
+
   function stopEnrichmentPolling() {
     if (enrichmentPollRef.current.source) {
       enrichmentPollRef.current.source.close()
@@ -231,6 +366,13 @@ export function useGuidedSearch() {
     setSelectionState(null)
     setIsEnrichmentReady(false)
     setIsEnrichmentSettled(false)
+    setFailureFromError({
+      amazonDomain: submittedAmazonDomain,
+      error: new Error(message),
+      query: submittedQuery,
+      searchStatus: 'frontend_error',
+      supportSearchId: analyticsSearchIdRef.current,
+    })
     setErrorMessage(message)
   }
 
@@ -671,6 +813,13 @@ export function useGuidedSearch() {
       query: variables?.query,
       token: variables?.discoveryToken,
     })
+    setFailureFromError({
+      amazonDomain: variables?.amazonDomain,
+      error,
+      query: variables?.query,
+      searchStatus: 'frontend_error',
+      supportSearchId: analyticsSearchIdRef.current,
+    })
     setErrorMessage(message)
   }
 
@@ -690,6 +839,8 @@ export function useGuidedSearch() {
     finalizeMutation.mutate({
       ...variables,
       searchId: activeSearchIdRef.current,
+      supportSearchId: analyticsSearchIdRef.current,
+      sessionId: analyticsSessionIdRef.current,
       signal: abortController.signal,
     })
   }
@@ -854,6 +1005,7 @@ export function useGuidedSearch() {
     setSubmittedAmazonDomain(nextSubmittedAmazonDomain)
     setSelectedProductState(null)
     setErrorMessage('')
+    setFailureDiagnostics(null)
     setDiscoveryToken('')
     setCandidatePool(null)
     setPreviewResults([])
@@ -941,6 +1093,11 @@ export function useGuidedSearch() {
       cacheMode,
       query: normalizedQuery,
     })
+    recordDiagnostic('frontend_search_started', {
+      amazonDomain: nextAmazonDomain,
+      query: normalizedQuery,
+      status: 'started',
+    }, { searchId: analyticsSearchId, sessionId: analyticsSessionId })
 
     trackSearchRun({
       productQuery: normalizedQuery,
@@ -958,8 +1115,17 @@ export function useGuidedSearch() {
     cancelDiscoveryRequest()
     const discoveryAbortController = new AbortController()
     discoveryAbortControllerRef.current = discoveryAbortController
+    recordDiagnostic('backend_request_started', {
+      amazonDomain: nextAmazonDomain,
+      query: normalizedQuery,
+      status: 'started',
+    }, { searchId: analyticsSearchId, sessionId: analyticsSessionId })
 
-    fetchDiscoveryResults(normalizedQuery, nextAmazonDomain, discoveryAbortController.signal, { cacheMode })
+    fetchDiscoveryResults(normalizedQuery, nextAmazonDomain, discoveryAbortController.signal, {
+      cacheMode,
+      searchId: analyticsSearchId,
+      sessionId: analyticsSessionId,
+    })
       .then((payload) => {
         if (activeSearchIdRef.current !== nextSearchId) {
           recordSearchDebugEvent('discovery', 'stale', {
@@ -989,11 +1155,26 @@ export function useGuidedSearch() {
           })
           setCandidatePool(null)
           setPreviewResults([])
+          setFailureFromError({
+            amazonDomain: nextAmazonDomain,
+            error: new Error(createExpiredSessionMessage()),
+            query: normalizedQuery,
+            searchStatus: 'frontend_error',
+            supportSearchId: analyticsSearchId,
+          })
           setErrorMessage(createExpiredSessionMessage())
           return
         }
 
         const responseAmazonDomain = payload.amazonDomain || nextAmazonDomain
+        recordDiagnostic('frontend_response_received', {
+          amazonDomain: responseAmazonDomain,
+          cachedOrFallbackUsed: payload.source === 'cache' || Boolean(payload.fallbackFrom),
+          durationMs: payload.timing?.client?.totalMs,
+          query: normalizedQuery,
+          resultCountAfterInternalFilters: Array.isArray(payload.previewResults) ? payload.previewResults.length : 0,
+          status: 'success',
+        }, { searchId: analyticsSearchId, sessionId: analyticsSessionId })
         recordSearchDebugEvent('discovery', 'success', {
           activeSearchId: nextSearchId,
           amazonDomain: responseAmazonDomain,
@@ -1027,6 +1208,14 @@ export function useGuidedSearch() {
           previewCount: Array.isArray(payload.previewResults) ? payload.previewResults.length : 0,
           source: payload.source || 'live',
         }, { searchId: analyticsSearchId, sessionId: analyticsSessionId })
+        recordDiagnostic('frontend_display_success', {
+          amazonDomain: responseAmazonDomain,
+          cachedOrFallbackUsed: payload.source === 'cache' || Boolean(payload.fallbackFrom),
+          finalStatus: 'success',
+          query: normalizedQuery,
+          resultCountAfterInternalFilters: Array.isArray(payload.previewResults) ? payload.previewResults.length : 0,
+          status: 'success',
+        }, { searchId: analyticsSearchId, sessionId: analyticsSessionId })
       })
       .catch((error) => {
         if (activeSearchIdRef.current !== nextSearchId) {
@@ -1056,6 +1245,13 @@ export function useGuidedSearch() {
           amazonDomain: nextAmazonDomain,
           error,
           query: normalizedQuery,
+        })
+        setFailureFromError({
+          amazonDomain: nextAmazonDomain,
+          error,
+          query: normalizedQuery,
+          searchStatus: 'frontend_error',
+          supportSearchId: analyticsSearchId,
         })
         setErrorMessage(error instanceof Error ? error.message : 'Unable to start the search.')
       })
@@ -1219,7 +1415,11 @@ export function useGuidedSearch() {
         constraintRefreshQuery,
         amazonDomain,
         undefined,
-        { cacheMode: 'refresh' },
+        {
+          cacheMode: 'refresh',
+          searchId: analyticsSearchIdRef.current,
+          sessionId: analyticsSessionIdRef.current,
+        },
       )
 
       if (activeSearchIdRef.current !== searchId) {
@@ -1295,6 +1495,13 @@ export function useGuidedSearch() {
         error,
         matchedTerm: constraintMatch.matchedTerm,
         query: constraintRefreshQuery,
+      })
+      setFailureFromError({
+        amazonDomain,
+        error,
+        query: constraintRefreshQuery,
+        searchStatus: 'frontend_error',
+        supportSearchId: analyticsSearchIdRef.current,
       })
       setErrorMessage(error instanceof Error ? error.message : 'Unable to refresh the search with your constraints.')
       return null
@@ -1699,6 +1906,11 @@ export function useGuidedSearch() {
       setSuggestedQuery: setSuggestedRetryQuery,
       suggestedQuery: suggestedRetryQuery,
       trySuggestion: handleTryRetrySuggestion,
+    },
+    diagnostics: {
+      copyDebugInfo: copyFailureDebugInfo,
+      failure: failureDiagnostics,
+      setReportedFilterType: updateReportedFilterType,
     },
     status: {
       errorMessage,

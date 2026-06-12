@@ -667,7 +667,8 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
 
-    expect(await screen.findByText(/thanks so much for testing focamai/i)).toBeInTheDocument()
+    expect((await screen.findAllByText(/support code/i)).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /copy report/i })).toBeInTheDocument()
   })
 
   it('shows a session-expired recovery message when discovery returns without a token', async () => {
@@ -703,7 +704,8 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
 
-    expect(await screen.findByText(/thanks so much for testing focamai/i)).toBeInTheDocument()
+    expect((await screen.findAllByText(/support code/i)).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /copy report/i })).toBeInTheDocument()
   })
 
   it('finalizes results after the user adds refinement notes', async () => {

@@ -8,6 +8,10 @@ import {
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
 
+function shouldSendDiagnosticId(value) {
+  return value && value !== 'analytics-disabled'
+}
+
 export async function readJsonResponse(response, requestStartedAt) {
   const responseReceivedAt = performance.now()
   const rawBody = await response.text()
@@ -54,6 +58,15 @@ export async function fetchDiscoveryResults(query, amazonDomain = AMAZON_MARKETP
   appendAmazonDomain(searchParams, amazonDomain)
   if (options.cacheMode === 'refresh') {
     searchParams.set('cacheMode', 'refresh')
+  }
+  if (shouldSendDiagnosticId(options.searchId)) {
+    searchParams.set('searchId', options.searchId)
+  }
+  if (shouldSendDiagnosticId(options.sessionId)) {
+    searchParams.set('sessionId', options.sessionId)
+  }
+  if (shouldSendDiagnosticId(options.searchId)) {
+    searchParams.set('platform', 'web')
   }
   const requestStartedAt = performance.now()
   const response = await fetch(`${BACKEND_URL}/api/search/rainforest-discover?${searchParams.toString()}`, {
@@ -102,6 +115,9 @@ export async function finalizeGuidedSearch({
   rejectionFeedback,
   retryCount,
   excludedCandidateIds,
+  searchId,
+  supportSearchId,
+  sessionId,
   requestMode = FINALIZE_REQUEST_MODE_DEFAULT,
   signal,
 }) {
@@ -120,6 +136,8 @@ export async function finalizeGuidedSearch({
       rejectionFeedback,
       retryCount,
       excludedCandidateIds,
+      ...(shouldSendDiagnosticId(supportSearchId || searchId) ? { searchId: supportSearchId || searchId } : {}),
+      ...(shouldSendDiagnosticId(sessionId) ? { sessionId } : {}),
       requestMode,
     }),
   })

@@ -13,6 +13,7 @@ import {
   TESTER_FEEDBACK_TABLE,
 } from './supabase-client.js'
 import { normalizeFeedbackValue } from './feedback-storage.js'
+import { readSearchDiagnosticsDashboardData } from './search-diagnostics-storage.js'
 
 export async function recordSearchHistory({
   cacheKey,
@@ -483,6 +484,13 @@ export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit
         .slice(0, 20),
     }
 
+    let searchDiagnostics = { available: false, reason: 'not_loaded' }
+    try {
+      searchDiagnostics = await readSearchDiagnosticsDashboardData({ sinceDays: lookbackDays })
+    } catch {
+      searchDiagnostics = { available: false, reason: 'read_failed' }
+    }
+
     return {
       available: true,
       generatedAt: new Date().toISOString(),
@@ -510,6 +518,7 @@ export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit
       badgePerformance,
       feedbackSummary,
       oxylabsFailures,
+      searchDiagnostics,
       recentSearches: [...runs]
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
         .slice(0, 25)

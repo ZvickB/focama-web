@@ -8,6 +8,7 @@ import {
   recordSearchCacheEvent,
   writeSearchSnapshot,
 } from '../search-pipeline.js'
+import { recordSearchDiagnosticEvent } from '../search-storage.js'
 import { fetchOxylabsArtifacts } from '../oxylabs-pipeline.js'
 import { buildCacheKey, getEnv } from '../search-data.js'
 import { fetchRainforestArtifacts } from '../rainforest-pipeline.js'
@@ -73,13 +74,16 @@ async function fetchDiscoveryArtifactsWithFallback({
         countryCode,
         amazonDomain,
       })
-    } catch {
+    } catch (error) {
+      const isTimeout = error?.name === 'TimeoutError' || error?.name === 'AbortError'
       rainforestResult = {
         error: {
-          error: 'Rainforest API request failed.',
-          statusCode: 502,
+          error: isTimeout ? 'Rainforest API request timed out.' : 'Rainforest API request failed.',
+          statusCode: isTimeout ? 504 : 502,
+          failureType: isTimeout ? 'timeout' : 'provider_error',
         },
         artifacts: null,
+        diagnostics: null,
       }
     }
 
@@ -88,10 +92,11 @@ async function fetchDiscoveryArtifactsWithFallback({
     if ((!rainforestResult.error && !shouldFallbackFromThinRainforest) || !hasOxylabsCredentials) {
       return {
         ...rainforestResult,
-        source: 'rainforest_discovery',
-        fallbackFrom: null,
-        fallbackReason: null,
-      }
+      source: 'rainforest_discovery',
+      fallbackFrom: null,
+      fallbackReason: null,
+      diagnostics: rainforestResult.diagnostics || null,
+    }
     }
 
     const oxylabsResult = await fetchOxylabsArtifacts({
@@ -109,6 +114,7 @@ async function fetchDiscoveryArtifactsWithFallback({
       source: 'oxylabs_discovery',
       fallbackFrom: 'rainforest_discovery',
       fallbackReason: shouldFallbackFromThinRainforest ? 'thin_rainforest_results' : 'rainforest_error',
+      diagnostics: oxylabsResult.diagnostics || rainforestResult.diagnostics || null,
     }
   }
 
@@ -128,6 +134,7 @@ async function fetchDiscoveryArtifactsWithFallback({
       source: 'oxylabs_discovery',
       fallbackFrom: null,
       fallbackReason: null,
+      diagnostics: oxylabsResult.diagnostics || null,
     }
   }
 
@@ -139,7 +146,30 @@ async function fetchDiscoveryArtifactsWithFallback({
     artifacts: null,
     source: 'rainforest_discovery',
     fallbackFrom: null,
+    diagnostics: null,
   }
+}
+
+function getDiagnosticContext(requestUrl) {
+  return {
+    searchId: String(requestUrl?.searchParams?.get('searchId') || '').trim(),
+    sessionId: String(requestUrl?.searchParams?.get('sessionId') || '').trim(),
+    platform: String(requestUrl?.searchParams?.get('platform') || 'web').trim() || 'web',
+  }
+}
+
+function recordDiscoveryDiagnosticEvent(context, event = {}) {
+  if (!context.searchId) {
+    return
+  }
+
+  void recordSearchDiagnosticEvent({
+    searchId: context.searchId,
+    sessionId: context.sessionId,
+    platform: context.platform,
+    provider: 'rainforest',
+    ...event,
+  })
 }
 
 function shouldRefreshDiscoveryCache(requestUrl) {
@@ -246,6 +276,7 @@ export async function handleCachedSearch(requestUrl, response) {
 
 export async function handleRainforestDiscoverySearch(requestUrl, response, request = { headers: {} }) {
   const requestStartedAt = nowMs()
+  const diagnosticContext = getDiagnosticContext(requestUrl)
   const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
   const oxylabsUsername = getEnv('OXYLABS_USERNAME')
   const oxylabsPassword = getEnv('OXYLABS_PASSWORD')
@@ -275,9 +306,24 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   })
 
   if (!isValid) {
+    recordDiscoveryDiagnosticEvent(diagnosticContext, {
+      stage: 'backend_received',
+      status: 'invalid_request',
+      query: '',
+      amazonDomain,
+      finalStatus: 'frontend_error',
+      errorMessage: error,
+    })
     sendJson(response, 400, { error })
     return
   }
+
+  recordDiscoveryDiagnosticEvent(diagnosticContext, {
+    stage: 'backend_received',
+    status: 'ok',
+    query: normalizedQuery,
+    amazonDomain,
+  })
 
   const normalizedDetails = ''
   const discoveryCacheKey = buildCacheKey(normalizedQuery, normalizedDetails, rainforestScope)
@@ -337,6 +383,18 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       ],
     })
 
+    recordDiscoveryDiagnosticEvent(diagnosticContext, {
+      stage: 'backend_response_sent',
+      status: 'success',
+      query: normalizedQuery,
+      amazonDomain,
+      durationMs: roundTimingDuration(nowMs() - requestStartedAt),
+      finalStatus: 'success',
+      resultCountBeforeInternalFilters: normalizedCachedResults.length,
+      resultCountAfterInternalFilters: normalizedCachedResults.length,
+      cachedOrFallbackUsed: true,
+    })
+
     startQueryQualityReview({
       normalizedQuery,
       amazonDomain,
@@ -365,12 +423,19 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
     const discoveryToken = createDiscoveryToken()
     const discoverySessionScope = getDiscoverySessionScope(discoveryToken)
     const providerStartedAt = nowMs()
+    recordDiscoveryDiagnosticEvent(diagnosticContext, {
+      stage: 'rainforest_request_started',
+      status: 'started',
+      query: normalizedQuery,
+      amazonDomain,
+    })
     const {
       artifacts,
       error: artifactsError,
       fallbackFrom,
       fallbackReason,
       source: discoverySource,
+      diagnostics,
     } = await fetchDiscoveryArtifactsWithFallback({
       filterConfig: LIVE_RESULT_FILTER_CONFIG,
       productQuery: normalizedQuery,
@@ -384,12 +449,74 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
     })
 
     if (artifactsError) {
+      const finalStatus = artifactsError.failureType === 'timeout'
+        ? 'timeout'
+        : artifactsError.statusCode === 404
+          ? 'empty'
+          : 'provider_error'
+      recordDiscoveryDiagnosticEvent(diagnosticContext, {
+        stage: artifactsError.failureType === 'timeout'
+          ? 'rainforest_timeout'
+          : artifactsError.statusCode === 404
+            ? 'empty_results'
+            : 'rainforest_error',
+        status: 'failed',
+        query: normalizedQuery,
+        amazonDomain,
+        durationMs: roundTimingDuration(nowMs() - providerStartedAt),
+        providerStatusCode: artifactsError.providerStatusCode || artifactsError.statusCode,
+        resultCountBeforeInternalFilters: diagnostics?.rawResultCount,
+        resultCountAfterInternalFilters: diagnostics?.resultCountAfterInternalFilters,
+        finalStatus,
+        errorMessage: artifactsError.error,
+      })
+      recordDiscoveryDiagnosticEvent(diagnosticContext, {
+        stage: 'backend_response_sent',
+        status: 'failed',
+        query: normalizedQuery,
+        amazonDomain,
+        durationMs: roundTimingDuration(nowMs() - requestStartedAt),
+        finalStatus,
+        errorMessage: artifactsError.error,
+      })
       sendJson(response, artifactsError.statusCode, {
         error: artifactsError.error,
       })
       return
     }
     const providerDuration = nowMs() - providerStartedAt
+    recordDiscoveryDiagnosticEvent(diagnosticContext, {
+      stage: 'rainforest_success',
+      status: 'success',
+      query: normalizedQuery,
+      amazonDomain,
+      durationMs: roundTimingDuration(providerDuration),
+      resultCountBeforeInternalFilters: diagnostics?.rawResultCount,
+      resultCountAfterInternalFilters: diagnostics?.resultCountAfterInternalFilters,
+      cachedOrFallbackUsed: Boolean(fallbackFrom),
+      metadata: {
+        candidateCountAfterInternalFilters: diagnostics?.candidateCountAfterInternalFilters,
+        discoverySource,
+        fallbackFrom,
+        fallbackReason,
+      },
+    })
+    recordDiscoveryDiagnosticEvent(diagnosticContext, {
+      stage: 'app_filters_applied',
+      status: 'success',
+      query: normalizedQuery,
+      amazonDomain,
+      resultCountBeforeInternalFilters: diagnostics?.rawResultCount,
+      resultCountAfterInternalFilters: artifacts.results.length,
+      metadata: {
+        candidateCountAfterInternalFilters: Array.isArray(artifacts.candidatePool?.candidates)
+          ? artifacts.candidatePool.candidates.length
+          : 0,
+        priceKnownFilterActive: true,
+        scoringActive: true,
+        diversityActive: true,
+      },
+    })
 
     runInBackground(
       writeSearchSnapshot({
@@ -477,6 +604,18 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       ],
     })
 
+    recordDiscoveryDiagnosticEvent(diagnosticContext, {
+      stage: 'backend_response_sent',
+      status: 'success',
+      query: normalizedQuery,
+      amazonDomain,
+      durationMs: roundTimingDuration(nowMs() - requestStartedAt),
+      finalStatus: 'success',
+      resultCountBeforeInternalFilters: diagnostics?.rawResultCount,
+      resultCountAfterInternalFilters: artifacts.results.length,
+      cachedOrFallbackUsed: Boolean(fallbackFrom),
+    })
+
     startQueryQualityReview({
       normalizedQuery,
       amazonDomain,
@@ -501,6 +640,26 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       route: '/api/search/rainforest-discover',
       source: 'rainforest_discovery',
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
+    })
+    recordDiscoveryDiagnosticEvent(diagnosticContext, {
+      stage: 'rainforest_error',
+      status: 'failed',
+      query: normalizedQuery,
+      amazonDomain,
+      durationMs: roundTimingDuration(nowMs() - requestStartedAt),
+      finalStatus: 'provider_error',
+      errorType: error?.name || 'Error',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+    })
+    recordDiscoveryDiagnosticEvent(diagnosticContext, {
+      stage: 'backend_response_sent',
+      status: 'failed',
+      query: normalizedQuery,
+      amazonDomain,
+      durationMs: roundTimingDuration(nowMs() - requestStartedAt),
+      finalStatus: 'provider_error',
+      errorType: error?.name || 'Error',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
     })
     sendJson(response, 500, buildInternalErrorPayload('Unable to reach Rainforest API.', error))
   }

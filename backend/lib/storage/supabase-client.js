@@ -11,6 +11,8 @@ export const ANALYTICS_RESULT_CLICKS_TABLE = 'analytics_result_clicks'
 export const TESTER_FEEDBACK_TABLE = 'tester_feedback'
 export const OXYLABS_PRODUCT_FAILURES_TABLE = 'oxylabs_product_failures'
 export const RATE_LIMIT_EVENTS_TABLE = 'rate_limit_events'
+export const SEARCH_ATTEMPTS_TABLE = 'search_attempts'
+export const SEARCH_EVENTS_TABLE = 'search_events'
 const DEFAULT_CACHE_TTL_MINUTES = 1440
 
 let supabaseAdminClient = null
@@ -196,6 +198,8 @@ export async function getSupabaseHealth() {
       checkSupabaseTable(supabase, ANALYTICS_SEARCH_EVENTS_TABLE, 'search_id'),
       checkSupabaseTable(supabase, ANALYTICS_RESULT_IMPRESSIONS_TABLE, 'search_id'),
       checkSupabaseTable(supabase, ANALYTICS_RESULT_CLICKS_TABLE, 'search_id'),
+      checkSupabaseTable(supabase, SEARCH_ATTEMPTS_TABLE, 'search_id'),
+      checkSupabaseTable(supabase, SEARCH_EVENTS_TABLE, 'search_id'),
       checkSupabaseTable(supabase, OXYLABS_PRODUCT_FAILURES_TABLE, 'asin'),
       checkSupabaseTable(supabase, RATE_LIMIT_EVENTS_TABLE, 'rate_key'),
     ])

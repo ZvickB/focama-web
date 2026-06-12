@@ -35,6 +35,11 @@ import { createRetryAdviceHandler } from './lib/handlers/retry-advice-handler.js
 import { createFeedbackHandler } from './lib/handlers/feedback-handler.js'
 import { createSupabaseHealthHandler } from './lib/handlers/supabase-health-handler.js'
 import {
+  handleConnectivityDiagnostic,
+  handleHealth,
+  handleSearchDiagnosticEvent,
+} from './lib/handlers/diagnostics-handler.js'
+import {
   FINALIZE_MAX_NOTE_LENGTH,
   FINALIZE_MAX_REJECTION_FEEDBACK_LENGTH,
   RATE_LIMIT_WAIT_MESSAGE,
@@ -102,6 +107,9 @@ export {
   mergeProductDetailsIntoCandidatePool,
   applyLateProductDetailsToEnrichment,
   handleProductDetails,
+  handleSearchDiagnosticEvent,
+  handleHealth,
+  handleConnectivityDiagnostic,
 }
 
 export function createApiServer() {
@@ -141,6 +149,21 @@ export function createApiServer() {
 
       if (request.method === 'GET' && requestUrl.pathname === '/api/health/supabase') {
         await handleSupabaseHealth(response)
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/health') {
+        handleHealth(response)
+        return
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/diagnostics/connectivity') {
+        handleConnectivityDiagnostic(response)
+        return
+      }
+
+      if (request.method === 'POST' && requestUrl.pathname === '/api/search/diagnostics/event') {
+        await handleSearchDiagnosticEvent(request, response)
         return
       }
 

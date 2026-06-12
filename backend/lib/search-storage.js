@@ -12,3 +12,7 @@ export {
   recordSearchHistory,
   upsertAnalyticsSearchRun,
 } from './storage/analytics-storage.js'
+export {
+  readSearchDiagnosticsDashboardData,
+  recordSearchDiagnosticEvent,
+} from './storage/search-diagnostics-storage.js'
