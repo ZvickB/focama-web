@@ -18,7 +18,7 @@ import {
   recordOxylabsProductFailures,
   writeProductDetailsCacheEntries,
 } from '../search-storage.js'
-import { fetchOxylabsProductDetailsByAsin } from '../oxylabs-pipeline.js'
+import { fetchAmazonProductDetailsByAsin } from '../product-details-provider.js'
 import {
   resolveDiscoveryContext,
 } from './discovery-handler.js'
@@ -802,24 +802,26 @@ export async function handleFinalizeSelection(request, response) {
     // Fire off product details and mini enrichment async; do not block the response.
     if (usedHaikuSelection) {
       const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
-      const oxylabsUsername = getEnv('OXYLABS_USERNAME') // TODO: swap back to Rainforest before launch.
-      const oxylabsPassword = getEnv('OXYLABS_PASSWORD') // TODO: swap back to Rainforest before launch.
+      const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
+      const oxylabsUsername = getEnv('OXYLABS_USERNAME')
+      const oxylabsPassword = getEnv('OXYLABS_PASSWORD')
 
       runInBackground((async () => {
         try {
           const productDetailsStartedAt = nowMs()
           const detailFailures = []
-          const productDetailsById = await fetchOxylabsProductDetailsByAsin({ // TODO: swap back to Rainforest before launch.
+          const productDetailsById = await fetchAmazonProductDetailsByAsin({
             asins: selectedCandidateIds,
+            rainforestApiKey,
             oxylabsUsername,
             oxylabsPassword,
             amazonDomain: sanitizedDiscoveryContext.amazonDomain,
             readCache: readProductDetailsCacheEntries,
             writeCache: writeProductDetailsCacheEntries,
-            onAsinFailure: (asin, failureType, statusCode) => {
+            onOxylabsAsinFailure: (asin, failureType, statusCode) => {
               detailFailures.push({ asin, failureType, statusCode, query: sanitizedDiscoveryContext.normalizedQuery })
             },
-            onBackgroundRetryResolved: async (retryDetailsById) => {
+            onOxylabsBackgroundRetryResolved: async (retryDetailsById) => {
               await applyLateProductDetailsToEnrichment({
                 normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
                 discoveryToken: sanitizedDiscoveryContext.discoveryToken,
