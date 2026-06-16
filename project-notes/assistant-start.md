@@ -9,19 +9,17 @@
 Focamai helps a user describe the product they want, answer one short follow-up when useful, and get a focused shortlist of 6 picks before leaving to shop. The product should feel calm, practical, and focused instead of like a prettier Amazon wall.
 
 ## Current branch context
-- Active branch for the current experiment: `new_web_ui`.
-- The branch is intended for a new web UI direction inspired by the stronger mobile app.
-- The goal is not to port mobile wholesale. Web should stay optimized for desktop and responsive browser use.
-- The web UI improvement plan lives at `project-notes/ui_improvement_plan/README.md`.
+- Active branch for the current experiment: `experiment/serp-price-intel`.
+- Price-comparison Phases 1-3 are implemented on this branch behind `PRICE_COMPARISON_ENABLED=false`: async identity, isolated SerpApi/BlueCart matching, a 7-day match/30-minute price cache, and server-validated `POST /api/product/price-check` with optional Supabase auth redaction and rate limits. The current UI does not call it; settings and offer UI remain Phase 4.
+- The active web UI direction remains documented at `project-notes/ui_improvement_plan/README.md`.
 
 ## Current app reality
 - Frontend: Vite, React, React Router, TanStack Query, Tailwind, Vitest.
 - Backend: Node/Express on Render.
 - Frontend deploy: Vercel.
 - Backend deploy: Render, starting from `backend/express-server.js`.
-- The frontend calls the backend through `VITE_BACKEND_URL`.
+- Production frontend API calls try the configured Render backend directly. A browser-level network failure retries once through same-origin `/api/...` Vercel rewrites and persists that route preference. On later page loads, a background direct health ping clears the preference when Render is reachable again.
 - `api/geo.js` intentionally stays on Vercel so the UI can use Vercel geolocation headers.
-- The same Render Express service also hosts the separate KAILA scaffold under `/kaila` so KAILA can share the paid service without replacing Focamai.
 
 ## Current product direction
 - The homepage at `/` is the main product experience.
@@ -49,6 +47,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Enrichment reads: `GET /api/search/enrichment-stream` first, with `GET /api/search/enrichment` as polling fallback.
 - Query-quality polling: `GET /api/search/query-quality`.
 - Preview product detail hydration: `GET /api/search/product-details`.
+- Lazy Canadian comparison endpoint: `POST /api/product/price-check` (implemented but not called by the current UI).
 - Retry advice: `POST /api/search/retry-advice`.
 - Feedback: `POST /api/feedback`.
 - Search diagnostics: `POST /api/search/diagnostics/event`, `GET /api/health`, `GET /api/diagnostics/connectivity`.
@@ -57,12 +56,13 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Discovery uses Rainforest API first for all Amazon marketplaces when configured. Oxylabs is now the discovery fallback only: it runs when Rainforest errors or returns too few usable items to support the 6-item shortlist. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available.
 - Finalize rebuilds the candidate pool server-side from guided cache.
 - Haiku locks the shortlist first, with deterministic fallback/top-up when needed. Its prompt ranks inferred product fit first, then quality confidence (rating, review count, trustScore, and recognized category brand), price/value, shortlist variety, and raw Amazon position as the final tiebreaker.
-- Provider-confirmed Prime eligibility is preserved as structured `isPrime` data; clear Prime delivery/eligibility requests narrow finalize to Prime-tagged candidates when available, and the UI shows only a quiet in-house Prime marker/fact. Plain free-delivery text may show as `Free delivery` but must not be upgraded to Prime. Oxylabs product-detail enrichment can upgrade `isPrime` when search rows underreport Prime.
+- Provider-confirmed Prime eligibility is preserved as structured `isPrime` data; clear Prime delivery/eligibility requests narrow finalize to Prime-tagged candidates when available, and the UI shows only a quiet in-house Prime marker/fact. Plain free-delivery text may show as `Free delivery` but must not be upgraded to Prime. Rainforest product-detail enrichment can upgrade `isPrime` when search rows underreport Prime, with Oxylabs only as the detail fallback.
 - Result surfaces should stay compact: source/store names belong in clickout CTAs, rating plus review count are one ratings/reviews signal, and delivery is at most one optional signal.
 - Hard-constraint follow-up notes can trigger one refreshed discovery before finalize.
 - Query-quality suggestions are polling-based only. No SSE or prewarm path exists.
 - Modal/detail enrichment hydrates after the first shortlist cards are shown, framing the top pick as the hero recommendation and later picks as alternatives.
-- Skipped-refinement preview products do not show AI recommendation analysis. When opened, the modal can lazily hydrate product detail bullets/description from the per-ASIN cache or Oxylabs through `GET /api/search/product-details`.
+- The same async mini-enrichment response preserves `sourceTitle`, validates a cleaner `displayTitle`, and stores a separate `matchIdentifier`. Provider identifiers outrank deterministic extraction, and AI cannot supply authoritative UPC/EAN/GTIN fields.
+- Skipped-refinement preview products do not show AI recommendation analysis. When opened, the modal can lazily hydrate product detail bullets/description from the per-ASIN cache or Rainforest through `GET /api/search/product-details`, with Oxylabs fallback when Rainforest is unavailable or returns no usable detail.
 - Marketplace listings without a known positive price are filtered out before preview/finalize.
 - Thin discovery cache hits with fewer than 6 cached results or candidates are bypassed and refreshed from the provider.
 - `/api/search/live` and debug/cache routes are not the main user path.

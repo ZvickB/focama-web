@@ -2,7 +2,6 @@ import express from 'express'
 import helmet from 'helmet'
 import multer from 'multer'
 import { attachCorsOrigin, buildInternalErrorPayload, resolveCorsOrigin, sendJson } from './lib/http.js'
-import { createKailaRouter } from './kaila/router.js'
 import { initObservability, registerProcessErrorHandlers, reportBackendError } from './lib/observability.js'
 import {
   handleAnalyticsDashboard,
@@ -17,6 +16,7 @@ import {
   handleFinalizeHistory,
   handleHealth,
   handleProductDetails,
+  handlePriceCheck,
   handleQueryQualityPoll,
   handleRainforestDiscoverySearch,
   handleRefinementPrompt,
@@ -42,7 +42,7 @@ app.use((req, res, next) => {
     res.set({
       'Access-Control-Allow-Origin': resolveCorsOrigin(req.headers.origin),
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       Vary: 'Origin',
     })
     res.sendStatus(204)
@@ -64,8 +64,6 @@ app.get('/api/ping', (req, res) => {
   res.json({ ok: true })
 })
 
-app.use('/kaila', createKailaRouter())
-
 // Search routes
 app.get('/api/search/rainforest-discover', async (req, res) => {
   await handleRainforestDiscoverySearch(getRequestUrl(req), res, req)
@@ -86,6 +84,10 @@ app.get('/api/search/cache', async (req, res) => {
 
 app.get('/api/search/product-details', async (req, res) => {
   await handleProductDetails(getRequestUrl(req), res)
+})
+
+app.post('/api/product/price-check', async (req, res) => {
+  await handlePriceCheck(req, res)
 })
 
 // handleEnrichmentPoll takes (request, response) and constructs its own URL internally

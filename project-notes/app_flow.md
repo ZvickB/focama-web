@@ -68,7 +68,7 @@
   - starts async product-detail fetch + mini enrichment in the background
 - `GET /api/search/enrichment-stream`
   - first enrichment path used by the frontend
-  - responds cross-origin for the Vercel -> Render setup
+  - normally connects directly to Render; if another request has already selected the VPN-safe proxy route, the stream uses that same-origin route instead
   - only streams enrichment for the exact `discoveryToken` that owns the active search session
   - pushes ready enrichment when the background work finishes
 - `GET /api/search/enrichment`
@@ -81,7 +81,12 @@
   - returns `shouldSuggest: false` for quiet no-op reviews, ambiguous language, failures, or skipped reviews
 - `GET /api/search/product-details`
   - lightweight one-product detail hydration endpoint used when a user opens a skipped-refinement preview product
-  - reads the per-ASIN product details cache first and uses Oxylabs only for cache misses when credentials are configured
+  - reads the per-ASIN product details cache first, then uses Rainforest for cache misses when configured, with Oxylabs only as the fallback detail provider
+- `POST /api/product/price-check`
+  - disabled by default and currently not called by the frontend
+  - accepts the query, discovery token, finalized candidate ID, `amazon.ca` marketplace, and seller coverage mode
+  - resolves product identity from server-owned finalized search state, restricts execution to CA/CAD, checks the comparison cache before SerpApi/BlueCart, and never joins the blocking finalize path
+  - signed-out responses expose only whether qualifying cheaper offers exist; a Supabase-validated signed-in request can receive up to two offer details
   - returns product detail bullets, product description, Prime, and delivery facts; it does not run AI recommendation analysis
 - `POST /api/search/retry-advice`
   - reads the rejected shortlist plus user feedback
@@ -91,8 +96,8 @@
   - accepts quick structured answers, optional free text, optional email, and current journey context
 - `GET /api/search/debug`, `GET /api/search/cache`, and `/api/search/live`
   - debugging/support routes, not the main product flow
-- Render CORS accepts both live custom frontend origins (`focamai.com` and `www.focamai.com`) and still tolerates the older `focama.vercel.app` origin.
-- The same Render Express process also mounts the KAILA API at `/kaila` for the separate KAILA Vercel app. This keeps Focamai's existing `/api/...` routes live while exposing `GET /kaila/health`, `POST /kaila/ask`, and `POST /kaila/ask/stream`. The KAILA ask routes resolve the public store `embed_key`, retrieve product-scoped passages, and return a grounded answer payload with citations. The stream route emits status-only SSE events (`retrieving`, `answering`, `validating`) before the final `done` payload; it does not stream answer tokens before validation.
+- Production frontend requests try Render directly first. If `fetch` fails at the browser/network layer, the request retries once through same-origin `/api/...` Vercel rewrites and successful proxy use is remembered in local storage. Later page loads start on the remembered route while a lightweight direct `/api/health` ping checks whether Render works again; any direct HTTP response clears the proxy preference. HTTP errors and cancelled requests do not trigger the fallback. `/api/geo` remains the local Vercel function.
+- Render CORS still accepts both live custom frontend origins (`focamai.com` and `www.focamai.com`) and the older `focama.vercel.app` origin for direct development/debug access.
 
 ## Amazon store behavior
 - The store picker defaults to `Auto`.
@@ -120,7 +125,7 @@
 - Result, retry, and modal surfaces now share a quieter visual system: fewer decorative gradients, smaller shadows, and more consistent 16-28px radii.
 - Selecting a row or the row details action opens the modal.
 - The modal is ordered as a decision aid: image and title, an `At a glance` facts card, `Why this pick`, `Worth knowing`, then product notes from `feature_bullets` or description. The facts card stays compact with price, combined ratings/reviews, and optional delivery; source/store naming is reserved for the shopping CTA instead of repeated as passive metadata.
-- For skipped-refinement preview products, the modal hides the AI `Why this pick` analysis panel because finalize/enrichment has not run; opening the preview modal lazily hydrates product notes from the per-ASIN cache or Oxylabs.
+- For skipped-refinement preview products, the modal hides the AI `Why this pick` analysis panel because finalize/enrichment has not run; opening the preview modal lazily hydrates product notes from the per-ASIN cache or the Rainforest-first detail provider.
 - If the normalized detail heading differs from the raw title, the detail header exposes the original directly under the title behind a quiet `Full Amazon title`/source-title disclosure.
 - If enrichment is still pending, result rows/panels and the modal use quiet teal/orange breathing dots instead of visible uncertainty copy; if enrichment settles without a fit reason, the modal shows a practical fallback instead of an empty section.
 - Shopping clickout CTAs happen from result rows/cards and the modal CTA, and derive their visible label from the product source/store (`View on Amazon`, `View on Walmart`, etc.) instead of using generic `retailer` wording when a source name is available.
@@ -165,8 +170,11 @@
 - Product details have a separate per-ASIN cache shared across detail providers.
 - Async mini enrichment is token-scoped when it writes back into the per-session discovery snapshot so older same-query searches cannot leak context-specific `fit_reason` or `caveat` text into newer sessions.
 - Mini enrichment treats the first locked product as the hero recommendation and writes later picks as alternatives that explain who might prefer them over the hero.
-- Oxylabs product-detail fetches use a fast first pass for finalize enrichment and retry failed ASIN detail calls in the background so cache quality can still improve without holding the modal AI copy back longer.
-- When a background detail retry later succeeds, the stored enrichment payload is updated with the new `feature_bullets` and the frontend keeps polling long enough for the open modal to hydrate those bullets in place.
+- The same async mini-enrichment request now preserves each provider title as `sourceTitle`, produces a validated `displayTitle`, and stores a separate structured `matchIdentifier`. Provider product codes outrank deterministic extraction, AI cannot return authoritative UPC/EAN/GTIN fields, and unsafe title cleanup falls back to the source title.
+- Result rows/cards reserve a stable two-line title area. When enrichment arrives, `displayTitle` replaces the initial source-title presentation in cards, the selected-product panel, and the modal without replacing the underlying source title.
+- Product-detail enrichment is Rainforest-first for fresh detail fetches, with Oxylabs used only for missing details or missing Rainforest configuration.
+- Oxylabs fallback product-detail fetches use a fast first pass for finalize enrichment and retry failed ASIN detail calls in the background so cache quality can still improve without holding the modal AI copy back longer.
+- When an Oxylabs fallback background detail retry later succeeds, the stored enrichment payload is updated with new `feature_bullets` and any newly available provider identity, and the frontend keeps polling long enough for the open modal to hydrate those fields in place.
 - Backend observability is now opt-in through Sentry (`SENTRY_DSN`) with sanitized error context, and background async failures are logged/reported instead of disappearing silently.
 - Search reliability diagnostics now use the existing frontend search ID as a user-facing support code. Frontend discovery/finalize failures show the support code, offer a safe `Copy debug info` action, ask testers whether they use a filter/VPN, run lightweight `/api/health` and `/api/diagnostics/connectivity` checks, and write best-effort lifecycle rows to Supabase `search_attempts` / `search_events` when those tables exist.
 - The diagnostic lifecycle covers frontend search start, backend request start/receive, Rainforest start/success/error/timeout, app filter counts, empty results, backend response sent, frontend response/display success, frontend error, backend health, and connectivity checks.
