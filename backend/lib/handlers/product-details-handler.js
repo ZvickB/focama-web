@@ -1,6 +1,6 @@
 import { buildInternalErrorPayload, sendJson } from '../http.js'
 import { reportBackendError } from '../observability.js'
-import { fetchOxylabsProductDetailsByAsin } from '../oxylabs-pipeline.js'
+import { fetchAmazonProductDetailsByAsin } from '../product-details-provider.js'
 import {
   recordOxylabsProductFailures,
   readProductDetailsCacheEntries,
@@ -64,23 +64,25 @@ export async function handleProductDetails(requestUrl, response) {
       return
     }
 
+    const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
     const oxylabsUsername = getEnv('OXYLABS_USERNAME')
     const oxylabsPassword = getEnv('OXYLABS_PASSWORD')
 
-    if (!oxylabsUsername || !oxylabsPassword) {
+    if (!rainforestApiKey && (!oxylabsUsername || !oxylabsPassword)) {
       sendJson(response, 200, buildProductDetailsPayload(asin, cachedEntry))
       return
     }
 
     const detailFailures = []
-    const detailsById = await fetchOxylabsProductDetailsByAsin({
+    const detailsById = await fetchAmazonProductDetailsByAsin({
       asins: [asin],
+      rainforestApiKey,
       oxylabsUsername,
       oxylabsPassword,
       amazonDomain,
       readCache: readProductDetailsCacheEntries,
       writeCache: writeProductDetailsCacheEntries,
-      onAsinFailure: (failedAsin, failureType, statusCode) => {
+      onOxylabsAsinFailure: (failedAsin, failureType, statusCode) => {
         detailFailures.push({ asin: failedAsin, failureType, statusCode, query: '' })
       },
     })
