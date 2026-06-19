@@ -26,11 +26,6 @@ This folder is the active notes layer for Focamai. Keep active files focused on 
 - `search-flow.html` — visual flow reference
 - `serp-route-if-activated.md` — only if the SerpApi path is being reactivated
 - `monetization-strategy.md` — longer-term monetization thinking
-- `rainforest-strategy/product-data-strategy.md` — provider/data strategy
-- `rainforest-strategy/subscriber-features.md` — later tiering ideas
-- `rainforest-strategy/oxylabs-feasibility.md` — detail-fetch provider swap reference
-- `ui-desktop-suggestions.md` — extra desktop polish ideas
 
 ## Archive
 - `archive/` holds completed audits, superseded strategy notes, and historical implementation docs.
-- `archive/completed-work-2026-05-03.md` is the current index for recently archived done items that were removed from active notes.

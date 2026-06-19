@@ -15,30 +15,6 @@ Active backlog only. Completed items were moved into `project-notes/archive/comp
 
 ---
 
-## UI Polish
-
-| Status | Item |
-|--------|------|
-| pending | Fix onboarding/search-expectation clarity so new users understand to start with the product query and use the next step for narrowing |
-| pending | Add more intentional loading states between search, refine, and results |
-| pending | Improve low-confidence search handling so weak or ambiguous searches get a clearer fallback |
-| pending | Decide whether to add a proactive pool-mismatch nudge before the user asks for retry advice |
-| pending | Replace the About page with a `Why Focamai` page |
-| pending | Update header/nav links to point to `Why Focamai` once it exists |
-| pending | Add a clear home button to the `Why Focamai` page |
-| pending | Add a short post-results prompt that points people toward the best pick without sounding salesy |
-| pending | Add a lightweight internal view for checking cache hit/miss and funnel health without one-off scripts |
-
----
-
-## Backend
-
-| Status | Item |
-|--------|------|
-| pending | Trim `backend/server.js` incrementally so orchestration helpers keep moving out of the main route file |
-
----
-
 ## SEO
 
 | Status | Item |
@@ -83,7 +59,6 @@ Active backlog only. Completed items were moved into `project-notes/archive/comp
 | pending | Decide how affiliate retailer links should appear in cards and the product modal |
 | pending | Decide Amazon vs Walmart vs broader provider support by tier |
 | pending | Tighten privacy and affiliate disclosure language once real affiliate links are live |
-| pending | Add saved searches as a user-facing feature after v1 without reusing the internal `search_history` table |
 
 ---
 
@@ -92,6 +67,5 @@ Active backlog only. Completed items were moved into `project-notes/archive/comp
 | Status | Item |
 |--------|------|
 | long term | Design and implement a monetization strategy — see `project-notes/monetization-strategy.md` |
-| long term | Add user accounts and login if persistence becomes a clear product need |
 | long term | Explore preference learning as a light secondary signal after the core shortlist flow is proven |
 | long term | Build a subscriber tier with premium features once the free core flow is solid |
