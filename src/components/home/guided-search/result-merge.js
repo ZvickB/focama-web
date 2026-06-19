@@ -19,6 +19,9 @@ export function mergeEnrichmentIntoResults(results, enrichmentEntries) {
 
     return {
       ...result,
+      sourceTitle: entry?.source_title || entry?.sourceTitle || result.sourceTitle || result.title || '',
+      displayTitle: entry?.display_title || entry?.displayTitle || result.displayTitle || '',
+      matchIdentifier: entry?.match_identifier || entry?.matchIdentifier || result.matchIdentifier || null,
       fit_reason: entry?.fit_reason || entry?.fitReason || '',
       caveat: entry?.caveat || '',
       isPrime: Boolean(result.isPrime || entry?.isPrime || entry?.is_prime),

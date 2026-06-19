@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
-import { ArrowUpRight, CheckCircle2, ChevronDown, Info, Star, X } from 'lucide-react'
+import { ArrowUpRight, CheckCircle2, ChevronDown, Info, Lightbulb, Star, X } from 'lucide-react'
 
 import logo from '@/assets/logo_master_version.svg'
 import { Button } from '@/components/ui/button.jsx'
@@ -201,6 +201,89 @@ function ProductNotes({
   )
 }
 
+function getCandidateId(item) {
+  return String(item?.id || item?.candidate_id || item?.candidateId || '').trim()
+}
+
+function getValidPriceComparison(item, priceComparisonResults) {
+  const candidateId = getCandidateId(item)
+  if (!candidateId) return null
+
+  return (Array.isArray(priceComparisonResults) ? priceComparisonResults : [])
+    .filter((result) => String(result?.candidate_id || result?.candidateId || '').trim() === candidateId)
+    .filter((result) => {
+      const price = Number(result?.price)
+      const savings = Number(result?.savings)
+      const retailer = String(result?.retailer || '').trim()
+
+      try {
+        const url = new URL(String(result?.url || ''))
+        return (
+          price > 0 &&
+          savings > 0 &&
+          retailer &&
+          (url.protocol === 'https:' || url.protocol === 'http:')
+        )
+      } catch {
+        return false
+      }
+    })
+    .sort((a, b) => Number(b.savings) - Number(a.savings))[0] || null
+}
+
+function formatComparisonMoney(value, currency) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return ''
+
+  const normalizedCurrency = String(currency || '').trim().toUpperCase()
+  if (normalizedCurrency === 'CAD' || normalizedCurrency === 'USD') {
+    return new Intl.NumberFormat('en-CA', {
+      style: 'currency',
+      currency: normalizedCurrency,
+    }).format(amount)
+  }
+
+  return `$${amount.toFixed(2)}`
+}
+
+function BetterPricePanel({ result }) {
+  if (!result) return null
+
+  const retailer = String(result.retailer).trim()
+  const price = formatComparisonMoney(result.price, result.currency)
+  const savings = formatComparisonMoney(result.savings, result.currency)
+  const savingsPercent = Number(result.savings_percent)
+  const percentText = Number.isFinite(savingsPercent) && savingsPercent > 0
+    ? ` / ${Math.round(savingsPercent * 100)}%`
+    : ''
+  const disclaimer = String(result.disclaimer || '').trim()
+
+  return (
+    <section className="rounded-2xl border border-[#d9e6e8] bg-[#f7fbfb] p-4">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-primary">
+        <Lightbulb className="h-4 w-4" />
+        Better price found
+      </div>
+      <p className="mt-2 text-sm leading-6 text-slate-700">
+        <span className="font-semibold">{retailer} · {price}</span>
+        <span className="text-slate-500">{` (save ${savings}${percentText})`}</span>
+      </p>
+      <a
+        href={result.url}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary/80"
+      >
+        {`View on ${retailer}`}
+        <ArrowUpRight className="h-3.5 w-3.5" />
+      </a>
+      {disclaimer ? (
+        <p className="mt-2 text-xs leading-5 text-slate-400">{disclaimer}</p>
+      ) : null}
+    </section>
+  )
+}
+
 function RetailerDecisionBar({ displayPrice, item, onClose, onRetailerClick, retailerLabel }) {
   return (
     <div className="border-t border-[#eadfd2] bg-white/94 px-4 py-3 sm:px-6 lg:px-8">
@@ -251,6 +334,7 @@ function RetailerDecisionBar({ displayPrice, item, onClose, onRetailerClick, ret
 export function ProductDetailModal({
   item,
   isEnrichmentSettled = false,
+  priceComparisonResults = [],
   showRecommendationAnalysis = true,
   onClose,
   onRetailerClick,
@@ -353,13 +437,14 @@ export function ProductDetailModal({
 
   const userFacingDescription = getUserFacingDescription(item.productDescription || item.description)
   const displayPrice = formatDisplayPrice(item.price)
-  const rawTitle = String(item.title || '').replace(/\s+/g, ' ').trim()
-  const displayTitle = getProductDisplayTitle(rawTitle)
+  const rawTitle = String(item.sourceTitle || item.title || '').replace(/\s+/g, ' ').trim()
+  const displayTitle = item.displayTitle || getProductDisplayTitle(rawTitle)
   const hasCleanedTitle = Boolean(rawTitle && displayTitle && rawTitle !== displayTitle)
   const fullTitleLabel = 'Full source title'
   const shouldCollapseBullets = featureBullets.length >= 5
   const displayedBullets =
     shouldCollapseBullets && !bulletsExpanded ? featureBullets.slice(0, 3) : featureBullets
+  const priceComparison = getValidPriceComparison(item, priceComparisonResults)
 
   return (
     <MotionDiv
@@ -507,6 +592,8 @@ export function ProductDetailModal({
               shouldCollapseBullets={shouldCollapseBullets}
               userFacingDescription={userFacingDescription}
             />
+
+            <BetterPricePanel result={priceComparison} />
 
           </div>
         </div>

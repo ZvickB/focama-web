@@ -51,6 +51,7 @@ import {
   resolveSelectedProductForDisplay,
 } from '@/components/home/guided-search/result-merge.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
+import { getBackendUrl } from '@/lib/backendUrl.js'
 import { historyStore } from '@/lib/history/historyStore.js'
 import {
   buildSearchDebugInfoText,
@@ -63,8 +64,6 @@ export { AMAZON_MARKETPLACE_AUTO }
 export { RESULT_CARD_COUNT, RESULT_CARD_SLOTS }
 export { detectHardConstraint, resolveAmazonDomainForRequest }
 export { resolveSelectedProductForDisplay }
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
 
 export function useGuidedSearch() {
   const [productQuery, setProductQuery] = useState('')
@@ -108,6 +107,7 @@ export function useGuidedSearch() {
   const [isRefreshingConstraintDiscovery, setIsRefreshingConstraintDiscovery] = useState(false)
   const [isEnrichmentReady, setIsEnrichmentReady] = useState(false)
   const [isEnrichmentSettled, setIsEnrichmentSettled] = useState(false)
+  const [priceComparisonResults, setPriceComparisonResults] = useState([])
   const [querySuggestion, setQuerySuggestion] = useState(null)
   const [isCheckingQueryQuality, setIsCheckingQueryQuality] = useState(false)
   const [isApplyingQuerySuggestion, setIsApplyingQuerySuggestion] = useState(false)
@@ -362,6 +362,7 @@ export function useGuidedSearch() {
     setDiscoveryToken('')
     setCandidatePool(null)
     setResults([])
+    setPriceComparisonResults([])
     setPreviousResults([])
     setSelectionState(null)
     setIsEnrichmentReady(false)
@@ -388,6 +389,41 @@ export function useGuidedSearch() {
       query,
       token,
     })
+    let hasReceivedEnrichment = false
+
+    function handlePriceComparisonPayload(payload) {
+      const priceResults = Array.isArray(payload?.results) ? payload.results : []
+      setPriceComparisonResults(priceResults)
+      recordSearchDebugEvent('price-comparison', 'received', {
+        activeSearchId: searchId,
+        amazonDomain,
+        query,
+        resultCount: priceResults.length,
+        token,
+      })
+    }
+
+    function handleEnrichmentPayload(payload) {
+      if (payload.ready) {
+        hasReceivedEnrichment = true
+        if (Array.isArray(payload.entries) && payload.entries.length > 0) {
+          setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
+          setIsEnrichmentReady(true)
+          shouldContinueDetailHydrationRef.current = entriesNeedFeatureBulletHydration(payload.entries)
+        }
+        recordSearchDebugEvent('enrichment', 'success', {
+          activeSearchId: searchId,
+          amazonDomain,
+          query,
+          token,
+          resultCount: Array.isArray(payload.entries) ? payload.entries.length : 0,
+        })
+        setIsEnrichmentSettled(true)
+        return true
+      }
+
+      return false
+    }
 
     function schedulePoll({ recordFallback = false } = {}) {
       if (recordFallback) {
@@ -423,20 +459,11 @@ export function useGuidedSearch() {
             return
           }
 
-          if (payload.ready) {
-            if (Array.isArray(payload.entries) && payload.entries.length > 0) {
-              setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
-              setIsEnrichmentReady(true)
-              shouldContinueDetailHydrationRef.current = entriesNeedFeatureBulletHydration(payload.entries)
-            }
-            recordSearchDebugEvent('enrichment', 'success', {
-              activeSearchId: searchId,
-              amazonDomain,
-              query,
-              token,
-              resultCount: Array.isArray(payload.entries) ? payload.entries.length : 0,
-            })
-            setIsEnrichmentSettled(true)
+          if (Array.isArray(payload.priceComparison?.results)) {
+            handlePriceComparisonPayload({ results: payload.priceComparison.results })
+          }
+
+          if (handleEnrichmentPayload(payload)) {
 
             if (shouldContinueDetailHydrationRef.current) {
               schedulePoll()
@@ -463,7 +490,7 @@ export function useGuidedSearch() {
 
     const searchParams = new URLSearchParams({ token, query })
     appendAmazonDomain(searchParams, amazonDomain)
-    const source = new EventSource(`${BACKEND_URL}/api/search/enrichment-stream?${searchParams.toString()}`)
+    const source = new EventSource(`${getBackendUrl()}/api/search/enrichment-stream?${searchParams.toString()}`)
     enrichmentPollRef.current.source = source
     let hasFallenBackToPolling = false
 
@@ -482,21 +509,13 @@ export function useGuidedSearch() {
       try {
         const payload = JSON.parse(event.data)
 
-        if (payload.ready) {
-          if (Array.isArray(payload.entries) && payload.entries.length > 0) {
-            setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
-            setIsEnrichmentReady(true)
-            shouldContinueDetailHydrationRef.current = entriesNeedFeatureBulletHydration(payload.entries)
-          }
-          recordSearchDebugEvent('enrichment', 'success', {
-            activeSearchId: searchId,
-            amazonDomain,
-            query,
-            token,
-            resultCount: Array.isArray(payload.entries) ? payload.entries.length : 0,
-          })
-          setIsEnrichmentSettled(true)
+        if (payload.type === 'price_comparison') {
+          handlePriceComparisonPayload(payload)
+          stopEnrichmentPolling()
+          return
+        }
 
+        if (handleEnrichmentPayload(payload)) {
           if (shouldContinueDetailHydrationRef.current) {
             if (enrichmentPollRef.current.source) {
               enrichmentPollRef.current.source.close()
@@ -506,7 +525,7 @@ export function useGuidedSearch() {
             return
           }
 
-          stopEnrichmentPolling()
+          return
         }
       } catch (error) {
         recordSearchDebugEvent('enrichment', 'parse-error', {
@@ -522,6 +541,11 @@ export function useGuidedSearch() {
     }
 
     source.onerror = () => {
+      if (hasReceivedEnrichment) {
+        stopEnrichmentPolling()
+        return
+      }
+
       if (hasFallenBackToPolling || enrichmentPollRef.current.searchId !== searchId) {
         if (enrichmentPollRef.current.searchId !== searchId) {
           recordSearchDebugEvent('enrichment', 'stale', {
@@ -703,6 +727,7 @@ export function useGuidedSearch() {
     setCandidatePool(variables.originalCandidatePool || null)
     setPreviousResults(previousDisplayResults)
     setResults(finalizedResults)
+    setPriceComparisonResults([])
     if (finalizedResults.length > 0) {
       void historyStore.save({
         amazonDomain: variables.amazonDomain || submittedAmazonDomain,
@@ -1889,6 +1914,7 @@ export function useGuidedSearch() {
       candidatePool,
       displayed: displayedResults,
       hasFinalResults,
+      priceComparison: priceComparisonResults,
       previous: previousResults,
       selectedProduct: selectedProductForDisplay,
       selectionState,

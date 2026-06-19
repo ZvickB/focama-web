@@ -8,3 +8,9 @@ export function emitEnrichmentReady(token, entries, model) {
     model,
   })
 }
+
+export function emitPriceComparisonReady(token, results) {
+  enrichmentBus.emit(`price_comparison:${token}`, {
+    results: Array.isArray(results) ? results : [],
+  })
+}

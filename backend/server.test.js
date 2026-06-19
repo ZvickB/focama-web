@@ -56,11 +56,13 @@ vi.mock('./lib/search-storage.js', () => ({
   getSupabaseHealth: vi.fn(),
   isSupabaseConfigured: vi.fn(() => false),
   readProductDetailsCacheEntries: vi.fn().mockResolvedValue(new Map()),
+  readPriceComparisonCacheEntry: vi.fn().mockResolvedValue(null),
   readStoredSearchCacheEntry: vi.fn(),
   recordOxylabsProductFailures: vi.fn().mockResolvedValue(undefined),
   recordTesterFeedback: vi.fn().mockResolvedValue(undefined),
   recordSearchHistory: vi.fn(),
   writeProductDetailsCacheEntries: vi.fn().mockResolvedValue(undefined),
+  writePriceComparisonCacheEntry: vi.fn().mockResolvedValue(undefined),
   writeStoredSearchCacheEntry: vi.fn(),
 }))
 
@@ -96,6 +98,7 @@ import {
 import {
   getEnv,
 } from './lib/search-data.js'
+import { emitPriceComparisonReady } from './lib/enrichment-bus.js'
 
 function createResponseRecorder() {
   return {
@@ -367,21 +370,19 @@ describe('server handlers', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('fetches and caches Oxylabs product details for a preview product cache miss', async () => {
+  it('fetches and caches Rainforest product details for a preview product cache miss', async () => {
     getEnv.mockImplementation((name) => ({
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
+      RAINFOREST_API_KEY: 'rf-key',
     })[name] || '')
     readProductDetailsCacheEntries.mockResolvedValue(new Map())
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       json: async () => ({
-        results: [{
-          content: {
-            bullet_points: 'Fresh bullet one\nFresh bullet two',
-            description: 'Fresh product description.',
-          },
-        }],
+        product: {
+          asin: 'B002',
+          bullet_points: 'Fresh bullet one\nFresh bullet two',
+          description: 'Fresh product description.',
+        },
       }),
     })))
 
@@ -401,13 +402,17 @@ describe('server handlers', () => {
       source: '',
     })
     expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch.mock.calls[0][0]).toBeInstanceOf(URL)
+    expect(fetch.mock.calls[0][0].searchParams.get('type')).toBe('product')
+    expect(fetch.mock.calls[0][0].searchParams.get('asin')).toBe('B002')
+    expect(fetch.mock.calls[0][0].searchParams.get('api_key')).toBe('rf-key')
     await waitForExpectation(() => {
       expect(writeProductDetailsCacheEntries).toHaveBeenCalledWith([
         expect.objectContaining({
           asin: 'B002',
           feature_bullets: ['Fresh bullet one', 'Fresh bullet two'],
           productDescription: 'Fresh product description.',
-          source: 'oxylabs',
+          source: 'rainforest',
         }),
       ])
     })
@@ -784,6 +789,7 @@ describe('server handlers', () => {
 
   it('creates a fresh token-scoped session snapshot on discovery cache hits', async () => {
     getEnv.mockImplementation((name) => ({
+      RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
       OXYLABS_PASSWORD: 'oxy-pass',
     })[name] || '')
@@ -853,6 +859,7 @@ describe('server handlers', () => {
 
   it('refreshes discovery from the provider instead of returning an existing cache hit when requested', async () => {
     getEnv.mockImplementation((name) => ({
+      RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
       OXYLABS_PASSWORD: 'oxy-pass',
     })[name] || '')
@@ -902,7 +909,7 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(200)
 
     const payload = JSON.parse(response.body)
-    expect(payload.source).toBe('oxylabs_discovery')
+    expect(payload.source).toBe('rainforest_discovery')
     expect(payload.discoveryToken).toBeTruthy()
     expect(payload.discoveryToken).not.toBe('old-token')
     expect(payload.previewResults).toEqual([
@@ -937,6 +944,7 @@ describe('server handlers', () => {
 
   it('bypasses thin discovery cache hits so one-result snapshots do not trap normal searches', async () => {
     getEnv.mockImplementation((name) => ({
+      RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
       OXYLABS_PASSWORD: 'oxy-pass',
     })[name] || '')
@@ -993,7 +1001,7 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(200)
 
     const payload = JSON.parse(response.body)
-    expect(payload.source).toBe('oxylabs_discovery')
+    expect(payload.source).toBe('rainforest_discovery')
     expect(payload.previewResults).toHaveLength(6)
     expect(payload.previewResults[0]).toEqual(
       expect.objectContaining({
@@ -1017,6 +1025,7 @@ describe('server handlers', () => {
 
     getEnv.mockImplementation((name) => ({
       OPENAI_API_KEY: 'openai-key',
+      RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
       OXYLABS_PASSWORD: 'oxy-pass',
     })[name] || '')
@@ -1140,7 +1149,8 @@ describe('server handlers', () => {
     expect(fetch.mock.calls[0][0].searchParams.get('amazon_domain')).toBe('amazon.ca')
   })
 
-  it('falls back to Oxylabs for Canada discovery when Rainforest fails', async () => {
+  // Oxylabs disabled
+  it.skip('falls back to Oxylabs for Canada discovery when Rainforest fails', async () => {
     getEnv.mockImplementation((name) => ({
       RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
@@ -1211,7 +1221,8 @@ describe('server handlers', () => {
     expect(fetch.mock.calls[1][1].method).toBe('POST')
   })
 
-  it('falls back to Oxylabs discovery when Rainforest returns too few usable results', async () => {
+  // Oxylabs disabled
+  it.skip('falls back to Oxylabs discovery when Rainforest returns too few usable results', async () => {
     getEnv.mockImplementation((name) => ({
       RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
@@ -1303,7 +1314,8 @@ describe('server handlers', () => {
     expect(fetch.mock.calls[1][1].method).toBe('POST')
   })
 
-  it('falls back to Oxylabs discovery when Rainforest fails', async () => {
+  // Oxylabs disabled
+  it.skip('falls back to Oxylabs discovery when Rainforest fails', async () => {
     getEnv.mockImplementation((name) => ({
       RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
@@ -1371,6 +1383,7 @@ describe('server handlers', () => {
 
     getEnv.mockImplementation((name) => ({
       OPENAI_API_KEY: 'openai-key',
+      RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
       OXYLABS_PASSWORD: 'oxy-pass',
     })[name] || '')
@@ -1967,7 +1980,8 @@ describe('server handlers', () => {
     )
   })
 
-  it('returns cards before Oxylabs resolves, then enriches with product details in the polling cache', async () => {
+  // Oxylabs disabled
+  it.skip('returns cards before Oxylabs resolves, then enriches with product details in the polling cache', async () => {
     mockFinalizeEnv({
       OXYLABS_USERNAME: 'oxy-user',
       OXYLABS_PASSWORD: 'oxy-pass',
@@ -2093,7 +2107,8 @@ describe('server handlers', () => {
     })
   })
 
-  it('keeps initial cards usable while an Oxylabs detail call fails, then enriches with available details', async () => {
+  // Oxylabs disabled
+  it.skip('keeps initial cards usable while an Oxylabs detail call fails, then enriches with available details', async () => {
     mockFinalizeEnv({
       OXYLABS_USERNAME: 'oxy-user',
       OXYLABS_PASSWORD: 'oxy-pass',
@@ -2209,7 +2224,8 @@ describe('server handlers', () => {
     expect(miniEnrichSelectedCandidates.mock.calls[0][0].candidatePool.candidates[1].productDescription ?? '').toBe('')
   })
 
-  it('hydrates stored enrichment bullets when a background detail retry succeeds later', async () => {
+  // Oxylabs disabled
+  it.skip('hydrates stored enrichment bullets when a background detail retry succeeds later', async () => {
     mockFinalizeEnv({
       OXYLABS_USERNAME: 'oxy-user',
       OXYLABS_PASSWORD: 'oxy-pass',
@@ -2653,8 +2669,7 @@ describe('server handlers', () => {
 
   it('uses the final merged shortlist ids for async detail fetch and mini enrichment', async () => {
     mockFinalizeEnv({
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
+      RAINFOREST_API_KEY: 'rf-key',
     })
     haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'claude-haiku-4-5-20251001',
@@ -2665,12 +2680,10 @@ describe('server handlers', () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({
-        results: [{
-          content: {
-            bullet_points: '',
-            description: '',
-          },
-        }],
+        product: {
+          bullet_points: '',
+          description: '',
+        },
       }),
     }))
 
@@ -2700,8 +2713,14 @@ describe('server handlers', () => {
     await waitForExpectation(() => {
       expect(fetchMock).toHaveBeenCalledTimes(6)
       expect(
-        fetchMock.mock.calls.map(([, requestInit]) => JSON.parse(requestInit.body).query),
+        fetchMock.mock.calls.map(([url]) => url.searchParams.get('asin')),
       ).toEqual(['one', 'three', 'five', 'six', 'two', 'four'])
+      expect(
+        fetchMock.mock.calls.every(([url]) =>
+          url.searchParams.get('type') === 'product' &&
+          url.searchParams.get('api_key') === 'rf-key'
+        ),
+      ).toBe(true)
       expect(miniEnrichSelectedCandidates).toHaveBeenCalledWith(
         expect.objectContaining({
           lockedIds: ['one', 'three', 'five', 'six', 'two', 'four'],
@@ -2879,6 +2898,42 @@ describe('server handlers', () => {
     })
   })
 
+  it('returns hidden price comparison results from enrichment poll when stored', async () => {
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')], {
+        mode: 'ai',
+        enrichment: {
+          entries: [
+            { candidate_id: 'one', fit_reason: 'Good city stroller', caveat: 'Slightly pricey' },
+          ],
+          model: 'gpt-5-mini',
+        },
+        priceComparison: {
+          results: [
+            { candidate_id: 'one', retailer: 'Best Buy', price: 299.99, savings: 50, url: 'https://example.com' },
+          ],
+        },
+      }),
+    )
+
+    const response = createResponseRecorder()
+    const url = new URL('http://localhost/api/search/enrichment')
+    url.searchParams.set('token', 'opaque-discovery-token')
+    url.searchParams.set('query', 'stroller')
+
+    await handleEnrichmentPoll({ url: url.toString() }, response)
+
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual(expect.objectContaining({
+      ready: true,
+      priceComparison: {
+        results: [
+          { candidate_id: 'one', retailer: 'Best Buy', price: 299.99, savings: 50, url: 'https://example.com' },
+        ],
+      },
+    }))
+  })
+
   it('returns ready:false from query-quality poll when review is not yet stored', async () => {
     readStoredSearchCacheEntry.mockResolvedValueOnce(
       createDiscoveryCacheEntry('celcius drink', [createFinalizeCandidate('one')], { mode: 'discovery_preview' }),
@@ -3030,6 +3085,39 @@ describe('server handlers', () => {
     expect(response.body).toContain('"ready":true')
   })
 
+  it('streams price comparison after enrichment when Serper price intelligence is enabled', async () => {
+    getEnv.mockImplementation((name) => ({
+      SERPER_PRICE_INTEL_ENABLED: 'true',
+      SERPER_API_KEY: 'serper-key',
+    })[name] || '')
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')], {
+        mode: 'discovery_preview',
+        enrichment: {
+          entries: [{ candidate_id: 'one', fit_reason: 'Good city stroller', caveat: 'Slightly pricey' }],
+          model: 'gpt-5-mini',
+        },
+      }),
+    )
+
+    const response = createResponseRecorder()
+    const request = {
+      url: 'http://localhost/api/search/enrichment-stream?token=opaque-discovery-token&query=stroller',
+      on() {},
+    }
+
+    await handleEnrichmentStream(request, response)
+    expect(response.body).toContain('"type":"enrichment"')
+    expect(response.body).not.toContain('"type":"price_comparison"')
+
+    emitPriceComparisonReady('opaque-discovery-token', [
+      { candidate_id: 'one', retailer: 'Best Buy', price: 299.99, savings: 50, url: 'https://example.com' },
+    ])
+
+    expect(response.body).toContain('"type":"price_comparison"')
+    expect(response.body).toContain('"retailer":"Best Buy"')
+  })
+
   it('rejects enrichment poll with missing token or query', async () => {
     const response = createResponseRecorder()
 
@@ -3068,7 +3156,14 @@ describe('server handlers', () => {
     const { miniEnrichSelectedCandidates } = await import('./lib/ai-selector.js')
     miniEnrichSelectedCandidates.mockResolvedValue({
       model: 'gpt-5-mini',
-      enriched: [{ candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey' }],
+      enriched: [{
+        candidate_id: 'one',
+        fit_reason: 'Good match',
+        caveat: 'A bit pricey',
+        source_title: 'Product one',
+        display_title: 'Product One',
+        match_identifier: { brand: null, model_number: null, product_type: 'product' },
+      }],
       enrichedIds: ['one'],
       usage: null,
       preservedOrder: true,
@@ -3095,7 +3190,14 @@ describe('server handlers', () => {
           scope: 'guided_discovery_session:opaque-discovery-token',
           selection: expect.objectContaining({
             enrichment: expect.objectContaining({
-              entries: [{ candidate_id: 'one', fit_reason: 'Good match', caveat: 'A bit pricey' }],
+              entries: [{
+                candidate_id: 'one',
+                fit_reason: 'Good match',
+                caveat: 'A bit pricey',
+                source_title: 'Product one',
+                display_title: 'Product One',
+                match_identifier: { brand: null, model_number: null, product_type: 'product' },
+              }],
               model: 'gpt-5-mini',
               preservedOrder: true,
             }),
@@ -3107,6 +3209,7 @@ describe('server handlers', () => {
 
   it('does not write stale mini enrichment onto a newer discovery token for the same query', async () => {
     mockFinalizeEnv({
+      RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
       OXYLABS_PASSWORD: 'oxy-pass',
     })
@@ -3167,11 +3270,21 @@ describe('server handlers', () => {
       expect(miniEnrichSelectedCandidates).toHaveBeenCalled()
     })
 
-    expect(writeStoredSearchCacheEntry).not.toHaveBeenCalled()
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledTimes(1)
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'finalize_update',
+        selection: expect.objectContaining({
+          selectedCandidateIds: ['one'],
+          shortlistLocked: true,
+        }),
+      }),
+    )
   })
 
   it('keeps finalize async while product details and mini enrichment run in the background', async () => {
     mockFinalizeEnv({
+      RAINFOREST_API_KEY: 'rf-key',
       OXYLABS_USERNAME: 'oxy-user',
       OXYLABS_PASSWORD: 'oxy-pass',
     })
@@ -3218,7 +3331,13 @@ describe('server handlers', () => {
         }),
       }),
     )
-    expect(writeStoredSearchCacheEntry).not.toHaveBeenCalled()
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledTimes(1)
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'finalize_update',
+        selection: expect.objectContaining({ selectedCandidateIds: ['one'] }),
+      }),
+    )
 
     detailFetch.resolve({
       ok: true,
@@ -3256,6 +3375,27 @@ describe('server handlers', () => {
       expect(response.status).toBe(204)
       expect(response.headers.get('vary')).toBe('Origin')
       expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
+      expect(response.headers.get('access-control-allow-headers')).toContain('Authorization')
+    } finally {
+      await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+    }
+  })
+
+  it('routes disabled price checks without invoking providers', async () => {
+    getEnv.mockImplementation(() => '')
+    const server = createApiServer()
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    const port = typeof address === 'object' && address ? address.port : 0
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/product/price-check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      expect(response.status).toBe(200)
+      await expect(response.json()).resolves.toEqual({ status: 'disabled', cheaperOffersFound: false })
     } finally {
       await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
     }

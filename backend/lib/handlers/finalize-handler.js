@@ -15,10 +15,10 @@ import { getEnv, validateSearchInput } from '../search-data.js'
 import {
   readProductDetailsCacheEntries,
   recordSearchDiagnosticEvent,
-  recordOxylabsProductFailures,
   writeProductDetailsCacheEntries,
 } from '../search-storage.js'
-import { fetchOxylabsProductDetailsByAsin } from '../oxylabs-pipeline.js'
+import { fetchAmazonProductDetailsByAsin } from '../product-details-provider.js'
+import { writeSearchSnapshot } from '../search-pipeline.js'
 import {
   resolveDiscoveryContext,
 } from './discovery-handler.js'
@@ -46,8 +46,10 @@ import {
 import {
   runMiniEnrichmentAsync,
   mergeProductDetailsIntoCandidatePool,
-  applyLateProductDetailsToEnrichment,
 } from './enrichment-handler.js'
+import {
+  createSerperPricePrefetches,
+} from '../price-comparison/serper-price-intelligence.js'
 
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 
@@ -714,6 +716,23 @@ export async function handleFinalizeSelection(request, response) {
     })
     const totalDuration = nowMs() - requestStartedAt
 
+    await writeSearchSnapshot({
+      productQuery: sanitizedDiscoveryContext.normalizedQuery,
+      details: '',
+      candidatePool: nextCandidatePool,
+      discoveryToken: sanitizedDiscoveryContext.discoveryToken,
+      results,
+      selection: {
+        ...(resolvedDiscoveryContext.cachedEntry?.selection || {}),
+        mode: usedHaikuSelection ? 'ai' : 'rules_fallback',
+        strategy: selectionStrategy,
+        shortlistLocked: true,
+        selectedCandidateIds,
+      },
+      source: 'finalize_update',
+      scope: resolvedDiscoveryContext.discoveryScope,
+    })
+
     logSearchFlowEvent('guided_finalize_completed', {
       route: '/api/search/finalize',
       query: sanitizedDiscoveryContext.normalizedQuery,
@@ -802,35 +821,23 @@ export async function handleFinalizeSelection(request, response) {
     // Fire off product details and mini enrichment async; do not block the response.
     if (usedHaikuSelection) {
       const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
-      const oxylabsUsername = getEnv('OXYLABS_USERNAME') // TODO: swap back to Rainforest before launch.
-      const oxylabsPassword = getEnv('OXYLABS_PASSWORD') // TODO: swap back to Rainforest before launch.
+      const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
 
       runInBackground((async () => {
         try {
           const productDetailsStartedAt = nowMs()
-          const detailFailures = []
-          const productDetailsById = await fetchOxylabsProductDetailsByAsin({ // TODO: swap back to Rainforest before launch.
+          const priceComparisonPrefetches = createSerperPricePrefetches({
+            candidates: nextCandidatePool.candidates,
+            selectedCandidateIds,
+            amazonDomain: sanitizedDiscoveryContext.amazonDomain,
+          })
+          const productDetailsById = await fetchAmazonProductDetailsByAsin({
             asins: selectedCandidateIds,
-            oxylabsUsername,
-            oxylabsPassword,
+            rainforestApiKey,
             amazonDomain: sanitizedDiscoveryContext.amazonDomain,
             readCache: readProductDetailsCacheEntries,
             writeCache: writeProductDetailsCacheEntries,
-            onAsinFailure: (asin, failureType, statusCode) => {
-              detailFailures.push({ asin, failureType, statusCode, query: sanitizedDiscoveryContext.normalizedQuery })
-            },
-            onBackgroundRetryResolved: async (retryDetailsById) => {
-              await applyLateProductDetailsToEnrichment({
-                normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
-                discoveryToken: sanitizedDiscoveryContext.discoveryToken,
-                discoveryScope: resolvedDiscoveryContext.discoveryScope,
-                productDetailsById: retryDetailsById,
-              })
-            },
           })
-          if (detailFailures.length > 0) {
-            await recordOxylabsProductFailures(detailFailures)
-          }
           const productDetailsDuration = nowMs() - productDetailsStartedAt
           const enrichedCandidatePool = mergeProductDetailsIntoCandidatePool(nextCandidatePool, productDetailsById)
 
@@ -842,6 +849,8 @@ export async function handleFinalizeSelection(request, response) {
             normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
             discoveryToken: sanitizedDiscoveryContext.discoveryToken,
             discoveryScope: resolvedDiscoveryContext.discoveryScope,
+            priceComparisonPrefetches,
+            priceComparisonApiKey: getEnv('CLAUDE_API_KEY'),
           })
 
           logSearchFlowEvent('mini_enrichment_background_completed', {

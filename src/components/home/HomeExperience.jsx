@@ -651,6 +651,7 @@ export function HomeExperience({ initialSearchFollowUp = '', initialSearchQuery 
           <ProductDetailModal
             item={results.selectedProduct}
             isEnrichmentSettled={status.isEnrichmentSettled}
+            priceComparisonResults={results.priceComparison}
             showRecommendationAnalysis={results.selectedProduct?.analyticsMeta?.resultSet !== 'preview'}
             onRetailerClick={() =>
               trackRetailerClick(results.selectedProduct, {

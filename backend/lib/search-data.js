@@ -7,6 +7,7 @@ export {
 } from '../../shared/search-input.js'
 
 export const SERPAPI_ENDPOINT = 'https://serpapi.com/search.json'
+export const SERPER_SHOPPING_ENDPOINT = 'https://google.serper.dev/shopping'
 export const SEARCH_CACHE_PATH = resolve(process.cwd(), 'temp-data', 'serpapi-cache.json')
 export const SEARCH_EVALUATION_PATH = resolve(process.cwd(), 'temp-data', 'search-evaluation.json')
 const ENV_PATH = resolve(process.cwd(), '.env')

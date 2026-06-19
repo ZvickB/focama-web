@@ -194,12 +194,31 @@ describe('HomePage modal enrichment', () => {
                   candidateId: 'result-1',
                   fitReason: 'Fits travel days well because it folds quickly and stays easy to carry.',
                   caveat: 'Storage is tighter than on larger everyday strollers.',
+                  sourceTitle: 'Travel stroller',
+                  displayTitle: 'Compact Travel Stroller',
+                  matchIdentifier: {
+                    brand: null,
+                    model_number: null,
+                    product_type: 'travel stroller',
+                  },
                   featureBullets: [
                     'One-hand fold for quick airport transfers.',
                     'Compact carry strap for travel days.',
                   ],
                 },
               ],
+              priceComparison: {
+                results: [{
+                  candidate_id: 'result-1',
+                  retailer: 'Best Buy',
+                  price: 99.99,
+                  currency: 'CAD',
+                  savings: 30,
+                  savings_percent: 0.23,
+                  url: 'https://example.com/better-price',
+                  disclaimer: 'Prices are approximate. Verify the product matches before purchasing.',
+                }],
+              },
             }),
         })
       }
@@ -218,8 +237,9 @@ describe('HomePage modal enrichment', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Travel stroller')
 
-    await user.click(getVisibleResultTitle('Travel stroller'))
-    const dialog = await screen.findByRole('dialog', { name: /travel stroller/i })
+    await findVisibleResultTitle('Compact Travel Stroller')
+    await user.click(getVisibleResultTitle('Compact Travel Stroller'))
+    const dialog = await screen.findByRole('dialog', { name: /compact travel stroller/i })
 
     await waitFor(
       () => {
@@ -236,6 +256,11 @@ describe('HomePage modal enrichment', () => {
     expect(
       within(dialog).getByText(/one-hand fold for quick airport transfers\./i),
     ).toBeInTheDocument()
+    expect(within(dialog).getByText(/better price found/i)).toBeInTheDocument()
+    expect(within(dialog).getByRole('link', { name: /view on best buy/i })).toHaveAttribute(
+      'href',
+      'https://example.com/better-price',
+    )
   }, 10000)
 
   it('keeps polling for late feature bullets after initial enrichment is already ready', async () => {

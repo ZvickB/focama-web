@@ -2,14 +2,15 @@ import {
   miniEnrichSelectedCandidates,
 } from '../ai-selector.js'
 import { resolveCorsOrigin, sendJson } from '../http.js'
-import { emitEnrichmentReady, enrichmentBus } from '../enrichment-bus.js'
+import { emitEnrichmentReady, emitPriceComparisonReady, enrichmentBus } from '../enrichment-bus.js'
 import {
   resolveDiscoveryContext,
 } from './discovery-handler.js'
 import {
   writeSearchSnapshot,
 } from '../search-pipeline.js'
-import { validateSearchInput } from '../search-data.js'
+import { getEnv, validateSearchInput } from '../search-data.js'
+import { runSerperPriceIntelligence } from '../price-comparison/serper-price-intelligence.js'
 import {
   CACHE_SCOPE_DISCOVERY,
   CACHE_SCOPE_RAINFOREST,
@@ -17,8 +18,18 @@ import {
   getRequestedAmazonDomain,
   logSearchFlowEvent,
 } from '../server-helpers.js'
+import { normalizeProductIdentity } from '../product-identity.js'
 
 const ENRICHMENT_STREAM_TIMEOUT_MS = 30000
+const PRICE_COMPARISON_STREAM_TIMEOUT_MS = 10000
+
+function isEnabled(value) {
+  return /^(1|true|yes|on)$/i.test(String(value || '').trim())
+}
+
+function isSerperPriceStreamEnabled() {
+  return isEnabled(getEnv('SERPER_PRICE_INTEL_ENABLED')) && Boolean(getEnv('SERPER_API_KEY'))
+}
 
 export function mergeProductDetailsIntoCandidatePool(candidatePool, productDetailsById) {
   if (!productDetailsById?.size) {
@@ -40,6 +51,7 @@ export function mergeProductDetailsIntoCandidatePool(candidatePool, productDetai
         productDescription: productDetails.productDescription,
         isPrime: Boolean(candidate.isPrime || productDetails.isPrime),
         delivery: productDetails.delivery || candidate.delivery || '',
+        providerIdentity: productDetails.providerIdentity || candidate.providerIdentity || null,
       }
     }),
   }
@@ -73,6 +85,12 @@ function mergeCandidateFactsIntoEnrichmentEntries(entries, candidatePool) {
   })
 }
 
+function sameSelectedCandidateSet(currentIds, expectedIds) {
+  const current = Array.isArray(currentIds) ? currentIds.map(String).filter(Boolean).sort() : []
+  const expected = Array.isArray(expectedIds) ? expectedIds.map(String).filter(Boolean).sort() : []
+  return current.length === expected.length && current.every((id, index) => id === expected[index])
+}
+
 // Runs mini enrichment after Haiku has locked the shortlist, stores result in the token-scoped session snapshot.
 export async function runMiniEnrichmentAsync({
   lockedIds,
@@ -82,6 +100,8 @@ export async function runMiniEnrichmentAsync({
   normalizedQuery,
   discoveryToken,
   discoveryScope = CACHE_SCOPE_DISCOVERY,
+  priceComparisonPrefetches = [],
+  priceComparisonApiKey = null,
 }) {
   const miniResult = await miniEnrichSelectedCandidates({
     lockedIds,
@@ -102,10 +122,11 @@ export async function runMiniEnrichmentAsync({
 
   const { cachedEntry } = resolvedDiscoveryContext
 
+  const enrichmentEntries = mergeCandidateFactsIntoEnrichmentEntries(miniResult.enriched, candidatePool)
   const updatedSelection = {
     ...(cachedEntry.selection && typeof cachedEntry.selection === 'object' ? cachedEntry.selection : {}),
     enrichment: {
-      entries: mergeCandidateFactsIntoEnrichmentEntries(miniResult.enriched, candidatePool),
+      entries: enrichmentEntries,
       model: miniResult.model,
       generatedAt: new Date().toISOString(),
       preservedOrder: miniResult.preservedOrder,
@@ -135,6 +156,61 @@ export async function runMiniEnrichmentAsync({
     preservedOrder: miniResult.preservedOrder,
     model: miniResult.model,
   })
+
+  if (Array.isArray(priceComparisonPrefetches) && priceComparisonPrefetches.length > 0) {
+    const expectedLockedIds = Array.isArray(lockedIds) ? lockedIds.map(String).filter(Boolean) : []
+    const priceComparison = await runSerperPriceIntelligence({
+      prefetches: priceComparisonPrefetches,
+      enrichmentEntries,
+      anthropicApiKey: priceComparisonApiKey,
+    })
+
+    if (priceComparison.completed) {
+      const latestDiscoveryContext = await resolveDiscoveryContext(
+        normalizedQuery,
+        discoveryToken,
+        [discoveryScope],
+      )
+
+      if (latestDiscoveryContext.isValid) {
+        const latestEntry = latestDiscoveryContext.cachedEntry
+        if (!sameSelectedCandidateSet(latestEntry?.selection?.selectedCandidateIds, expectedLockedIds)) {
+          logSearchFlowEvent('price_comparison_stale_selection_skipped', {
+            query: normalizedQuery,
+            expectedCount: expectedLockedIds.length,
+            currentCount: Array.isArray(latestEntry?.selection?.selectedCandidateIds)
+              ? latestEntry.selection.selectedCandidateIds.length
+              : 0,
+          })
+          return miniResult
+        }
+
+        await writeSearchSnapshot({
+          productQuery: normalizedQuery,
+          details: '',
+          candidatePool: latestEntry.candidatePool,
+          discoveryToken: discoveryToken || latestEntry.discoveryToken || '',
+          results: Array.isArray(latestEntry.results) ? latestEntry.results : [],
+          selection: {
+            ...(latestEntry.selection && typeof latestEntry.selection === 'object' ? latestEntry.selection : {}),
+            priceComparison: {
+              results: priceComparison.results,
+              model: priceComparison.model,
+              generatedAt: new Date().toISOString(),
+              usage: priceComparison.usage,
+            },
+          },
+          source: 'price_comparison_update',
+          scope: discoveryScope,
+        })
+
+        emitPriceComparisonReady(
+          discoveryToken || latestEntry.discoveryToken || '',
+          priceComparison.results,
+        )
+      }
+    }
+  }
 
   return miniResult
 }
@@ -167,11 +243,22 @@ function mergeLateProductDetailsIntoEnrichmentEntries(entries, productDetailsByI
 
     const nextIsPrime = Boolean(entry?.isPrime || productDetails.isPrime)
     const nextDelivery = productDetails.delivery || entry?.delivery || ''
+    const normalizedIdentity = productDetails.providerIdentity
+      ? normalizeProductIdentity({
+          sourceTitle: entry?.source_title || entry?.sourceTitle,
+          providerIdentity: productDetails.providerIdentity,
+          aiNormalization: entry,
+        })
+      : null
 
     if (
       JSON.stringify(currentFeatureBullets) === JSON.stringify(nextFeatureBullets) &&
       Boolean(entry?.isPrime) === nextIsPrime &&
-      (entry?.delivery || '') === nextDelivery
+      (entry?.delivery || '') === nextDelivery &&
+      (!normalizedIdentity || (
+        normalizedIdentity.display_title === (entry?.display_title || '') &&
+        JSON.stringify(normalizedIdentity.match_identifier) === JSON.stringify(entry?.match_identifier)
+      ))
     ) {
       return entry
     }
@@ -183,6 +270,7 @@ function mergeLateProductDetailsIntoEnrichmentEntries(entries, productDetailsByI
       feature_bullets: nextFeatureBullets,
       ...(nextIsPrime ? { isPrime: true } : {}),
       ...(nextDelivery ? { delivery: nextDelivery } : {}),
+      ...(normalizedIdentity || {}),
     }
   })
 
@@ -301,9 +389,13 @@ export async function handleEnrichmentPoll(request, response) {
   const { cachedEntry } = resolvedDiscoveryContext
 
   const enrichment = cachedEntry?.selection?.enrichment
+  const priceComparison = cachedEntry?.selection?.priceComparison
 
   if (!enrichment?.entries?.length) {
-    sendJson(response, 200, { ready: false })
+    sendJson(response, 200, {
+      ready: false,
+      ...(Array.isArray(priceComparison?.results) ? { priceComparison: { results: priceComparison.results } } : {}),
+    })
     return
   }
 
@@ -311,6 +403,7 @@ export async function handleEnrichmentPoll(request, response) {
     ready: true,
     entries: enrichment.entries,
     model: enrichment.model || '',
+    ...(Array.isArray(priceComparison?.results) ? { priceComparison: { results: priceComparison.results } } : {}),
   })
 }
 
@@ -344,6 +437,8 @@ export async function handleEnrichmentStream(request, response) {
 
   const { cachedEntry } = resolvedDiscoveryContext
   const enrichment = cachedEntry?.selection?.enrichment
+  const priceComparison = cachedEntry?.selection?.priceComparison
+  const shouldWaitForPriceComparison = isSerperPriceStreamEnabled()
 
   response.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -356,9 +451,34 @@ export async function handleEnrichmentStream(request, response) {
 
   if (enrichment?.entries?.length) {
     response.write(`data: ${JSON.stringify({
+      type: 'enrichment',
       ready: true,
       entries: enrichment.entries,
       model: enrichment.model || '',
+    })}\n\n`)
+
+    if (!shouldWaitForPriceComparison) {
+      response.end()
+      return
+    }
+
+    if (Array.isArray(priceComparison?.results)) {
+      response.write(`data: ${JSON.stringify({
+        type: 'price_comparison',
+        results: priceComparison.results,
+      })}\n\n`)
+      response.end()
+      return
+    }
+
+    waitForPriceComparisonThenEnd({ request, response, token })
+    return
+  }
+
+  if (shouldWaitForPriceComparison && Array.isArray(priceComparison?.results)) {
+    response.write(`data: ${JSON.stringify({
+      type: 'price_comparison',
+      results: priceComparison.results,
     })}\n\n`)
     response.end()
     return
@@ -372,7 +492,7 @@ export async function handleEnrichmentStream(request, response) {
     clearTimeout(timeoutId)
   }
 
-  function finish(payload) {
+  function finish(payload, { waitForPriceComparison = false } = {}) {
     if (completed) {
       return
     }
@@ -380,21 +500,76 @@ export async function handleEnrichmentStream(request, response) {
     completed = true
     cleanup()
     response.write(`data: ${JSON.stringify(payload)}\n\n`)
+
+    if (waitForPriceComparison) {
+      waitForPriceComparisonThenEnd({ request, response, token })
+      return
+    }
+
     response.end()
   }
 
   function handleReady(payload) {
     finish({
+      type: 'enrichment',
       ready: true,
       entries: payload?.entries,
       model: payload?.model,
+    }, {
+      waitForPriceComparison: shouldWaitForPriceComparison,
     })
   }
 
   const timeoutId = setTimeout(() => {
-    finish({ ready: false })
+    finish({ type: 'enrichment', ready: false })
   }, ENRICHMENT_STREAM_TIMEOUT_MS)
 
+  enrichmentBus.on(eventName, handleReady)
+
+  request.on('close', () => {
+    if (completed) {
+      return
+    }
+
+    completed = true
+    cleanup()
+  })
+}
+
+function waitForPriceComparisonThenEnd({ request, response, token }) {
+  const eventName = `price_comparison:${token}`
+  let completed = false
+
+  function cleanup() {
+    enrichmentBus.off(eventName, handleReady)
+    clearTimeout(timeoutId)
+  }
+
+  function end() {
+    if (completed) {
+      return
+    }
+
+    completed = true
+    cleanup()
+    response.end()
+  }
+
+  function handleReady(payload) {
+    if (completed) {
+      return
+    }
+
+    completed = true
+    cleanup()
+    response.write(`data: ${JSON.stringify({
+      type: 'price_comparison',
+      results: Array.isArray(payload?.results) ? payload.results : [],
+    })}\n\n`)
+    response.end()
+  }
+
+  const timeoutId = setTimeout(end, PRICE_COMPARISON_STREAM_TIMEOUT_MS)
   enrichmentBus.on(eventName, handleReady)
 
   request.on('close', () => {

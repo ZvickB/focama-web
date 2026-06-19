@@ -122,6 +122,58 @@ describe('ProductDetailModal', () => {
     expect(screen.getByText(/free delivery/i)).toBeInTheDocument()
     expect(screen.queryByText(/prime eligible/i)).not.toBeInTheDocument()
   })
+
+  it('shows a quiet better-price option above the existing Amazon CTA', () => {
+    renderModal({
+      priceComparisonResults: [{
+        candidate_id: 'result-1',
+        retailer: 'Best Buy',
+        price: 99.99,
+        currency: 'CAD',
+        savings: 30,
+        savings_percent: 0.23,
+        url: 'https://example.com/better-price',
+        disclaimer: 'Prices are approximate. Verify the product matches before purchasing.',
+      }],
+    })
+
+    const betterPriceHeading = screen.getByText(/better price found/i)
+    const amazonCta = screen.getByRole('link', { name: /view on amazon/i })
+
+    expect(screen.getByText(/best buy · \$99\.99/i)).toBeInTheDocument()
+    expect(screen.getByText(/save \$30\.00 \/ 23%/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /view on best buy/i })).toHaveAttribute(
+      'href',
+      'https://example.com/better-price',
+    )
+    expect(screen.getByText(/prices are approximate/i)).toBeInTheDocument()
+    expect(betterPriceHeading.compareDocumentPosition(amazonCta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('keeps the better-price section invisible without a valid matching result', () => {
+    renderModal({
+      priceComparisonResults: [
+        {
+          candidate_id: 'another-result',
+          retailer: 'Best Buy',
+          price: 99.99,
+          savings: 30,
+          url: 'https://example.com/other-product',
+        },
+        {
+          candidate_id: 'result-1',
+          retailer: 'Best Buy',
+          price: 99.99,
+          savings: 30,
+          url: 'javascript:alert(1)',
+        },
+      ],
+    })
+
+    expect(screen.queryByText(/better price found/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/checking.*price/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /view on amazon/i })).toBeInTheDocument()
+  })
 })
 describe('ResultsSection retry advice', () => {
   it('shows Prime availability on result surfaces when confirmed', () => {

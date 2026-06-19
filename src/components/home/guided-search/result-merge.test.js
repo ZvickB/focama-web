@@ -46,6 +46,23 @@ describe('mergeEnrichmentIntoResults', () => {
     const merged = mergeEnrichmentIntoResults(results, enrichment)
     expect(merged[0].feature_bullets).toEqual(['a', 'b'])
   })
+
+  it('merges normalized titles and comparison identity without overwriting the source title', () => {
+    const results = [{ id: '1', title: 'Long provider title, with extra keywords' }]
+    const enrichment = [{
+      candidate_id: '1',
+      source_title: 'Long provider title, with extra keywords',
+      display_title: 'Long Provider Title',
+      match_identifier: { brand: 'Long', model_number: null },
+    }]
+
+    expect(mergeEnrichmentIntoResults(results, enrichment)[0]).toEqual(expect.objectContaining({
+      title: 'Long provider title, with extra keywords',
+      sourceTitle: 'Long provider title, with extra keywords',
+      displayTitle: 'Long Provider Title',
+      matchIdentifier: { brand: 'Long', model_number: null },
+    }))
+  })
 })
 
 describe('mergeProductDetailsIntoResults', () => {
