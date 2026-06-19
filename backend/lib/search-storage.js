@@ -2,6 +2,7 @@ export { isSupabaseConfigured, getSupabaseHealth } from './storage/supabase-clie
 export { recordTesterFeedback } from './storage/feedback-storage.js'
 export { readStoredSearchCacheEntry, writeStoredSearchCacheEntry } from './storage/search-cache-storage.js'
 export { readProductDetailsCacheEntries, writeProductDetailsCacheEntries } from './storage/product-details-storage.js'
+export { readPriceComparisonCacheEntry, writePriceComparisonCacheEntry } from './storage/price-comparison-storage.js'
 export {
   readAnalyticsDashboardData,
   readCachePoolEntries,

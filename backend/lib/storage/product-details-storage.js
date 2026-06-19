@@ -36,6 +36,7 @@ function mapSupabaseProductDetailsRow(row) {
     source: row?.source,
     needsUpdating: row?.needs_updating,
     nextUpdateAt: row?.next_update_at,
+    providerIdentity: row?.provider_identity,
   })
 
   if (!row?.asin || !normalized) {
@@ -58,6 +59,7 @@ function mapLocalProductDetailsEntry(entry) {
     source: entry?.source,
     needsUpdating: entry?.needsUpdating,
     nextUpdateAt: entry?.nextUpdateAt,
+    providerIdentity: entry?.providerIdentity,
   })
 
   if (!normalized) {
@@ -90,6 +92,7 @@ function writeLocalProductDetailsCacheEntries(entries) {
       source: normalized.source,
       needsUpdating: normalized.needsUpdating,
       nextUpdateAt: normalized.nextUpdateAt,
+      providerIdentity: normalized.providerIdentity,
       cachedAt,
     }
   }
@@ -118,7 +121,7 @@ export async function readProductDetailsCacheEntries(asins = []) {
       const supabase = getSupabaseAdminClient()
       const { data, error } = await supabase
         .from(PRODUCT_DETAILS_CACHE_TABLE)
-        .select('asin, feature_bullets, product_description, source, needs_updating, next_update_at')
+        .select('asin, feature_bullets, product_description, source, needs_updating, next_update_at, provider_identity')
         .in('asin', uniqueAsins)
 
       if (error) {
@@ -164,6 +167,7 @@ export async function writeProductDetailsCacheEntries(entries = []) {
         source: normalized.source,
         needsUpdating: normalized.needsUpdating,
         nextUpdateAt: normalized.nextUpdateAt,
+        providerIdentity: normalized.providerIdentity,
       }
     })
     .filter(Boolean)
@@ -184,6 +188,7 @@ export async function writeProductDetailsCacheEntries(entries = []) {
           source: entry.source,
           needs_updating: entry.needsUpdating,
           next_update_at: entry.nextUpdateAt,
+          provider_identity: entry.providerIdentity,
           cached_at: cachedAt,
         })),
         { onConflict: 'asin' },

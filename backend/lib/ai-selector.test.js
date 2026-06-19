@@ -113,6 +113,28 @@ describe('ai selector', () => {
     })
   })
 
+  it('gives Haiku one ordered shortlist policy with eligibility before ranking', async () => {
+    mockHaikuResponse('{"picks":[{"candidate_id":"prod-1"}]}')
+
+    await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 1,
+      candidatePool: createCandidatePool(2),
+    })
+
+    const prompt = anthropicMocks.create.mock.calls[0][0].messages[0].content
+
+    expect(prompt).toContain('Apply these rules in order:')
+    expect(prompt).toContain('An eligible lower-rated product beats an ineligible higher-rated product.')
+    expect(prompt).toContain('Match the requested product type before considering quality.')
+    expect(prompt).toContain('Brand familiarity is positive only when the product also fits.')
+    expect(prompt).toContain('Detect duplicates using duplicateFamilyKey first')
+    expect(prompt).toContain('Use amazonPosition only as the final tie-breaker.')
+    expect(prompt).not.toContain('Ranking approach - apply in this order:')
+    expect(prompt).not.toContain('Eligibility rules (apply before ranking):')
+    expect(prompt).not.toContain('Within the eligible set, final order priority:')
+  })
+
   it('rejects duplicate and out-of-pool Haiku ids while keeping valid ids in order', async () => {
     mockHaikuResponse(JSON.stringify({
       picks: [
@@ -172,6 +194,21 @@ describe('ai selector', () => {
               candidate_id: 'prod-1',
               fit_reason: 'Fits travel days because it folds quickly and stays easy to carry.',
               caveat: 'Storage is tighter than on larger everyday strollers.',
+              display_title: 'Travel Stroller',
+              match_identifier: {
+                brand: null,
+                model_number: null,
+                product_type: 'travel stroller',
+                attributes: {
+                  generation: null,
+                  size: null,
+                  capacity: null,
+                  color: null,
+                  material: null,
+                  pack_count: null,
+                  condition: null,
+                },
+              },
             },
           ],
         }),
@@ -206,9 +243,18 @@ describe('ai selector', () => {
         candidate_id: 'prod-1',
         fit_reason: 'Fits travel days because it folds quickly and stays easy to carry.',
         caveat: 'Storage is tighter than on larger everyday strollers.',
+        display_title: 'Travel Stroller',
+        match_identifier: expect.objectContaining({
+          brand: null,
+          model_number: null,
+          upc: null,
+          product_type: 'travel stroller',
+        }),
+        source_title: 'Travel stroller',
         feature_bullets: ['One-hand fold', 'Compact carry strap'],
       },
     ])
+    expect(requestBody.text.format.schema.properties.enriched.items.properties.match_identifier.properties).not.toHaveProperty('upc')
   })
 
   it('reports whether mini enrichment preserved the locked shortlist order', async () => {

@@ -75,6 +75,7 @@ describe('search-storage product details cache helpers', () => {
           source: 'oxylabs',
           needs_updating: false,
           next_update_at: null,
+          provider_identity: { brand: 'Example', model_number: 'ST-100' },
         },
         {
           asin: 'B002',
@@ -97,7 +98,7 @@ describe('search-storage product details cache helpers', () => {
 
     expect(supabaseClient.from).toHaveBeenCalledWith('product_details_cache')
     expect(selectMock).toHaveBeenCalledWith(
-      'asin, feature_bullets, product_description, source, needs_updating, next_update_at',
+      'asin, feature_bullets, product_description, source, needs_updating, next_update_at, provider_identity',
     )
     expect(inMock).toHaveBeenCalledWith('asin', ['B001', 'B002', 'B003'])
     expect(result).toBeInstanceOf(Map)
@@ -108,6 +109,7 @@ describe('search-storage product details cache helpers', () => {
       source: 'oxylabs',
       needsUpdating: false,
       nextUpdateAt: null,
+      providerIdentity: { brand: 'Example', model_number: 'ST-100' },
     })
     expect(result.get('B002')).toEqual({
       feature_bullets: [],
@@ -115,6 +117,7 @@ describe('search-storage product details cache helpers', () => {
       source: 'rainforest',
       needsUpdating: true,
       nextUpdateAt: '2026-04-28T00:00:00.000Z',
+      providerIdentity: null,
     })
   })
 
@@ -129,6 +132,7 @@ describe('search-storage product details cache helpers', () => {
         source: 'oxylabs',
         needsUpdating: false,
         nextUpdateAt: null,
+        providerIdentity: { brand: 'Example', model_number: 'MX-10' },
       },
       {
         asin: 'B011',
@@ -148,6 +152,7 @@ describe('search-storage product details cache helpers', () => {
         source: 'oxylabs',
         needsUpdating: false,
         nextUpdateAt: null,
+        providerIdentity: { brand: 'Example', model_number: 'MX-10' },
       }),
     )
     expect(typeof writtenFile.entries.B010.cachedAt).toBe('string')
@@ -160,6 +165,7 @@ describe('search-storage product details cache helpers', () => {
       source: 'oxylabs',
       needsUpdating: false,
       nextUpdateAt: null,
+      providerIdentity: { brand: 'Example', model_number: 'MX-10' },
     })
     expect(result.get('B011')).toEqual({
       feature_bullets: [],
@@ -167,6 +173,7 @@ describe('search-storage product details cache helpers', () => {
       source: 'rainforest',
       needsUpdating: true,
       nextUpdateAt: '2026-04-28T00:00:00.000Z',
+      providerIdentity: null,
     })
   })
 
@@ -197,6 +204,7 @@ describe('search-storage product details cache helpers', () => {
       source: 'oxylabs',
       needsUpdating: true,
       nextUpdateAt: '2026-04-28T12:00:00.000Z',
+      providerIdentity: null,
     })
   })
 

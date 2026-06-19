@@ -34,6 +34,7 @@ import { handleProductDetails } from './lib/handlers/product-details-handler.js'
 import { createRetryAdviceHandler } from './lib/handlers/retry-advice-handler.js'
 import { createFeedbackHandler } from './lib/handlers/feedback-handler.js'
 import { createSupabaseHealthHandler } from './lib/handlers/supabase-health-handler.js'
+import { createPriceCheckHandler } from './lib/handlers/price-check-handler.js'
 import {
   handleConnectivityDiagnostic,
   handleHealth,
@@ -88,6 +89,7 @@ export const handleFeedbackSubmission = createFeedbackHandler({
 })
 
 export const handleSupabaseHealth = createSupabaseHealthHandler()
+export const handlePriceCheck = createPriceCheckHandler()
 
 export {
   handleAnalyticsTrack,
@@ -125,7 +127,7 @@ export function createApiServer() {
         response.writeHead(204, {
           'Access-Control-Allow-Origin': resolveCorsOrigin(request.headers?.origin),
           'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
           Vary: 'Origin',
         })
         response.end()
@@ -189,6 +191,11 @@ export function createApiServer() {
 
       if (request.method === 'GET' && requestUrl.pathname === '/api/search/product-details') {
         await handleProductDetails(requestUrl, response)
+        return
+      }
+
+      if (request.method === 'POST' && requestUrl.pathname === '/api/product/price-check') {
+        await handlePriceCheck(request, response)
         return
       }
 

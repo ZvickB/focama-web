@@ -4,6 +4,7 @@ import { getEnv } from '../search-data.js'
 export const SEARCH_CACHE_TABLE = 'search_cache'
 export const SEARCH_HISTORY_TABLE = 'search_history'
 export const PRODUCT_DETAILS_CACHE_TABLE = 'product_details_cache'
+export const PRICE_COMPARISON_CACHE_TABLE = 'price_comparison_cache'
 export const ANALYTICS_SEARCH_RUNS_TABLE = 'analytics_search_runs'
 export const ANALYTICS_SEARCH_EVENTS_TABLE = 'analytics_search_events'
 export const ANALYTICS_RESULT_IMPRESSIONS_TABLE = 'analytics_result_impressions'
@@ -16,6 +17,10 @@ export const SEARCH_EVENTS_TABLE = 'search_events'
 const DEFAULT_CACHE_TTL_MINUTES = 1440
 
 let supabaseAdminClient = null
+
+function isEnabled(value) {
+  return /^(1|true|yes|on)$/i.test(String(value || '').trim())
+}
 
 export function getCacheTtlMinutes() {
   const configuredValue = Number.parseInt(getEnv('SEARCH_CACHE_TTL_MINUTES') || '', 10)
@@ -189,7 +194,7 @@ export async function getSupabaseHealth() {
 
   try {
     const supabase = getSupabaseAdminClient()
-    const tableChecks = await Promise.all([
+    const requiredTableChecks = [
       checkSupabaseTable(supabase, SEARCH_CACHE_TABLE, 'cache_key'),
       checkSupabaseTable(supabase, SEARCH_HISTORY_TABLE, 'id'),
       checkSupabaseTable(supabase, PRODUCT_DETAILS_CACHE_TABLE, 'asin'),
@@ -202,7 +207,11 @@ export async function getSupabaseHealth() {
       checkSupabaseTable(supabase, SEARCH_EVENTS_TABLE, 'search_id'),
       checkSupabaseTable(supabase, OXYLABS_PRODUCT_FAILURES_TABLE, 'asin'),
       checkSupabaseTable(supabase, RATE_LIMIT_EVENTS_TABLE, 'rate_key'),
-    ])
+    ]
+    if (isEnabled(getEnv('PRICE_COMPARISON_ENABLED'))) {
+      requiredTableChecks.push(checkSupabaseTable(supabase, PRICE_COMPARISON_CACHE_TABLE, 'cache_key'))
+    }
+    const tableChecks = await Promise.all(requiredTableChecks)
 
     return {
       configured: true,

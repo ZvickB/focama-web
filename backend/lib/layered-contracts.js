@@ -141,6 +141,11 @@ export function createEnrichmentContract({
           candidateId: truncateText(entry?.candidateId, 200),
           fitReason: truncateText(entry?.fitReason, 400),
           caveat: truncateText(entry?.caveat, 400),
+          sourceTitle: truncateText(entry?.sourceTitle, 500),
+          displayTitle: truncateText(entry?.displayTitle, 300),
+          matchIdentifier: entry?.matchIdentifier && typeof entry.matchIdentifier === 'object'
+            ? entry.matchIdentifier
+            : null,
           featureBullets: compactStringArray(entry?.featureBullets, {
             maxItems: 10,
             maxLength: 320,

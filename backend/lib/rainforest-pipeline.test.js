@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchRainforestArtifacts, getAmazonDomain, RAINFOREST_ENDPOINT } from './rainforest-pipeline.js'
+import {
+  fetchRainforestArtifacts,
+  fetchRainforestProductDetailsByAsin,
+  getAmazonDomain,
+  RAINFOREST_ENDPOINT,
+} from './rainforest-pipeline.js'
 
 describe('getAmazonDomain', () => {
   beforeEach(() => {
@@ -181,5 +186,36 @@ describe('getAmazonDomain', () => {
       },
       artifacts: null,
     })
+  })
+
+  it('preserves provider identifiers from Rainforest product detail', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        product: {
+          asin: 'B001',
+          title: 'Cuisinart ICE-21C 1.5 qt Ice Cream Maker',
+          brand: 'Cuisinart',
+          upc: '068459178126',
+          specifications: [
+            { name: 'Item model number', value: 'ICE-21C' },
+            { name: 'Capacity', value: '1.5 qt' },
+          ],
+        },
+      }),
+    })
+
+    const result = await fetchRainforestProductDetailsByAsin({
+      asins: ['B001'],
+      rainforestApiKey: 'rf-key',
+      amazonDomain: 'amazon.ca',
+    })
+
+    expect(result.get('B001').providerIdentity).toEqual(expect.objectContaining({
+      brand: 'Cuisinart',
+      model_number: 'ICE-21C',
+      upc: '068459178126',
+      attributes: expect.objectContaining({ capacity: '1.5 qt' }),
+    }))
   })
 })

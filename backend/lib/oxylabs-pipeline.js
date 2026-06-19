@@ -2,6 +2,7 @@ import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './result-filt
 import { buildProductDetailsCacheWriteEntry, fetchProductDetailsWithCache } from './product-details-cache.js'
 import { buildQuery } from './search-data.js'
 import { normalizeOxylabsProduct, normalizeOxylabsSearchResult } from './oxylabs-normalizer.js'
+import { buildProviderIdentity } from './product-identity.js'
 import { getOxylabsDomainFromAmazonDomain } from '../../shared/amazon-marketplaces.js'
 
 export const OXYLABS_ENDPOINT = 'https://realtime.oxylabs.io/v1/queries'
@@ -48,6 +49,10 @@ async function fetchSingleOxylabsProductDetail({
     productDescription: typeof normalized.description === 'string' ? normalized.description : '',
     isPrime: Boolean(normalized.isPrime),
     delivery: normalized.delivery || '',
+    providerIdentity: buildProviderIdentity({
+      product: content || {},
+      specifications: normalized.specifications,
+    }),
   }
 }
 
@@ -215,6 +220,7 @@ export async function fetchOxylabsProductDetailsByAsin({
           productDescription: settledResult.value.productDescription,
           isPrime: Boolean(settledResult.value.isPrime),
           delivery: settledResult.value.delivery || '',
+          providerIdentity: settledResult.value.providerIdentity,
         })
       }
 
@@ -247,6 +253,7 @@ export async function fetchOxylabsProductDetailsByAsin({
                 productDescription: retryResult.value.productDescription,
                 isPrime: Boolean(retryResult.value.isPrime),
                 delivery: retryResult.value.delivery || '',
+                providerIdentity: retryResult.value.providerIdentity,
               })
 
               const retryWrite = buildProductDetailsCacheWriteEntry({
@@ -255,6 +262,7 @@ export async function fetchOxylabsProductDetailsByAsin({
                 productDescription: retryResult.value.productDescription,
                 isPrime: Boolean(retryResult.value.isPrime),
                 delivery: retryResult.value.delivery || '',
+                providerIdentity: retryResult.value.providerIdentity,
                 source: 'oxylabs',
               })
 

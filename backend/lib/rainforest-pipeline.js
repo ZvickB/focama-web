@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fetchProductDetailsWithCache } from './product-details-cache.js'
+import { buildProviderIdentity } from './product-identity.js'
 import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './result-filter.js'
 import { buildQuery } from './search-data.js'
 import {
@@ -100,6 +101,11 @@ function normalizeRainforestProductDetailPayload(payload, fallbackAsin) {
 
   const isPrime = hasRainforestPrimeSignal(product)
   const deliveryTagline = getRainforestDeliveryTagline(product?.delivery)
+  const specifications = Array.isArray(product?.specifications)
+    ? product.specifications
+    : product?.specifications && typeof product.specifications === 'object'
+      ? Object.entries(product.specifications).map(([name, value]) => ({ name, value }))
+      : []
 
   return {
     asin: typeof product?.asin === 'string' && product.asin.trim() ? product.asin.trim() : fallbackAsin,
@@ -116,6 +122,7 @@ function normalizeRainforestProductDetailPayload(payload, fallbackAsin) {
     ),
     isPrime,
     delivery: deliveryTagline || (isPrime ? 'Prime delivery' : ''),
+    providerIdentity: buildProviderIdentity({ product, specifications }),
   }
 }
 
@@ -249,6 +256,7 @@ export async function fetchRainforestProductDetailsByAsin({
             productDescription: normalized.productDescription,
             isPrime: Boolean(normalized.isPrime),
             delivery: normalized.delivery || '',
+            providerIdentity: normalized.providerIdentity,
           }
         }),
       )
@@ -265,6 +273,7 @@ export async function fetchRainforestProductDetailsByAsin({
           productDescription: settledResult.value.productDescription,
           isPrime: Boolean(settledResult.value.isPrime),
           delivery: settledResult.value.delivery || '',
+          providerIdentity: settledResult.value.providerIdentity,
         })
       }
 

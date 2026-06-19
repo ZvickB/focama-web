@@ -30,6 +30,10 @@ function normalizeNextUpdateAt(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
 }
 
+function normalizeProviderIdentity(value) {
+  return value && typeof value === 'object' ? JSON.parse(JSON.stringify(value)) : null
+}
+
 export function normalizeCachedProductDetailsEntry(entry) {
   if (!entry || typeof entry !== 'object') {
     return null
@@ -46,6 +50,7 @@ export function normalizeCachedProductDetailsEntry(entry) {
     source: normalizeString(entry.source),
     needsUpdating: Boolean(entry.needsUpdating ?? entry.needs_updating),
     nextUpdateAt: normalizeNextUpdateAt(entry.nextUpdateAt ?? entry.next_update_at),
+    providerIdentity: normalizeProviderIdentity(entry.providerIdentity ?? entry.provider_identity),
   }
 }
 
@@ -89,7 +94,7 @@ export function shouldRefreshPartialProductDetails(entry, now = Date.now()) {
   return parsed.getTime() <= now
 }
 
-export function buildProductDetailsCacheWriteEntry({ asin, feature_bullets, productDescription, isPrime, delivery, source }) {
+export function buildProductDetailsCacheWriteEntry({ asin, feature_bullets, productDescription, isPrime, delivery, providerIdentity, source }) {
   const normalizedAsin = normalizeString(asin).slice(0, 200)
 
   if (!normalizedAsin) {
@@ -101,6 +106,7 @@ export function buildProductDetailsCacheWriteEntry({ asin, feature_bullets, prod
     productDescription,
     isPrime,
     delivery,
+    providerIdentity,
     source,
   })
 
@@ -119,6 +125,7 @@ export function buildProductDetailsCacheWriteEntry({ asin, feature_bullets, prod
     productDescription: normalizedEntry.productDescription,
     ...(normalizedEntry.isPrime ? { isPrime: true } : {}),
     ...(normalizedEntry.delivery ? { delivery: normalizedEntry.delivery } : {}),
+    ...(normalizedEntry.providerIdentity ? { providerIdentity: normalizedEntry.providerIdentity } : {}),
     source: normalizedEntry.source,
     needsUpdating,
     nextUpdateAt,
@@ -160,6 +167,7 @@ function createDetailsValue(entry) {
     productDescription: normalized.productDescription,
     ...(normalized.isPrime ? { isPrime: true } : {}),
     ...(normalized.delivery ? { delivery: normalized.delivery } : {}),
+    ...(normalized.providerIdentity ? { providerIdentity: normalized.providerIdentity } : {}),
   }
 }
 
@@ -224,6 +232,7 @@ export async function fetchProductDetailsWithCache({
             productDescription: freshEntries?.get?.(asin)?.productDescription,
             isPrime: freshEntries?.get?.(asin)?.isPrime,
             delivery: freshEntries?.get?.(asin)?.delivery,
+            providerIdentity: freshEntries?.get?.(asin)?.providerIdentity,
             source,
           })
 
@@ -262,6 +271,7 @@ export async function fetchProductDetailsWithCache({
         productDescription: freshEntry.productDescription,
         isPrime: freshEntry.isPrime,
         delivery: freshEntry.delivery,
+        providerIdentity: freshEntry.providerIdentity,
         source,
       })
 
