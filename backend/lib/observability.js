@@ -180,7 +180,8 @@ export function reportBackendError(error, context = {}) {
   }
 
   Sentry.withScope((scope) => {
-    scope.setLevel('error')
+    const level = sanitizedContext?.sentryLevel === 'warning' ? 'warning' : 'error'
+    scope.setLevel(level)
     scope.setTag('source', sanitizedContext?.source || 'backend')
 
     if (sanitizedContext?.route) {

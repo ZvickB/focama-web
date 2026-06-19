@@ -6,7 +6,7 @@ import {
   resolveDiscoveryContext,
 } from '../discovery-context.js'
 import { getRefinementModel } from './refine-handler.js'
-import { generateQueryQualityReview } from '../query-quality-review.js'
+import { generateQueryQualityReview, QUERY_QUALITY_REVIEW_TIMEOUT_MS } from '../query-quality-review.js'
 import {
   writeSearchSnapshot,
 } from '../search-pipeline.js'
@@ -181,11 +181,18 @@ async function runQueryQualityReviewAsync({
     })
   } catch (error) {
     const errorContext = getQueryQualityErrorContext(error)
+    const isTimeout = error?.name === 'ExternalRequestTimeoutError' ||
+      error?.errorName === 'TimeoutError'
+    const reviewMs = roundTimingDuration(nowMs() - reviewStartedAt)
 
     logSearchFlowEvent('query_quality_review_failed', {
       route: '/api/search/rainforest-discover',
       query: normalizedQuery,
-      reviewMs: roundTimingDuration(nowMs() - reviewStartedAt),
+      reviewMs,
+      isTimeout,
+      model,
+      timeoutMs: QUERY_QUALITY_REVIEW_TIMEOUT_MS,
+      fallbackUsed: true,
       ...errorContext,
     })
 
@@ -195,7 +202,12 @@ async function runQueryQualityReviewAsync({
       query: normalizedQuery,
       route: '/api/search/rainforest-discover',
       source: 'background_task',
-      reviewMs: roundTimingDuration(nowMs() - reviewStartedAt),
+      model,
+      timeoutMs: QUERY_QUALITY_REVIEW_TIMEOUT_MS,
+      isTimeout,
+      fallbackUsed: true,
+      reviewMs,
+      sentryLevel: isTimeout ? 'warning' : 'error',
       ...errorContext,
     })
 

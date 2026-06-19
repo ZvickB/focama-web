@@ -6,7 +6,7 @@ const MAX_TITLE_LENGTH = 160
 const MAX_CANDIDATE_ITEMS = 12
 const MAX_PREVIEW_ITEMS = 6
 const MAX_SIMILAR_QUERIES = 8
-const QUERY_QUALITY_REVIEW_TIMEOUT_MS = 20000
+export const QUERY_QUALITY_REVIEW_TIMEOUT_MS = 20000
 
 const CLASSIFICATIONS = new Set(['ok', 'likely_typo', 'weak_pool', 'ambiguous_language'])
 const SUGGESTABLE_CLASSIFICATIONS = new Set(['likely_typo', 'weak_pool'])
