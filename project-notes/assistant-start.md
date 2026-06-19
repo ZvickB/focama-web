@@ -10,7 +10,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 
 ## Current branch context
 - Active branch for the current experiment: `experiment/serp-price-intel`.
-- Price-comparison Phases 1-3 are implemented on this branch behind `PRICE_COMPARISON_ENABLED=false`: async identity, isolated SerpApi/BlueCart matching, a 7-day match/30-minute price cache, and server-validated `POST /api/product/price-check` with optional Supabase auth redaction and rate limits. The current UI does not call it; settings and offer UI remain Phase 4.
+- Price-comparison Phases 1-3 are implemented on this branch behind `PRICE_COMPARISON_ENABLED=false`: async identity, isolated SerpApi/BlueCart matching, a 7-day match/30-minute price cache, and server-validated `POST /api/product/price-check` with optional Supabase auth redaction and rate limits. Separate Serper price intelligence is implemented behind `SERPER_PRICE_INTEL_ENABLED=false`: Serper Shopping, isolated Haiku same-product judgment, post-enrichment orchestration, caching, budget/rate controls, measurement logs, SSE/poll delivery, and a quiet modal-only `Better price found` panel. The panel has no loading/empty state and only appears for a valid result matching the open product. No card badge exists.
 - The active web UI direction remains documented at `project-notes/ui_improvement_plan/README.md`.
 
 ## Current app reality
@@ -35,8 +35,8 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
 - Do not let future multi-retailer flexibility make today's Amazon-first UX vague. If more retailers become active, revisit frontend labels based on the real source mix.
 - `search_history` is internal telemetry/cache visibility, not a user-facing saved-history feature.
-- User-facing search history has started as a localStorage-only feature at `/history`; finalized searches auto-save on the current device and can be expanded, deleted, cleared, or re-run. Account-backed history is still pending and should use `saved_searches`, not internal `search_history`.
-- Frontend auth shell has started: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI exist. Search remains ungated. Signed-out history uses localStorage; signed-in history uses Supabase `saved_searches`; local entries migrate into the account on login. Live QA of auth/RLS/history persistence is still pending.
+- User-facing search history is implemented at `/history`: signed-out users use localStorage, signed-in users use Supabase `saved_searches`, and local entries migrate into the account on login.
+- Frontend auth shell is implemented: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI exist. Search remains ungated.
 
 ## Current guided flow
 - User enters a product query.
@@ -53,16 +53,16 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Search diagnostics: `POST /api/search/diagnostics/event`, `GET /api/health`, `GET /api/diagnostics/connectivity`.
 
 ## Important behavior notes
-- Discovery uses Rainforest API first for all Amazon marketplaces when configured. Oxylabs is now the discovery fallback only: it runs when Rainforest errors or returns too few usable items to support the 6-item shortlist. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available.
+- Discovery uses Rainforest API for active Amazon marketplaces when configured. Oxylabs is retired from the active stack; keep historical references archived only.
 - Finalize rebuilds the candidate pool server-side from guided cache.
 - Haiku locks the shortlist first, with deterministic fallback/top-up when needed. Its prompt ranks inferred product fit first, then quality confidence (rating, review count, trustScore, and recognized category brand), price/value, shortlist variety, and raw Amazon position as the final tiebreaker.
-- Provider-confirmed Prime eligibility is preserved as structured `isPrime` data; clear Prime delivery/eligibility requests narrow finalize to Prime-tagged candidates when available, and the UI shows only a quiet in-house Prime marker/fact. Plain free-delivery text may show as `Free delivery` but must not be upgraded to Prime. Rainforest product-detail enrichment can upgrade `isPrime` when search rows underreport Prime, with Oxylabs only as the detail fallback.
+- Provider-confirmed Prime eligibility is preserved as structured `isPrime` data; clear Prime delivery/eligibility requests narrow finalize to Prime-tagged candidates when available, and the UI shows only a quiet in-house Prime marker/fact. Plain free-delivery text may show as `Free delivery` but must not be upgraded to Prime. Rainforest product-detail enrichment can upgrade `isPrime` when search rows underreport Prime.
 - Result surfaces should stay compact: source/store names belong in clickout CTAs, rating plus review count are one ratings/reviews signal, and delivery is at most one optional signal.
 - Hard-constraint follow-up notes can trigger one refreshed discovery before finalize.
 - Query-quality suggestions are polling-based only. No SSE or prewarm path exists.
 - Modal/detail enrichment hydrates after the first shortlist cards are shown, framing the top pick as the hero recommendation and later picks as alternatives.
 - The same async mini-enrichment response preserves `sourceTitle`, validates a cleaner `displayTitle`, and stores a separate `matchIdentifier`. Provider identifiers outrank deterministic extraction, and AI cannot supply authoritative UPC/EAN/GTIN fields.
-- Skipped-refinement preview products do not show AI recommendation analysis. When opened, the modal can lazily hydrate product detail bullets/description from the per-ASIN cache or Rainforest through `GET /api/search/product-details`, with Oxylabs fallback when Rainforest is unavailable or returns no usable detail.
+- Skipped-refinement preview products do not show AI recommendation analysis. When opened, the modal can lazily hydrate product detail bullets/description from the per-ASIN cache or Rainforest through `GET /api/search/product-details`.
 - Marketplace listings without a known positive price are filtered out before preview/finalize.
 - Thin discovery cache hits with fewer than 6 cached results or candidates are bypassed and refreshed from the provider.
 - `/api/search/live` and debug/cache routes are not the main user path.

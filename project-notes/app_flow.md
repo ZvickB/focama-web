@@ -45,7 +45,7 @@
 - `GET /api/search/rainforest-discover`
   - primary homepage discovery route
   - uses Rainforest API first for all Amazon marketplaces when configured
-  - falls back to Oxylabs only when Rainforest errors or returns too few usable items to support the 6-item shortlist; if Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available
+  - uses Rainforest for active Amazon marketplaces when configured; Oxylabs is retired from the active stack and should appear only in archived historical notes
   - writes reusable guided discovery cache and creates a separate token-scoped session snapshot for finalize/enrichment
   - honors an explicit one-request cache refresh mode for accepted retry-advice searches, bypassing the shared discovery cache read while still writing fresh provider results back to shared cache and session state
   - also honors that refresh mode for the one-time pre-finalize discovery pass when follow-up notes contain hard constraints
@@ -81,13 +81,14 @@
   - returns `shouldSuggest: false` for quiet no-op reviews, ambiguous language, failures, or skipped reviews
 - `GET /api/search/product-details`
   - lightweight one-product detail hydration endpoint used when a user opens a skipped-refinement preview product
-  - reads the per-ASIN product details cache first, then uses Rainforest for cache misses when configured, with Oxylabs only as the fallback detail provider
+  - reads the per-ASIN product details cache first, then uses Rainforest for cache misses when configured
 - `POST /api/product/price-check`
   - disabled by default and currently not called by the frontend
   - accepts the query, discovery token, finalized candidate ID, `amazon.ca` marketplace, and seller coverage mode
   - resolves product identity from server-owned finalized search state, restricts execution to CA/CAD, checks the comparison cache before SerpApi/BlueCart, and never joins the blocking finalize path
   - signed-out responses expose only whether qualifying cheaper offers exist; a Supabase-validated signed-in request can receive up to two offer details
-  - returns product detail bullets, product description, Prime, and delivery facts; it does not run AI recommendation analysis
+- Serper price-intelligence backend orchestration also exists separately behind `SERPER_PRICE_INTEL_ENABLED=false`: for finalized products above the configured price threshold, finalize can start capped Serper Shopping calls in the background; Serper result lists are cached for 30 minutes, live calls pass through a narrow background rate bucket, and after mini enrichment produces `matchIdentifier`, cached or fresh Haiku same-product judgments identify qualifying better-price results for token-scoped snapshot storage.
+- The enrichment SSE can send a second `price_comparison` message after enrichment, and polling can return stored price comparison data as a fallback. The guided-search hook stores this data. When a valid result matches the open product, the modal quietly shows retailer, price, savings, comparison link, and disclaimer below product notes and above the unchanged Amazon decision bar. There is no price-check loading/empty state and no result-card badge.
 - `POST /api/search/retry-advice`
   - reads the rejected shortlist plus user feedback
   - returns `recommendation`, `suggestedQuery`, and `rationale`
@@ -120,7 +121,7 @@
 - A development-only results-view toggle can switch between the ranked rows view and the older grid/card view.
 - Result rows/cards show reliable product facts first: image, title, price, one combined ratings/reviews signal, and at most one delivery signal when available. The provider/source name is carried by the shopping clickout CTA when available, not repeated as separate card metadata.
 - Provider-confirmed Prime eligibility is preserved as structured product data and shown as a quiet factual `Prime` marker on result rows/cards plus a modal `Delivery` fact only when Prime is confirmed. Plain free-delivery text can show as `Free delivery` instead of being upgraded to Prime. Positive Rainforest delivery text such as Prime delivery/signup eligibility is promoted into `isPrime`; Focamai does not show negative/unknown Prime copy, use the official Amazon Prime logo, or turn Prime into a marketplace-style filter panel.
-- Some Oxylabs search rows underreport Prime even when the product page confirms it. Async product-detail enrichment can upgrade a result to `isPrime: true` and hydrate the row/card plus modal fact after the initial shortlist appears.
+- Some search rows underreport Prime even when product detail confirms it. Async product-detail enrichment can upgrade a result to `isPrime: true` and hydrate the row/card plus modal fact after the initial shortlist appears.
 - User-facing result and detail titles are normalized for display so long Amazon keyword-stuffed titles are shortened without changing the raw product data. Long titles with commas keep the first comma chunk; otherwise display titles truncate at a word boundary before 80 characters.
 - Result, retry, and modal surfaces now share a quieter visual system: fewer decorative gradients, smaller shadows, and more consistent 16-28px radii.
 - Selecting a row or the row details action opens the modal.
@@ -172,9 +173,8 @@
 - Mini enrichment treats the first locked product as the hero recommendation and writes later picks as alternatives that explain who might prefer them over the hero.
 - The same async mini-enrichment request now preserves each provider title as `sourceTitle`, produces a validated `displayTitle`, and stores a separate structured `matchIdentifier`. Provider product codes outrank deterministic extraction, AI cannot return authoritative UPC/EAN/GTIN fields, and unsafe title cleanup falls back to the source title.
 - Result rows/cards reserve a stable two-line title area. When enrichment arrives, `displayTitle` replaces the initial source-title presentation in cards, the selected-product panel, and the modal without replacing the underlying source title.
-- Product-detail enrichment is Rainforest-first for fresh detail fetches, with Oxylabs used only for missing details or missing Rainforest configuration.
-- Oxylabs fallback product-detail fetches use a fast first pass for finalize enrichment and retry failed ASIN detail calls in the background so cache quality can still improve without holding the modal AI copy back longer.
-- When an Oxylabs fallback background detail retry later succeeds, the stored enrichment payload is updated with new `feature_bullets` and any newly available provider identity, and the frontend keeps polling long enough for the open modal to hydrate those fields in place.
+- Product-detail enrichment uses Rainforest for fresh detail fetches.
+- Historical Oxylabs fallback behavior is retired from the active stack; keep any reference to it in archive notes only.
 - Backend observability is now opt-in through Sentry (`SENTRY_DSN`) with sanitized error context, and background async failures are logged/reported instead of disappearing silently.
 - Search reliability diagnostics now use the existing frontend search ID as a user-facing support code. Frontend discovery/finalize failures show the support code, offer a safe `Copy debug info` action, ask testers whether they use a filter/VPN, run lightweight `/api/health` and `/api/diagnostics/connectivity` checks, and write best-effort lifecycle rows to Supabase `search_attempts` / `search_events` when those tables exist.
 - The diagnostic lifecycle covers frontend search start, backend request start/receive, Rainforest start/success/error/timeout, app filter counts, empty results, backend response sent, frontend response/display success, frontend error, backend health, and connectivity checks.

@@ -1,793 +1,1105 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Focamai Search Flow — Current</title>
-    <style>
-      :root {
-        --bg: #f6f2eb;
-        --panel: rgba(255, 252, 247, 0.96);
-        --panel-strong: #fffdf9;
-        --line: #ddd4c7;
-        --text: #24313c;
-        --muted: #64717c;
-        --green: #2f6b52;
-        --green-soft: #e9f5ef;
-        --blue: #325d82;
-        --blue-soft: #edf4fb;
-        --amber: #a96833;
-        --amber-soft: #fff3e7;
-        --slate: #4b5563;
-        --slate-soft: #f1f5f9;
-        --shadow: 0 24px 56px rgba(34, 48, 60, 0.08);
-      }
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Focamai — App Flow</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #f8f9fa;
+    color: #1a1a2e;
+    padding: 24px;
+    line-height: 1.5;
+  }
+  h1 {
+    text-align: center;
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #1a1a2e;
+  }
+  .subtitle {
+    text-align: center;
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 32px;
+  }
 
-      * { box-sizing: border-box; }
+  /* Legend */
+  .legend {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 32px;
+    padding: 12px 20px;
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #e0e0e0;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #555;
+  }
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+  }
 
-      body {
-        margin: 0;
-        font-family: Inter, "Segoe UI", Arial, sans-serif;
-        color: var(--text);
-        background:
-          radial-gradient(circle at top, rgba(255,255,255,0.84), transparent 34%),
-          linear-gradient(180deg, #faf8f4 0%, var(--bg) 100%);
-      }
+  /* Section */
+  .section {
+    margin-bottom: 40px;
+  }
+  .section-title {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    padding-left: 12px;
+    border-left: 4px solid #0d9488;
+  }
 
-      code {
-        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-        font-size: 0.92em;
-      }
+  /* Flow container */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  .flow-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 24px;
+    width: 100%;
+    max-width: 900px;
+  }
 
-      .page {
-        max-width: 1180px;
-        margin: 0 auto;
-        padding: 32px 18px 64px;
-        display: grid;
-        gap: 22px;
-      }
+  /* Arrow connector */
+  .arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 0;
+  }
+  .arrow-line {
+    width: 2px;
+    height: 20px;
+    background: #999;
+  }
+  .arrow-head {
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid #999;
+  }
+  .arrow-label {
+    font-size: 11px;
+    color: #888;
+    margin: 2px 0;
+    font-style: italic;
+  }
 
-      .hero,
-      .parallel-band,
-      .timing-section,
-      .rules,
-      .step {
-        border: 1px solid var(--line);
-        border-radius: 24px;
-        background: var(--panel);
-        box-shadow: var(--shadow);
-      }
+  /* Parallel indicator */
+  .parallel-wrapper {
+    position: relative;
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    padding: 16px 20px;
+    border: 2px dashed #ccc;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 900px;
+  }
+  .parallel-label {
+    position: absolute;
+    top: -10px;
+    left: 20px;
+    background: #f8f9fa;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
 
-      .hero,
-      .parallel-band,
-      .timing-section,
-      .rules {
-        padding: 24px;
-      }
+  /* Box base */
+  .box {
+    border-radius: 10px;
+    padding: 14px 18px;
+    cursor: pointer;
+    transition: box-shadow 0.2s, transform 0.1s;
+    position: relative;
+    min-width: 200px;
+    max-width: 420px;
+    flex: 1;
+  }
+  .box:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  }
+  .box-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .box-title {
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .box-subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-top: 2px;
+  }
+  .box-expand-icon {
+    font-size: 18px;
+    color: #999;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .box.expanded .box-expand-icon {
+    transform: rotate(180deg);
+  }
 
-      .eyebrow {
-        margin: 0 0 10px;
-        font-size: 12px;
-        font-weight: 800;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }
+  /* Box details (hidden by default) */
+  .box-details {
+    display: none;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(0,0,0,0.1);
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+  .box.expanded .box-details {
+    display: block;
+  }
+  .box-details h4 {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin: 8px 0 4px 0;
+    color: #555;
+  }
+  .box-details h4:first-child {
+    margin-top: 0;
+  }
+  .box-details ul, .box-details ol {
+    padding-left: 16px;
+  }
+  .box-details li {
+    margin-bottom: 3px;
+  }
+  .box-details code {
+    background: rgba(0,0,0,0.06);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11.5px;
+    font-family: 'Consolas', 'Fira Code', monospace;
+  }
 
-      h1 {
-        margin: 0;
-        font-size: clamp(2.2rem, 4vw, 3.5rem);
-        line-height: 1.03;
-      }
+  /* Color themes */
+  .box-frontend {
+    background: #e8f4fd;
+    border: 1.5px solid #7ec8e3;
+  }
+  .box-backend {
+    background: #e6f9f0;
+    border: 1.5px solid #6bcf9f;
+  }
+  .box-ai {
+    background: #f0e6fa;
+    border: 1.5px solid #b794d6;
+  }
+  .box-provider {
+    background: #fff3e0;
+    border: 1.5px solid #f0a858;
+  }
+  .box-cache {
+    background: #f0f0f0;
+    border: 1.5px solid #b0b0b0;
+  }
+  .box-decision {
+    background: #fff8e1;
+    border: 1.5px solid #dfc050;
+  }
 
-      .subtitle {
-        max-width: 860px;
-        margin: 14px 0 0;
-        font-size: 17px;
-        line-height: 1.72;
-        color: var(--muted);
-      }
+  /* Branch arrows */
+  .branch {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    width: 100%;
+    max-width: 900px;
+  }
+  .branch-path {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+  }
+  .branch-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #888;
+    margin-bottom: 6px;
+    text-align: center;
+  }
 
-      .provider-note {
-        display: inline-block;
-        margin-top: 16px;
-        padding: 10px 16px;
-        border-radius: 12px;
-        background: var(--amber-soft);
-        border: 1px solid rgba(169,104,51,0.22);
-        font-size: 14px;
-        line-height: 1.6;
-        color: var(--amber);
-      }
+  /* Full-width box */
+  .box-full {
+    width: 100%;
+    max-width: 420px;
+  }
 
-      .provider-note strong { color: #7a4a20; }
+  /* Expand all / collapse all */
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .controls button {
+    padding: 6px 16px;
+    border: 1px solid #ccc;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #555;
+    transition: background 0.15s;
+  }
+  .controls button:hover {
+    background: #f0f0f0;
+  }
 
-      .legend {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 12px;
-        margin-top: 20px;
-      }
+  /* Responsive */
+  @media (max-width: 700px) {
+    .flow-row, .parallel-wrapper, .branch {
+      flex-direction: column;
+      align-items: center;
+    }
+    .box { max-width: 100%; min-width: unset; }
+  }
+</style>
+</head>
+<body>
 
-      .legend-card,
-      .lane,
-      .detail,
-      .timing-card,
-      .rule-card {
-        border-radius: 16px;
-        background: var(--panel-strong);
-        border: 1px solid var(--line);
-        padding: 14px;
-      }
+<h1>Focamai App Flow</h1>
+<p class="subtitle">Click any box to expand its internals. Click again to collapse.</p>
 
-      .legend-card strong,
-      .detail strong {
-        display: block;
-        margin-bottom: 6px;
-        font-size: 12px;
-        font-weight: 800;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-      }
+<div class="controls">
+  <button onclick="expandAll()">Expand All</button>
+  <button onclick="collapseAll()">Collapse All</button>
+</div>
 
-      .legend-card p,
-      .detail p,
-      .lane p,
-      .timing-card .tc-note,
-      .rule-card p {
-        margin: 0;
-        font-size: 13px;
-        line-height: 1.62;
-        color: var(--muted);
-      }
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#7ec8e3"></div> Frontend / UI</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#6bcf9f"></div> Backend API</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#b794d6"></div> AI Model Call</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f0a858"></div> External Provider</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#b0b0b0"></div> Cache / Storage</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#dfc050"></div> Decision / Branch</div>
+</div>
 
-      .legend-card.parallel { background: var(--blue-soft); }
-      .legend-card.blocking { background: var(--green-soft); }
-      .legend-card.async { background: var(--amber-soft); }
+<!-- ============================================================ -->
+<!-- SECTION 1: PAGE LOAD -->
+<!-- ============================================================ -->
+<div class="section">
+  <div class="section-title">1. Page Load</div>
+  <div class="flow">
 
-      .parallel-band {
-        border-color: rgba(50,93,130,0.2);
-        background: var(--blue-soft);
-      }
-
-      .parallel-band h2,
-      .timing-section h2,
-      .rules h2 {
-        margin: 0 0 6px;
-        font-size: clamp(1.35rem, 2.4vw, 1.95rem);
-      }
-
-      .band-sub,
-      .ts-sub {
-        margin: 0 0 18px;
-        font-size: 14px;
-        line-height: 1.6;
-        color: var(--muted);
-      }
-
-      .lane-grid,
-      .detail-grid,
-      .timing-grid,
-      .rules-grid {
-        display: grid;
-        gap: 12px;
-      }
-
-      .lane-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 16px; }
-      .timing-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-      .rules-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-
-      .lane {
-        background: rgba(255,255,255,0.76);
-        border-color: rgba(50,93,130,0.14);
-      }
-
-      .lane-label,
-      .rc-rank,
-      .timing-card .tc-route {
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-      }
-
-      .lane-label,
-      .timing-card .tc-route { color: var(--blue); }
-      .rc-rank { color: var(--green); margin-bottom: 6px; }
-
-      .lane h3,
-      .rule-card h3 {
-        margin: 0 0 6px;
-        font-size: 1rem;
-      }
-
-      .lane .timing {
-        display: inline-block;
-        margin-top: 10px;
-        font-size: 12px;
-        font-weight: 700;
-        padding: 3px 9px;
-        border-radius: 999px;
-        background: rgba(50,93,130,0.1);
-        color: var(--blue);
-      }
-
-      .flow { display: grid; gap: 18px; }
-
-      .step {
-        position: relative;
-        display: grid;
-        grid-template-columns: 88px 1fr;
-        gap: 18px;
-        padding: 22px;
-      }
-
-      .step::after {
-        content: "";
-        position: absolute;
-        left: 43px;
-        bottom: -20px;
-        width: 2px;
-        height: 20px;
-        background: var(--line);
-      }
-
-      .step:last-child::after { display: none; }
-
-      .step-id {
-        display: flex;
-        justify-content: center;
-        align-items: flex-start;
-      }
-
-      .step-id span {
-        width: 54px;
-        height: 54px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 999px;
-        color: #fff;
-        font-size: 19px;
-        font-weight: 800;
-        background: linear-gradient(135deg, #3b6b57, #204637);
-      }
-
-      .step h3 {
-        margin: 0;
-        font-size: clamp(1.35rem, 2.4vw, 2rem);
-        line-height: 1.1;
-      }
-
-      .step > div > p {
-        margin: 14px 0 0;
-        font-size: 15px;
-        line-height: 1.72;
-        color: var(--muted);
-      }
-
-      .tag-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 10px;
-      }
-
-      .tag {
-        display: inline-flex;
-        align-items: center;
-        border-radius: 999px;
-        padding: 5px 10px;
-        font-size: 12px;
-        font-weight: 800;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-      }
-
-      .tag.api { background: var(--blue-soft); color: var(--blue); }
-      .tag.blocking { background: var(--green-soft); color: var(--green); }
-      .tag.async { background: var(--amber-soft); color: var(--amber); }
-      .tag.ui { background: var(--slate-soft); color: var(--slate); }
-
-      .detail.green { background: var(--green-soft); border-color: rgba(47,107,82,0.18); }
-      .detail.amber { background: var(--amber-soft); border-color: rgba(169,104,51,0.2); }
-      .detail.blue { background: var(--blue-soft); border-color: rgba(50,93,130,0.18); }
-
-      .timing-card .tc-time {
-        font-size: 1.25rem;
-        font-weight: 800;
-        line-height: 1.15;
-        color: var(--text);
-      }
-
-      .rules {
-        border-color: rgba(47,107,82,0.2);
-        background: var(--green-soft);
-      }
-
-      .rules h2 { color: #1e4a36; }
-
-      .rule-card {
-        background: rgba(255,255,255,0.7);
-        border-color: rgba(47,107,82,0.14);
-      }
-
-      @media (max-width: 860px) {
-        .lane-grid,
-        .detail-grid {
-          grid-template-columns: 1fr;
-        }
-      }
-
-      @media (max-width: 680px) {
-        .step { grid-template-columns: 1fr; }
-        .step::after { left: 26px; }
-        .step-id { justify-content: flex-start; }
-      }
-    </style>
-  </head>
-  <body>
-    <main class="page">
-      <section class="hero">
-        <p class="eyebrow">Current Implemented Flow</p>
-        <h1>Focamai Search Flow</h1>
-        <p class="subtitle">
-          This is the live guided flow as wired today in the homepage and Render backend.
-          It documents current behavior only: discovery, refinement, shortlist lock, async
-          enrichment, preview mode, and retry advice.
-        </p>
-        <p class="provider-note">
-          <strong>Provider reality:</strong> the main homepage route is still
-          <code>/api/search/rainforest-discover</code>, but the route currently uses the
-          Oxylabs-backed Amazon path under that Rainforest-named surface. The current UX may name
-          Amazon when Amazon is the active source, while backend/provider logic stays flexible.
-          SerpApi is not part of the active homepage flow.
-        </p>
-
-        <div class="legend">
-          <article class="legend-card parallel">
-            <strong>Parallel</strong>
-            <p>Starts at the same time as another request and does not wait for it.</p>
-          </article>
-          <article class="legend-card blocking">
-            <strong>Blocking</strong>
-            <p>User waits for this response before the next product state can appear.</p>
-          </article>
-          <article class="legend-card async">
-            <strong>Async</strong>
-            <p>Runs after finalize returns. The UI merges this work in later.</p>
-          </article>
+    <div class="box box-frontend box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">HTML Boot Splash</div>
+          <div class="box-subtitle">index.html renders immediately</div>
         </div>
-      </section>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <ul>
+          <li>Preconnects Google Fonts</li>
+          <li>Preloads PNG wordmark at high fetch priority</li>
+          <li>Shows a branded splash while JS loads</li>
+        </ul>
+      </div>
+    </div>
 
-      <section class="parallel-band">
-        <h2>Two Requests Fire On Submit</h2>
-        <p class="band-sub">
-          Starting a search launches discovery and the follow-up question in parallel. The old
-          third “framing fields” lane is not part of the current implementation anymore.
-        </p>
-        <div class="lane-grid">
-          <article class="lane">
-            <div class="lane-label">Parallel lane A</div>
-            <h3>Discovery</h3>
-            <p>
-              <code>GET /api/search/rainforest-discover</code> validates the query, resolves the
-              Amazon domain, checks discovery cache, fetches product artifacts when needed, stores
-              a <code>discoveryToken</code>, and returns a preview set plus a server-owned
-              candidate pool.
-            </p>
-            <span class="timing">Returns preview data + token</span>
-          </article>
-          <article class="lane">
-            <div class="lane-label">Parallel lane B</div>
-            <h3>Refine</h3>
-            <p>
-              <code>GET /api/search/refine</code> generates one short follow-up question plus helper
-              copy. If it fails, the frontend falls back to a local generic prompt so the flow keeps
-              moving.
-            </p>
-            <span class="timing">Question-first experience</span>
-          </article>
+    <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+    <div class="box box-frontend box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">HomeShell (lightweight)</div>
+          <div class="box-subtitle">Route renders while idle &mdash; no search yet</div>
         </div>
-      </section>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <ul>
+          <li>Preconnects to backend origin (<code>VITE_BACKEND_URL</code>)</li>
+          <li>Warms the <code>HomeExperience</code> chunk in the background</li>
+          <li>Resolves marketplace from localStorage or geo detection</li>
+          <li>Shows the compact 2-line search textarea</li>
+        </ul>
+        <h4>Marketplace Resolution</h4>
+        <ul>
+          <li>If saved preference exists &rarr; use immediately, skip geo</li>
+          <li>If no saved preference &rarr; <code>api/geo.js</code> (Vercel) &rarr; country code &rarr; Amazon domain</li>
+          <li>Only <code>amazon.com</code> and <code>amazon.ca</code> have Associates tags configured</li>
+        </ul>
+      </div>
+    </div>
 
-      <section class="flow">
-        <article class="step">
-          <div class="step-id"><span>1</span></div>
+    <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+    <div class="box box-frontend box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">HomeExperience (lazy)</div>
+          <div class="box-subtitle">Activates when user starts a search</div>
+        </div>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <ul>
+          <li>On mount, prefetches <code>ResultsSection</code> and <code>ProductDetailModal</code> chunks</li>
+          <li>Houses the <code>useGuidedSearch</code> hook &mdash; the main search state machine</li>
+          <li>Route-level lazy loading with visible loading fallback</li>
+          <li>Chunk-load crashes get a reload-focused recovery message</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: SEARCH SUBMISSION & PARALLEL REQUESTS -->
+<!-- ============================================================ -->
+<div class="section">
+  <div class="section-title">2. Search Submission</div>
+  <div class="flow">
+
+    <div class="box box-frontend box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">User Submits Query</div>
+          <div class="box-subtitle">Textarea &rarr; useGuidedSearch fires two requests</div>
+        </div>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <ul>
+          <li>Query validated client-side (<code>validateSearchInput</code>)</li>
+          <li>Search ID created for diagnostics/analytics</li>
+          <li>Large search stage collapses into compact progress line</li>
+          <li>Two requests fire in parallel immediately</li>
+        </ul>
+        <h4>Network Routing</h4>
+        <ul>
+          <li>Tries Render backend directly first</li>
+          <li>If <code>fetch</code> fails at network level &rarr; retries once through Vercel <code>/api/...</code> rewrites</li>
+          <li>Successful proxy use remembered in localStorage</li>
+          <li>Background <code>/api/health</code> ping clears proxy preference when Render is reachable again</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-head"></div>
+      <div class="arrow-label">fires in parallel</div>
+    </div>
+
+    <div class="parallel-wrapper">
+      <div class="parallel-label">Parallel Requests</div>
+
+      <!-- Discovery -->
+      <div class="box box-backend" onclick="toggle(this)" style="flex:1.2">
+        <div class="box-header">
           <div>
-            <h3>User Starts With Just The Product</h3>
-            <div class="tag-row">
-              <span class="tag ui">Homepage</span>
-            </div>
-            <p>
-              The homepage asks only for the product topic first. Helper copy explicitly says
-              budget, size, and other details come next, so the initial query stays lightweight.
-            </p>
-            <div class="detail-grid">
-              <div class="detail">
-                <strong>Primary CTA</strong>
-                <p><code>Start search</code></p>
-              </div>
-              <div class="detail">
-                <strong>Examples shown</strong>
-                <p>
-                  Travel stroller for airplane, ergonomic office chair, lego botanical set.
-                </p>
-              </div>
-            </div>
+            <div class="box-title">GET /api/search/rainforest-discover</div>
+            <div class="box-subtitle">Primary discovery &mdash; returns candidates + token</div>
           </div>
-        </article>
+          <div class="box-expand-icon">&#9660;</div>
+        </div>
+        <div class="box-details">
+          <h4>Rate Limiting</h4>
+          <ul>
+            <li>15 req / IP / 10s rolling window</li>
+            <li>Supabase-backed in prod, in-memory fallback</li>
+          </ul>
+          <h4>Cache Check</h4>
+          <ul>
+            <li>Builds cache key: normalized query + marketplace scope</li>
+            <li>Reads shared cache (<code>rainforest_discovery:v3</code>)</li>
+            <li>Bypasses thin cache hits (&lt;6 results or candidates)</li>
+            <li>Sanitizes stale entries (removes zero-price items, retags Amazon links)</li>
+            <li>Cache hit &rarr; skip provider, return cached artifacts</li>
+          </ul>
+          <h4>Provider Fetch (cache miss)</h4>
+          <ul>
+            <li><strong>Rainforest API first</strong> for all Amazon marketplaces</li>
+            <li>Falls back to <strong>Oxylabs</strong> only when Rainforest errors or returns too few items</li>
+            <li>Builds ~20-candidate pool from search results</li>
+            <li>Filters out items without known positive price</li>
+          </ul>
+          <h4>After Response Sent</h4>
+          <ul>
+            <li>Writes shared discovery cache + token-scoped session snapshot</li>
+            <li>Starts background query-quality review (non-blocking)</li>
+          </ul>
+          <h4>Returns</h4>
+          <ul>
+            <li><code>discoveryToken</code> &mdash; session key for finalize/enrichment</li>
+            <li>Preview results (up to ~20 items)</li>
+            <li>Server-Timing header</li>
+          </ul>
+        </div>
+      </div>
 
-        <article class="step">
-          <div class="step-id"><span>2</span></div>
+      <!-- Refine -->
+      <div class="box box-backend" onclick="toggle(this)" style="flex:0.8">
+        <div class="box-header">
           <div>
-            <h3>Discovery And The Follow-Up Prompt Race In Parallel</h3>
-            <div class="tag-row">
-              <span class="tag api">GET /api/search/rainforest-discover</span>
-              <span class="tag api">GET /api/search/refine</span>
-              <span class="tag blocking">Question visible before finalize</span>
-            </div>
-            <p>
-              The user sees the refinement area as soon as the follow-up prompt is ready. Discovery
-              can still be loading underneath. The primary button stays disabled until discovery has
-              returned a valid <code>discoveryToken</code> and preview set.
-            </p>
-            <div class="detail-grid">
-              <div class="detail blue">
-                <strong>Refine copy</strong>
-                <p>
-                  The more you share, the better the picks. The user can type while the suggested
-                  prompt is still being generated.
-                </p>
-              </div>
-              <div class="detail green">
-                <strong>Discovery output</strong>
-                <p>
-                  <code>candidatePool</code>, <code>previewResults</code>, resolved
-                  <code>amazonDomain</code>, and a trusted <code>discoveryToken</code>.
-                </p>
-              </div>
-            </div>
+            <div class="box-title">GET /api/search/refine</div>
+            <div class="box-subtitle">AI generates one follow-up question</div>
           </div>
-        </article>
+          <div class="box-expand-icon">&#9660;</div>
+        </div>
+        <div class="box-details">
+          <h4>AI Call</h4>
+          <ul>
+            <li><strong>gpt-5-mini first</strong> &mdash; generates question + refinement chip suggestions</li>
+            <li>Falls back to <strong>Haiku</strong> if OpenAI fails</li>
+            <li>If both fail &rarr; local generic fallback prompt</li>
+          </ul>
+          <h4>Returns</h4>
+          <ul>
+            <li>One short follow-up question</li>
+            <li>Chip suggestions for quick refinement</li>
+            <li>Helper copy</li>
+          </ul>
+          <h4>Key Files</h4>
+          <ul>
+            <li><code>backend/lib/handlers/refine-handler.js</code></li>
+            <li><code>backend/lib/refinement-assistant.js</code></li>
+          </ul>
+        </div>
+      </div>
+    </div>
 
-        <article class="step">
-          <div class="step-id"><span>3</span></div>
-          <div>
-            <h3>Preview Mode Is Available Before Finalize</h3>
-            <div class="tag-row">
-              <span class="tag ui">Just show me results</span>
-              <span class="tag blocking">No AI shortlist yet</span>
-            </div>
-            <p>
-              Once discovery is ready, the user can click <code>Just show me results</code>. That
-              reveals the preview grid immediately and tracks a preview impression set, but it does
-              not run finalize and it does not claim those cards are the focused picks.
-            </p>
-            <div class="detail-grid">
-              <div class="detail">
-                <strong>User-facing note</strong>
-                <p>No AI refinement — results based on your search only.</p>
-              </div>
-              <div class="detail amber">
-                <strong>Important distinction</strong>
-                <p>Preview results are real product cards, but not the locked 6-pick shortlist.</p>
-              </div>
-            </div>
-          </div>
-        </article>
+  </div>
+</div>
 
-        <article class="step">
-          <div class="step-id"><span>4</span></div>
-          <div>
-            <h3>User Adds Context And Clicks “Show Focused Picks”</h3>
-            <div class="tag-row">
-              <span class="tag ui">Refine step</span>
-            </div>
-            <p>
-              The user can write natural-language notes about price, style, fit, use case, or what
-              to avoid. The frontend sends the query, resolved Amazon domain, discovery token,
-              follow-up notes, retry metadata, and request mode. It does not send the candidate pool
-              itself.
-            </p>
-            <div class="detail-grid">
-              <div class="detail">
-                <strong>Request modes in use</strong>
-                <p>
-                  <code>guided_refined</code> when notes are present,
-                  <code>guided_empty_notes</code> when the user skips details.
-                </p>
-              </div>
-              <div class="detail amber">
-                <strong>Server trust boundary</strong>
-                <p>
-                  Finalize rebuilds the pool from guided cache using <code>discoveryToken</code>.
-                  Browser-posted candidate data is not part of the trusted path.
-                </p>
-              </div>
-            </div>
-          </div>
-        </article>
+<!-- ============================================================ -->
+<!-- SECTION 3: REFINEMENT UI -->
+<!-- ============================================================ -->
+<div class="section">
+  <div class="section-title">3. Refinement Phase</div>
+  <div class="flow">
 
-        <article class="step">
-          <div class="step-id"><span>5</span></div>
-          <div>
-            <h3>Finalize Locks The 6 Winners</h3>
-            <div class="tag-row">
-              <span class="tag api">POST /api/search/finalize</span>
-              <span class="tag blocking">Shortlist response</span>
-            </div>
-            <p>
-              Finalize validates the body, rate limits by IP, resolves the discovery snapshot,
-              trims notes, then asks Haiku to lock the shortlist. The fallback path is
-              deterministic, and partial valid Haiku output is topped up rather than discarded.
-            </p>
-            <div class="detail-grid">
-              <div class="detail green">
-                <strong>Happy path</strong>
-                <p><code>selection.strategy: 'haiku_lock'</code></p>
-              </div>
-              <div class="detail blue">
-                <strong>Recoverable partial path</strong>
-                <p><code>selection.strategy: 'haiku_lock_topped_up'</code></p>
-              </div>
-              <div class="detail amber">
-                <strong>Fallback path</strong>
-                <p><code>selection.mode: 'rules_fallback'</code> when Haiku yields nothing usable.</p>
-              </div>
-            </div>
-          </div>
-        </article>
+    <div class="box box-frontend box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">Refine Panel</div>
+          <div class="box-subtitle">"What should Focamai keep in mind?"</div>
+        </div>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <ul>
+          <li>Shows the AI follow-up question</li>
+          <li>Up to 3 refinement chips (backend suggestions or fallback set)</li>
+          <li>Label-only chips &rarr; append to notes box</li>
+          <li>Prompt-backed chips &rarr; fill notes box with richer text</li>
+          <li>User can type freely in addition to chips</li>
+        </ul>
+        <h4>Query-Quality Suggestion (background)</h4>
+        <ul>
+          <li>Frontend polls <code>GET /api/search/query-quality</code></li>
+          <li>If high-confidence suggestion ready &rarr; shows inline prompt</li>
+          <li>"Try [suggested query] instead?" / "Keep these results"</li>
+          <li>Does not replace results automatically</li>
+        </ul>
+      </div>
+    </div>
 
-        <article class="step">
-          <div class="step-id"><span>6</span></div>
-          <div>
-            <h3>Cards Render Immediately After The Lock</h3>
-            <div class="tag-row">
-              <span class="tag ui">Final results grid</span>
-              <span class="tag blocking">Get 6 picks</span>
-            </div>
-            <p>
-              The blocking finalize response returns the shortlisted cards right away. The frontend
-              treats the grid as metadata-first: image, title, price, source, rating, review count,
-              and badge labels. It does not wait for product-detail enrichment before showing the
-              six results.
-            </p>
-            <div class="detail-grid">
-              <div class="detail">
-                <strong>What arrives immediately</strong>
-                <p>
-                  Shortlist cards, selection/debug metadata, analytics events, and badge reveal
-                  timing.
-                </p>
-              </div>
-              <div class="detail amber">
-                <strong>What may still be missing</strong>
-                <p>
-                  <code>feature_bullets</code>, <code>fit_reason</code>, and
-                  <code>caveat</code> are usually still on the async path.
-                </p>
-              </div>
-            </div>
-          </div>
-        </article>
+    <div class="arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-head"></div>
+      <div class="arrow-label">user chooses path</div>
+    </div>
 
-        <article class="step">
-          <div class="step-id"><span>7</span></div>
-          <div>
-            <h3>Product Details And Mini Enrichment Run Fully Async</h3>
-            <div class="tag-row">
-              <span class="tag async">Background work</span>
+    <div class="branch">
+      <div class="branch-path">
+        <div class="branch-label">Skip refinement</div>
+        <div class="box box-frontend" onclick="toggle(this)">
+          <div class="box-header">
+            <div>
+              <div class="box-title">"Show products now"</div>
+              <div class="box-subtitle">Preview mode &mdash; not the focused shortlist</div>
             </div>
-            <p>
-              After the finalize response has already been sent, the backend fetches product details
-              for the selected IDs, merges those details into the shortlisted candidate pool, runs
-              mini enrichment, writes enrichment back into the discovery snapshot, and emits an
-              enrichment-ready event keyed by the discovery token.
-            </p>
-            <div class="detail-grid">
-              <div class="detail green">
-                <strong>Stored enrichment fields</strong>
-                <p>
-                  <code>feature_bullets</code>, <code>fit_reason</code>,
-                  <code>caveat</code>, model, generated timestamp, and preserved order.
-                </p>
-              </div>
-              <div class="detail amber">
-                <strong>Important rule</strong>
-                <p>
-                  Async enrichment explains the locked shortlist. It does not change the winners.
-                </p>
-              </div>
-            </div>
+            <div class="box-expand-icon">&#9660;</div>
           </div>
-        </article>
-
-        <article class="step">
-          <div class="step-id"><span>8</span></div>
-          <div>
-            <h3>SSE Is First, Polling Is Fallback</h3>
-            <div class="tag-row">
-              <span class="tag api">GET /api/search/enrichment-stream</span>
-              <span class="tag api">GET /api/search/enrichment</span>
-              <span class="tag async">Best effort</span>
-            </div>
-            <p>
-              The frontend opens <code>EventSource</code> against
-              <code>/api/search/enrichment-stream</code> first. If SSE is unavailable or errors,
-              it silently falls back to polling <code>/api/search/enrichment</code> every 1.5
-              seconds for up to 30 seconds.
-            </p>
-            <div class="detail-grid">
-              <div class="detail blue">
-                <strong>SSE response shape</strong>
-                <p><code>{ ready: true, entries, model }</code> or <code>{ ready: false }</code></p>
-              </div>
-              <div class="detail">
-                <strong>Poll response shape</strong>
-                <p>Same contract, but fetched repeatedly until enrichment is ready or timing settles.</p>
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article class="step">
-          <div class="step-id"><span>9</span></div>
-          <div>
-            <h3>The Modal Starts Useful, Then Gets Smarter</h3>
-            <div class="tag-row">
-              <span class="tag ui">Product modal</span>
-            </div>
-            <p>
-              Opening a card shows the main product facts immediately. If async enrichment has not
-              landed yet, the modal shows an ambient “Analyzing your pick…” state. When enrichment
-              arrives, the modal fills in the “Why we picked it” explanation and the honest caveat.
-            </p>
-            <div class="detail-grid">
-              <div class="detail">
-                <strong>Before enrichment</strong>
-                <p>
-                  Title, image, price, rating, source-specific CTA, and either feature bullets or the base
-                  description when bullets are not available yet.
-                </p>
-              </div>
-              <div class="detail green">
-                <strong>After enrichment</strong>
-                <p>
-                  <code>fit_reason</code> and <code>caveat</code> appear, plus
-                  <code>feature_bullets</code> when the async detail fetch found them.
-                </p>
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article class="step">
-          <div class="step-id"><span>10</span></div>
-          <div>
-            <h3>Retry Is Suggestion-Led</h3>
-            <div class="tag-row">
-              <span class="tag ui">Retry panel</span>
-              <span class="tag api">POST /api/search/retry-advice</span>
-            </div>
-            <p>
-              After final results, the active UI asks what felt off and requests a better next
-              search. The returned suggestion is editable, and using it resets the page into a
-              fresh search flow.
-            </p>
-            <div class="detail-grid">
-              <div class="detail">
-                <strong>Live button copy</strong>
-                <p><code>Get a suggestion</code> followed by <code>Use this search</code></p>
-              </div>
-              <div class="detail amber">
-                <strong>Archived — same-pool retry</strong>
-                <p>
-                  The same-pool retry path (excluded IDs, <code>retryCount &gt; 0</code>,
-                  <code>retry_exhausted</code>) exists only in code archives. The frontend always
-                  sends <code>retryCount: 0</code> — those server branches are unreachable from
-                  the active flow.
-                </p>
-              </div>
-            </div>
-          </div>
-        </article>
-      </section>
-
-      <section class="timing-section">
-        <h2>Timing And Observability Reality</h2>
-        <p class="ts-sub">
-          Exact numbers vary by cache hit, provider latency, and model speed. What matters now is
-          which stages block and which stages are deferred.
-        </p>
-        <div class="timing-grid">
-          <div class="timing-card">
-            <div class="tc-route">Discovery</div>
-            <div class="tc-time">Cache-first</div>
-            <div class="tc-note">
-              Returns cached preview results immediately when available. Misses call the Oxylabs-backed
-              Amazon path behind the Rainforest route name.
-            </div>
-          </div>
-          <div class="timing-card">
-            <div class="tc-route">Refine</div>
-            <div class="tc-time">Independent lane</div>
-            <div class="tc-note">
-              Does not wait for discovery. The frontend has a local fallback prompt if the API call fails.
-            </div>
-          </div>
-          <div class="timing-card">
-            <div class="tc-route">Finalize</div>
-            <div class="tc-time">Shortlist lock only</div>
-            <div class="tc-note">
-              Server-Timing currently measures body read, cache lookup, Haiku, and total. Product detail
-              latency is no longer in the blocking response.
-            </div>
-          </div>
-          <div class="timing-card">
-            <div class="tc-route">Enrichment</div>
-            <div class="tc-time">SSE-first async</div>
-            <div class="tc-note">
-              Product details plus mini enrichment run after finalize responds. Polling exists only as a fallback.
-            </div>
+          <div class="box-details">
+            <ul>
+              <li>Shows preview set from discovery (up to ~20)</li>
+              <li>No AI recommendation analysis (finalize hasn't run)</li>
+              <li>Preview rows stay factual &mdash; no fallback recommendation copy</li>
+              <li>Opening a product modal lazily hydrates detail bullets via <code>GET /api/search/product-details</code></li>
+            </ul>
           </div>
         </div>
-      </section>
-
-      <section class="rules">
-        <h2>Current Guardrails</h2>
-        <div class="rules-grid">
-          <article class="rule-card">
-            <div class="rc-rank">Rule 1</div>
-            <h3>The candidate pool is server-owned</h3>
-            <p>
-              The browser sends a token, not the authoritative pool. Finalize reconstructs from the
-              discovery snapshot.
-            </p>
-          </article>
-          <article class="rule-card">
-            <div class="rc-rank">Rule 2</div>
-            <h3>Shortlist stays at 6</h3>
-            <p>
-              Preview can show a broader discovery set, but the guided product output is still the
-              final six picks.
-            </p>
-          </article>
-          <article class="rule-card">
-            <div class="rc-rank">Rule 3</div>
-            <h3>Finalize is thin on purpose</h3>
-            <p>
-              Haiku locks the shortlist in the blocking path. Product-detail fetches and mini
-              enrichment stay off that critical path.
-            </p>
-          </article>
-          <article class="rule-card">
-            <div class="rc-rank">Rule 4</div>
-            <h3>Preview is not the same as focused picks</h3>
-            <p>
-              <code>Just show me results</code> is a discovery preview, not the guided shortlist.
-            </p>
-          </article>
-          <article class="rule-card">
-            <div class="rc-rank">Rule 5</div>
-            <h3>Enrichment explains, not reranks</h3>
-            <p>
-              Async detail work can add bullets, fit reasons, and caveats, but it cannot replace the
-              locked winners.
-            </p>
-          </article>
-          <article class="rule-card">
-            <div class="rc-rank">Rule 6</div>
-            <h3>Amazon-first UX, flexible internals</h3>
-            <p>
-              The current UI may name Amazon when Amazon is the active source. Backend/provider logic
-              and normalized product data should stay flexible, without making today's Amazon-first UX
-              vague.
-            </p>
-          </article>
+      </div>
+      <div class="branch-path">
+        <div class="branch-label">Add context &amp; finalize</div>
+        <div class="box box-frontend" onclick="toggle(this)">
+          <div class="box-header">
+            <div>
+              <div class="box-title">"Show focused picks"</div>
+              <div class="box-subtitle">Triggers guided finalize &rarr; 6 ranked picks</div>
+            </div>
+            <div class="box-expand-icon">&#9660;</div>
+          </div>
+          <div class="box-details">
+            <ul>
+              <li>Sends follow-up notes to finalize</li>
+              <li>Shows staged progress copy while waiting</li>
+              <li>Progress stages: reading search &rarr; applying notes &rarr; narrowing to 6 &rarr; getting shortlist ready</li>
+            </ul>
+            <h4>Hard Constraint Detection</h4>
+            <ul>
+              <li>If notes contain hard constraints (kosher, dietary, allergy, safety, compatibility)</li>
+              <li>Frontend first does a <strong>refreshed discovery</strong> pass with original query + notes</li>
+              <li>Then finalizes from the refreshed token</li>
+            </ul>
+          </div>
         </div>
-      </section>
-    </main>
-  </body>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 4: FINALIZE -->
+<!-- ============================================================ -->
+<div class="section">
+  <div class="section-title">4. Finalize &mdash; Shortlist Lock</div>
+  <div class="flow">
+
+    <div class="box box-backend box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">POST /api/search/finalize</div>
+          <div class="box-subtitle">Locks the 6-pick shortlist</div>
+        </div>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <h4>Input Validation</h4>
+        <ul>
+          <li>32 KB body limit</li>
+          <li>Candidate pool cap: 30</li>
+          <li>Follow-up notes truncated to 500 chars</li>
+          <li>Rate limited (same 15/10s window)</li>
+        </ul>
+        <h4>Pool Reconstruction</h4>
+        <ul>
+          <li>Reads token-scoped session snapshot from cache</li>
+          <li><strong>Never trusts browser-posted candidate data</strong></li>
+          <li>Sanitizes: removes zero-price items, retags Amazon links</li>
+          <li>If Prime explicitly requested &rarr; narrows to Prime-eligible candidates</li>
+        </ul>
+        <h4>Key Files</h4>
+        <ul>
+          <li><code>backend/lib/handlers/finalize-handler.js</code></li>
+          <li><code>backend/lib/ai-selector.js</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+    <div class="box box-ai box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">Haiku Shortlist Lock</div>
+          <div class="box-subtitle">claude-haiku-4-5 selects 6 picks (~2s)</div>
+        </div>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <h4>Ranking Criteria (in order)</h4>
+        <ol>
+          <li>Inferred product fit to user's stated needs</li>
+          <li>Quality confidence (rating, review count, trustScore, recognized brand)</li>
+          <li>Price/value alignment</li>
+          <li>Shortlist variety</li>
+          <li>Raw Amazon search position (final tiebreaker)</li>
+        </ol>
+        <h4>Fallback Strategy</h4>
+        <ul>
+          <li><strong>Full valid response</strong> &rarr; <code>haiku_lock</code></li>
+          <li><strong>Partial valid subset</strong> &rarr; tops up from deterministic fallback &rarr; <code>haiku_lock_topped_up</code></li>
+          <li><strong>Zero valid picks</strong> &rarr; full deterministic rules fallback &rarr; <code>rules_fallback</code></li>
+        </ul>
+        <h4>Model</h4>
+        <ul>
+          <li>Default: <code>claude-haiku-4-5-20251001</code></li>
+          <li>Override: <code>OPENAI_FINALIZE_MODEL</code> env var</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-head"></div>
+      <div class="arrow-label">returns immediately</div>
+    </div>
+
+    <div class="box box-frontend box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">Result Cards Render</div>
+          <div class="box-subtitle">6 ranked picks appear &mdash; enrichment still pending</div>
+        </div>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <ul>
+          <li>Cards show immediately: image, title, price, ratings/reviews, delivery</li>
+          <li>Breathing dots (teal/orange) where enrichment hasn't arrived</li>
+          <li>Refinement panel collapses into compact summary</li>
+          <li>Search saved to localStorage history</li>
+          <li>Desktop: large selected panel (left) + scrolling row list (right)</li>
+          <li>Mobile: stacked ranked pick cards</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 5: ASYNC ENRICHMENT -->
+<!-- ============================================================ -->
+<div class="section">
+  <div class="section-title">5. Async Enrichment (after finalize responds)</div>
+  <div class="flow">
+
+    <div class="box box-backend box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">Background Enrichment Starts</div>
+          <div class="box-subtitle">Product detail fetch + AI fit reasons &mdash; non-blocking</div>
+        </div>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <h4>Two Things Happen in Parallel</h4>
+        <ol>
+          <li><strong>Product detail fetch</strong> &mdash; per-ASIN details (bullets, description, Prime, delivery)</li>
+          <li><strong>Mini AI enrichment</strong> &mdash; writes fit_reason + caveat for each pick</li>
+        </ol>
+        <h4>Product Detail Provider Order</h4>
+        <ul>
+          <li>Check per-ASIN detail cache first</li>
+          <li>Rainforest API for cache misses</li>
+          <li>Oxylabs fallback for missing details or missing Rainforest config</li>
+          <li>Oxylabs does a fast first pass, then retries failures in background</li>
+        </ul>
+        <h4>Mini Enrichment (AI)</h4>
+        <ul>
+          <li>Model: <strong>gpt-5-mini</strong></li>
+          <li>First locked product framed as <strong>hero recommendation</strong></li>
+          <li>Later picks framed as <strong>alternatives</strong> (who might prefer this over hero)</li>
+          <li>Writes fit_reason + honest caveat per product</li>
+          <li>Token-scoped &mdash; won't leak into other sessions</li>
+          <li><strong>Enrichment explains, it does NOT rerank</strong></li>
+        </ul>
+        <h4>Key Files</h4>
+        <ul>
+          <li><code>backend/lib/handlers/enrichment-handler.js</code></li>
+          <li><code>backend/lib/ai-selector.js</code> (miniEnrichSelectedCandidates)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-head"></div>
+      <div class="arrow-label">frontend receives enrichment</div>
+    </div>
+
+    <div class="box box-decision box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">Enrichment Delivery</div>
+          <div class="box-subtitle">SSE stream first, polling fallback</div>
+        </div>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <h4>Primary: SSE Stream</h4>
+        <ul>
+          <li><code>GET /api/search/enrichment-stream</code></li>
+          <li>EventSource connection, pushes when ready</li>
+          <li>30s timeout</li>
+          <li>Only streams for the exact <code>discoveryToken</code> that owns the search</li>
+        </ul>
+        <h4>Fallback: Polling</h4>
+        <ul>
+          <li><code>GET /api/search/enrichment</code></li>
+          <li>Polls every 1.5s, up to 30s</li>
+          <li>Activates if SSE stream errors</li>
+        </ul>
+        <h4>Merge Behavior</h4>
+        <ul>
+          <li>fit_reason, caveat, feature_bullets merged into result cards</li>
+          <li>Breathing dots replaced with real content</li>
+          <li>If enrichment settles without a fit reason &rarr; practical fallback text</li>
+          <li>Late Oxylabs detail retries can update feature_bullets even after initial enrichment</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 6: PRODUCT MODAL -->
+<!-- ============================================================ -->
+<div class="section">
+  <div class="section-title">6. Product Modal</div>
+  <div class="flow">
+
+    <div class="box box-frontend box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">Product Detail Modal</div>
+          <div class="box-subtitle">Click a row &rarr; decision-aid modal opens</div>
+        </div>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <h4>Modal Sections (in order)</h4>
+        <ol>
+          <li>Image + title (normalized for display; long titles shortened)</li>
+          <li><strong>At a glance</strong> &mdash; price, ratings/reviews, optional delivery</li>
+          <li><strong>Why this pick</strong> &mdash; AI fit reason (hidden for skipped-refinement previews)</li>
+          <li><strong>Worth knowing</strong> &mdash; AI honest caveat</li>
+          <li><strong>Product notes</strong> &mdash; feature_bullets or description</li>
+        </ol>
+        <h4>Bottom Bar</h4>
+        <ul>
+          <li>Current price + availability reminder</li>
+          <li>Source-specific CTA: "View on Amazon" (derives label from product source)</li>
+          <li>Compact Amazon Associates disclosure</li>
+        </ul>
+        <h4>Title Normalization</h4>
+        <ul>
+          <li>Long Amazon keyword-stuffed titles shortened</li>
+          <li>If normalized differs from raw &rarr; "Full Amazon title" disclosure</li>
+        </ul>
+        <h4>Hydration</h4>
+        <ul>
+          <li>Gets smarter as enrichment arrives (fit_reason, caveat, bullets)</li>
+          <li>For preview products &rarr; lazy hydration via <code>GET /api/search/product-details</code></li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 7: PRODUCT DETAILS ENDPOINT -->
+<!-- ============================================================ -->
+<div class="section">
+  <div class="section-title">7. Product Details (on-demand)</div>
+  <div class="flow">
+
+    <div class="box box-backend box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">GET /api/search/product-details</div>
+          <div class="box-subtitle">Per-ASIN detail hydration &mdash; no AI analysis</div>
+        </div>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <h4>When Used</h4>
+        <ul>
+          <li>User opens a skipped-refinement preview product</li>
+          <li>Modal needs bullets/description that aren't cached yet</li>
+        </ul>
+        <h4>Provider Order</h4>
+        <ol>
+          <li>Per-ASIN product detail cache</li>
+          <li>Rainforest API (for cache misses)</li>
+          <li>Oxylabs fallback (if Rainforest unavailable or no usable detail)</li>
+        </ol>
+        <h4>Returns</h4>
+        <ul>
+          <li>Product detail bullets</li>
+          <li>Product description</li>
+          <li>Prime status + delivery facts</li>
+          <li><strong>Does NOT run AI recommendation analysis</strong></li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 8: RETRY -->
+<!-- ============================================================ -->
+<div class="section">
+  <div class="section-title">8. Retry Flow</div>
+  <div class="flow">
+
+    <div class="box box-frontend box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">Retry Panel</div>
+          <div class="box-subtitle">"Need a better fit?" at end of shortlist</div>
+        </div>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <ul>
+          <li>Quiet end-of-shortlist row: "Need a better fit?" + "Improve picks"</li>
+          <li>Expanded: "What felt off?" + freeform text</li>
+          <li>Quick prompts: "Too expensive", "Wrong style", "Missing a must-have"</li>
+          <li>Quick prompts append into <code>rejectionFeedback</code> text</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+    <div class="box box-backend box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">POST /api/search/retry-advice</div>
+          <div class="box-subtitle">AI suggests a better next query</div>
+        </div>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <h4>Input</h4>
+        <ul>
+          <li>Rejected shortlist (up to 6 items, titles truncated to 160 chars)</li>
+          <li>User feedback text</li>
+          <li>16 KB body limit</li>
+        </ul>
+        <h4>Behavior</h4>
+        <ul>
+          <li>Preserves accumulated must-have constraints from original query + notes + feedback</li>
+          <li>Can replace/remove a constraint when feedback clearly changes direction</li>
+        </ul>
+        <h4>Returns</h4>
+        <ul>
+          <li><code>recommendation</code> &mdash; what to try next</li>
+          <li><code>suggestedQuery</code> &mdash; editable in the UI</li>
+          <li><code>rationale</code> &mdash; why this direction</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-head"></div>
+      <div class="arrow-label">"Search again"</div>
+    </div>
+
+    <div class="box box-frontend box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">New Guided Search (with cache refresh)</div>
+          <div class="box-subtitle">Loops back to Section 2 with fresh discovery</div>
+        </div>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <ul>
+          <li>Uses the suggested (or edited) query</li>
+          <li>One-request discovery cache refresh &mdash; bypasses shared cache read</li>
+          <li>Still writes fresh results back to shared cache</li>
+          <li>Scrolls toward loading/results region</li>
+          <li>Full guided flow restarts from discovery + refine</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 9: DATA / CACHE LAYER -->
+<!-- ============================================================ -->
+<div class="section">
+  <div class="section-title">9. Data &amp; Cache Layer</div>
+  <div class="flow">
+
+    <div class="flow-row">
+      <div class="box box-cache" onclick="toggle(this)">
+        <div class="box-header">
+          <div>
+            <div class="box-title">Shared Discovery Cache</div>
+            <div class="box-subtitle">Reusable across sessions</div>
+          </div>
+          <div class="box-expand-icon">&#9660;</div>
+        </div>
+        <div class="box-details">
+          <ul>
+            <li>Scope: <code>rainforest_discovery:v3</code></li>
+            <li>Key: normalized query + marketplace</li>
+            <li>Normalization: lowercase, spacing, product plural forms</li>
+            <li>Supabase-backed (prod) or local file fallback (dev)</li>
+            <li>Thin entries (&lt;6 items) auto-bypassed on read</li>
+            <li>Zero-price items sanitized on read</li>
+            <li>Stale Amazon links retagged on read</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="box box-cache" onclick="toggle(this)">
+        <div class="box-header">
+          <div>
+            <div class="box-title">Token-Scoped Session Snapshot</div>
+            <div class="box-subtitle">Per-search, per-discoveryToken</div>
+          </div>
+          <div class="box-expand-icon">&#9660;</div>
+        </div>
+        <div class="box-details">
+          <ul>
+            <li>Created during discovery</li>
+            <li>Contains the candidate pool that finalize rebuilds from</li>
+            <li>Enrichment writes are token-scoped (no cross-session leaks)</li>
+            <li>Also stores query-quality review status</li>
+            <li>This is what <code>discoveryToken</code> points to</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div style="height:16px"></div>
+
+    <div class="flow-row">
+      <div class="box box-cache" onclick="toggle(this)">
+        <div class="box-header">
+          <div>
+            <div class="box-title">Per-ASIN Product Detail Cache</div>
+            <div class="box-subtitle">Shared across providers</div>
+          </div>
+          <div class="box-expand-icon">&#9660;</div>
+        </div>
+        <div class="box-details">
+          <ul>
+            <li>Keyed by ASIN</li>
+            <li>Stores feature_bullets, description, Prime, delivery</li>
+            <li>Shared across all detail providers</li>
+            <li>Late background Oxylabs retries can improve cache quality</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="box box-cache" onclick="toggle(this)">
+        <div class="box-header">
+          <div>
+            <div class="box-title">Client-Side History</div>
+            <div class="box-subtitle">localStorage (signed-out) / Supabase (signed-in)</div>
+          </div>
+          <div class="box-expand-icon">&#9660;</div>
+        </div>
+        <div class="box-details">
+          <ul>
+            <li>Key: <code>focamai:searchHistory:v1</code> (localStorage)</li>
+            <li>Saves finalized searches automatically</li>
+            <li>Dedupes by normalized query + follow-up notes</li>
+            <li>Signed-in users &rarr; Supabase <code>saved_searches</code></li>
+            <li>Local entries migrate to account on login</li>
+            <li>Separate from internal <code>search_history</code> telemetry table</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 10: QUERY QUALITY -->
+<!-- ============================================================ -->
+<div class="section">
+  <div class="section-title">10. Query-Quality Review (background)</div>
+  <div class="flow">
+
+    <div class="box box-ai box-full" onclick="toggle(this)">
+      <div class="box-header">
+        <div>
+          <div class="box-title">Background Query-Quality Review</div>
+          <div class="box-subtitle">Runs after discovery, non-blocking</div>
+        </div>
+        <div class="box-expand-icon">&#9660;</div>
+      </div>
+      <div class="box-details">
+        <h4>Trigger</h4>
+        <ul>
+          <li>Starts automatically after discovery response is sent</li>
+          <li>Only when OpenAI is configured</li>
+          <li>Stores status on token-scoped snapshot: pending &rarr; ready/skipped/failed</li>
+        </ul>
+        <h4>Frontend Polling</h4>
+        <ul>
+          <li><code>GET /api/search/query-quality</code></li>
+          <li>Returns <code>ready: false</code> while pending</li>
+          <li>Returns suggestion only for high-confidence, user-visible reviews</li>
+          <li>Returns <code>shouldSuggest: false</code> for quiet/ambiguous/failed</li>
+          <li>Stale poll responses ignored after new search</li>
+        </ul>
+        <h4>UI</h4>
+        <ul>
+          <li>Small inline prompt near refine/results region</li>
+          <li>"Try [suggested query] instead?" / "Keep these results"</li>
+          <li>Accept &rarr; starts new guided search with suggested query</li>
+          <li>No automatic query replacement or prewarm</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function toggle(el) {
+  el.classList.toggle('expanded');
+}
+
+function expandAll() {
+  document.querySelectorAll('.box').forEach(function(b) { b.classList.add('expanded'); });
+}
+
+function collapseAll() {
+  document.querySelectorAll('.box').forEach(function(b) { b.classList.remove('expanded'); });
+}
+</script>
+
+</body>
 </html>

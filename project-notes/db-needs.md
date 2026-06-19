@@ -16,7 +16,13 @@
 
 ### `product_details_cache`
 - Stores reusable per-ASIN product details for shortlist winners.
-- Shared by the current Oxylabs detail helper and the later Rainforest detail helper.
+- Shared by the current Rainforest product-detail helper.
+- Persists provider identity used by the disabled-by-default Canadian comparison endpoint.
+
+### `price_comparison_cache`
+- Stores server-only comparison matches, rejected-match diagnostics, short-lived accepted prices, automatic Serper Shopping result caches, and Serper match-judgment caches.
+- Match identity and Serper match judgments are reusable for 7 days; accepted price data and Serper Shopping result lists are reusable for 30 minutes.
+- Browser clients have no direct RLS policy. The backend service-role client owns reads and writes.
 
 ### `analytics_search_runs`
 - One anchor row per search flow.
@@ -49,29 +55,42 @@
 - Lets multiple Render instances count against the same 10-second request window.
 - Does not store raw IP addresses.
 
+## In use via Supabase Auth / frontend
+- `auth.users` — managed by Supabase Auth (email/password + Google OAuth)
+- `saved_searches` — user-facing account-backed search history (RLS-protected)
+
 ## Not used now
-- user accounts tables
-- saved search tables
 - saved item tables
 - preference-learning tables
 
 Rate limiting falls back to in-memory storage when Supabase is not configured or the table is unavailable, but production should create this table before public traffic.
 
 ## Current recommendation
-- Create the eleven tables above if you want full Supabase-backed storage, analytics, search diagnostics, tester feedback, and shared rate limiting.
+- Create the active tables above if you want full Supabase-backed storage, analytics, search diagnostics, tester feedback, comparison caching, and shared rate limiting.
 - Keep user-facing memory features separate from `search_history`.
 
 ## Environment variables
 ```env
 SERPAPI_API_KEY=your-serpapi-key
+BLUECART_API_KEY=your-bluecart-key
+RAINFOREST_API_KEY=your-rainforest-key
 OPENAI_API_KEY=your-openai-key
-OXYLABS_USERNAME=your-oxylabs-username
-OXYLABS_PASSWORD=your-oxylabs-password
+SERPER_PRICE_INTEL_ENABLED=false
+SERPER_API_KEY=your-serper-key
+PRICE_CHECK_THRESHOLD=100
+PRICE_MATCH_MIN_SAVINGS=8
+PRICE_MATCH_MIN_PERCENT=0.08
+PRICE_MATCH_CONFIDENCE=0.85
+SERPER_PRICE_INTEL_MAX_OFFERS=8
+SERPER_PRICE_INTEL_MAX_PRODUCTS=3
+SERPER_PRICE_INTEL_RATE_LIMIT_PER_MINUTE=30
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SECRET_KEY=your-supabase-secret-key
 SEARCH_CACHE_TTL_MINUTES=1440
 RATE_LIMIT_STORAGE=auto
 RATE_LIMIT_HASH_SALT=your-stable-random-salt
+PRICE_COMPARISON_ENABLED=false
+PRICE_COMPARISON_MARKET=CA
 ```
 
 Notes:
@@ -126,9 +145,42 @@ create table if not exists public.product_details_cache (
   source text not null default '',
   needs_updating boolean not null default false,
   next_update_at timestamptz null,
+  provider_identity jsonb,
   cached_at timestamptz not null default now()
 );
+
+create table if not exists public.price_comparison_cache (
+  cache_key text primary key,
+  candidate_id text not null,
+  marketplace text not null,
+  coverage_mode text not null,
+  strategy_version integer not null,
+  identity jsonb not null default '{}'::jsonb,
+  status text not null default 'complete',
+  query text,
+  offers jsonb not null default '[]'::jsonb,
+  accepted jsonb not null default '[]'::jsonb,
+  rejected jsonb not null default '[]'::jsonb,
+  provider_errors jsonb not null default '{}'::jsonb,
+  match_cached_at timestamptz not null,
+  match_expires_at timestamptz not null,
+  price_cached_at timestamptz not null,
+  price_expires_at timestamptz not null
+);
+
+create index if not exists price_comparison_cache_match_expires_at_idx
+  on public.price_comparison_cache (match_expires_at);
+
+create index if not exists price_comparison_cache_price_expires_at_idx
+  on public.price_comparison_cache (price_expires_at);
+
+alter table public.price_comparison_cache enable row level security;
+
+-- No browser policies are intentional. The backend service-role client owns this cache.
 ```
+
+`db-needs.md` is the canonical current schema reference. The Phase 3 comparison
+schema has already been applied to the active Supabase project.
 
 ### Analytics tables
 - Run `project-notes/analytics-funnel-schema.sql` for:

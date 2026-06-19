@@ -6,7 +6,7 @@
 - `app_flow.md` is the implemented flow.
 
 ## Current reality
-- Frontend is on Vercel; backend is on Render.
+- Frontend is on Vercel; backend is on Render. Production browser requests use Render directly unless a network failure selects and persists the same-origin Vercel proxy; a direct health ping on later loads restores the direct route when possible. `/api/geo` remains local to Vercel.
 - The product path is `rainforest-discover -> refine -> finalize -> enrichment`.
 - Retry currently suggests a better next search instead of showing endless same-pool results.
 - Discovery cache, internal operational `search_history`, local saved-search history, analytics, and product-details cache are the main active storage paths.
@@ -23,20 +23,18 @@
 - Review early tester feedback from the new homepage FAB and decide whether the reveal timing, wording, or question set should change.
 - Decide whether to add a proactive pool-mismatch nudge before the user opens retry.
 - Watch retry-advice behavior on multi-constraint misses such as brand + product type + dietary need; the prompt now preserves accumulated constraints by default, and the frontend now exposes correction chips plus inline suggested-query confirmation, but this still needs live validation.
-- Replace the About page with a `Why Focamai` page, then update nav and add a clear return-home path.
 - Watch whether the new inline clickout disclosure feels clear and trust-building, and adjust the wording if testers read it as friction or legal copy.
-- Keep trimming `backend/server.js` so route orchestration and flow logic do not keep growing in one file.
 - Use the local `/admin/analytics` dashboard during development against live data and decide which weak-query, weak-ranking, or refine-friction fixes to prioritize first.
 - Create the Supabase `search_attempts` and `search_events` tables from `project-notes/db-needs.md`, then verify a live failed search writes a support-code event path and appears in `/admin/analytics` under Search reliability.
-- Finish the saved-search sequence: verify local history on real finalized searches, then add Supabase auth, then move logged-in history to a separate `saved_searches` table with local-to-account migration.
-- Finish auth/history QA: verify sign up, sign in, OAuth return if Google is enabled, session persistence, sign out, local-to-account history migration, remote save on finalize, reload persistence, delete, clear, and second browser/device account history.
 - If live QA passes, decide whether to add a small post-finalize nudge telling logged-out users that sign-in syncs history across devices.
 
 ## Backend/provider follow-ups
-- Discovery uses Rainforest API first for all Amazon marketplaces when configured. Oxylabs is now the discovery fallback only: it runs when Rainforest errors or returns too few usable items to support the 6-item shortlist. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available; validate this Rainforest-first order on live tester searches.
+- Discovery uses Rainforest API for active Amazon marketplaces when configured. Oxylabs is retired from the active stack; keep historical references archived only.
 - Active Amazon discovery is currently constrained to affiliate-tagged marketplaces (`amazon.com`, `amazon.ca`) for Associates compliance; broader Amazon marketplace support is deferred until valid tracking IDs exist.
-- The current shortlist-detail helper is still Oxylabs-backed so modal bullets/descriptions stay on the stronger detail path for now.
+- Shortlist and modal product-detail hydration use Rainforest.
 - Keep the SerpApi route inactive unless there is a deliberate reason to reactivate multi-retailer discovery.
+- Price-comparison Phases 1-3 are implemented on `experiment/serp-price-intel` behind `PRICE_COMPARISON_ENABLED=false`. Phase 3 added the server-validated CA/CAD price-check endpoint, cache, auth redaction, rate limits, finalized-snapshot persistence, Supabase schema, local fallback, and focused tests. Separate Serper price intelligence is implemented behind `SERPER_PRICE_INTEL_ENABLED=false`: Serper Shopping, isolated Haiku matching, post-enrichment orchestration, caching, budget/rate controls, stale-selection protection, measurement logs, SSE/poll delivery, guided-search state, and a quiet modal-only `Better price found` panel. No card badge exists.
+- Keep Serper price intelligence off by default while measuring real searches for nudge rate, savings, false positives, and Serper/Haiku cost. The modal panel is wired but is not shipped behavior until the flag is deliberately enabled.
 - Create the `rate_limit_events` table in Supabase before public traffic so Render instances share the same rate-limit bucket; the app falls back to process-local limiting if the table is unavailable.
 - Add the real `SENTRY_DSN` and confirm events arrive in production once the Render environment is updated.
 - Keep Sentry as a useful backend exception channel, but do not rely on it as the only search-failure visibility path; search support-code diagnostics now write to Supabase separately when configured.
@@ -49,7 +47,5 @@
 - Keep provider-specific implementation details out of the core product identity.
 
 ## Later, not now
-- Accounts/login only if persistence becomes a real product need.
-- Account-backed saved searches as an explicit user-facing feature in `saved_searches`, not by repurposing internal `search_history`.
 - Preference learning only after the core shortlist experience proves useful.
 - Subscriber-tier expansion only after the free core flow is solid.

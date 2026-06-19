@@ -18,7 +18,7 @@
    - current snapshot/changelog: `project-notes/current-status.md`
 
 ## Current direction
-- The current experiment branch is `new_web_ui`.
+- The current experiment branch is `experiment/serp-price-intel`.
 - The branch is for borrowing the strongest UI/UX lessons from the mobile app while keeping web optimized for browser and desktop use.
 - The current web homepage at `/` still uses the `open` layout until changed.
 - The product should stay calm, focused, mobile-first/responsive, and not marketplace-shaped.
@@ -38,18 +38,21 @@
 - Priority 5 is now implemented in the first pass: product detail modal order is image/facts, reasoning/caveat, product notes, and one compact source-specific CTA/disclosure area.
 - Priority 6 is now implemented in the first pass: search/refine/results/retry/modal surfaces use fewer gradients, lighter shadows, more consistent radii, teal-first actions, and orange mainly for shopping clickout.
 - Priority 7 is now implemented in the first pass: retry asks what felt off, uses only three broad quick prompts, shows AI advice as an editable `Next search` field, and has one `Search again` action.
-- Product titles are normalized for user-facing display across result rows, selected panels, grid/card view, and modal headings. Raw Amazon/source titles remain in data and are exposed behind a quiet full-title disclosure in details when the display title differs.
-- User-facing search history has started as a localStorage-only phase. `/history` lists completed finalized searches saved on the current device, can expand/delete/clear entries, and can re-run a saved query with follow-up notes prefilled. Account-backed history is still pending and should use `saved_searches`, not internal `search_history`.
-- Frontend auth shell has started: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI are implemented. Search remains ungated. Signed-out history uses localStorage; signed-in history uses Supabase `saved_searches`; local entries migrate into the account on login. Live QA of auth/RLS/history persistence is still pending.
+- Finalized product titles now receive async normalization alongside recommendation enrichment. Provider titles are preserved as `sourceTitle`; validated `displayTitle` values hydrate result rows, selected panels, grid/card view, and modal headings; structured `matchIdentifier` data remains separate for the future comparison flow.
+- User-facing search history is implemented at `/history`: signed-out users use localStorage, signed-in users use Supabase `saved_searches`, and local entries migrate into the account on login.
+- Frontend auth shell is implemented: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI are implemented. Search remains ungated.
 
 ## Current guided flow
-- `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It uses Rainforest API first for all Amazon marketplaces when configured, with Oxylabs fallback only when Rainforest errors or returns too few usable items. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available.
+- `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It uses Rainforest API for active Amazon marketplaces when configured. Oxylabs is retired from the active stack; keep historical references archived only.
 - `GET /api/search/refine` returns one short follow-up question and optional refinement chips.
 - `POST /api/search/finalize` rebuilds the candidate pool from guided cache and returns up to 6 shortlist cards.
 - Haiku shortlist locking now ranks by inferred product fit first, then quality confidence (rating, review count, trustScore, and recognized category brand), price/value, useful shortlist variety, and raw Amazon search position (`amazonPosition`) as the final secondary signal.
 - `GET /api/search/enrichment-stream` is the first enrichment path; `GET /api/search/enrichment` is the polling fallback.
-- `GET /api/search/product-details` hydrates one skipped-refinement preview product from the per-ASIN product detail cache or Oxylabs when its modal opens.
+- `GET /api/search/product-details` hydrates one skipped-refinement preview product from the per-ASIN product detail cache or Rainforest when its modal opens.
 - Mini enrichment now treats the first locked pick as the hero recommendation and later picks as alternatives with distinct tradeoffs.
+- Mini enrichment also produces validated display-title and comparison-identity data in the same async OpenAI request. Provider UPC/EAN/GTIN values are merged after model output so AI cannot invent authoritative product codes.
+- Price-comparison Phase 3 is implemented backend-only behind `PRICE_COMPARISON_ENABLED=false`: `POST /api/product/price-check` validates a finalized candidate from the token-scoped snapshot, stays CA/CAD-only, rate-limits anonymous and signed-in callers, verifies optional Supabase bearer auth, redacts offer details for signed-out callers, and uses a 7-day match/30-minute price cache with local fallback. Separate Serper price intelligence is implemented behind `SERPER_PRICE_INTEL_ENABLED=false`: Serper Shopping, isolated Haiku matching, post-enrichment orchestration, caching, budget/rate controls, stale-selection protection, measurement logs, SSE/poll delivery, and guided-search state. A valid result can now appear in a quiet modal-only `Better price found` panel; missing/invalid results stay invisible, the Amazon CTA hierarchy is unchanged, and no card badge exists. Keep the flag off by default while real-search quality and cost are measured.
+- The active Supabase project has the Phase 3 schema: `product_details_cache.provider_identity` and the server-only `price_comparison_cache` table. The canonical schema remains in `project-notes/db-needs.md`.
 - `GET /api/search/query-quality` exposes polling-based query-quality suggestions.
 - `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist.
 - `POST /api/feedback` stores tester feedback.
@@ -80,7 +83,7 @@
 ## Deployment reality
 - Frontend is on Vercel.
 - Backend is on Render and starts from `backend/express-server.js`.
-- The frontend calls the Render backend through `VITE_BACKEND_URL`.
+- Production frontend calls try the configured Render backend directly. Browser-level network failures retry through explicit same-origin Vercel rewrites and persist the successful proxy route. Each later homepage load directly pings Render and clears that preference when direct access works again; HTTP errors and aborts do not fall back.
 - `api/geo.js` intentionally stays on Vercel so the UI can read Vercel geolocation headers through a relative `/api/geo` request.
 
 ## If continuing from here
