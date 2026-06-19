@@ -90,7 +90,7 @@ export function RankedPickRow({
   retailerLabel,
 }) {
   const displayPrice = formatDisplayPrice(item.price)
-  const displayTitle = getProductDisplayTitle(item.title)
+  const displayTitle = item.displayTitle || getProductDisplayTitle(item.sourceTitle || item.title)
   const shortReason = getShortReason(item, { hasFinalResults, isEnrichmentSettled })
   const isReasonPending = hasPendingReason({ hasFinalResults, isEnrichmentSettled, item })
   const deliverySignal = getDeliverySignal(item)
@@ -115,7 +115,7 @@ export function RankedPickRow({
           <ProductImage className="h-full w-full rounded-xl" image={item.image} title={displayTitle || item.title} />
         </div>
         <div className="min-w-0 flex-1 space-y-1.5">
-          <p className="line-clamp-2 text-sm font-medium leading-5 text-slate-900">{displayTitle || item.title}</p>
+          <p className="line-clamp-2 min-h-10 text-sm font-medium leading-5 text-slate-900">{displayTitle || item.title}</p>
           {isReasonPending ? (
             <BreathingDots className="py-2" />
           ) : shortReason ? (
@@ -162,7 +162,7 @@ export function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item
   }
 
   const displayPrice = formatDisplayPrice(item.price)
-  const displayTitle = getProductDisplayTitle(item.title)
+  const displayTitle = item.displayTitle || getProductDisplayTitle(item.sourceTitle || item.title)
   const shortReason = getShortReason(item, {
     hasFinalResults,
     isEnrichmentSettled,
@@ -186,7 +186,7 @@ export function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item
       </div>
       <div className="space-y-3 p-4">
         <div className="space-y-2">
-          <p className="text-lg font-semibold leading-6 text-slate-950">
+          <p className="line-clamp-2 min-h-12 text-lg font-semibold leading-6 text-slate-950">
             {displayTitle || item.title}
           </p>
           {isReasonPending ? (
