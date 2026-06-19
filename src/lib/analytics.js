@@ -1,5 +1,6 @@
+import { fetchBackend } from '@/lib/backendUrl.js'
+
 const SESSION_STORAGE_KEY = 'focamai_analytics_session_id'
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
 const ANALYTICS_FLUSH_DELAY_MS = 2000
 
 let queuedEvents = []
@@ -69,7 +70,7 @@ function clearScheduledFlush() {
 }
 
 function postAnalyticsEvent(event) {
-  const request = fetch(`${BACKEND_URL}/api/analytics/track`, {
+  const request = fetchBackend('/api/analytics/track', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

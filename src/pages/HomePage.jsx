@@ -2,9 +2,8 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import Seo from '@/components/Seo.jsx'
 import { HomeShell } from '@/components/home/HomeShell.jsx'
+import { getBackendUrl, probeDirectBackend } from '@/lib/backendUrl.js'
 import { preconnectToUrl, scheduleIdleTask } from '@/lib/resourceHints.js'
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
 
 function loadHomeExperience() {
   return import('@/components/home/HomeExperience.jsx').then((module) => ({
@@ -26,7 +25,8 @@ function HomePage() {
   const hasStartedSearch = Boolean(initialSearchQuery)
 
   useEffect(() => {
-    preconnectToUrl(BACKEND_URL)
+    preconnectToUrl(getBackendUrl())
+    void probeDirectBackend()
   }, [])
 
   useEffect(() => {

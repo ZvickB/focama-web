@@ -1,4 +1,4 @@
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
+import { fetchBackend } from '@/lib/backendUrl.js'
 
 async function readFeedbackResponse(response) {
   const rawBody = await response.text()
@@ -21,7 +21,7 @@ async function readFeedbackResponse(response) {
 }
 
 export async function submitTesterFeedback(payload) {
-  const response = await fetch(`${BACKEND_URL}/api/feedback`, {
+  const response = await fetchBackend('/api/feedback', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

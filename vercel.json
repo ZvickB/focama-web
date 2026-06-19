@@ -2,6 +2,34 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/api/search/:path*",
+      "destination": "https://focama-web.onrender.com/api/search/:path*"
+    },
+    {
+      "source": "/api/analytics/:path*",
+      "destination": "https://focama-web.onrender.com/api/analytics/:path*"
+    },
+    {
+      "source": "/api/diagnostics/:path*",
+      "destination": "https://focama-web.onrender.com/api/diagnostics/:path*"
+    },
+    {
+      "source": "/api/health",
+      "destination": "https://focama-web.onrender.com/api/health"
+    },
+    {
+      "source": "/api/health/:path*",
+      "destination": "https://focama-web.onrender.com/api/health/:path*"
+    },
+    {
+      "source": "/api/feedback",
+      "destination": "https://focama-web.onrender.com/api/feedback"
+    },
+    {
+      "source": "/api/ping",
+      "destination": "https://focama-web.onrender.com/api/ping"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
