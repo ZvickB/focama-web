@@ -4,6 +4,7 @@ import { DEFAULT_HAIKU_MODEL } from '../ai-selector.js'
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.85
 const DEFAULT_MIN_SAVINGS = 8
 const DEFAULT_MIN_SAVINGS_PERCENT = 0.08
+const DEFAULT_MAX_SAVINGS_PERCENT = 0.6
 
 function finiteNumber(value) {
   if (value == null || value === '') return null
@@ -54,6 +55,8 @@ function buildPrompt({ product, offers }) {
     '- REJECT accessories, cases, replacement parts, bundles that include extras',
     '- REJECT refurbished/renewed/used unless the source is also that condition',
     '- REJECT if the offer title suggests a clearly different product',
+    '- REJECT offers from the same retailer as the source product; this feature is for a genuinely different retailer',
+    '- Treat an unusually low price as a strong accessory, counterfeit, deposit, or partial-product warning; reject unless the title unambiguously proves the complete same product',
     '- When unsure, reject - false negatives are better than false positives',
     '',
     'Source product:',
@@ -63,6 +66,7 @@ function buildPrompt({ product, offers }) {
     `Type: ${identifier.product_type || ''}`,
     `Attributes: ${JSON.stringify(identifier.attributes || {})}`,
     `Price: ${product?.price ?? ''} ${product?.currency || ''}`,
+    `Source retailer: ${product?.source_retailer || product?.sourceRetailer || ''}`,
     '',
     'Shopping offers:',
     JSON.stringify(offers.map(summarizeOffer)),
@@ -91,6 +95,7 @@ function normalizeMatchEntry(entry, offers, sourcePrice, {
   confidenceThreshold,
   minSavings,
   minSavingsPercent,
+  maxSavingsPercent,
   sourceCurrency,
 }) {
   const offerIndex = Number.parseInt(entry?.offer_index, 10)
@@ -109,6 +114,7 @@ function normalizeMatchEntry(entry, offers, sourcePrice, {
   const savings = sourcePrice - offerPrice
   const savingsPercent = savings / sourcePrice
   if (savings < minSavings || savingsPercent < minSavingsPercent) return null
+  if (savingsPercent > maxSavingsPercent) return null
 
   return {
     offer_index: offerIndex,
@@ -130,6 +136,7 @@ export async function judgeSerperMatches({
   confidenceThreshold = DEFAULT_CONFIDENCE_THRESHOLD,
   minSavings = DEFAULT_MIN_SAVINGS,
   minSavingsPercent = DEFAULT_MIN_SAVINGS_PERCENT,
+  maxSavingsPercent = DEFAULT_MAX_SAVINGS_PERCENT,
 }) {
   if (!apiKey && !anthropicClient) {
     throw new Error('CLAUDE_API_KEY is required for Serper match judgment')
@@ -186,6 +193,7 @@ export async function judgeSerperMatches({
       confidenceThreshold,
       minSavings,
       minSavingsPercent,
+      maxSavingsPercent,
       sourceCurrency,
     }))
     .filter(Boolean)

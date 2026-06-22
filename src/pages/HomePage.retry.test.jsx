@@ -15,87 +15,59 @@ describe('HomePage retry advice', () => {
     'suggests an editable new search when the user rejects a weak shortlist',
     async () => {
     const user = userEvent.setup()
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            discoveryToken: 'opaque-discovery-token',
-            candidatePool: {
-              query: 'stroller',
-              details: '',
-              candidates: [
-                {
-                  id: 'result-1',
-                  title: 'Travel stroller',
-                  source: 'Target',
-                  price: '$129.99',
-                  rating: 4.4,
-                  reviewCount: 87,
-                  description: 'Lightweight and easy to fold.',
-                  reasons: ['Available from Target'],
-                  image: 'https://example.com/stroller.jpg',
-                  link: 'https://example.com/stroller',
-                },
-                {
-                  id: 'result-2',
-                  title: 'Full-size stroller',
-                  source: 'Target',
-                  price: '$189.99',
-                  rating: 4.5,
-                  reviewCount: 120,
-                  description: 'Larger frame for everyday use.',
-                  reasons: ['Roomier seat'],
-                  image: 'https://example.com/full-size.jpg',
-                  link: 'https://example.com/full-size',
-                },
-              ],
-            },
-            previewResults: [createMockResult(), createMockResult({ id: 'result-2', title: 'Full-size stroller' })],
-          }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            prompt: 'What should we optimize for with this stroller?',
-            helperText: 'Pick anything that matters.',
-            followUpPlaceholder: 'Anything else?',
-          }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            candidatePool: {
-              query: 'stroller',
-              details: 'Notes: comfort matters most',
-              candidates: [],
-            },
-            retryCount: 0,
-            results: [
-              createMockResult(),
-              createMockResult({
-                id: 'result-2',
-                title: 'Compact airport stroller',
-                price: '$149.99',
-              }),
+    const fetchMock = vi.fn((input) => {
+      const url = String(input)
+      let payload
+      if (url.includes('/api/search/rainforest-discover')) {
+        payload = {
+          discoveryToken: 'opaque-discovery-token',
+          candidatePool: {
+            query: 'stroller',
+            details: '',
+            candidates: [
+              {
+                id: 'result-1', title: 'Travel stroller', source: 'Target', price: '$129.99',
+                rating: 4.4, reviewCount: 87, description: 'Lightweight and easy to fold.',
+                reasons: ['Available from Target'], image: 'https://example.com/stroller.jpg',
+                link: 'https://example.com/stroller',
+              },
+              {
+                id: 'result-2', title: 'Full-size stroller', source: 'Target', price: '$189.99',
+                rating: 4.5, reviewCount: 120, description: 'Larger frame for everyday use.',
+                reasons: ['Roomier seat'], image: 'https://example.com/full-size.jpg',
+                link: 'https://example.com/full-size',
+              },
             ],
-            selection: {
-              mode: 'ai',
-            },
-          }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            recommendation: 'new_search',
-            suggestedQuery: 'compact city stroller under 18 pounds',
-            rationale: 'The rejected picks sounded too bulky, so a narrower city stroller search should help.',
-          }),
-      })
+          },
+          previewResults: [createMockResult(), createMockResult({ id: 'result-2', title: 'Full-size stroller' })],
+        }
+      } else if (url.includes('/api/search/refine')) {
+        payload = {
+          prompt: 'What should we optimize for with this stroller?',
+          helperText: 'Pick anything that matters.',
+          followUpPlaceholder: 'Anything else?',
+        }
+      } else if (url.includes('/api/search/finalize')) {
+        payload = {
+          candidatePool: { query: 'stroller', details: 'Notes: comfort matters most', candidates: [] },
+          retryCount: 0,
+          results: [
+            createMockResult(),
+            createMockResult({ id: 'result-2', title: 'Compact airport stroller', price: '$149.99' }),
+          ],
+          selection: { mode: 'ai' },
+        }
+      } else if (url.includes('/api/search/retry-advice')) {
+        payload = {
+          recommendation: 'new_search',
+          suggestedQuery: 'compact city stroller under 18 pounds',
+          rationale: 'The rejected picks sounded too bulky, so a narrower city stroller search should help.',
+        }
+      } else {
+        throw new Error(`Unexpected fetch call: ${url}`)
+      }
+      return Promise.resolve({ ok: true, text: async () => JSON.stringify(payload) })
+    })
 
     vi.stubGlobal('fetch', fetchMock)
 

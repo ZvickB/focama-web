@@ -223,6 +223,14 @@ export async function takeRateLimitToken(ipAddress, config = DEFAULT_RATE_LIMIT_
       return await takeSupabaseRateLimitToken(ipAddress, config)
     } catch (error) {
       warnSupabaseRateLimitFallback(error)
+      if (config?.failClosed === true) {
+        return {
+          allowed: false,
+          remaining: 0,
+          resetAt: Date.now() + (config?.windowMs || DEFAULT_RATE_LIMIT_CONFIG.windowMs),
+          reason: 'persistent_rate_limit_unavailable',
+        }
+      }
     }
   }
 

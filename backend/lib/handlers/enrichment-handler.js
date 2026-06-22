@@ -23,12 +23,11 @@ import { normalizeProductIdentity } from '../product-identity.js'
 const ENRICHMENT_STREAM_TIMEOUT_MS = 30000
 const PRICE_COMPARISON_STREAM_TIMEOUT_MS = 10000
 
-function isEnabled(value) {
-  return /^(1|true|yes|on)$/i.test(String(value || '').trim())
-}
-
 function isSerperPriceStreamEnabled() {
-  return isEnabled(getEnv('SERPER_PRICE_INTEL_ENABLED')) && Boolean(getEnv('SERPER_API_KEY'))
+  return String(getEnv('HYBRID_PRICE_INTEL_MODE') || '').trim().toLowerCase() === 'surface' &&
+    Number(getEnv('PRICE_INTEL_SURFACE_PERCENT') || 0) > 0 &&
+    Boolean(getEnv('SERPER_API_KEY')) &&
+    Boolean(getEnv('SERPAPI_API_KEY'))
 }
 
 export function mergeProductDetailsIntoCandidatePool(candidatePool, productDetailsById) {
@@ -162,10 +161,11 @@ export async function runMiniEnrichmentAsync({
     const priceComparison = await runSerperPriceIntelligence({
       prefetches: priceComparisonPrefetches,
       enrichmentEntries,
+      discoveryToken,
       anthropicApiKey: priceComparisonApiKey,
     })
 
-    if (priceComparison.completed) {
+    if (priceComparison.completed && priceComparison.shouldSurface) {
       const latestDiscoveryContext = await resolveDiscoveryContext(
         normalizedQuery,
         discoveryToken,

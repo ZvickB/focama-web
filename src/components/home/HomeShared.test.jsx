@@ -174,6 +174,50 @@ describe('ProductDetailModal', () => {
     expect(screen.queryByText(/checking.*price/i)).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /view on amazon/i })).toBeInTheDocument()
   })
+
+  it('refuses extreme savings and Amazon comparison links as a final UI safeguard', () => {
+    renderModal({
+      priceComparisonResults: [
+        {
+          candidate_id: 'result-1',
+          retailer: 'Best Buy',
+          price: 9.99,
+          savings: 120,
+          savings_percent: 0.92,
+          url: 'https://example.com/too-cheap',
+        },
+        {
+          candidate_id: 'result-1',
+          retailer: 'Amazon',
+          price: 99.99,
+          savings: 30,
+          savings_percent: 0.23,
+          url: 'https://www.amazon.ca/accessory',
+        },
+      ],
+    })
+
+    expect(screen.queryByText(/better price found/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /view on amazon/i })).toBeInTheDocument()
+  })
+
+  it('refuses Google Shopping and SerpApi intermediary links', () => {
+    renderModal({
+      priceComparisonResults: [
+        {
+          candidate_id: 'result-1', retailer: 'Best Buy', price: 99.99, savings: 30,
+          savings_percent: 0.23, url: 'https://www.google.com/shopping/product/1',
+        },
+        {
+          candidate_id: 'result-1', retailer: 'Walmart', price: 109.99, savings: 20,
+          savings_percent: 0.15, url: 'https://serpapi.com/search.json?page_token=x',
+        },
+      ],
+    })
+
+    expect(screen.queryByText(/better price found/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /view on amazon/i })).toBeInTheDocument()
+  })
 })
 describe('ResultsSection retry advice', () => {
   it('shows Prime availability on result surfaces when confirmed', () => {

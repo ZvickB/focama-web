@@ -214,15 +214,24 @@ function getValidPriceComparison(item, priceComparisonResults) {
     .filter((result) => {
       const price = Number(result?.price)
       const savings = Number(result?.savings)
+      const savingsPercent = Number(result?.savings_percent)
       const retailer = String(result?.retailer || '').trim()
+      const sourceRetailer = String(item?.subtitle || item?.source || '').trim()
 
       try {
         const url = new URL(String(result?.url || ''))
         return (
           price > 0 &&
           savings > 0 &&
+          Number.isFinite(savingsPercent) &&
+          savingsPercent > 0 &&
+          savingsPercent <= 0.6 &&
           retailer &&
-          (url.protocol === 'https:' || url.protocol === 'http:')
+          url.protocol === 'https:' &&
+          !/\bamazon\b/i.test(retailer) &&
+          !/(^|\.)amazon\.[a-z.]+$/i.test(url.hostname) &&
+          !/(^|\.)(?:google\.[a-z.]+|serpapi\.com)$/i.test(url.hostname) &&
+          retailer.toLowerCase() !== sourceRetailer.toLowerCase()
         )
       } catch {
         return false

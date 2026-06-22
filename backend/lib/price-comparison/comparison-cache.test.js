@@ -4,6 +4,7 @@ import {
   COMPARISON_PRICE_TTL_MS,
   buildComparisonCacheEntry,
   buildComparisonCacheKey,
+  buildHybridIdentityJudgmentCacheKey,
   buildSerperMatchJudgmentCacheEntry,
   buildSerperMatchJudgmentCacheKey,
   buildSerperResultCacheEntry,
@@ -36,6 +37,22 @@ const result = {
 }
 
 describe('comparison cache', () => {
+  it('keeps hybrid identity judgments reusable when only price or URL changes', () => {
+    const product = { candidate_id: 'one', source_title: 'Sony WH-1000XM5', match_identifier: input.matchIdentifier }
+    const first = buildHybridIdentityJudgmentCacheKey({
+      product,
+      offers: [{ retailer: 'Best Buy', title: 'Sony WH-1000XM5', price: 300, url: 'https://bestbuy.ca/old' }],
+    })
+    const second = buildHybridIdentityJudgmentCacheKey({
+      product,
+      offers: [{ retailer: 'Best Buy', title: 'Sony WH-1000XM5', price: 280, url: 'https://bestbuy.ca/new' }],
+    })
+    expect(first).toBe(second)
+    expect(buildHybridIdentityJudgmentCacheKey({
+      product: { ...product, match_policy: { minSavingsPercent: 0.1 } },
+      offers: [{ retailer: 'Best Buy', title: 'Sony WH-1000XM5', price: 280, url: 'https://bestbuy.ca/new' }],
+    })).not.toBe(first)
+  })
   it('keys by identity, marketplace, coverage mode, and strategy version', () => {
     const first = buildComparisonCacheKey(input)
     expect(first).toMatch(/^[a-f0-9]{64}$/)
@@ -154,5 +171,6 @@ describe('comparison cache', () => {
       usage: { inputTokens: 1, outputTokens: 1 },
       model: 'haiku',
     })
+    expect(entry.strategyVersion).toBe(3)
   })
 })

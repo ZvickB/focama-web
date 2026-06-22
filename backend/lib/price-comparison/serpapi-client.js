@@ -43,6 +43,8 @@ export function normalizeSerpShoppingResult(result, { market = 'CA' } = {}) {
     condition: String(result?.second_hand_condition || result?.condition || '').trim() || null,
     identifiers: {},
     attributes: {},
+    product_id: result?.product_id ? String(result.product_id) : null,
+    immersive_page_token: String(result?.immersive_product_page_token || '').trim() || null,
     immersive_url: String(result?.serpapi_immersive_product_api || '').trim() || null,
   }
 }
@@ -70,6 +72,18 @@ export function normalizeSerpStoreOffer(store, { market = 'CA' } = {}) {
   }
 }
 
+function normalizeVariant(variant) {
+  return {
+    title: String(variant?.title || '').trim(),
+    items: (Array.isArray(variant?.items) ? variant.items : []).map((item) => ({
+      name: String(item?.name || '').trim(),
+      selected: item?.selected === true,
+      available: item?.available !== false,
+      serpapi_link: String(item?.serpapi_link || '').trim() || null,
+    })),
+  }
+}
+
 export async function searchShoppingOffers(query, market = 'CA', deps = {}) {
   const apiKey = deps.apiKey ?? getEnv('SERPAPI_API_KEY')
   const fetchImpl = deps.fetchImpl || fetch
@@ -89,7 +103,12 @@ export async function searchShoppingOffers(query, market = 'CA', deps = {}) {
 }
 
 export async function fetchShoppingOfferStores(immersiveUrl, market = 'CA', deps = {}) {
-  if (!immersiveUrl) return []
+  const immersive = await fetchImmersiveProduct(immersiveUrl, market, deps)
+  return immersive.stores
+}
+
+export async function fetchImmersiveProduct(immersiveUrl, market = 'CA', deps = {}) {
+  if (!immersiveUrl) return { title: '', brand: null, stores: [], variants: [], stores_next_page_token: null }
 
   const apiKey = deps.apiKey ?? getEnv('SERPAPI_API_KEY')
   const fetchImpl = deps.fetchImpl || fetch
@@ -98,7 +117,18 @@ export async function fetchShoppingOfferStores(immersiveUrl, market = 'CA', deps
 
   const url = new URL(immersiveUrl)
   url.searchParams.set('api_key', apiKey)
+  url.searchParams.set('more_stores', 'true')
   const payload = await fetchJson(url, { fetchImpl, timeoutMs })
-  const stores = Array.isArray(payload?.product_results?.stores) ? payload.product_results.stores : []
-  return stores.map((store) => normalizeSerpStoreOffer(store, { market }))
+  const product = payload?.product_results && typeof payload.product_results === 'object'
+    ? payload.product_results
+    : {}
+  const stores = Array.isArray(product.stores) ? product.stores : []
+  const variants = Array.isArray(product.variants) ? product.variants : []
+  return {
+    title: String(product.title || '').trim(),
+    brand: String(product.brand || '').trim() || null,
+    stores: stores.map((store) => normalizeSerpStoreOffer(store, { market })),
+    variants: variants.map(normalizeVariant),
+    stores_next_page_token: String(product.stores_next_page_token || '').trim() || null,
+  }
 }

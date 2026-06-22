@@ -20,8 +20,8 @@
 - Persists provider identity used by the disabled-by-default Canadian comparison endpoint.
 
 ### `price_comparison_cache`
-- Stores server-only comparison matches, rejected-match diagnostics, short-lived accepted prices, automatic Serper Shopping result caches, and Serper match-judgment caches.
-- Match identity and Serper match judgments are reusable for 7 days; accepted price data and Serper Shopping result lists are reusable for 30 minutes.
+- Stores server-only manual comparison data plus automatic hybrid Serper, SerpApi Shopping, Immersive Product, negative/error, and semantic-identity cache entries.
+- Hybrid semantic identity judgments are reusable for 7 days; price/link/provider data is normally 30 minutes, empty results 15 minutes, and provider errors 5 minutes.
 - Browser clients have no direct RLS policy. The backend service-role client owns reads and writes.
 
 ### `analytics_search_runs`
@@ -63,7 +63,7 @@
 - saved item tables
 - preference-learning tables
 
-Rate limiting falls back to in-memory storage when Supabase is not configured or the table is unavailable, but production should create this table before public traffic.
+General rate limiting falls back to memory when Supabase is unavailable. Hybrid SerpApi cost buckets fail closed instead when configured persistent rate-limit storage fails, preventing an outage from bypassing the API budget.
 
 ## Current recommendation
 - Create the active tables above if you want full Supabase-backed storage, analytics, search diagnostics, tester feedback, comparison caching, and shared rate limiting.
@@ -75,15 +75,22 @@ SERPAPI_API_KEY=your-serpapi-key
 BLUECART_API_KEY=your-bluecart-key
 RAINFOREST_API_KEY=your-rainforest-key
 OPENAI_API_KEY=your-openai-key
-SERPER_PRICE_INTEL_ENABLED=false
+HYBRID_PRICE_INTEL_MODE=off
 SERPER_API_KEY=your-serper-key
+PRICE_INTEL_ALLOWED_DOMAINS_CA=bestbuy.ca,walmart.ca,staples.ca,londondrugs.com,visions.ca
+PRICE_INTEL_ALLOWED_DOMAINS_US=bestbuy.com,walmart.com,target.com,homedepot.com
+PRICE_INTEL_ALLOWLIST_VERSION=1
+PRICE_INTEL_SURFACE_PERCENT=0
 PRICE_CHECK_THRESHOLD=100
 PRICE_MATCH_MIN_SAVINGS=8
 PRICE_MATCH_MIN_PERCENT=0.08
+PRICE_MATCH_MAX_PERCENT=0.60
 PRICE_MATCH_CONFIDENCE=0.85
-SERPER_PRICE_INTEL_MAX_OFFERS=8
-SERPER_PRICE_INTEL_MAX_PRODUCTS=3
+SERPER_PRICE_INTEL_MAX_OFFERS=3
 SERPER_PRICE_INTEL_RATE_LIMIT_PER_MINUTE=30
+SERPAPI_PRICE_INTEL_DAILY_CALLS=32
+SERPAPI_PRICE_INTEL_CALLS_PER_MINUTE=4
+SERPAPI_PRICE_INTEL_MAX_CONCURRENCY=1
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SECRET_KEY=your-supabase-secret-key
 SEARCH_CACHE_TTL_MINUTES=1440

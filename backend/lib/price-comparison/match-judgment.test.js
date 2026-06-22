@@ -142,6 +142,21 @@ describe('judgeSerperMatches', () => {
     }))
   })
 
+  it('rejects implausibly extreme savings even when Haiku approves the match', async () => {
+    const anthropicClient = anthropicClientWithInput({
+      matches: [{ offer_index: 0, is_match: true, confidence: 0.99, reason: 'Claims same model.' }],
+    })
+
+    const result = await judgeSerperMatches({
+      product: { ...product, price: 209 },
+      offers: [offer({ price: 9.99 })],
+      apiKey: 'claude-key',
+      anthropicClient,
+    })
+
+    expect(result.matches).toEqual([])
+  })
+
   it('does not surface savings when offer currency differs from the source product currency', async () => {
     const anthropicClient = anthropicClientWithInput({
       matches: [{ offer_index: 0, is_match: true, confidence: 0.95, reason: 'Same model.' }],

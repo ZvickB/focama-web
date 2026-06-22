@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { normalizeBlueCartResult, searchWalmartOffers } from './bluecart-client.js'
 import {
   fetchShoppingOfferStores,
+  fetchImmersiveProduct,
   normalizeSerpShoppingResult,
   normalizeSerpStoreOffer,
   searchShoppingOffers,
@@ -60,6 +61,29 @@ describe('SerpApi comparison client', () => {
       retailer: 'Best Buy Canada',
       url: 'https://bestbuy.example/ninja',
       shipping: 5,
+    }))
+    expect(String(fetchImpl.mock.calls[0][0])).toContain('more_stores=true')
+  })
+
+  it('preserves selected Immersive Product variants for exact-product proof', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
+      product_results: {
+        title: 'Nintendo Switch OLED Model',
+        brand: 'Nintendo',
+        variants: [{ title: 'Color', items: [
+          { name: 'White', selected: true, available: true, serpapi_link: 'https://serpapi.example/white' },
+          { name: 'Neon', selected: false, available: true },
+        ] }],
+        stores: [],
+      },
+    }))
+    const result = await fetchImmersiveProduct('https://serpapi.com/search.json?page_token=x', 'CA', {
+      apiKey: 'test', fetchImpl,
+    })
+    expect(result).toEqual(expect.objectContaining({
+      title: 'Nintendo Switch OLED Model',
+      brand: 'Nintendo',
+      variants: [expect.objectContaining({ items: [expect.objectContaining({ name: 'White', selected: true }), expect.anything()] })],
     }))
   })
 

@@ -241,6 +241,19 @@ describe('rate-limit helpers', () => {
       }),
     )
 
+    await expect(
+      takeFallbackRateLimitToken('serpapi-cost-budget', {
+        limit: 32,
+        windowMs: 24 * 60 * 60 * 1000,
+        failClosed: true,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        allowed: false,
+        reason: 'persistent_rate_limit_unavailable',
+      }),
+    )
+
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Supabase limiter unavailable'))
   })
 })

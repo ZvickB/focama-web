@@ -4,7 +4,10 @@ export const COMPARISON_MATCH_TTL_MS = 7 * 24 * 60 * 60 * 1000
 export const COMPARISON_PRICE_TTL_MS = 30 * 60 * 1000
 export const COMPARISON_MATCH_STRATEGY_VERSION = 1
 export const SERPER_PRICE_RESULT_STRATEGY_VERSION = 1
-export const SERPER_MATCH_JUDGMENT_STRATEGY_VERSION = 1
+export const SERPER_MATCH_JUDGMENT_STRATEGY_VERSION = 3
+export const HYBRID_SHOPPING_STRATEGY_VERSION = 2
+export const HYBRID_IMMERSIVE_STRATEGY_VERSION = 2
+export const HYBRID_IDENTITY_JUDGMENT_STRATEGY_VERSION = 1
 
 function clean(value) {
   return String(value || '').trim()
@@ -84,6 +87,74 @@ export function buildSerperMatchJudgmentCacheKey({ product = {}, offers = [] } =
   })
 }
 
+export function buildHybridIdentityJudgmentCacheKey({ product = {}, offers = [] } = {}) {
+  const identifier = product.match_identifier || product.matchIdentifier || {}
+  return hash({
+    mode: 'hybrid_identity_judgment',
+    candidateIdentity: clean(product.candidate_id || product.candidateId),
+    sourceTitle: clean(product.source_title || product.sourceTitle).toLowerCase(),
+    identifier,
+    matchPolicy: stableObject(product.match_policy || product.matchPolicy || {}),
+    offers: (Array.isArray(offers) ? offers : []).map((offer) => ({
+      retailer: clean(offer?.retailer).toLowerCase(),
+      title: clean(offer?.title).toLowerCase(),
+      condition: clean(offer?.condition).toLowerCase(),
+    })),
+    strategyVersion: HYBRID_IDENTITY_JUDGMENT_STRATEGY_VERSION,
+  })
+}
+
+export function buildHybridProviderCacheKey({ mode, market, identity, retailer = '', strategyVersion = 1 } = {}) {
+  return hash({
+    mode: clean(mode),
+    market: clean(market).toUpperCase(),
+    identity: stableObject(identity || {}),
+    retailer: clean(retailer).toLowerCase(),
+    strategyVersion,
+  })
+}
+
+export function readHybridProviderCacheState(entry, nowMs = Date.now()) {
+  if (!entry || typeof entry !== 'object') return { price: 'miss', payload: null }
+  const price = isFresh(entry.priceExpiresAt, nowMs) ? 'hit' : 'stale'
+  const wrapper = Array.isArray(entry.offers) ? entry.offers[0] : null
+  return {
+    price,
+    payload: price === 'hit' && wrapper?.hybrid_payload ? wrapper.hybrid_payload : null,
+  }
+}
+
+export function buildHybridProviderCacheEntry({
+  cacheKey,
+  mode,
+  market,
+  identity,
+  payload,
+  strategyVersion = 1,
+  ttlMs = COMPARISON_PRICE_TTL_MS,
+  now = new Date(),
+}) {
+  const expiresAt = new Date(now.getTime() + ttlMs).toISOString()
+  return {
+    cacheKey,
+    candidateId: clean(identity?.candidate_id || identity?.candidateId),
+    marketplace: clean(market).toUpperCase(),
+    coverageMode: clean(mode),
+    strategyVersion,
+    identity: stableObject(identity || {}),
+    status: 'complete',
+    query: null,
+    offers: [{ hybrid_payload: payload }],
+    accepted: [],
+    rejected: [],
+    providerErrors: {},
+    matchCachedAt: now.toISOString(),
+    matchExpiresAt: expiresAt,
+    priceCachedAt: now.toISOString(),
+    priceExpiresAt: expiresAt,
+  }
+}
+
 function isFresh(expiresAt, nowMs) {
   const expiresAtMs = new Date(expiresAt || '').getTime()
   return Number.isFinite(expiresAtMs) && expiresAtMs > nowMs
@@ -141,6 +212,7 @@ export function buildSerperResultCacheEntry({
   query,
   market,
   offers,
+  ttlMs = COMPARISON_PRICE_TTL_MS,
   now = new Date(),
 }) {
   const nowMs = now.getTime()
@@ -162,7 +234,7 @@ export function buildSerperResultCacheEntry({
     matchCachedAt: now.toISOString(),
     matchExpiresAt: now.toISOString(),
     priceCachedAt: now.toISOString(),
-    priceExpiresAt: new Date(nowMs + COMPARISON_PRICE_TTL_MS).toISOString(),
+    priceExpiresAt: new Date(nowMs + ttlMs).toISOString(),
   }
 }
 

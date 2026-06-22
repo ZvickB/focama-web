@@ -3085,10 +3085,12 @@ describe('server handlers', () => {
     expect(response.body).toContain('"ready":true')
   })
 
-  it('streams price comparison after enrichment when Serper price intelligence is enabled', async () => {
+  it('streams price comparison after enrichment when hybrid surface mode is enabled', async () => {
     getEnv.mockImplementation((name) => ({
-      SERPER_PRICE_INTEL_ENABLED: 'true',
+      HYBRID_PRICE_INTEL_MODE: 'surface',
+      PRICE_INTEL_SURFACE_PERCENT: '100',
       SERPER_API_KEY: 'serper-key',
+      SERPAPI_API_KEY: 'serpapi-key',
     })[name] || '')
     readStoredSearchCacheEntry.mockResolvedValueOnce(
       createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')], {
