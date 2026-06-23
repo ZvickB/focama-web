@@ -12,6 +12,7 @@ import {
 } from '../text-sanitizers.js'
 import { lacksKnownPositivePrice } from '../result-filter.js'
 import { getEnv, validateSearchInput } from '../search-data.js'
+import { writeSearchSnapshot } from '../search-pipeline.js'
 import {
   readProductDetailsCacheEntries,
   recordSearchDiagnosticEvent,
@@ -713,6 +714,28 @@ export async function handleFinalizeSelection(request, response) {
       strategy: selectionStrategy,
     })
     const totalDuration = nowMs() - requestStartedAt
+
+    await writeSearchSnapshot({
+      productQuery: sanitizedDiscoveryContext.normalizedQuery,
+      details: '',
+      candidatePool: nextCandidatePool,
+      discoveryToken: sanitizedDiscoveryContext.discoveryToken,
+      results,
+      selection: {
+        ...(resolvedDiscoveryContext.cachedEntry?.selection &&
+        typeof resolvedDiscoveryContext.cachedEntry.selection === 'object' &&
+        !Array.isArray(resolvedDiscoveryContext.cachedEntry.selection)
+          ? resolvedDiscoveryContext.cachedEntry.selection
+          : {}),
+        mode: usedHaikuSelection ? 'ai' : 'rules_fallback',
+        strategy: selectionStrategy,
+        model: usedHaikuSelection ? haikuResult.model : null,
+        selectedCandidateIds: finalizeFast.selectedCandidateIds,
+        finalizedAt: new Date().toISOString(),
+      },
+      source: 'guided_finalize_selection',
+      scope: resolvedDiscoveryContext.discoveryScope,
+    })
 
     logSearchFlowEvent('guided_finalize_completed', {
       route: '/api/search/finalize',

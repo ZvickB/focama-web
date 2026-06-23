@@ -23,6 +23,7 @@ import {
   handleQueryQualityPoll,
   startQueryQualityReview,
 } from './lib/handlers/query-quality-handler.js'
+import { handleDeepDive } from './lib/handlers/deep-dive-handler.js'
 import {
   applyLateProductDetailsToEnrichment,
   handleEnrichmentPoll,
@@ -101,6 +102,7 @@ export {
   handleFinalizeSelection,
   handleQueryQualityPoll,
   startQueryQualityReview,
+  handleDeepDive,
   handleEnrichmentPoll,
   handleEnrichmentStream,
   runMiniEnrichmentAsync,
@@ -125,7 +127,7 @@ export function createApiServer() {
         response.writeHead(204, {
           'Access-Control-Allow-Origin': resolveCorsOrigin(request.headers?.origin),
           'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
           Vary: 'Origin',
         })
         response.end()
@@ -174,6 +176,11 @@ export function createApiServer() {
 
       if (request.method === 'POST' && requestUrl.pathname === '/api/search/finalize') {
         await handleFinalizeSelection(request, response)
+        return
+      }
+
+      if (request.method === 'POST' && requestUrl.pathname === '/api/product/deep-dive') {
+        await handleDeepDive(request, response)
         return
       }
 
