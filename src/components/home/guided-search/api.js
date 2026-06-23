@@ -168,3 +168,30 @@ export async function fetchQueryQualitySuggestion({ token, query, amazonDomain }
   const response = await fetch(`${BACKEND_URL}/api/search/query-quality?${searchParams.toString()}`)
   return readJsonResponse(response, requestStartedAt)
 }
+
+export async function fetchProductDeepDive({
+  amazonDomain,
+  candidateId,
+  discoveryToken,
+  includeSynthesis = true,
+  query,
+  token,
+}) {
+  const requestStartedAt = performance.now()
+  const response = await fetch(`${BACKEND_URL}/api/product/deep-dive`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      amazonDomain,
+      candidateId,
+      discoveryToken,
+      includeSynthesis,
+      query,
+    }),
+  })
+
+  return readJsonResponse(response, requestStartedAt)
+}

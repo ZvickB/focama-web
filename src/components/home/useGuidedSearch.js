@@ -1887,6 +1887,7 @@ export function useGuidedSearch() {
     },
     results: {
       candidatePool,
+      discoveryToken,
       displayed: displayedResults,
       hasFinalResults,
       previous: previousResults,

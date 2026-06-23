@@ -649,8 +649,11 @@ export function HomeExperience({ initialSearchFollowUp = '', initialSearchQuery 
       {results.selectedProduct ? (
         <Suspense fallback={<ProductDetailModalFallback />}>
           <ProductDetailModal
+            amazonDomain={guided.marketplace.resolvedAmazonDomain}
+            discoveryToken={results.discoveryToken}
             item={results.selectedProduct}
             isEnrichmentSettled={status.isEnrichmentSettled}
+            searchQuery={query.submittedQuery}
             showRecommendationAnalysis={results.selectedProduct?.analyticsMeta?.resultSet !== 'preview'}
             onRetailerClick={() =>
               trackRetailerClick(results.selectedProduct, {
