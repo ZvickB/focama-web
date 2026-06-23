@@ -49,16 +49,29 @@
 - Lets multiple Render instances count against the same 10-second request window.
 - Does not store raw IP addresses.
 
+### `saved_searches`
+- Stores user-facing saved search history for signed-in users.
+- Separate from internal `search_history`.
+- Uses Supabase auth/RLS with `user_id` ownership.
+
+### `deep_dive_cache`
+- Stores feature-flagged Deep Dive product-group, Immersive, and synthesis cache entries.
+- Separate from guided discovery cache and internal `search_history`.
+
+### `deep_dive_usage`
+- Stores account-level Deep Dive usage for the current first-free account gate.
+- Payment/subscription tables are still deferred.
+
 ## Not used now
 - user accounts tables
-- saved search tables
 - saved item tables
 - preference-learning tables
+- payment/subscription tables
 
 Rate limiting falls back to in-memory storage when Supabase is not configured or the table is unavailable, but production should create this table before public traffic.
 
 ## Current recommendation
-- Create the eleven tables above if you want full Supabase-backed storage, analytics, search diagnostics, tester feedback, and shared rate limiting.
+- Create the app tables above if you want full Supabase-backed storage, analytics, search diagnostics, tester feedback, shared rate limiting, signed-in history, and Deep Dive.
 - Keep user-facing memory features separate from `search_history`.
 
 ## Environment variables
@@ -80,6 +93,11 @@ Notes:
 - Do not expose either server-side key to the browser.
 - `RATE_LIMIT_STORAGE=auto` uses Supabase when configured and memory otherwise; set `memory` only for local/debug fallback.
 - `RATE_LIMIT_HASH_SALT` is optional but recommended so rate-limit keys remain stable without relying on the Supabase secret as the hash salt.
+- `DEEP_DIVE_ENABLED=true` is required before the Deep Dive endpoint calls SerpApi.
+- `DEEP_DIVE_REQUIRE_AUTH=true` keeps Deep Dive account-gated. Keep this on for the first release.
+- `DEEP_DIVE_FREE_LIMIT=1` is the default non-subscriber cap; `DEEP_DIVE_FREE_LIMIT_DISABLED=true` temporarily disables that cap in controlled testing.
+- `DEEP_DIVE_SUBSCRIBER_EMAILS` and `DEEP_DIVE_SUBSCRIBER_USER_IDS` can grant temporary unlimited tester/subscriber access until billing/account tables exist.
+- `DEEP_DIVE_ALLOWED_DOMAINS_US` and `DEEP_DIVE_ALLOWED_DOMAINS_CA` can override the default direct-retailer allowlists.
 
 ## SQL to run
 
@@ -128,6 +146,79 @@ create table if not exists public.product_details_cache (
   next_update_at timestamptz null,
   cached_at timestamptz not null default now()
 );
+```
+
+### Signed-in history table
+```sql
+create table if not exists public.saved_searches (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  query_key text not null,
+  query text not null,
+  follow_up text not null default '',
+  amazon_domain text,
+  results jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique (user_id, query_key)
+);
+
+create index if not exists saved_searches_user_created_at_idx
+  on public.saved_searches (user_id, created_at desc);
+
+create index if not exists saved_searches_user_updated_at_idx
+  on public.saved_searches (user_id, updated_at desc);
+
+alter table public.saved_searches enable row level security;
+
+create policy "saved_searches_select_own"
+  on public.saved_searches
+  for select
+  using (auth.uid() = user_id);
+
+create policy "saved_searches_insert_own"
+  on public.saved_searches
+  for insert
+  with check (auth.uid() = user_id);
+
+create policy "saved_searches_update_own"
+  on public.saved_searches
+  for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "saved_searches_delete_own"
+  on public.saved_searches
+  for delete
+  using (auth.uid() = user_id);
+```
+
+### Deep Dive tables
+```sql
+create table if not exists public.deep_dive_cache (
+  cache_key text primary key,
+  layer text not null,
+  payload jsonb not null default '{}'::jsonb,
+  cached_at timestamptz not null default timezone('utc', now()),
+  expires_at timestamptz not null
+);
+
+create index if not exists deep_dive_cache_layer_idx
+  on public.deep_dive_cache (layer);
+
+create index if not exists deep_dive_cache_expires_at_idx
+  on public.deep_dive_cache (expires_at);
+
+create table if not exists public.deep_dive_usage (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  used_count integer not null default 0,
+  first_used_at timestamptz,
+  last_used_at timestamptz,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists deep_dive_usage_last_used_at_idx
+  on public.deep_dive_usage (last_used_at desc);
 ```
 
 ### Analytics tables

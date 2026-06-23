@@ -49,6 +49,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Enrichment reads: `GET /api/search/enrichment-stream` first, with `GET /api/search/enrichment` as polling fallback.
 - Query-quality polling: `GET /api/search/query-quality`.
 - Preview product detail hydration: `GET /api/search/product-details`.
+- User-triggered finalized-product Deep Dive: `POST /api/product/deep-dive` when `DEEP_DIVE_ENABLED=true` and the user is signed in.
 - Retry advice: `POST /api/search/retry-advice`.
 - Feedback: `POST /api/feedback`.
 - Search diagnostics: `POST /api/search/diagnostics/event`, `GET /api/health`, `GET /api/diagnostics/connectivity`.
@@ -63,6 +64,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Query-quality suggestions are polling-based only. No SSE or prewarm path exists.
 - Modal/detail enrichment hydrates after the first shortlist cards are shown, framing the top pick as the hero recommendation and later picks as alternatives.
 - Skipped-refinement preview products do not show AI recommendation analysis. When opened, the modal can lazily hydrate product detail bullets/description from the per-ASIN cache or Oxylabs through `GET /api/search/product-details`.
+- Finalized product modals have a feature-flagged, user-triggered Deep Dive panel. It is account-gated, uses SerpApi Shopping -> Immersive Product only after click, validates exact product/store links deterministically, and keeps the existing Amazon/source CTA unchanged. Do not add automatic background price surfacing or shortlist badges for this path.
 - Marketplace listings without a known positive price are filtered out before preview/finalize.
 - Thin discovery cache hits with fewer than 6 cached results or candidates are bypassed and refreshed from the provider.
 - `/api/search/live` and debug/cache routes are not the main user path.

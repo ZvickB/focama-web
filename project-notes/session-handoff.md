@@ -49,11 +49,13 @@
 - Haiku shortlist locking now ranks by inferred product fit first, then quality confidence (rating, review count, trustScore, and recognized category brand), price/value, useful shortlist variety, and raw Amazon search position (`amazonPosition`) as the final secondary signal.
 - `GET /api/search/enrichment-stream` is the first enrichment path; `GET /api/search/enrichment` is the polling fallback.
 - `GET /api/search/product-details` hydrates one skipped-refinement preview product from the per-ASIN product detail cache or Oxylabs when its modal opens.
+- `POST /api/product/deep-dive` is implemented behind `DEEP_DIVE_ENABLED=true` for signed-in users who manually click Deep Dive inside a finalized product modal. It validates the candidate against the finalized token-scoped snapshot, uses SerpApi Shopping -> Immersive Product, refreshes stale Immersive cache before showing store offers, validates exact offers/direct links, and optionally synthesizes real review evidence with Haiku.
 - Mini enrichment now treats the first locked pick as the hero recommendation and later picks as alternatives with distinct tradeoffs.
 - `GET /api/search/query-quality` exposes polling-based query-quality suggestions.
 - `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist.
 - `POST /api/feedback` stores tester feedback.
 - Search diagnostics now run outside Sentry. The frontend search ID is the support code; failed searches show that code, `Copy debug info`, and an optional filter/VPN selector. Frontend/backend lifecycle events write to Supabase `search_attempts` and `search_events` when those tables exist. `/admin/analytics` has a Search reliability section for failed support codes and provider/network patterns.
+- Automatic hybrid price-intel surfacing remains intentionally inactive. Deep Dive is the current comparison/review-research bet; do not add card badges, background better-price checks, Serper, Google Light, or Google Custom Search for this flow without a fresh decision.
 
 ## Key files
 - App route shell: `src/App.jsx`

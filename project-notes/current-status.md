@@ -18,6 +18,11 @@
 - User-facing history now switches by auth state: signed-out users use localStorage; signed-in users use Supabase `saved_searches`. Local entries migrate into the account on login after successful remote upsert.
 - The current user path is: search -> collapsed search summary -> active refine panel -> collapsed refine summary/focused ranked shortlist with a desktop selected-product preview -> modal details -> Amazon/source clickout.
 - The modal detail view now acts more like a decision aid: compact `At a glance` facts, `Why this pick`, `Worth knowing`, product notes, then one compact bottom source-specific CTA/disclosure area. Source/store naming is kept in clickout actions instead of repeated as passive metadata.
+- A feature-flagged account-gated Deep Dive panel now exists inside finalized product modals. It is user-triggered only, uses SerpApi Shopping -> Immersive Product when enabled, validates exact product/store links deterministically, and can synthesize real review/critic/insight data with Haiku when enough evidence exists. It does not add shortlist-card badges or automatic background price surfacing.
+- Deep Dive account gating now treats subscriber-style Supabase auth metadata (`subscriber`, `subscribed`, `is_subscriber`, or `deep_dive_unlimited`) and temporary env allowlists (`DEEP_DIVE_SUBSCRIBER_EMAILS`, `DEEP_DIVE_SUBSCRIBER_USER_IDS`) as unlimited. Non-subscriber free usage remains configurable with `DEEP_DIVE_FREE_LIMIT`, and can be disabled for controlled testing with `DEEP_DIVE_FREE_LIMIT_DISABLED=true`.
+- First live-debug finding: Sony WH-1000XM5 returned multiple same-model Google Shopping candidates and was incorrectly treated as ambiguous. The selector now permits same-model top ties while still rejecting refurbished, accessory-like, and wrong-model Shopping candidates.
+- Deep Dive offer tuning is intentionally deterministic: trusted allowlisted retailer URLs can be soft-accepted when the probe times out or bot-blocks after HTTPS/public-DNS/same-domain checks pass, and generation proof can come from the Immersive product group title when the store title omits it. Color is kept as optional supporting proof when available, but missing color no longer rejects an otherwise exact model/direct-store offer. Core model, condition, currency, capacity ambiguity, and off-domain redirect checks remain strict.
+- Deep Dive no longer lets a 24-hour Immersive cache entry silently suppress store offers after the 30-minute price freshness window. Stale Immersive cache now triggers one fresh Immersive fetch; only if that refresh fails does it fall back to stale review signals without prices.
 - The new web UI slices now share a quieter visual system: mostly white/cream surfaces, lighter shadows, fewer decorative gradients, consistent rounded corners, teal actions, and orange only for the shopping clickout CTA.
 - A tester-only feedback FAB now opens a lightweight sheet for quick product feedback, optional free text, and optional follow-up email.
 - Shortlists are always 6 items.
@@ -60,6 +65,7 @@
 - `GET /api/search/query-quality` exposes the stored query-quality review through simple polling. The homepage uses it to show an optional suggested-query prompt only when the backend review says to suggest one.
 - `GET /api/search/refine` now uses OpenAI mini first to generate the short follow-up question and refinement chips, with Haiku as the fallback when OpenAI is unavailable or not configured.
 - `POST /api/search/finalize`, `GET /api/search/enrichment-stream`, `GET /api/search/enrichment`, `GET /api/search/query-quality`, `GET /api/search/product-details`, and `POST /api/search/retry-advice` are all active in the Render app.
+- `POST /api/product/deep-dive` is implemented but disabled unless `DEEP_DIVE_ENABLED=true`. It requires a Supabase bearer token, validates the clicked candidate against the finalized token-scoped search snapshot, uses separate Deep Dive cache/usage storage, and returns ready/limited/gated/unavailable states.
 - `GET /api/analytics/dashboard` is a localhost-only development endpoint for the internal analytics page and returns `404` in production.
 - `GET /api/geo` intentionally stays on Vercel so the frontend can resolve the user’s country from Vercel headers and send an explicit Amazon domain on guided requests when the store picker is left on `Auto`.
 - The Amazon marketplace context now remembers the last saved marketplace in localStorage (`focamai_marketplace`) so repeat visits skip geo lookup when a preference or confident detection already exists.
@@ -99,6 +105,7 @@
 - Keep active Amazon marketplaces aligned with valid Associates tracking IDs. Do not re-enable more Amazon domains until their store/tracking IDs are configured and verified.
 - Do not force generic `retailer` language in user-facing UI when `Amazon` is more accurate for the current experience.
 - Do not introduce new Amazon/source/retailer labels, facts, or badges as side effects of unrelated features. Existing clickout wording should stay source-derived unless the user explicitly asks to revisit it.
+- Deep Dive remains explicit user action only. Do not re-enable automatic hybrid price-intel surfacing, shortlist badges, Serper, Google Light, or Google Custom Search for this path without a fresh product decision.
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
 - Do not let future multi-retailer flexibility make today's Amazon-first UX vague. If more retailers become active, revisit frontend labels based on the real source mix.
 - Keep `search_history` as internal telemetry, not user-facing saved history.
@@ -115,6 +122,7 @@
 - Watch whether the compact modal bottom CTA/disclosure feels clear without sounding defensive.
 - Verify local Search History on real searches: finalized save, duplicate upsert, expand/delete/clear, and re-run with notes prefilled.
 - Verify Supabase account history end to end now that the remote store is wired: local-to-account migration, remote save on finalize, list, delete, clear, reload persistence, sign-out fallback to local history.
+- Live-review Deep Dive before any public rollout: set up the Supabase tables, enable `DEEP_DIVE_ENABLED` in a controlled environment, run at least 20 US/CA finalized products, inspect every surfaced offer against raw SerpApi Shopping/Immersive evidence, and watch retailer-link validator false negatives. The current US black Sony WH-1000XM5 backend probe accepts 8 verified offers; color is no longer a hard offer-rejection reason.
 - Before reapplying to Amazon Associates, verify live production clickouts from result cards and modals show the current account's `tag=` value for every active Amazon store choice.
 
 ## server.js decomposition (refactor/server-decomposition branch)

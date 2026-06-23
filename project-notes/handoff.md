@@ -25,6 +25,7 @@
 - Watch retry-advice behavior on multi-constraint misses such as brand + product type + dietary need; the prompt now preserves accumulated constraints by default, and the frontend now exposes correction chips plus inline suggested-query confirmation, but this still needs live validation.
 - Replace the About page with a `Why Focamai` page, then update nav and add a clear return-home path.
 - Watch whether the new inline clickout disclosure feels clear and trust-building, and adjust the wording if testers read it as friction or legal copy.
+- Deep Dive is now implemented as a feature-flagged, account-gated, user-triggered modal panel. Stale Immersive cache now refreshes before showing store offers, while stale review signals can still be used if the refresh fails. Before enabling broadly, create the Supabase tables, configure `DEEP_DIVE_ENABLED=true`, `SERPAPI_API_KEY`, `CLAUDE_API_KEY`, and the `DEEP_DIVE_ALLOWED_DOMAINS_US/CA` allowlists, then run live review against at least 20 finalized products.
 - Keep trimming `backend/server.js` so route orchestration and flow logic do not keep growing in one file.
 - Use the local `/admin/analytics` dashboard during development against live data and decide which weak-query, weak-ranking, or refine-friction fixes to prioritize first.
 - Create the Supabase `search_attempts` and `search_events` tables from `project-notes/db-needs.md`, then verify a live failed search writes a support-code event path and appears in `/admin/analytics` under Search reliability.
@@ -37,6 +38,7 @@
 - Active Amazon discovery is currently constrained to affiliate-tagged marketplaces (`amazon.com`, `amazon.ca`) for Associates compliance; broader Amazon marketplace support is deferred until valid tracking IDs exist.
 - The current shortlist-detail helper is still Oxylabs-backed so modal bullets/descriptions stay on the stronger detail path for now.
 - Keep the SerpApi route inactive unless there is a deliberate reason to reactivate multi-retailer discovery.
+- Keep automatic hybrid price-intel surfacing inactive. The current approved pivot is explicit Deep Dive only: no shortlist badges, no automatic background price checks, no Serper, no Google Light, and no Google Custom Search unless live review proves the SerpApi Shopping -> Immersive path cannot locate product groups reliably.
 - Create the `rate_limit_events` table in Supabase before public traffic so Render instances share the same rate-limit bucket; the app falls back to process-local limiting if the table is unavailable.
 - Add the real `SENTRY_DSN` and confirm events arrive in production once the Render environment is updated.
 - Keep Sentry as a useful backend exception channel, but do not rely on it as the only search-failure visibility path; search support-code diagnostics now write to Supabase separately when configured.
