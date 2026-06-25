@@ -17,7 +17,7 @@ import {
 const SERPAPI_ENDPOINT = 'https://serpapi.com/search.json'
 const PRICE_STALE_MS = 30 * 60 * 1000
 const DEFAULT_ALLOWED_DOMAINS = {
-  CA: 'bestbuy.ca,walmart.ca,staples.ca,londondrugs.com,visions.ca,costco.ca,canadiantire.ca,homedepot.ca,amazon.ca',
+  CA: 'bestbuy.ca,walmart.ca,staples.ca,londondrugs.com,visions.ca,costco.ca,canadiantire.ca,homedepot.ca,amazon.ca,newegg.ca,cameracanada.com',
   US: 'bestbuy.com,walmart.com,target.com,costco.com,staples.com,homedepot.com,lowes.com,bhphotovideo.com,adorama.com,newegg.com,amazon.com,abt.com,officedepot.com,dell.com,sweetwater.com,macys.com,pcrichard.com,verizon.com,sony.com',
 }
 const MODEL_TOKEN = /\b[A-Z]{1,5}[-\s]?\d{2,5}[A-Z0-9]{0,5}\b/
@@ -172,6 +172,7 @@ export async function fetchShoppingProductGroup({ apiKey, candidate, market }) {
     payload,
     selectedOffer: selected.offer,
     selectedReason: selected.reason,
+    ambiguous: Boolean(selected.ambiguous),
     ranked: selected.ranked || [],
   }
 }
@@ -212,12 +213,32 @@ function normalizeStoreOffer(store, market) {
 }
 
 function parseCandidatePrice(candidate, market) {
-  return parseMoney(candidate?.numericPrice ?? candidate?.extracted_price ?? candidate?.price) ?? null
+  for (const value of [candidate?.numericPrice, candidate?.extracted_price, candidate?.price]) {
+    const parsed = parseMoney(value)
+    if (parsed !== null) return parsed
+  }
+  return null
 }
 
 function getAllowedDomains(market) {
   const configured = getEnv(`DEEP_DIVE_ALLOWED_DOMAINS_${market}`) || DEFAULT_ALLOWED_DOMAINS[market] || ''
   return parseRetailerDomainAllowlist(configured)
+}
+
+const SOFT_FAILURE_LABELS = {
+  model_missing: 'Model number could not be confirmed',
+  model_number_missing: 'Model number could not be confirmed',
+  product_type_missing: 'Product type could not be confirmed',
+  capacity_missing: 'Storage or size could not be confirmed',
+  capacity_ambiguous: 'Listing mentions multiple sizes',
+  generation_missing: 'Generation or version could not be confirmed',
+  feature_tier_missing: 'Feature variant could not be confirmed',
+  display_tier_missing: 'Display type could not be confirmed',
+  insufficient_identity: 'Limited detail available to verify exact match',
+}
+
+function describeSoftFailure(code) {
+  return SOFT_FAILURE_LABELS[code] || ''
 }
 
 function normalizeProof(proofResult) {
@@ -226,16 +247,37 @@ function normalizeProof(proofResult) {
     : []
 }
 
+export function calculateSavingsVsSource(sourceTotal, offerTotal) {
+  if (sourceTotal === null || sourceTotal === undefined) return null
+
+  const sourceValue = Number(sourceTotal)
+  const offerValue = Number(offerTotal)
+
+  if (!Number.isFinite(sourceValue) || !Number.isFinite(offerValue) || sourceValue <= 0 || offerValue <= 0) {
+    return null
+  }
+
+  const amount = sourceValue - offerValue
+
+  if (amount <= 0) return null
+
+  return {
+    amount: Math.round(amount * 100) / 100,
+    percent: Math.round((amount / sourceValue) * 10000) / 10000,
+  }
+}
+
 export async function normalizeDeepDiveOffers({
   candidate,
   immersive,
   market,
   shoppingOffer,
+  skipSavingsFilter = false,
 }) {
   const expectedCurrency = expectedCurrencyForMarket(market)
   const productResults = immersive?.productResults || {}
   const stores = Array.isArray(productResults?.stores) ? productResults.stores : []
-  const amazonTotal = parseCandidatePrice(candidate, market)
+  const amazonTotal = skipSavingsFilter ? null : parseCandidatePrice(candidate, market)
   const allowedDomains = getAllowedDomains(market)
   const offers = []
   const rejected = []
@@ -279,6 +321,8 @@ export async function normalizeDeepDiveOffers({
       continue
     }
 
+    const caveats = (proof.softFailures || []).map(describeSoftFailure).filter(Boolean)
+
     const linkValidation = await validateDirectRetailerUrl(normalized.url, {
       allowedDomains,
       retailer: normalized.retailer,
@@ -295,8 +339,12 @@ export async function normalizeDeepDiveOffers({
       continue
     }
 
-    const savingsAmount = amazonTotal !== null ? Math.max(0, amazonTotal - normalized.knownTotal) : 0
-    const savingsPercent = amazonTotal && savingsAmount > 0 ? savingsAmount / amazonTotal : 0
+    const savingsVsAmazon = calculateSavingsVsSource(amazonTotal, normalized.knownTotal)
+
+    if (amazonTotal !== null && !savingsVsAmazon) {
+      rejected.push({ reason: 'not_lower_than_source', retailer: normalized.retailer })
+      continue
+    }
 
     offers.push({
       retailer: normalized.retailer,
@@ -306,12 +354,9 @@ export async function normalizeDeepDiveOffers({
       shipping: normalized.shipping || null,
       knownTotal: normalized.knownTotal,
       url: linkValidation.finalUrl || normalized.url,
-      savingsVsAmazon: savingsAmount > 0
-        ? {
-            amount: Math.round(savingsAmount * 100) / 100,
-            percent: Math.round(savingsPercent * 10000) / 10000,
-          }
-        : null,
+      savingsVsAmazon,
+      confidence: proof.confidence || 'high',
+      caveats,
       proof: [
         ...normalizeProof(proof),
         linkValidation.verification === 'soft' ? `link_${linkValidation.reason}` : 'direct_link',
@@ -352,12 +397,25 @@ export function buildReviewEvidence(productResults) {
     .filter((entry) => entry.source || entry.text || entry.rating)
     .slice(0, 8)
   const topInsights = (Array.isArray(productResults?.top_insights) ? productResults.top_insights : [])
-    .map((insight) => ({
-      source: sourceName(insight) || 'Google Shopping',
-      text: truncateText(insightText(insight), 400),
-    }))
+    .flatMap((category) => {
+      const categoryTitle = clean(category?.title)
+      const items = Array.isArray(category?.items) ? category.items : []
+      if (items.length === 0) {
+        const text = insightText(category)
+        return text ? [{ source: sourceName(category) || 'Google Shopping', text: truncateText(text, 400) }] : []
+      }
+      return items.map((item) => ({
+        source: clean(item?.source) || sourceName(category) || 'Google Shopping',
+        text: truncateText(
+          [clean(item?.key_point), clean(item?.snippet)].filter(Boolean).join(' — ') ||
+          insightText(item),
+          400,
+        ),
+        category: categoryTitle,
+      }))
+    })
     .filter((entry) => entry.text)
-    .slice(0, 8)
+    .slice(0, 12)
 
   return {
     userReviews,
@@ -371,6 +429,7 @@ export function buildReviewEvidence(productResults) {
 export function normalizeReviewSignals(productResults) {
   const evidence = buildReviewEvidence(productResults)
   return {
+    userReviews: evidence.userReviews,
     criticRatings: evidence.criticRatings,
     topInsights: evidence.topInsights,
     starDistribution: productResults?.ratings || productResults?.rating_distribution || [],
@@ -423,17 +482,35 @@ export async function synthesizeDeepDiveReviews({ apiKey, evidence }) {
 }
 
 export function buildDeepDiveProductPayload(productResults, candidate) {
+  const variants = Array.isArray(productResults?.variants) ? productResults.variants : []
+  const variantDimensions = variants
+    .map((group) => {
+      const title = clean(group?.title).toLowerCase()
+      const items = Array.isArray(group?.items) ? group.items : []
+      const selected = items.find((item) => item?.selected === true)
+      const optionCount = items.filter((item) => clean(item?.name) && clean(item?.name).toLowerCase() !== 'any color').length
+      if (!title || optionCount <= 1) return null
+      return {
+        dimension: title,
+        yourPick: selected ? clean(selected.name) : null,
+        optionCount,
+      }
+    })
+    .filter(Boolean)
+    .slice(0, 4)
+
   return {
     title: clean(productResults?.title || candidate?.title),
     brand: clean(productResults?.brand || candidate?.match_identifier?.brand) || null,
     rating: Number.isFinite(Number(productResults?.rating)) ? Number(productResults.rating) : candidate?.rating || null,
     reviewCount: Number.isFinite(Number(productResults?.reviews)) ? Number(productResults.reviews) : candidate?.reviewCount || null,
-    selectedVariantProof: (Array.isArray(productResults?.variants) ? productResults.variants : [])
+    selectedVariantProof: variants
       .flatMap((variant) => (Array.isArray(variant?.items) ? variant.items : []))
       .filter((item) => item?.selected === true)
       .map((item) => clean(item?.name))
       .filter(Boolean)
       .slice(0, 8),
+    variantDimensions,
   }
 }
 

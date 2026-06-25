@@ -1,4 +1,5 @@
 import {
+  assessDeepDiveEligibility,
   miniEnrichSelectedCandidates,
 } from '../ai-selector.js'
 import { resolveCorsOrigin, sendJson } from '../http.js'
@@ -137,6 +138,83 @@ export async function runMiniEnrichmentAsync({
   })
 
   return miniResult
+}
+
+export async function runDeepDiveEligibilityAsync({
+  lockedIds,
+  candidatePool,
+  apiKey,
+  model,
+  normalizedQuery,
+  discoveryToken,
+  discoveryScope = CACHE_SCOPE_DISCOVERY,
+}) {
+  const resolvedBeforeAi = await resolveDiscoveryContext(
+    normalizedQuery,
+    discoveryToken,
+    [discoveryScope],
+  )
+
+  if (!resolvedBeforeAi.isValid) {
+    return
+  }
+
+  const enrichmentEntries = Array.isArray(resolvedBeforeAi.cachedEntry?.selection?.enrichment?.entries)
+    ? resolvedBeforeAi.cachedEntry.selection.enrichment.entries
+    : []
+  const eligibilityResult = await assessDeepDiveEligibility({
+    lockedIds,
+    candidatePool,
+    enrichmentEntries,
+    apiKey,
+    model,
+  })
+
+  const resolvedAfterAi = await resolveDiscoveryContext(
+    normalizedQuery,
+    discoveryToken,
+    [discoveryScope],
+  )
+
+  if (!resolvedAfterAi.isValid) {
+    return
+  }
+
+  const { cachedEntry } = resolvedAfterAi
+  const updatedSelection = {
+    ...(cachedEntry.selection && typeof cachedEntry.selection === 'object' ? cachedEntry.selection : {}),
+    deepDiveEligibility: {
+      decisions: eligibilityResult.decisions,
+      model: eligibilityResult.model,
+      generatedAt: new Date().toISOString(),
+    },
+  }
+
+  await writeSearchSnapshot({
+    productQuery: normalizedQuery,
+    details: '',
+    candidatePool: cachedEntry.candidatePool,
+    discoveryToken: discoveryToken || cachedEntry.discoveryToken || '',
+    results: Array.isArray(cachedEntry.results) ? cachedEntry.results : [],
+    selection: updatedSelection,
+    source: 'deep_dive_eligibility_update',
+    scope: discoveryScope,
+  })
+
+  emitEnrichmentReady(
+    discoveryToken || cachedEntry.discoveryToken || '',
+    updatedSelection.enrichment?.entries || [],
+    updatedSelection.enrichment?.model || '',
+    updatedSelection.deepDiveEligibility,
+  )
+
+  logSearchFlowEvent('deep_dive_eligibility_stored', {
+    query: normalizedQuery,
+    decisionCount: eligibilityResult.decisions.length,
+    model: eligibilityResult.model,
+  })
+
+  return eligibilityResult
 }
 
 function mergeLateProductDetailsIntoEnrichmentEntries(entries, productDetailsById) {
@@ -301,6 +379,7 @@ export async function handleEnrichmentPoll(request, response) {
   const { cachedEntry } = resolvedDiscoveryContext
 
   const enrichment = cachedEntry?.selection?.enrichment
+  const deepDiveEligibility = cachedEntry?.selection?.deepDiveEligibility || null
 
   if (!enrichment?.entries?.length) {
     sendJson(response, 200, { ready: false })
@@ -309,6 +388,7 @@ export async function handleEnrichmentPoll(request, response) {
 
   sendJson(response, 200, {
     ready: true,
+    deepDiveEligibility,
     entries: enrichment.entries,
     model: enrichment.model || '',
   })
@@ -344,6 +424,7 @@ export async function handleEnrichmentStream(request, response) {
 
   const { cachedEntry } = resolvedDiscoveryContext
   const enrichment = cachedEntry?.selection?.enrichment
+  const deepDiveEligibility = cachedEntry?.selection?.deepDiveEligibility || null
 
   response.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -357,6 +438,7 @@ export async function handleEnrichmentStream(request, response) {
   if (enrichment?.entries?.length) {
     response.write(`data: ${JSON.stringify({
       ready: true,
+      deepDiveEligibility,
       entries: enrichment.entries,
       model: enrichment.model || '',
     })}\n\n`)
@@ -387,6 +469,7 @@ export async function handleEnrichmentStream(request, response) {
     finish({
       ready: true,
       entries: payload?.entries,
+      deepDiveEligibility: payload?.deepDiveEligibility || null,
       model: payload?.model,
     })
   }

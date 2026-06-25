@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   mergeEnrichmentIntoResults,
+  mergeDeepDiveEligibilityIntoResults,
   mergeProductDetailsIntoResults,
   entriesNeedFeatureBulletHydration,
   mergeFinalizeResults,
@@ -45,6 +46,31 @@ describe('mergeEnrichmentIntoResults', () => {
     const enrichment = [{ candidate_id: '1', feature_bullets: ['a', 'b'] }]
     const merged = mergeEnrichmentIntoResults(results, enrichment)
     expect(merged[0].feature_bullets).toEqual(['a', 'b'])
+  })
+})
+
+describe('mergeDeepDiveEligibilityIntoResults', () => {
+  it('merges Deep Dive eligibility decisions by candidate id', () => {
+    const results = [{ id: '1', title: 'A' }, { id: '2', title: 'B' }]
+    const merged = mergeDeepDiveEligibilityIntoResults(results, {
+      decisions: [
+        {
+          candidate_id: '1',
+          recommendation: 'show',
+          mode: 'offers_and_reviews',
+          confidence: 'high',
+          reason: 'stable_model_multi_retailer',
+        },
+      ],
+    })
+
+    expect(merged[0].deepDiveEligibility).toEqual({
+      recommendation: 'show',
+      mode: 'offers_and_reviews',
+      confidence: 'high',
+      reason: 'stable_model_multi_retailer',
+    })
+    expect(merged[1]).toEqual({ id: '2', title: 'B' })
   })
 })
 
@@ -94,6 +120,15 @@ describe('mergeFinalizeResults', () => {
     expect(merged[0].image).toBe('img.jpg')
     expect(merged[0].link).toBe('http://a.com')
     expect(merged[0].isPrime).toBe(true)
+  })
+
+  it('preserves Prime aliases from source candidate pool data', () => {
+    const results = [{ id: '1', title: 'A', delivery: 'Free delivery' }]
+    const pool = { candidates: [{ id: '1', is_prime: true }] }
+    const merged = mergeFinalizeResults(results, pool)
+
+    expect(merged[0].isPrime).toBe(true)
+    expect(merged[0].delivery).toBe('Free delivery')
   })
 })
 

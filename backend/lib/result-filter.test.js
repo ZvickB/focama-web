@@ -521,4 +521,35 @@ describe('result filter', () => {
       'Brooks Ghost Running Shoe',
     ])
   })
+
+  it('preserves snake_case Prime eligibility from provider rows', () => {
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: [
+          createShoppingResult({
+            product_id: 'prod-prime',
+            title: 'Sony WH-1000XM5 Wireless Headphones',
+            source: 'Amazon',
+            price: '$299.99',
+            extracted_price: 299.99,
+            delivery: 'Free delivery',
+            is_prime: true,
+          }),
+        ],
+      },
+      {
+        productQuery: 'sony headphones',
+        candidatePoolSize: 20,
+        finalResultLimit: 1,
+        reasonFallback: 'Returned by the live provider route',
+      },
+    )
+
+    expect(artifacts.candidatePool.candidates[0]).toEqual(
+      expect.objectContaining({ isPrime: true, delivery: 'Free delivery' }),
+    )
+    expect(artifacts.results[0]).toEqual(
+      expect.objectContaining({ isPrime: true, delivery: 'Free delivery' }),
+    )
+  })
 })

@@ -18,7 +18,7 @@ A user-triggered action on any product in the shortlist that shows:
 ## How it works
 
 ### Trigger
-User taps a "Deep dive" button in the product modal after finalize. No automatic background work - only fires when requested.
+User taps a "Deep dive" button in the product modal after finalize. The button is hidden by default and appears only after mini writeup plus a separate deterministic prefilter + `gpt-5-mini` eligibility pass marks the product `show` or `maybe`. No automatic provider work fires before the user requests Deep Dive; eligibility only controls button visibility.
 
 ### Data flow
 1. **SerpApi Google Shopping** — one call using the product title/identity. Finds the product group and returns an Immersive token. (1 credit)
@@ -30,7 +30,7 @@ User taps a "Deep dive" button in the product modal after finalize. No automatic
 ### What the user sees
 
 **Price comparison section:**
-- Store name, price, and direct link for each offer
+- Store name, price, and direct link for each lower verified offer when the Amazon/source price is known
 - Highlight the lowest price and savings vs the Amazon price they're already looking at
 - Show currency, condition (new/refurb), and shipping when available
 
@@ -73,9 +73,16 @@ The existing Serper-based discovery layer is not needed for this flow. The deep 
 - No Serper calls
 - The existing Immersive store normalization, retailer-link-validation, and exact-product-proof logic from the hybrid pipeline can be reused for URL safety checks
 
+## Matching behavior (current)
+
+- **Layer A (Shopping product group selection):** Identity scoring picks the best Google Shopping result. Same-model ties resolve to the first result. Cross-family ties pick the top result with an `ambiguous` flag so the frontend can warn the user.
+- **Layer B (per-store offer proof):** Hard failures (marketplace label, accessory title, condition conflict, brand missing) reject the offer. Soft failures (model, capacity, generation, feature/display tier, insufficient identity) accept the offer with user-facing caveats describing what could not be confirmed.
+- **Reviews are independent of offers:** Review synthesis, critic ratings, and top insights return as `status: 'ready'` even when zero store offers beat the source price.
+
 ## Open questions
 
 1. **Subscription model:** Monthly? Per-deep-dive credits? Price point?
 2. **Free tier limit:** Current implementation is one lifetime free per account; confirm before public rollout.
 3. **Market scope:** Current implementation is US/CA only; expand only after live review.
 4. **Live-review quality:** Validate at least 20 US/CA Deep Dives before hardening paid gating.
+5. **Unknown source price behavior:** If the source product has no comparable price, v1 may still show exact verified alternate offers because there is no honest lower-price baseline.

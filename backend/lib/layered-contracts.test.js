@@ -68,6 +68,7 @@ describe('layered contracts', () => {
       rating: 4.7,
       reviewCount: 342,
       isPrime: true,
+      delivery: '',
       description: 'Lightweight stroller for flights',
       feature_bullets: ['One-hand fold', 'Carry-on friendly'],
       image: 'https://example.com/stroller.jpg',
@@ -76,6 +77,20 @@ describe('layered contracts', () => {
     })
     expect(card).not.toHaveProperty('reasons')
     expect(card).not.toHaveProperty('drawbacks')
+  })
+
+  it('preserves provider Prime aliases in finalize-fast cards', () => {
+    const card = toFinalizeFastCard({
+      id: 'prod-1',
+      title: 'Prime product',
+      source: 'Amazon',
+      price: '$99.99',
+      is_prime: true,
+      delivery: 'Free delivery',
+    })
+
+    expect(card.isPrime).toBe(true)
+    expect(card.delivery).toBe('Free delivery')
   })
 
   it('defines an enrichment contract that explains a locked shortlist without ranking it again', () => {

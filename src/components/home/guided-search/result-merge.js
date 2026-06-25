@@ -1,3 +1,13 @@
+function hasPrimeEligibility(...items) {
+  return items.some((item) => Boolean(
+    item?.isPrime ||
+    item?.is_prime ||
+    item?.primeEligible ||
+    item?.isPrimeEligible ||
+    item?.is_prime_eligible,
+  ))
+}
+
 export function mergeEnrichmentIntoResults(results, enrichmentEntries) {
   if (!Array.isArray(results) || !Array.isArray(enrichmentEntries) || enrichmentEntries.length === 0) {
     return results
@@ -21,7 +31,7 @@ export function mergeEnrichmentIntoResults(results, enrichmentEntries) {
       ...result,
       fit_reason: entry?.fit_reason || entry?.fitReason || '',
       caveat: entry?.caveat || '',
-      isPrime: Boolean(result.isPrime || entry?.isPrime || entry?.is_prime),
+      isPrime: hasPrimeEligibility(result, entry),
       delivery: entry?.delivery || result.delivery || '',
       productDescription: entry?.productDescription || entry?.product_description || result.productDescription || '',
       feature_bullets: Array.isArray(entry?.feature_bullets)
@@ -31,6 +41,43 @@ export function mergeEnrichmentIntoResults(results, enrichmentEntries) {
           : Array.isArray(result?.feature_bullets)
             ? result.feature_bullets
             : [],
+    }
+  })
+}
+
+export function mergeDeepDiveEligibilityIntoResults(results, deepDiveEligibility) {
+  const decisions = Array.isArray(deepDiveEligibility?.decisions)
+    ? deepDiveEligibility.decisions
+    : Array.isArray(deepDiveEligibility)
+      ? deepDiveEligibility
+      : []
+
+  if (!Array.isArray(results) || decisions.length === 0) {
+    return results
+  }
+
+  const decisionById = new Map(
+    decisions.map((decision) => [
+      String(decision?.candidate_id || decision?.candidateId || ''),
+      decision,
+    ]),
+  )
+
+  return results.map((result) => {
+    const decision = decisionById.get(String(result.id))
+
+    if (!decision) {
+      return result
+    }
+
+    return {
+      ...result,
+      deepDiveEligibility: {
+        recommendation: decision.recommendation || 'hide',
+        mode: decision.mode || 'hide',
+        confidence: decision.confidence || 'low',
+        reason: decision.reason || '',
+      },
     }
   })
 }
@@ -53,7 +100,7 @@ export function mergeProductDetailsIntoResults(results, productId, details) {
 
     return {
       ...result,
-      isPrime: Boolean(result.isPrime || details.isPrime || details.is_prime),
+      isPrime: hasPrimeEligibility(result, details),
       delivery: details.delivery || result.delivery || '',
       productDescription: details.productDescription || details.product_description || result.productDescription || '',
       feature_bullets: featureBullets.length > 0
@@ -101,7 +148,7 @@ export function mergeFinalizeResults(results, sourceCandidatePool) {
       ...result,
       image: sourceCandidate.image || result.image,
       link: sourceCandidate.link || result.link,
-      isPrime: Boolean(result.isPrime || sourceCandidate.isPrime),
+      isPrime: hasPrimeEligibility(result, sourceCandidate),
       productDescription: sourceCandidate.productDescription || result.productDescription || '',
     }
   })

@@ -46,6 +46,7 @@ import {
 } from '../server-helpers.js'
 import {
   runMiniEnrichmentAsync,
+  runDeepDiveEligibilityAsync,
   mergeProductDetailsIntoCandidatePool,
   applyLateProductDetailsToEnrichment,
 } from './enrichment-handler.js'
@@ -193,6 +194,12 @@ function sanitizeFinalizeCandidate(candidate, index) {
       : Number.isFinite(Number(candidate.reviewCount))
         ? Number(candidate.reviewCount)
         : null
+  const isPrime = Boolean(
+    candidate.isPrime ||
+    candidate.is_prime ||
+    candidate.primeEligible ||
+    candidate.isPrimeEligible,
+  )
 
   return {
     isValid: true,
@@ -206,7 +213,7 @@ function sanitizeFinalizeCandidate(candidate, index) {
       numericPrice,
       rating,
       reviewCount,
-      isPrime: Boolean(candidate.isPrime),
+      isPrime,
       delivery: truncateText(candidate.delivery, 160),
       tag: truncateText(candidate.tag, 120),
       extensions: sanitizeStringList(candidate.extensions, { maxItems: 6, maxItemLength: 120 }),
@@ -868,6 +875,30 @@ export async function handleFinalizeSelection(request, response) {
             discoveryToken: sanitizedDiscoveryContext.discoveryToken,
             discoveryScope: resolvedDiscoveryContext.discoveryScope,
           })
+
+          try {
+            await runDeepDiveEligibilityAsync({
+              lockedIds: selectedCandidateIds,
+              candidatePool: enrichedCandidatePool,
+              apiKey: openAiApiKey,
+              model: miniModel,
+              normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
+              discoveryToken: sanitizedDiscoveryContext.discoveryToken,
+              discoveryScope: resolvedDiscoveryContext.discoveryScope,
+            })
+          } catch (error) {
+            logSearchFlowEvent('deep_dive_eligibility_failed', {
+              query: sanitizedDiscoveryContext.normalizedQuery,
+              error: error instanceof Error ? error.message : 'Unknown error',
+              mode: 'async',
+            })
+            reportBackendError(error, {
+              label: 'deep_dive_eligibility_async',
+              query: sanitizedDiscoveryContext.normalizedQuery,
+              route: '/api/search/finalize',
+              source: 'guided_finalize_background',
+            })
+          }
 
           logSearchFlowEvent('mini_enrichment_background_completed', {
             query: sanitizedDiscoveryContext.normalizedQuery,

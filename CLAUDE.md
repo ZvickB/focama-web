@@ -141,6 +141,7 @@ Optional: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SEARCH_CACHE_TTL_MINUTES`, `AL
 
 ### Environment
 - **PowerShell on Windows** — prefer PowerShell-safe commands; never assume Unix-only shell behavior
+- **Never run `taskkill //F //IM node.exe`** — this kills ALL Node processes including Claude Code itself (which runs on Node.js). To stop a dev server, use `npx kill-port <port>` to target specific ports instead.
 - Small UI or copy changes: prefer manual verification over a full build every time
 
 ### Testing

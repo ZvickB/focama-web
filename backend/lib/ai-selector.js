@@ -75,6 +75,48 @@ function normalizeComparableText(value) {
     .trim()
 }
 
+function parseNumericPrice(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const match = String(value || '').replace(/,/g, '').match(/[0-9]+(?:\.[0-9]+)?/)
+  return match ? Number(match[0]) : null
+}
+
+const DEEP_DIVE_MODEL_TOKEN = /\b[A-Z]{1,5}[-\s]?\d{2,5}[A-Z0-9]{0,5}\b/
+const WEAK_DEEP_DIVE_TITLE = /\b(?:refill|replacement|spare|adapter|cable|cord|charger|case|cover|skin|protector|tips?|hooks?|pack of|count|ct\.?|bundle)\b/i
+const CONSUMABLE_DEEP_DIVE_TITLE = /\b(?:protein powder|supplement|vitamin|snack|coffee|tea|soap|shampoo|detergent|paper towels?|toilet paper|wipes|diapers?|batteries?)\b/i
+
+function deterministicDeepDivePrefilter(candidate) {
+  const title = String(candidate?.title || '')
+  const price = parseNumericPrice(candidate?.numericPrice ?? candidate?.price)
+  const reviewCount = Number(candidate?.reviewCount)
+  const hasMeaningfulPrice = Number.isFinite(price) && price >= 75
+  const hasBrand = Boolean(candidate?.brand || candidate?.match_identifier?.brand || candidate?.matchIdentifier?.brand)
+  const hasModelSignal = Boolean(
+    candidate?.match_identifier?.model_number ||
+    candidate?.matchIdentifier?.model_number ||
+    candidate?.matchIdentifier?.modelNumber ||
+    DEEP_DIVE_MODEL_TOKEN.test(title),
+  )
+  const hasReviewSignal = Number.isFinite(reviewCount) && reviewCount >= 50
+
+  if (!hasMeaningfulPrice) {
+    return { passed: false, reason: 'low_value' }
+  }
+
+  if (WEAK_DEEP_DIVE_TITLE.test(title) || CONSUMABLE_DEEP_DIVE_TITLE.test(title)) {
+    return {
+      passed: false,
+      reason: WEAK_DEEP_DIVE_TITLE.test(title) ? 'accessory_or_replacement' : 'variant_pack_size_risk',
+    }
+  }
+
+  if (!hasBrand && !hasModelSignal && !hasReviewSignal) {
+    return { passed: false, reason: 'weak_identity' }
+  }
+
+  return { passed: true, reason: 'prefilter_passed' }
+}
+
 function getComparableTokens(value) {
   return normalizeComparableText(value)
     .split(' ')
@@ -380,6 +422,82 @@ function buildMiniEnrichmentSchema() {
   }
 }
 
+function buildDeepDiveEligibilityPrompt({ candidates, query, details, enrichmentEntries }) {
+  const enrichmentById = new Map(
+    (Array.isArray(enrichmentEntries) ? enrichmentEntries : []).map((entry) => [
+      String(entry?.candidate_id || entry?.candidateId || ''),
+      entry,
+    ]),
+  )
+  const payload = candidates.map((candidate) => {
+    const enrichment = enrichmentById.get(String(candidate.id)) || {}
+    return {
+      candidate_id: String(candidate.id),
+      title: candidate.title,
+      source: candidate.source,
+      price: candidate.price,
+      rating: candidate.rating,
+      reviewCount: candidate.reviewCount,
+      fit_reason: enrichment.fit_reason || enrichment.fitReason || '',
+      caveat: enrichment.caveat || '',
+      feature_bullets: Array.isArray(candidate.feature_bullets) ? candidate.feature_bullets.slice(0, 6) : [],
+      product_description: truncateText(candidate.productDescription, 1000),
+    }
+  })
+
+  return [
+    'Decide whether each product is worth showing a user-triggered Deep Dive button.',
+    '',
+    'Deep Dive is useful when the product is likely sold by multiple reputable stores, has a stable identity such as brand/model/generation/size/capacity/product line, prices may vary enough to matter, or external reviews would be useful.',
+    'Deep Dive is usually not useful for cheap generic commodities, consumables with pack-size/count ambiguity, marketplace-only or handmade goods, vague products with no stable identity, accessories/replacements, or products where alternate offers are likely mismatched.',
+    'This decision only controls whether the button appears. Backend proof still validates actual offers and reviews later.',
+    '',
+    'Return show when the Deep Dive is likely worthwhile, maybe when reviews-only or uncertain but plausibly helpful, and hide when it is unlikely to help.',
+    '',
+    `Product query: ${query}`,
+    `User context: ${details || 'None provided.'}`,
+    '',
+    'Products:',
+    JSON.stringify(payload),
+  ].join('\n')
+}
+
+function buildDeepDiveEligibilitySchema() {
+  return {
+    type: 'object',
+    properties: {
+      decisions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            candidate_id: { type: 'string' },
+            recommendation: { type: 'string', enum: ['show', 'maybe', 'hide'] },
+            mode: { type: 'string', enum: ['offers_and_reviews', 'reviews_only', 'hide'] },
+            confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
+            reason: {
+              type: 'string',
+              enum: [
+                'stable_model_multi_retailer',
+                'reviews_only_likely',
+                'generic_low_value',
+                'variant_pack_size_risk',
+                'weak_identity',
+                'accessory_or_replacement',
+                'marketplace_or_source_limited',
+              ],
+            },
+          },
+          required: ['candidate_id', 'recommendation', 'mode', 'confidence', 'reason'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['decisions'],
+    additionalProperties: false,
+  }
+}
+
 export async function haikuLockWinnersAndBadges(
   {
     candidatePool,
@@ -534,5 +652,81 @@ export async function miniEnrichSelectedCandidates(
   const preservedOrder = lockedIds.join(',') === enrichedLockedIds.join(',')
 
   return { model, enriched, enrichedIds, usage, preservedOrder }
+}
+
+export async function assessDeepDiveEligibility(
+  {
+    lockedIds,
+    candidatePool,
+    enrichmentEntries = [],
+    apiKey,
+    model = DEFAULT_OPENAI_MODEL,
+  },
+  fetchImpl = fetch,
+) {
+  if (!Array.isArray(lockedIds) || lockedIds.length === 0) {
+    return { model, decisions: [], usage: null }
+  }
+
+  const candidateById = new Map(
+    (Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []).map((candidate) => [
+      String(candidate.id),
+      candidate,
+    ]),
+  )
+  const baseDecisions = []
+  const candidatesForAi = []
+
+  for (const id of lockedIds) {
+    const candidate = candidateById.get(String(id))
+    if (!candidate) continue
+
+    const prefilter = deterministicDeepDivePrefilter(candidate)
+    if (!prefilter.passed) {
+      baseDecisions.push({
+        candidate_id: String(candidate.id),
+        recommendation: 'hide',
+        mode: 'hide',
+        confidence: 'high',
+        reason: prefilter.reason === 'low_value' ? 'generic_low_value' : prefilter.reason,
+      })
+      continue
+    }
+
+    candidatesForAi.push(candidate)
+  }
+
+  if (candidatesForAi.length === 0) {
+    return { model, decisions: baseDecisions, usage: null }
+  }
+
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is missing from the root .env file.')
+  }
+
+  const { parsed, usage } = await requestStructuredSelection(
+    {
+      prompt: buildDeepDiveEligibilityPrompt({
+        candidates: candidatesForAi,
+        query: candidatePool.query,
+        details: candidatePool.details || '',
+        enrichmentEntries,
+      }),
+      schema: buildDeepDiveEligibilitySchema(),
+      responseName: 'deep_dive_eligibility',
+      apiKey,
+      model,
+    },
+    fetchImpl,
+  )
+  const allowedIds = new Set(candidatesForAi.map((candidate) => String(candidate.id)))
+  const aiDecisions = (Array.isArray(parsed?.decisions) ? parsed.decisions : [])
+    .filter((decision) => allowedIds.has(String(decision?.candidate_id || '')))
+
+  return {
+    model,
+    decisions: [...baseDecisions, ...aiDecisions],
+    usage,
+  }
 }
 

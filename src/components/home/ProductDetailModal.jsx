@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
-import { ArrowUpRight, CheckCircle2, ChevronDown, Info, LoaderCircle, SearchCheck, Star, X } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, CheckCircle2, ChevronDown, Info, LoaderCircle, SearchCheck, Star, X } from 'lucide-react'
 
 import logo from '@/assets/logo_master_version.svg'
 import { Button } from '@/components/ui/button.jsx'
@@ -218,224 +218,49 @@ function formatDeepDiveMoney(value, currency = 'USD') {
 
 function parseReviewSignal(value) {
   const text = String(value || '').replace(/\s+/g, ' ').trim()
-  const match = text.match(/^(.+?)\s*\((.+)\)$/)
+  const dashSplit = text.match(/^(.+?)\s*—\s*(.+)$/)
+
+  if (dashSplit) {
+    return { label: dashSplit[1].trim(), detail: dashSplit[2].trim() }
+  }
+
+  const parenSplit = text.match(/^(.+?)\s*\((.+)\)$/)
 
   return {
-    detail: match ? match[2].trim() : '',
-    label: (match ? match[1] : text).trim(),
+    detail: parenSplit ? parenSplit[2].trim() : '',
+    label: (parenSplit ? parenSplit[1] : text).trim(),
   }
 }
 
-function DeepDivePanel({
-  amazonDomain,
-  discoveryToken,
-  item,
-  searchQuery,
-}) {
-  const { session, user } = useAuth()
-  const [deepDive, setDeepDive] = useState(null)
-  const [errorMessage, setErrorMessage] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const hasLoaded = Boolean(deepDive || errorMessage)
-  const offers = Array.isArray(deepDive?.offers) ? deepDive.offers : []
-  const reviews = deepDive?.reviews || {}
-  const limitedMessage = deepDive?.limitedData?.message || ''
-  const isGated = deepDive?.status === 'gated'
+function DeepDiveSourceNote({ product }) {
+  const dimensions = Array.isArray(product?.variantDimensions) ? product.variantDimensions : []
+  const specific = dimensions
+    .filter((d) => d.yourPick)
+    .map((d) => `your pick is ${d.yourPick} — reviews may include other ${d.dimension}s`)
+  const unmatched = dimensions
+    .filter((d) => !d.yourPick && d.optionCount > 1)
+    .map((d) => `${d.dimension} (${d.optionCount} options)`)
 
-  useEffect(() => {
-    setDeepDive(null)
-    setErrorMessage('')
-    setIsLoading(false)
-  }, [item?.id])
-
-  async function handleDeepDiveClick() {
-    if (!user || !session?.access_token) {
-      window.dispatchEvent(new CustomEvent('focamai:open-auth'))
-      return
-    }
-
-    if (!discoveryToken || !searchQuery || !item?.id) {
-      setErrorMessage('Deep Dive needs a finalized search session before it can run.')
-      return
-    }
-
-    setErrorMessage('')
-    setIsLoading(true)
-
-    try {
-      const payload = await fetchProductDeepDive({
-        amazonDomain,
-        candidateId: item.id,
-        discoveryToken,
-        query: searchQuery,
-        token: session.access_token,
-      })
-      setDeepDive(payload)
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Deep Dive was limited this time.')
-    } finally {
-      setIsLoading(false)
-    }
+  if (specific.length === 0 && unmatched.length === 0) {
+    return (
+      <p className="text-xs leading-5 text-slate-400">
+        Reviews and prices are from Google Shopping for this product family. Check the store page before buying.
+      </p>
+    )
   }
 
   return (
-    <section className="rounded-2xl border border-[#d9e6e8] bg-white/94 p-4 shadow-[0_14px_36px_-30px_rgba(15,97,117,0.18)]">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-primary">
-            <SearchCheck className="h-4 w-4" />
-            Deep dive
-          </p>
-          <p className="text-sm leading-6 text-slate-600">
-            Check direct store offers and review signals for this exact pick.
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={isLoading}
-          className="h-10 shrink-0 rounded-full border-[#cfe1de] bg-white px-4 text-sm text-primary hover:bg-[#f5fbf9]"
-          onClick={handleDeepDiveClick}
-        >
-          {isLoading ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
-          {hasLoaded ? 'Refresh panel' : 'Deep dive'}
-        </Button>
-      </div>
-
-      {isLoading ? (
-        <div
-          className="relative mt-4 overflow-hidden rounded-2xl border border-[#d9e6e8] bg-[#f6fbfa] px-4 py-3 text-sm text-slate-600"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="pointer-events-none absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/80 to-transparent animate-shimmer" />
-          <div className="relative flex items-center gap-3">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary/70 animate-soft-pulse" />
-            <span>Checking store offers and review signals...</span>
-          </div>
-          <div className="relative mt-3 grid grid-cols-[1fr_3rem] gap-3">
-            <div className="h-2 rounded-full bg-[#dcebea]" />
-            <div className="h-2 rounded-full bg-[#e9dfd1]" />
-          </div>
-        </div>
-      ) : null}
-
-      {errorMessage ? (
-        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-          {errorMessage}
-        </div>
-      ) : null}
-
-      {isGated ? (
-        <div className="mt-4 rounded-2xl border border-[#e5dacb] bg-[#fbf7f1] px-4 py-3 text-sm leading-6 text-slate-700">
-          {deepDive.error || 'More Deep Dives will be available soon.'}
-        </div>
-      ) : null}
-
-      {limitedMessage && !isGated ? (
-        <div className="mt-4 rounded-2xl border border-[#e5dacb] bg-[#fbf7f1] px-4 py-3 text-sm leading-6 text-slate-600">
-          <p className="font-semibold text-slate-800">Store offers limited</p>
-          <p className="mt-1">{limitedMessage}</p>
-        </div>
-      ) : null}
-
-      {offers.length > 0 ? (
-        <div className="mt-4 space-y-3">
-          <p className="text-sm font-semibold text-slate-900">Store offers</p>
-          <div className="space-y-2">
-            {offers.map((offer, index) => (
-              <div
-                key={`${offer.retailer}-${offer.url}-${index}`}
-                className="rounded-2xl border border-[#edf3f3] bg-[#f8fcfb] p-3"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">{offer.retailer}</p>
-                    <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-slate-500">{offer.title}</p>
-                    {offer.savingsVsAmazon?.amount ? (
-                      <p className="mt-1 text-xs font-medium text-primary">
-                        Saves {formatDeepDiveMoney(offer.savingsVsAmazon.amount, offer.currency)}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="shrink-0 text-left sm:text-right">
-                    <p className="text-sm font-semibold text-primary">
-                      {formatDeepDiveMoney(offer.knownTotal || offer.price, offer.currency)}
-                    </p>
-                    {offer.shipping ? (
-                      <p className="text-xs text-slate-400">{offer.shipping}</p>
-                    ) : null}
-                    <a
-                      href={offer.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900"
-                    >
-                      Open store
-                      <ArrowUpRight className="h-3.5 w-3.5" />
-                    </a>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {reviews.summary ? (
-        <div className="mt-4 space-y-2 border-t border-[#edf3f3] pt-4">
-          <p className="text-sm font-semibold text-slate-900">What reviewers say</p>
-          <p className="text-sm leading-6 text-slate-600">{reviews.summary}</p>
-          {Array.isArray(reviews.sources) && reviews.sources.length > 0 ? (
-            <p className="text-xs leading-5 text-slate-400">
-              Sources: {reviews.sources.join(', ')}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      {Array.isArray(reviews.topInsights) && reviews.topInsights.length > 0 ? (
-        <div className="mt-4 space-y-3 border-t border-[#edf3f3] pt-4">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Review signals</p>
-            <p className="mt-0.5 text-xs leading-5 text-slate-500">
-              Themes Google surfaced from available product reviews.
-            </p>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {reviews.topInsights.slice(0, 6).map((insight, index) => (
-              <div
-                key={`${insight.text}-${index}`}
-                className="rounded-2xl border border-[#d9e6e8] bg-[#f8fcfb] px-3 py-2.5"
-              >
-                <p className="text-sm font-semibold leading-5 text-slate-800">
-                  {parseReviewSignal(insight.text).label}
-                </p>
-                {parseReviewSignal(insight.text).detail ? (
-                  <p className="mt-0.5 text-xs leading-5 text-slate-500">
-                    {parseReviewSignal(insight.text).detail}
-                  </p>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {Array.isArray(reviews.criticRatings) && reviews.criticRatings.length > 0 ? (
-        <div className="mt-4 space-y-2 border-t border-[#edf3f3] pt-4">
-          <p className="text-sm font-semibold text-slate-900">Critic ratings</p>
-          <div className="space-y-1">
-            {reviews.criticRatings.slice(0, 4).map((rating, index) => (
-              <p key={`${rating.source}-${index}`} className="text-sm leading-6 text-slate-600">
-                <span className="font-medium text-slate-800">{rating.source || 'Review source'}</span>
-                {rating.rating ? `: ${rating.rating}` : ''}
-              </p>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </section>
+    <div className="space-y-1 text-xs leading-5 text-slate-400">
+      <p>Reviews and prices are from Google Shopping for this product family:</p>
+      <ul className="list-disc pl-4 space-y-0.5">
+        {specific.map((note) => (
+          <li key={note} className="capitalize">{note}</li>
+        ))}
+        {unmatched.length > 0 ? (
+          <li>This product comes in multiple {unmatched.join(', ')} — reviews cover all of them</li>
+        ) : null}
+      </ul>
+    </div>
   )
 }
 
@@ -508,8 +333,32 @@ export function ProductDetailModal({
   const [bulletsExpanded, setBulletsExpanded] = useState(false)
   const [fullTitleExpanded, setFullTitleExpanded] = useState(false)
   const [imgError, setImgError] = useState(false)
+  const [activeView, setActiveView] = useState('product')
+  const [deepDive, setDeepDive] = useState(null)
+  const [deepDiveError, setDeepDiveError] = useState('')
+  const [deepDiveLoading, setDeepDiveLoading] = useState(false)
+  const [showingUsFallback, setShowingUsFallback] = useState(false)
+  const { session, user } = useAuth()
   const dialogRef = useRef(null)
   const previouslyFocusedElementRef = useRef(null)
+
+  const ddOffers = Array.isArray(deepDive?.offers) ? deepDive.offers : []
+  const ddReviews = deepDive?.reviews || {}
+  const ddLimitedMessage = deepDive?.limitedData?.message || ''
+  const ddIsGated = deepDive?.status === 'gated'
+  const ddIsAmbiguous = Boolean(deepDive?.ambiguous)
+  const ddHasLoaded = Boolean(deepDive || deepDiveError)
+  const isCanadianMarket = /amazon\.ca/i.test(amazonDomain)
+  const canOfferUsFallback = isCanadianMarket && ddHasLoaded && !ddIsGated && !ddLimitedMessage && !deepDiveLoading && ddOffers.length === 0 && !showingUsFallback
+  const deepDiveEligibility = item?.deepDiveEligibility || null
+  const canShowDeepDiveButton =
+    showRecommendationAnalysis &&
+    ['show', 'maybe'].includes(deepDiveEligibility?.recommendation)
+  const deepDiveButtonLabel = ddHasLoaded
+    ? 'Back to Deep Dive'
+    : deepDiveEligibility?.recommendation === 'maybe' || deepDiveEligibility?.mode === 'reviews_only'
+      ? 'Check reviews and other stores'
+      : 'Deep dive — store prices and reviews'
 
   useEffect(() => {
     previouslyFocusedElementRef.current = document.activeElement
@@ -581,12 +430,82 @@ export function ProductDetailModal({
       setBulletsExpanded(false)
       setFullTitleExpanded(false)
       setImgError(false)
+      setActiveView('product')
+      setDeepDive(null)
+      setDeepDiveError('')
+      setDeepDiveLoading(false)
+      setShowingUsFallback(false)
     }, 0)
 
     return () => {
       window.clearTimeout(resetTimer)
     }
   }, [item?.id])
+
+  async function fetchDeepDive() {
+    if (!session?.access_token || !discoveryToken || !searchQuery || !item?.id) return
+
+    setDeepDiveError('')
+    setDeepDiveLoading(true)
+
+    try {
+      const payload = await fetchProductDeepDive({
+        amazonDomain,
+        candidateId: item.id,
+        discoveryToken,
+        query: searchQuery,
+        token: session.access_token,
+      })
+      setDeepDive(payload)
+    } catch (error) {
+      setDeepDiveError(error instanceof Error ? error.message : 'Deep Dive was limited this time.')
+    } finally {
+      setDeepDiveLoading(false)
+    }
+  }
+
+  function handleDeepDiveClick() {
+    if (!user || !session?.access_token) {
+      window.dispatchEvent(new CustomEvent('focamai:open-auth'))
+      return
+    }
+
+    if (!discoveryToken || !searchQuery || !item?.id) {
+      setDeepDiveError('Deep Dive needs a finalized search session before it can run.')
+      setActiveView('deepdive')
+      return
+    }
+
+    setActiveView('deepdive')
+    if (!deepDive) fetchDeepDive()
+  }
+
+  async function handleUsFallbackClick() {
+    if (!session?.access_token || !item?.id) return
+
+    setDeepDiveLoading(true)
+    setShowingUsFallback(true)
+
+    try {
+      const payload = await fetchProductDeepDive({
+        amazonDomain: 'amazon.com',
+        candidateId: item.id,
+        crossMarketFallback: true,
+        discoveryToken,
+        query: searchQuery,
+        token: session.access_token,
+      })
+      setDeepDive((prev) => ({
+        ...prev,
+        offers: Array.isArray(payload?.offers) ? payload.offers : [],
+        ambiguous: prev?.ambiguous || payload?.ambiguous,
+      }))
+    } catch {
+      setDeepDiveError('Could not load US retailer prices.')
+    } finally {
+      setDeepDiveLoading(false)
+    }
+  }
 
   if (!item) {
     return null
@@ -678,86 +597,314 @@ export function ProductDetailModal({
             className="relative flex flex-col gap-4 pr-2 sm:pr-3 lg:col-start-2 lg:min-h-0 lg:overflow-y-auto lg:pr-4"
             style={{ scrollbarGutter: 'stable' }}
           >
-            <div className="space-y-1">
-              <h2
-                id="product-detail-title"
-                className="text-xl font-semibold leading-snug tracking-tight text-slate-900 sm:text-2xl"
-              >
-                {displayTitle || item.title}
-              </h2>
-              {hasCleanedTitle ? (
-                <div className="max-w-full">
+            {activeView === 'deepdive' ? (
+              <>
+                <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1 rounded-full py-0 text-xs font-medium text-slate-500 transition-colors hover:text-slate-700"
-                    aria-expanded={fullTitleExpanded}
-                    onClick={() => setFullTitleExpanded((currentValue) => !currentValue)}
+                    className="inline-flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-slate-700"
+                    onClick={() => setActiveView('product')}
                   >
-                    {fullTitleExpanded ? 'Hide full title' : fullTitleLabel}
-                    <ChevronDown
-                      className={`h-3 w-3 transition-transform duration-200 ${
-                        fullTitleExpanded ? 'rotate-180' : ''
-                      }`}
-                    />
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to product
                   </button>
-                  {fullTitleExpanded ? (
-                    <p className="mt-0.5 text-xs leading-5 text-slate-500">{rawTitle}</p>
+                  {ddHasLoaded && !deepDiveLoading ? (
+                    <button
+                      type="button"
+                      className="ml-auto text-xs text-slate-400 transition-colors hover:text-slate-600"
+                      onClick={fetchDeepDive}
+                    >
+                      Refresh
+                    </button>
                   ) : null}
                 </div>
-              ) : null}
-              <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
-                <div className="flex items-center gap-0.5">
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <Star
-                      key={index}
-                      className={`h-3.5 w-3.5 ${
-                        index < Math.round(getRatingValue(item.rating) || 0)
-                          ? 'fill-current text-amber-500'
-                          : 'text-[#d4c5b2]'
-                      }`}
-                    />
-                  ))}
+
+                <div className="rounded-2xl border border-[#eee5da] bg-[#fbf7f1] px-3 py-2.5">
+                  <p className="text-sm font-semibold text-slate-900 line-clamp-1">{displayTitle || item.title}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">{displayPrice} on {retailerLabel || 'Amazon'}</p>
                 </div>
-                <span className="text-sm text-slate-500">
-                  {getRatingValue(item.rating)?.toFixed(1) || 'No rating'} - {formatReviewCount(item.reviewCount)}
-                </span>
-                {item.badgeLabel ? (
-                  <span className="rounded-full border border-[#e6d8c5] bg-white/90 px-2.5 py-0.5 text-xs font-medium text-[#80573f]">
-                    {item.badgeLabel}
-                  </span>
+
+                {deepDiveLoading ? (
+                  <div
+                    className="relative overflow-hidden rounded-2xl border border-[#d9e6e8] bg-[#f6fbfa] px-4 py-3 text-sm text-slate-600"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <div className="pointer-events-none absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/80 to-transparent animate-shimmer" />
+                    <div className="relative flex items-center gap-3">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary/70 animate-soft-pulse" />
+                      <span>Checking store offers and review signals...</span>
+                    </div>
+                    <div className="relative mt-3 grid grid-cols-[1fr_3rem] gap-3">
+                      <div className="h-2 rounded-full bg-[#dcebea]" />
+                      <div className="h-2 rounded-full bg-[#e9dfd1]" />
+                    </div>
+                  </div>
                 ) : null}
-              </div>
-            </div>
 
-            <ProductFacts displayPrice={displayPrice} item={item} />
+                {deepDiveError ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+                    {deepDiveError}
+                  </div>
+                ) : null}
 
-            {showRecommendationAnalysis ? (
-              <ReasoningPanel
-                caveat={caveat}
-                fitReason={fitReason}
-                isEnrichmentSettled={isEnrichmentSettled}
-              />
-            ) : null}
+                {ddIsGated ? (
+                  <div className="rounded-2xl border border-[#e5dacb] bg-[#fbf7f1] px-4 py-3 text-sm leading-6 text-slate-700">
+                    {deepDive.error || 'More Deep Dives will be available soon.'}
+                  </div>
+                ) : null}
 
-            {showRecommendationAnalysis ? (
-              <DeepDivePanel
-                amazonDomain={amazonDomain}
-                discoveryToken={discoveryToken}
-                item={item}
-                searchQuery={searchQuery}
-              />
-            ) : null}
+                {ddLimitedMessage && !ddIsGated ? (
+                  <div className="rounded-2xl border border-[#e5dacb] bg-[#fbf7f1] px-4 py-3 text-sm leading-6 text-slate-600">
+                    <p className="font-semibold text-slate-800">Store offers limited</p>
+                    <p className="mt-1">{ddLimitedMessage}</p>
+                  </div>
+                ) : null}
 
-            <ProductNotes
-              bulletsExpanded={bulletsExpanded}
-              displayedBullets={displayedBullets}
-              featureBullets={featureBullets}
-              itemId={item.id}
-              onExpand={() => setBulletsExpanded(true)}
-              shouldCollapseBullets={shouldCollapseBullets}
-              userFacingDescription={userFacingDescription}
-            />
+                {ddIsAmbiguous && ddHasLoaded && !ddIsGated ? (
+                  <p className="text-xs leading-5 text-amber-700">
+                    Google Shopping returned multiple similar products. The reviews and offers below may cover a different color, size, or edition of this product — not just the exact one you picked.
+                  </p>
+                ) : null}
 
+                {canOfferUsFallback ? (
+                  <div className="rounded-2xl border border-[#e5dacb] bg-[#fbf7f1] px-4 py-3">
+                    <p className="text-sm leading-6 text-slate-700">No cheaper prices from Canadian retailers.</p>
+                    <button
+                      type="button"
+                      className="mt-2 text-sm font-semibold text-primary hover:text-primary/80 transition-colors"
+                      onClick={handleUsFallbackClick}
+                    >
+                      Show US retailer prices instead
+                    </button>
+                  </div>
+                ) : null}
+
+                {ddOffers.length > 0 ? (
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold text-slate-900">
+                      {showingUsFallback ? 'US store offers (USD)' : 'Store offers'}
+                    </p>
+                    <div className="space-y-2">
+                      {ddOffers.map((offer, index) => (
+                        <div
+                          key={`${offer.retailer}-${offer.url}-${index}`}
+                          className="rounded-2xl border border-[#edf3f3] bg-[#f8fcfb] p-3"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold text-slate-900">{offer.retailer}</p>
+                              {offer.savingsVsAmazon?.amount ? (
+                                <p className="mt-0.5 text-xs font-medium text-primary">
+                                  Saves {formatDeepDiveMoney(offer.savingsVsAmazon.amount, offer.currency)}
+                                </p>
+                              ) : null}
+                              {Array.isArray(offer.caveats) && offer.caveats.length > 0 ? (
+                                <p className="mt-0.5 text-xs leading-5 text-amber-700">
+                                  {offer.caveats[0]}
+                                </p>
+                              ) : null}
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-sm font-semibold text-primary">
+                                {formatDeepDiveMoney(offer.knownTotal || offer.price, offer.currency)}
+                              </p>
+                              {offer.shipping ? (
+                                <p className="text-xs text-slate-400">{offer.shipping}</p>
+                              ) : null}
+                              <a
+                                href={offer.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800"
+                              >
+                                Visit
+                                <ArrowUpRight className="h-3 w-3" />
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {ddReviews.summary ? (
+                  <div className="space-y-2 border-t border-[#edf3f3] pt-4">
+                    <p className="text-sm font-semibold text-slate-900">What reviewers say</p>
+                    <p className="text-sm leading-6 text-slate-600">{ddReviews.summary}</p>
+                    {Array.isArray(ddReviews.sources) && ddReviews.sources.length > 0 ? (
+                      <p className="text-xs leading-5 text-slate-400">
+                        Sources: {ddReviews.sources.join(', ')}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {Array.isArray(ddReviews.topInsights) && ddReviews.topInsights.length > 0 ? (
+                  <div className="space-y-3 border-t border-[#edf3f3] pt-4">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Review signals</p>
+                      <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                        Themes Google surfaced from available product reviews.
+                      </p>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {ddReviews.topInsights.slice(0, 6).map((insight, index) => (
+                        <div
+                          key={`${insight.text}-${index}`}
+                          className="rounded-2xl border border-[#d9e6e8] bg-[#f8fcfb] px-3 py-2.5"
+                        >
+                          <p className="text-sm font-semibold leading-5 text-slate-800">
+                            {parseReviewSignal(insight.text).label}
+                          </p>
+                          {parseReviewSignal(insight.text).detail ? (
+                            <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                              {parseReviewSignal(insight.text).detail}
+                            </p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {Array.isArray(ddReviews.criticRatings) && ddReviews.criticRatings.length > 0 ? (
+                  <div className="space-y-2 border-t border-[#edf3f3] pt-4">
+                    <p className="text-sm font-semibold text-slate-900">Critic ratings</p>
+                    <div className="space-y-1">
+                      {ddReviews.criticRatings.slice(0, 4).map((rating, index) => (
+                        <p key={`${rating.source}-${index}`} className="text-sm leading-6 text-slate-600">
+                          <span className="font-medium text-slate-800">{rating.source || 'Review source'}</span>
+                          {rating.rating ? `: ${rating.rating}` : ''}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {Array.isArray(ddReviews.userReviews) && ddReviews.userReviews.length > 0 ? (
+                  <div className="space-y-3 border-t border-[#edf3f3] pt-4">
+                    <p className="text-sm font-semibold text-slate-900">Buyer reviews</p>
+                    <div className="space-y-2">
+                      {ddReviews.userReviews.slice(0, 4).map((review, index) => (
+                        <div
+                          key={`${review.source}-${review.date}-${index}`}
+                          className="rounded-2xl border border-[#edf3f3] bg-[#f8fcfb] px-3 py-2.5"
+                        >
+                          {review.rating ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-medium text-amber-600">
+                                {'★'.repeat(Math.min(Math.max(Math.round(Number(review.rating)), 0), 5))}
+                                {'☆'.repeat(5 - Math.min(Math.max(Math.round(Number(review.rating)), 0), 5))}
+                              </span>
+                              <span className="text-xs text-slate-400">
+                                {[review.source, review.date].filter(Boolean).join(' · ')}
+                              </span>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400">
+                              {[review.source, review.date].filter(Boolean).join(' · ')}
+                            </p>
+                          )}
+                          <p className="mt-1 text-sm leading-6 text-slate-600 line-clamp-3">{review.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {ddHasLoaded && !ddIsGated && !ddLimitedMessage ? (
+                  <div className="border-t border-[#edf3f3] pt-3">
+                    <DeepDiveSourceNote product={deepDive?.product} />
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  <h2
+                    id="product-detail-title"
+                    className="text-xl font-semibold leading-snug tracking-tight text-slate-900 sm:text-2xl"
+                  >
+                    {displayTitle || item.title}
+                  </h2>
+                  {hasCleanedTitle ? (
+                    <div className="max-w-full">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-full py-0 text-xs font-medium text-slate-500 transition-colors hover:text-slate-700"
+                        aria-expanded={fullTitleExpanded}
+                        onClick={() => setFullTitleExpanded((currentValue) => !currentValue)}
+                      >
+                        {fullTitleExpanded ? 'Hide full title' : fullTitleLabel}
+                        <ChevronDown
+                          className={`h-3 w-3 transition-transform duration-200 ${
+                            fullTitleExpanded ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </button>
+                      {fullTitleExpanded ? (
+                        <p className="mt-0.5 text-xs leading-5 text-slate-500">{rawTitle}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
+                    <div className="flex items-center gap-0.5">
+                      {Array.from({ length: 5 }).map((_, index) => (
+                        <Star
+                          key={index}
+                          className={`h-3.5 w-3.5 ${
+                            index < Math.round(getRatingValue(item.rating) || 0)
+                              ? 'fill-current text-amber-500'
+                              : 'text-[#d4c5b2]'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-sm text-slate-500">
+                      {getRatingValue(item.rating)?.toFixed(1) || 'No rating'} - {formatReviewCount(item.reviewCount)}
+                    </span>
+                    {item.badgeLabel ? (
+                      <span className="rounded-full border border-[#e6d8c5] bg-white/90 px-2.5 py-0.5 text-xs font-medium text-[#80573f]">
+                        {item.badgeLabel}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                <ProductFacts displayPrice={displayPrice} item={item} />
+
+                {showRecommendationAnalysis ? (
+                  <ReasoningPanel
+                    caveat={caveat}
+                    fitReason={fitReason}
+                    isEnrichmentSettled={isEnrichmentSettled}
+                  />
+                ) : null}
+
+                <ProductNotes
+                  bulletsExpanded={bulletsExpanded}
+                  displayedBullets={displayedBullets}
+                  featureBullets={featureBullets}
+                  itemId={item.id}
+                  onExpand={() => setBulletsExpanded(true)}
+                  shouldCollapseBullets={shouldCollapseBullets}
+                  userFacingDescription={userFacingDescription}
+                />
+
+                {canShowDeepDiveButton ? (
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#cfe1de] bg-white px-4 py-3 text-sm font-semibold text-primary shadow-[0_8px_24px_-18px_rgba(15,97,117,0.14)] transition hover:bg-[#f5fbf9]"
+                    onClick={handleDeepDiveClick}
+                  >
+                    <SearchCheck className="h-4 w-4" />
+                    {deepDiveButtonLabel}
+                  </button>
+                ) : null}
+              </>
+            )}
           </div>
         </div>
         <RetailerDecisionBar

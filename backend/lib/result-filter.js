@@ -449,6 +449,13 @@ function buildAiCandidate(item, index, score, matchSignals, reasonFallback) {
   const duplicateFamilyKey = buildDuplicateFamilyKey(normalized.title)
   const attributes = extractAttributes(item)
   const trustSignals = buildTrustSignals(item, normalized.description)
+  const isPrime = Boolean(
+    item.isPrime ||
+    item.is_prime ||
+    item.primeEligible ||
+    item.isPrimeEligible ||
+    item.is_prime_eligible,
+  )
 
   return {
     id: normalized.id,
@@ -461,7 +468,7 @@ function buildAiCandidate(item, index, score, matchSignals, reasonFallback) {
     rating: normalized.rating,
     reviewCount: normalized.reviewCount,
     amazonPosition: typeof item.position === 'number' ? item.position : null,
-    isPrime: Boolean(item.isPrime),
+    isPrime,
     delivery: item.delivery || '',
     tag: item.tag || '',
     extensions: Array.isArray(item.extensions) ? item.extensions.filter(Boolean) : [],

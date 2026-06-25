@@ -155,15 +155,38 @@ function sameIdentityFamily(product, left, right) {
   return normalizeEvidence(left?.title) === normalizeEvidence(right?.title)
 }
 
-export function selectUniqueShoppingProduct(product, offers) {
-  const ranked = (Array.isArray(offers) ? offers : [])
+const TRUSTED_SOURCE_PREFIXES = [
+  'best buy', 'target', 'walmart', 'costco', 'staples', 'home depot', 'lowes',
+  'b&h photo', 'bhphotovideo', 'adorama', 'newegg', 'amazon', 'dell',
+  'sweetwater', 'macys', 'macy\'s', 'pc richard', 'verizon', 'sony',
+  'apple', 'samsung', 'dyson', 'kitchenaid', 'lenovo', 'hp', 'lg',
+  'canadian tire', 'london drugs', 'visions',
+  'kohl\'s', 'kohls', 'overstock', 'office depot', 'abt',
+]
+
+function isTrustedSource(source) {
+  const normalized = clean(source).toLowerCase()
+  return TRUSTED_SOURCE_PREFIXES.some((prefix) => normalized.startsWith(prefix))
+}
+
+export function selectUniqueShoppingProduct(product, offers, { preferTrustedSources = true } = {}) {
+  const scored = (Array.isArray(offers) ? offers : [])
     .map((offer) => ({ offer, ...scoreShoppingIdentity(product, offer) }))
     .filter((entry) => entry.accepted && (entry.offer?.immersive_url || entry.offer?.immersive_product_page_token))
-    .sort((a, b) => b.score - a.score)
+
+  const ranked = scored
+    .map((entry) => ({
+      ...entry,
+      trustedSource: preferTrustedSources && isTrustedSource(entry.offer?.source),
+    }))
+    .sort((a, b) => (
+      b.score - a.score ||
+      Number(b.trustedSource) - Number(a.trustedSource)
+    ))
 
   if (!ranked.length) return { offer: null, reason: 'no_exact_shopping_product', ranked }
   if (ranked[1] && ranked[1].score === ranked[0].score && !sameIdentityFamily(product, ranked[0].offer, ranked[1].offer)) {
-    return { offer: null, reason: 'ambiguous_shopping_product', ranked }
+    return { offer: ranked[0].offer, reason: 'ambiguous_top_pick', ambiguous: true, ranked }
   }
   return { offer: ranked[0].offer, reason: 'selected', ranked }
 }
@@ -233,6 +256,8 @@ function addOptionalAttributeProof({ evidence, field, immersiveTitle, product, p
   }
 }
 
+const HARD_FAILURE_SET = new Set(['marketplace_offer', 'accessory_like_title', 'condition_conflict', 'brand_missing'])
+
 export function proveExactProductVariant({ product, shoppingOffer, immersive, storeOffer }) {
   const identifier = getIdentifier(product)
   const productTitle = clean(immersive?.title || shoppingOffer?.title)
@@ -286,9 +311,16 @@ export function proveExactProductVariant({ product, shoppingOffer, immersive, st
   const base = scoreShoppingIdentity(product, { ...shoppingOffer, title: productTitle })
   if (!base.accepted) failures.push(base.reason)
 
+  const uniqueFailures = [...new Set(failures)]
+  const hardFailures = uniqueFailures.filter((f) => HARD_FAILURE_SET.has(f))
+  const softFailures = uniqueFailures.filter((f) => !HARD_FAILURE_SET.has(f))
+
   return {
-    accepted: failures.length === 0,
-    failures: [...new Set(failures)],
+    accepted: hardFailures.length === 0,
+    confidence: uniqueFailures.length === 0 ? 'high' : hardFailures.length === 0 ? 'soft' : 'rejected',
+    failures: uniqueFailures,
+    hardFailures,
+    softFailures,
     proof,
     selectedVariants: variants,
     evidence,

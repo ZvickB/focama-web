@@ -65,7 +65,7 @@
   - locks the shortlist with haiku first, ranking inferred product fit before quality confidence, price/value, shortlist variety, and raw Amazon search position
   - if haiku returns a partial valid subset, tops up from deterministic fallback so the response still returns up to 6 eligible products
   - returns shortlist cards immediately
-  - starts async product-detail fetch + mini enrichment in the background
+  - starts async product-detail fetch + mini enrichment in the background; after mini writeup is stored, a separate `gpt-5-mini` Deep Dive eligibility pass may mark which finalized products should show the optional Deep Dive button
   - stores the finalized selected candidate IDs back into the token-scoped session snapshot so later user-triggered detail actions can validate the clicked product server-side
 - `POST /api/product/deep-dive`
   - feature-flagged behind `DEEP_DIVE_ENABLED=true`
@@ -76,7 +76,8 @@
   - validates `query`, `discoveryToken`, and `candidateId` against the server-side finalized search snapshot
   - uses SerpApi Google Shopping to find a unique product group, then SerpApi Immersive Product with `more_stores=true`
   - refreshes stale Immersive cache before showing store offers; if the refresh fails, stale Immersive data may still provide review signals but not prices
-  - shows store offers only after deterministic exact-product/variant proof, currency checks, positive price checks, and direct retailer URL validation; color is optional supporting proof, not a hard rejection reason
+  - shows lower store offers only after deterministic exact-product/variant proof, currency checks, positive price checks, direct retailer URL validation, and comparison against the known Amazon/source price; color is optional supporting proof, not a hard rejection reason
+  - the default Canadian direct-retailer allowlist includes major trusted sources such as Best Buy, Walmart, Staples, London Drugs, Visions, Costco, Canadian Tire, Home Depot, Amazon, Newegg.ca, and Camera Canada
   - can run Haiku review synthesis only from real Immersive user review, critic rating, and top-insight data; thin data returns a limited state instead of padded claims
 - `GET /api/search/enrichment-stream`
   - first enrichment path used by the frontend
@@ -132,7 +133,7 @@
 - Result, retry, and modal surfaces now share a quieter visual system: fewer decorative gradients, smaller shadows, and more consistent 16-28px radii.
 - Selecting a row or the row details action opens the modal.
 - The modal is ordered as a decision aid: image and title, an `At a glance` facts card, `Why this pick`, `Worth knowing`, then product notes from `feature_bullets` or description. The facts card stays compact with price, combined ratings/reviews, and optional delivery; source/store naming is reserved for the shopping CTA instead of repeated as passive metadata.
-- Finalized product modals include a quiet optional `Deep dive` panel. Signed-out users are sent to sign in before any provider call. Signed-in users can trigger the panel manually; it shows loading, gated, limited-data, store-offer, review-summary, top-insight, and critic-rating states. The existing bottom Amazon/source CTA remains unchanged and primary.
+- Finalized product modals include a quiet optional `Deep dive` panel only when async Deep Dive eligibility says the product is worth it. The button is hidden by default, appears after mini writeup when the separate `gpt-5-mini` eligibility pass returns `show` or `maybe`, and remains explicit/user-triggered. Signed-out users are sent to sign in before any provider call. Signed-in users can trigger the panel manually; it shows loading, gated, limited-data, store-offer, review-summary, top-insight, and critic-rating states. The existing bottom Amazon/source CTA remains unchanged and primary.
 - For skipped-refinement preview products, the modal hides the AI `Why this pick` analysis panel because finalize/enrichment has not run; opening the preview modal lazily hydrates product notes from the per-ASIN cache or Oxylabs.
 - If the normalized detail heading differs from the raw title, the detail header exposes the original directly under the title behind a quiet `Full Amazon title`/source-title disclosure.
 - If enrichment is still pending, result rows/panels and the modal use quiet teal/orange breathing dots instead of visible uncertainty copy; if enrichment settles without a fit reason, the modal shows a practical fallback instead of an empty section.
@@ -178,6 +179,7 @@
 - Supabase auth state is handled client-side through `AuthProvider`; the Supabase browser client is lazy-loaded so auth does not inflate the initial search bundle.
 - Product details have a separate per-ASIN cache shared across detail providers.
 - Async mini enrichment is token-scoped when it writes back into the per-session discovery snapshot so older same-query searches cannot leak context-specific `fit_reason` or `caveat` text into newer sessions.
+- Async Deep Dive eligibility is also token-scoped and stored separately at `selection.deepDiveEligibility`; it controls whether the modal button appears, not whether any Deep Dive offer/review evidence is trusted.
 - Mini enrichment treats the first locked product as the hero recommendation and writes later picks as alternatives that explain who might prefer them over the hero.
 - Oxylabs product-detail fetches use a fast first pass for finalize enrichment and retry failed ASIN detail calls in the background so cache quality can still improve without holding the modal AI copy back longer.
 - When a background detail retry later succeeds, the stored enrichment payload is updated with the new `feature_bullets` and the frontend keeps polling long enough for the open modal to hydrate those bullets in place.

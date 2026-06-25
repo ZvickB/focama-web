@@ -46,6 +46,7 @@ import {
 import {
   entriesNeedFeatureBulletHydration,
   mergeFinalizeResults,
+  mergeDeepDiveEligibilityIntoResults,
   mergeEnrichmentIntoResults,
   mergeProductDetailsIntoResults,
   resolveSelectedProductForDisplay,
@@ -429,6 +430,10 @@ export function useGuidedSearch() {
               setIsEnrichmentReady(true)
               shouldContinueDetailHydrationRef.current = entriesNeedFeatureBulletHydration(payload.entries)
             }
+            const hasDeepDiveEligibility = Array.isArray(payload.deepDiveEligibility?.decisions)
+            if (hasDeepDiveEligibility) {
+              setResults((current) => mergeDeepDiveEligibilityIntoResults(current, payload.deepDiveEligibility))
+            }
             recordSearchDebugEvent('enrichment', 'success', {
               activeSearchId: searchId,
               amazonDomain,
@@ -438,7 +443,7 @@ export function useGuidedSearch() {
             })
             setIsEnrichmentSettled(true)
 
-            if (shouldContinueDetailHydrationRef.current) {
+            if (shouldContinueDetailHydrationRef.current || !hasDeepDiveEligibility) {
               schedulePoll()
               return
             }
@@ -488,6 +493,10 @@ export function useGuidedSearch() {
             setIsEnrichmentReady(true)
             shouldContinueDetailHydrationRef.current = entriesNeedFeatureBulletHydration(payload.entries)
           }
+          const hasDeepDiveEligibility = Array.isArray(payload.deepDiveEligibility?.decisions)
+          if (hasDeepDiveEligibility) {
+            setResults((current) => mergeDeepDiveEligibilityIntoResults(current, payload.deepDiveEligibility))
+          }
           recordSearchDebugEvent('enrichment', 'success', {
             activeSearchId: searchId,
             amazonDomain,
@@ -497,7 +506,7 @@ export function useGuidedSearch() {
           })
           setIsEnrichmentSettled(true)
 
-          if (shouldContinueDetailHydrationRef.current) {
+          if (shouldContinueDetailHydrationRef.current || !hasDeepDiveEligibility) {
             if (enrichmentPollRef.current.source) {
               enrichmentPollRef.current.source.close()
               enrichmentPollRef.current.source = null

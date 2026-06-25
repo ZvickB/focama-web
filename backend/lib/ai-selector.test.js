@@ -14,7 +14,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
   }),
 }))
 
-import { haikuLockWinnersAndBadges, miniEnrichSelectedCandidates } from './ai-selector.js'
+import { assessDeepDiveEligibility, haikuLockWinnersAndBadges, miniEnrichSelectedCandidates } from './ai-selector.js'
 
 function createCandidate(overrides = {}) {
   return {
@@ -264,6 +264,111 @@ describe('ai selector', () => {
       enrichedIds: [],
       usage: null,
       preservedOrder: true,
+    })
+  })
+
+  it('hides obvious low-value Deep Dive candidates without calling the model', async () => {
+    const fetchMock = vi.fn()
+    const result = await assessDeepDiveEligibility(
+      {
+        apiKey: 'test-key',
+        lockedIds: ['prod-1'],
+        candidatePool: {
+          query: 'usb cable',
+          details: '',
+          candidates: [
+            createCandidate({
+              id: 'prod-1',
+              title: 'USB-C cable 3 pack',
+              price: '$12.99',
+              numericPrice: 12.99,
+            }),
+          ],
+        },
+      },
+      fetchMock,
+    )
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(result.decisions).toEqual([
+      {
+        candidate_id: 'prod-1',
+        recommendation: 'hide',
+        mode: 'hide',
+        confidence: 'high',
+        reason: 'generic_low_value',
+      },
+    ])
+  })
+
+  it('asks mini for Deep Dive eligibility after deterministic prefilter passes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          decisions: [
+            {
+              candidate_id: 'prod-1',
+              recommendation: 'show',
+              mode: 'offers_and_reviews',
+              confidence: 'high',
+              reason: 'stable_model_multi_retailer',
+            },
+          ],
+        }),
+        usage: {
+          input_tokens: 20,
+          output_tokens: 8,
+          total_tokens: 28,
+        },
+      }),
+    })
+
+    const result = await assessDeepDiveEligibility(
+      {
+        apiKey: 'test-key',
+        lockedIds: ['prod-1'],
+        candidatePool: {
+          query: 'sony headphones',
+          details: '',
+          candidates: [
+            createCandidate({
+              id: 'prod-1',
+              title: 'Sony WH-1000XM5 Wireless Noise Canceling Headphones',
+              price: '$299.99',
+              numericPrice: 299.99,
+            }),
+          ],
+        },
+        enrichmentEntries: [
+          {
+            candidate_id: 'prod-1',
+            fit_reason: 'Strong noise cancellation and travel-friendly battery life.',
+            caveat: 'Costs more than basic headphones.',
+          },
+        ],
+      },
+      fetchMock,
+    )
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(requestBody.model).toBe('gpt-5-mini')
+    expect(requestBody.text.format.name).toBe('deep_dive_eligibility')
+    expect(requestBody.input[1].content).toContain('Strong noise cancellation')
+    expect(result.decisions).toEqual([
+      {
+        candidate_id: 'prod-1',
+        recommendation: 'show',
+        mode: 'offers_and_reviews',
+        confidence: 'high',
+        reason: 'stable_model_multi_retailer',
+      },
+    ])
+    expect(result.usage).toEqual({
+      inputTokens: 20,
+      outputTokens: 8,
+      reasoningTokens: 0,
+      totalTokens: 28,
     })
   })
 })

@@ -172,6 +172,7 @@ export async function fetchQueryQualitySuggestion({ token, query, amazonDomain }
 export async function fetchProductDeepDive({
   amazonDomain,
   candidateId,
+  crossMarketFallback = false,
   discoveryToken,
   includeSynthesis = true,
   query,
@@ -187,6 +188,7 @@ export async function fetchProductDeepDive({
     body: JSON.stringify({
       amazonDomain,
       candidateId,
+      crossMarketFallback,
       discoveryToken,
       includeSynthesis,
       query,

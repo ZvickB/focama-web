@@ -30,6 +30,7 @@ import {
 import {
   useGuidedSearch,
 } from '@/components/home/useGuidedSearch.js'
+import { resolveAmazonDomainForRequest } from '@/components/home/guided-search/constants.js'
 import { Button } from '@/components/ui/button.jsx'
 import { Label } from '@/components/ui/label.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
@@ -649,7 +650,7 @@ export function HomeExperience({ initialSearchFollowUp = '', initialSearchQuery 
       {results.selectedProduct ? (
         <Suspense fallback={<ProductDetailModalFallback />}>
           <ProductDetailModal
-            amazonDomain={guided.marketplace.resolvedAmazonDomain}
+            amazonDomain={resolveAmazonDomainForRequest(guided.marketplace.selectedAmazonDomain, guided.marketplace.resolvedAmazonDomain)}
             discoveryToken={results.discoveryToken}
             item={results.selectedProduct}
             isEnrichmentSettled={status.isEnrichmentSettled}

@@ -45,6 +45,15 @@ function compactStringArray(values, { maxItems, maxLength }) {
     .slice(0, maxItems)
 }
 
+function hasPrimeEligibility(candidate) {
+  return Boolean(
+    candidate?.isPrime ||
+    candidate?.is_prime ||
+    candidate?.primeEligible ||
+    candidate?.isPrimeEligible,
+  )
+}
+
 export function createQueryFramingContract({
   query = '',
   categoryHint = '',
@@ -79,7 +88,8 @@ export function toFinalizeFastCard(candidate) {
     price: truncateText(candidate?.price, 80),
     rating: Number.isFinite(Number(candidate?.rating)) ? Number(candidate.rating) : null,
     reviewCount: Number.isFinite(Number(candidate?.reviewCount)) ? Number(candidate.reviewCount) : null,
-    isPrime: Boolean(candidate?.isPrime),
+    isPrime: hasPrimeEligibility(candidate),
+    delivery: truncateText(candidate?.delivery, 160),
     description: truncateText(candidate?.description, 1200),
     feature_bullets: compactStringArray(candidate?.feature_bullets, {
       maxItems: 10,
