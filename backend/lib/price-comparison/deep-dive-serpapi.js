@@ -52,12 +52,6 @@ function inferCurrency(value, market) {
   return expectedCurrencyForMarket(market)
 }
 
-function moneyString(value, market) {
-  if (typeof value === 'string' && value.trim()) return value
-  const currency = expectedCurrencyForMarket(market) === 'CAD' ? 'CA$' : '$'
-  return Number.isFinite(Number(value)) ? `${currency}${Number(value).toFixed(2)}` : ''
-}
-
 function hashPayload(value) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex')
 }
@@ -114,6 +108,8 @@ function normalizeShoppingResult(result) {
     immersive_url: result?.serpapi_immersive_product_api || '',
     immersive_product_page_token: result?.immersive_product_page_token || '',
     position: result?.position ?? null,
+    reviews: Number.isFinite(Number(result?.reviews)) ? Number(result.reviews) : 0,
+    rating: Number.isFinite(Number(result?.rating)) ? Number(result.rating) : 0,
   }
 }
 
@@ -212,7 +208,7 @@ function normalizeStoreOffer(store, market) {
   }
 }
 
-function parseCandidatePrice(candidate, market) {
+function parseCandidatePrice(candidate) {
   for (const value of [candidate?.numericPrice, candidate?.extracted_price, candidate?.price]) {
     const parsed = parseMoney(value)
     if (parsed !== null) return parsed
@@ -277,7 +273,7 @@ export async function normalizeDeepDiveOffers({
   const expectedCurrency = expectedCurrencyForMarket(market)
   const productResults = immersive?.productResults || {}
   const stores = Array.isArray(productResults?.stores) ? productResults.stores : []
-  const amazonTotal = skipSavingsFilter ? null : parseCandidatePrice(candidate, market)
+  const amazonTotal = skipSavingsFilter ? null : parseCandidatePrice(candidate)
   const allowedDomains = getAllowedDomains(market)
   const offers = []
   const rejected = []

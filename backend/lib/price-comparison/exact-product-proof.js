@@ -181,7 +181,8 @@ export function selectUniqueShoppingProduct(product, offers, { preferTrustedSour
     }))
     .sort((a, b) => (
       b.score - a.score ||
-      Number(b.trustedSource) - Number(a.trustedSource)
+      Number(b.trustedSource) - Number(a.trustedSource) ||
+      (b.offer?.reviews || 0) - (a.offer?.reviews || 0)
     ))
 
   if (!ranked.length) return { offer: null, reason: 'no_exact_shopping_product', ranked }

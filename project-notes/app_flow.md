@@ -76,6 +76,7 @@
   - validates `query`, `discoveryToken`, and `candidateId` against the server-side finalized search snapshot
   - uses SerpApi Google Shopping to find a unique product group, then SerpApi Immersive Product with `more_stores=true`
   - refreshes stale Immersive cache before showing store offers; if the refresh fails, stale Immersive data may still provide review signals but not prices
+  - caches Immersive responses when they contain review signals or store offers; truly empty Immersive responses are not cached, and old product-group cache entries without Shopping review-count metadata are refreshed so the review-count tiebreaker can run
   - shows lower store offers only after deterministic exact-product/variant proof, currency checks, positive price checks, direct retailer URL validation, and comparison against the known Amazon/source price; color is optional supporting proof, not a hard rejection reason
   - the default Canadian direct-retailer allowlist includes major trusted sources such as Best Buy, Walmart, Staples, London Drugs, Visions, Costco, Canadian Tire, Home Depot, Amazon, Newegg.ca, and Camera Canada
   - can run Haiku review synthesis only from real Immersive user review, critic rating, and top-insight data; thin data returns a limited state instead of padded claims
@@ -166,7 +167,7 @@
 
 ## Data, cache, and observability
 - Guided discovery is the reusable persistent cache layer.
-- Deep Dive has separate cache/usage storage from guided discovery and `search_history`: product-group cache is 7 days, Immersive data is 24 hours, price freshness is treated as 30 minutes, and synthesis cache is 7 days. When Immersive cache is older than the price freshness window, the handler attempts a fresh Immersive fetch before rendering offers. Supabase is preferred, with local JSON fallback for development/table outages. Non-subscriber usage is capped by `DEEP_DIVE_FREE_LIMIT` unless `DEEP_DIVE_FREE_LIMIT_DISABLED=true` is set for controlled testing.
+- Deep Dive has separate cache/usage storage from guided discovery and `search_history`: product-group cache is 7 days, Immersive data is 24 hours, price freshness is treated as 30 minutes, and synthesis cache is 7 days. When Immersive cache is older than the price freshness window, the handler attempts a fresh Immersive fetch before rendering offers. Useful no-review Immersive responses with store offers can be reused while price-fresh; empty no-review/no-store responses are not cached. Supabase is preferred, with local JSON fallback for development/table outages. Non-subscriber usage is capped by `DEEP_DIVE_FREE_LIMIT` unless `DEEP_DIVE_FREE_LIMIT_DISABLED=true` is set for controlled testing.
 - Rainforest guided discovery uses a versioned shared cache scope (`rainforest_discovery:v3`) so older provider/search-era candidate pools and pre-Prime-delivery-normalization rows are not reused as current evidence.
 - Finalize remains request-specific and rebuilds from discovery cache.
 - Amazon discovery and product-detail enrichment preserve provider Prime signals, including Rainforest delivery text with Prime availability, as structured `isPrime` data through candidate pools, finalize/enrichment payloads, and final UI results.

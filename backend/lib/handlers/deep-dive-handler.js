@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 
 import { verifySupabaseBearerToken } from '../auth.js'
-import { buildInternalErrorPayload, readJsonBody, sendJson } from '../http.js'
+import { readJsonBody, sendJson } from '../http.js'
 import { reportBackendError } from '../observability.js'
 import { getClientIpAddress, takeRateLimitToken } from '../rate-limit.js'
 import { getEnv, validateSearchInput } from '../search-data.js'
@@ -17,7 +17,6 @@ import {
 import { resolveDiscoveryContext } from './discovery-handler.js'
 import {
   buildDeepDiveProductPayload,
-  buildReviewEvidence,
   fetchImmersiveProduct,
   fetchShoppingProductGroup,
   normalizeDeepDiveOffers,
@@ -25,20 +24,16 @@ import {
   normalizeProductIdentity,
   normalizeReviewSignals,
   PRICE_STALE_MS,
-  synthesizeDeepDiveReviews,
 } from '../price-comparison/deep-dive-serpapi.js'
 import {
   incrementDeepDiveUsage,
   readDeepDiveCacheEntry,
-  readDeepDiveUsage,
   writeDeepDiveCacheEntry,
 } from '../storage/deep-dive-storage.js'
 
 const DEEP_DIVE_BODY_LIMIT_BYTES = 12 * 1024
 const PRODUCT_GROUP_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const IMMERSIVE_TTL_MS = 24 * 60 * 60 * 1000
-const SYNTHESIS_TTL_MS = 7 * 24 * 60 * 60 * 1000
-const DEFAULT_FREE_DEEP_DIVES_PER_ACCOUNT = 1
 const RATE_LIMIT_CONFIG = { limit: 5, windowMs: 60_000 }
 const IN_FLIGHT = new Set()
 
@@ -48,15 +43,6 @@ function clean(value) {
 
 function isEnabled() {
   return String(getEnv('DEEP_DIVE_ENABLED') || '').trim().toLowerCase() === 'true'
-}
-
-function getFreeDeepDiveLimit() {
-  const configured = Number.parseInt(getEnv('DEEP_DIVE_FREE_LIMIT') || '', 10)
-  return Number.isFinite(configured) ? configured : DEFAULT_FREE_DEEP_DIVES_PER_ACCOUNT
-}
-
-function isFreeDeepDiveLimitDisabled() {
-  return /^(true|1|yes)$/i.test(clean(getEnv('DEEP_DIVE_FREE_LIMIT_DISABLED')))
 }
 
 function buildHash(value) {
@@ -138,7 +124,13 @@ function readyOrLimitedPayload({ candidateId, product, offers, reviews, cache, a
 async function getCachedOrFetchProductGroup({ apiKey, cacheKey, candidate, market }) {
   const cached = await readDeepDiveCacheEntry(cacheKey)
   if (cached?.payload?.selectedOffer) {
-    return { cacheStatus: 'hit', value: cached.payload }
+    if (!Object.prototype.hasOwnProperty.call(cached.payload.selectedOffer, 'reviews')) {
+      logSearchFlowEvent('deep_dive_product_group_cache_incomplete', {
+        reason: 'missing_review_tiebreaker',
+      })
+    } else {
+      return { cacheStatus: 'hit', value: cached.payload }
+    }
   }
 
   logSearchFlowEvent('deep_dive_serpapi_shopping_started', { market })
@@ -163,20 +155,33 @@ function hasReviewSignals(productResults) {
   )
 }
 
+function hasStoreOffers(productResults) {
+  return Array.isArray(productResults?.stores) && productResults.stores.length > 0
+}
+
+function hasUsefulImmersiveData(productResults) {
+  return hasReviewSignals(productResults) || hasStoreOffers(productResults)
+}
+
+function isPriceStale(cachedAt) {
+  const cachedAtMs = new Date(cachedAt || '').getTime()
+  return Number.isFinite(cachedAtMs) && Date.now() - cachedAtMs > PRICE_STALE_MS
+}
+
 async function getCachedOrFetchImmersive({ apiKey, cacheKey, shoppingOffer }) {
   const cached = await readDeepDiveCacheEntry(cacheKey)
   if (cached?.payload?.productResults) {
-    // Treat cached entries missing all review signals as incomplete — re-fetch
-    if (!hasReviewSignals(cached.payload.productResults)) {
+    const cachedHasUsefulData = hasUsefulImmersiveData(cached.payload.productResults)
+    const cachedIsStale = isPriceStale(cached.cachedAt)
+
+    // Treat empty cached entries as incomplete; useful no-review store offers can still be reused while price-fresh.
+    if (!cachedHasUsefulData) {
       logSearchFlowEvent('deep_dive_immersive_cache_incomplete', {
-        reason: 'no_review_signals',
+        reason: 'no_review_or_store_signals',
         keys: Object.keys(cached.payload.productResults).join(','),
       })
     } else {
-      const cachedAtMs = new Date(cached.cachedAt || '').getTime()
-      const isStale = Number.isFinite(cachedAtMs) && Date.now() - cachedAtMs > PRICE_STALE_MS
-
-      if (!isStale) {
+      if (!cachedIsStale) {
         return { cacheStatus: 'hit', value: cached.payload }
       }
 
@@ -195,6 +200,24 @@ async function getCachedOrFetchImmersive({ apiKey, cacheKey, shoppingOffer }) {
         return { cacheStatus: 'stale', value: cached.payload }
       }
     }
+
+    try {
+      logSearchFlowEvent('deep_dive_immersive_refresh_started', { reason: 'cache_incomplete' })
+      const refreshed = await fetchImmersiveProduct({ apiKey, shoppingOffer })
+      logSearchFlowEvent('deep_dive_immersive_refresh_succeeded', {
+        storeCount: Array.isArray(refreshed?.productResults?.stores) ? refreshed.productResults.stores.length : 0,
+      })
+      if (hasUsefulImmersiveData(refreshed.productResults)) {
+        await writeDeepDiveCacheEntry({ cacheKey, layer: 'immersive', payload: refreshed, ttlMs: IMMERSIVE_TTL_MS })
+      }
+      return { cacheStatus: 'miss', value: refreshed }
+    } catch (error) {
+      logSearchFlowEvent('deep_dive_immersive_refresh_failed', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        reason: 'cache_incomplete',
+      })
+      return { cacheStatus: cachedIsStale ? 'stale' : 'incomplete_fallback', value: cached.payload }
+    }
   }
 
   logSearchFlowEvent('deep_dive_immersive_started', {})
@@ -202,49 +225,16 @@ async function getCachedOrFetchImmersive({ apiKey, cacheKey, shoppingOffer }) {
   logSearchFlowEvent('deep_dive_immersive_succeeded', {
     storeCount: Array.isArray(value?.productResults?.stores) ? value.productResults.stores.length : 0,
   })
-  // Only cache if the response includes review signals — incomplete responses should be re-fetched next time
-  if (hasReviewSignals(value.productResults)) {
+  // Cache useful review data or fresh store offers; avoid caching truly empty provider responses.
+  if (hasUsefulImmersiveData(value.productResults)) {
     await writeDeepDiveCacheEntry({ cacheKey, layer: 'immersive', payload: value, ttlMs: IMMERSIVE_TTL_MS })
   } else {
     logSearchFlowEvent('deep_dive_immersive_not_cached', {
-      reason: 'no_review_signals',
+      reason: 'no_review_or_store_signals',
       keys: Object.keys(value.productResults || {}).join(','),
     })
   }
   return { cacheStatus: 'miss', value }
-}
-
-async function getCachedOrCreateSynthesis({ cacheKey, evidence, includeSynthesis }) {
-  if (!includeSynthesis || evidence.evidenceCount < 2) {
-    return {
-      cacheStatus: 'skipped',
-      value: { summary: '', sources: [], limited: true, skipped: true },
-    }
-  }
-
-  const cached = await readDeepDiveCacheEntry(cacheKey)
-  if (cached?.payload?.summary) {
-    return { cacheStatus: 'hit', value: cached.payload }
-  }
-
-  const apiKey = getEnv('CLAUDE_API_KEY')
-  if (!apiKey) {
-    return {
-      cacheStatus: 'skipped',
-      value: { summary: '', sources: [], limited: true, skipped: true },
-    }
-  }
-
-  logSearchFlowEvent('deep_dive_synthesis_started', {})
-  const value = await synthesizeDeepDiveReviews({ apiKey, evidence })
-  logSearchFlowEvent('deep_dive_synthesis_succeeded', {
-    sourceCount: value.sources.length,
-    skipped: Boolean(value.skipped),
-  })
-  if (value.summary) {
-    await writeDeepDiveCacheEntry({ cacheKey, layer: 'synthesis', payload: value, ttlMs: SYNTHESIS_TTL_MS })
-  }
-  return { cacheStatus: value.skipped ? 'skipped' : 'miss', value }
 }
 
 export async function handleDeepDive(request, response) {
@@ -308,7 +298,6 @@ export async function handleDeepDive(request, response) {
   const candidateId = clean(body.candidateId)
   const discoveryToken = clean(body.discoveryToken)
   const amazonDomain = getRequestedAmazonDomain(body.amazonDomain || '') || 'amazon.com'
-  const includeSynthesis = body.includeSynthesis !== false
   const crossMarketFallback = Boolean(body.crossMarketFallback)
   const market = normalizeMarket(amazonDomain)
   const inFlightKey = `${auth.user.id}:${discoveryToken}:${candidateId}`
@@ -392,46 +381,13 @@ export async function handleDeepDive(request, response) {
       return
     }
 
-    // Try the selected offer first; if its immersive page has no review signals,
-    // fall back through other ranked offers (e.g. bundle pages often lack reviews).
-    const rankedOffers = [
-      productGroup.value.selectedOffer,
-      ...(Array.isArray(productGroup.value.ranked)
-        ? productGroup.value.ranked
-            .map((entry) => entry.offer)
-            .filter((o) => o && o !== productGroup.value.selectedOffer)
-        : []),
-    ]
-
-    let immersive = null
-    let usedOffer = productGroup.value.selectedOffer
-
-    for (const offer of rankedOffers) {
-      const token = offer.immersive_product_page_token || offer.immersive_url
-      if (!token) continue
-      const cacheKeyForOffer = buildCacheKey('immersive', [market, candidateId, token])
-      const result = await getCachedOrFetchImmersive({
-        apiKey,
-        cacheKey: cacheKeyForOffer,
-        shoppingOffer: offer,
-      })
-      if (hasReviewSignals(result.value.productResults)) {
-        immersive = result
-        usedOffer = offer
-        break
-      }
-      // First offer had no reviews — log and try the next ranked offer
-      if (offer === productGroup.value.selectedOffer) {
-        logSearchFlowEvent('deep_dive_immersive_no_reviews_fallback', {
-          candidateId,
-          originalTitle: offer.title,
-          alternatesAvailable: rankedOffers.length - 1,
-        })
-      }
-      immersive = result
-      usedOffer = offer
-    }
-
+    const immersiveToken = productGroup.value.selectedOffer.immersive_product_page_token || productGroup.value.selectedOffer.immersive_url
+    const immersiveCacheKey = buildCacheKey('immersive', [market, candidateId, immersiveToken])
+    const immersive = await getCachedOrFetchImmersive({
+      apiKey,
+      cacheKey: immersiveCacheKey,
+      shoppingOffer: productGroup.value.selectedOffer,
+    })
     cache.immersive = immersive.cacheStatus
 
     const productResults = immersive.value.productResults || {}
@@ -441,7 +397,7 @@ export async function handleDeepDive(request, response) {
           candidate,
           immersive: immersive.value,
           market,
-          shoppingOffer: usedOffer,
+          shoppingOffer: productGroup.value.selectedOffer,
           skipSavingsFilter: crossMarketFallback,
         })
       : { offers: [], rejected: [] }

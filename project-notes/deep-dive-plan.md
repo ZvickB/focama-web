@@ -86,3 +86,4 @@ The existing Serper-based discovery layer is not needed for this flow. The deep 
 3. **Market scope:** Current implementation is US/CA only; expand only after live review.
 4. **Live-review quality:** Validate at least 20 US/CA Deep Dives before hardening paid gating.
 5. **Unknown source price behavior:** If the source product has no comparable price, v1 may still show exact verified alternate offers because there is no honest lower-price baseline.
+6. **CA→US fallback cost:** The "Show US retailer prices" fallback costs 2 extra SerpApi credits (product group + immersive) because CA and US return different stores. Rethink whether this feature is worth the cost, or find a way to get cross-market offers from a single immersive call.
