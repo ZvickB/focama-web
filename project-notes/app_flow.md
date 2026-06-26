@@ -6,7 +6,7 @@
 
 ## Current app structure
 - The site uses React Router with a shared shell.
-- Current public pages are Home, Search History, Why Focamai, Contact, Privacy, and Affiliate Disclosure.
+- Current public pages are Home, Search History, Price Watches, Why Focamai, Contact, Privacy, and Affiliate Disclosure.
 - The shared header now has an optional auth entry point. When logged out, users see `Sign in`; when logged in, the header shows the account email/initial and a sign-out action.
 - The homepage is the main product experience and uses the `open` layout.
 - Public routes now set page-level SEO metadata in the client: title, description, canonical URL, Open Graph, Twitter tags, and `noindex` on the 404 page.
@@ -34,6 +34,7 @@
 - `/history` shows completed searches saved on the current device, newest first. Each entry can expand to show the saved six picks, be deleted, clear all history, or re-run the saved query with follow-up notes prefilled.
 - Auth UI is present and does not gate search. Email/password and Google sign-in are wired through the Supabase browser client when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are configured; otherwise the modal shows setup copy.
 - When signed out, user-facing search history uses localStorage. When signed in, the active history store switches to Supabase `saved_searches`; local entries are migrated into the account on login and then cleared locally after successful migration.
+- `/watches` is the signed-in Price Watch management page. Users can watch up to 5 finalized Amazon products, edit the drop percentage and optional target price, pause/resume, and remove watches. Email alerts can run from the daily job only when `PRICE_WATCH_EMAILS_ENABLED=true`.
 - `Start a new search` clears the guided state and returns to a fresh search box.
 - After final results appear, the user can open the retry panel and ask for a better search direction.
 - As soon as `HomeExperience` mounts, it prefetches the lazy `ResultsSection` and `ProductDetailModal` chunks so those UI steps are more likely to be ready before the user needs them.
@@ -135,6 +136,7 @@
 - Selecting a row or the row details action opens the modal.
 - The modal is ordered as a decision aid: image and title, an `At a glance` facts card, `Why this pick`, `Worth knowing`, then product notes from `feature_bullets` or description. The facts card stays compact with price, combined ratings/reviews, and optional delivery; source/store naming is reserved for the shopping CTA instead of repeated as passive metadata.
 - Finalized product modals include a quiet optional `Deep dive` panel only when async Deep Dive eligibility says the product is worth it. The button is hidden by default, appears after mini writeup when the separate `gpt-5-mini` eligibility pass returns `show` or `maybe`, and remains explicit/user-triggered. Signed-out users are sent to sign in before any provider call. Signed-in users can trigger the panel manually; it shows loading, gated, limited-data, store-offer, review-summary, top-insight, and critic-rating states. The existing bottom Amazon/source CTA remains unchanged and primary.
+- Finalized product modals include a `Watch price` action when the product has an ASIN and a positive numeric price. Signed-out users are sent to sign in; signed-in users create or reuse a `price_watches` row for that ASIN + marketplace. Preview-product modals do not show the watch action.
 - For skipped-refinement preview products, the modal hides the AI `Why this pick` analysis panel because finalize/enrichment has not run; opening the preview modal lazily hydrates product notes from the per-ASIN cache or Rainforest.
 - If the normalized detail heading differs from the raw title, the detail header exposes the original directly under the title behind a quiet `Full Amazon title`/source-title disclosure.
 - If enrichment is still pending, result rows/panels and the modal use quiet teal/orange breathing dots instead of visible uncertainty copy; if enrichment settles without a fit reason, the modal shows a practical fallback instead of an empty section.
@@ -177,6 +179,8 @@
 - Partial valid haiku output is recoverable, not final: zero picks still use rules fallback, full valid picks stay `haiku_lock`, and partial valid picks are returned as `haiku_lock_topped_up`.
 - Search cache and operational history use Supabase when configured, with local fallback in development.
 - User-facing saved-search history uses localStorage under `focamai:searchHistory:v1` for signed-out users and Supabase `saved_searches` for signed-in users.
+- Price Watch uses Supabase `price_watches` for signed-in users only; there is no localStorage watch mode because watches are intended to power account email alerts later.
+- The Price Watch job lives at `backend/jobs/check-price-watches.js` and is wired as the Render cron service `focama-price-watch`. It reads non-paused watches with the Supabase admin client, dedupes ASINs by marketplace, checks fresh Rainforest numeric prices, updates `last_checked_at` and positive `last_seen_price`, and logs which watches would notify while email is disabled. With `PRICE_WATCH_EMAILS_ENABLED=true`, it sends Resend price-drop emails, then updates `last_notified_*` and resets `baseline_price` only after successful send. Failed email sends do not reset the baseline.
 - Supabase auth state is handled client-side through `AuthProvider`; the Supabase browser client is lazy-loaded so auth does not inflate the initial search bundle.
 - Product details have a separate per-ASIN cache shared across detail providers.
 - Async mini enrichment is token-scoped when it writes back into the per-session discovery snapshot so older same-query searches cannot leak context-specific `fit_reason` or `caveat` text into newer sessions.

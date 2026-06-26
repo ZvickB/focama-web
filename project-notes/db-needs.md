@@ -16,7 +16,7 @@
 
 ### `product_details_cache`
 - Stores reusable per-ASIN product details for shortlist winners.
-- Shared by the current Oxylabs detail helper and the later Rainforest detail helper.
+- Shared by the active Rainforest detail helper.
 
 ### `analytics_search_runs`
 - One anchor row per search flow.
@@ -54,6 +54,13 @@
 - Separate from internal `search_history`.
 - Uses Supabase auth/RLS with `user_id` ownership.
 
+### `price_watches`
+- Stores signed-in users' Price Watch products for the Phase 1 watchlist UI.
+- Watches a specific Amazon ASIN + marketplace, not a saved search.
+- Uses Supabase auth/RLS with `user_id` ownership.
+- Browser CRUD is active under RLS for `/watches` and finalized modal `Watch price`.
+- The daily server-side job reads it with the service key, checks fresh Rainforest numeric prices, updates `last_checked_at` plus positive `last_seen_price`, and logs would-notify decisions while email is disabled. With `PRICE_WATCH_EMAILS_ENABLED=true`, it sends Resend alerts and resets `baseline_price` only after successful send.
+
 ### `deep_dive_cache`
 - Stores feature-flagged Deep Dive product-group, Immersive, and synthesis cache entries.
 - Separate from guided discovery cache and internal `search_history`.
@@ -78,13 +85,15 @@ Rate limiting falls back to in-memory storage when Supabase is not configured or
 ```env
 SERPAPI_API_KEY=your-serpapi-key
 OPENAI_API_KEY=your-openai-key
-OXYLABS_USERNAME=your-oxylabs-username
-OXYLABS_PASSWORD=your-oxylabs-password
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SECRET_KEY=your-supabase-secret-key
 SEARCH_CACHE_TTL_MINUTES=1440
 RATE_LIMIT_STORAGE=auto
 RATE_LIMIT_HASH_SALT=your-stable-random-salt
+RESEND_API_KEY=your-resend-key
+PRICE_WATCH_EMAILS_ENABLED=true
+PRICE_WATCH_FROM_EMAIL=contact@focamai.com
+PRICE_WATCH_MANAGE_URL=https://focamai.com/watches
 ```
 
 Notes:
@@ -98,6 +107,9 @@ Notes:
 - `DEEP_DIVE_FREE_LIMIT=1` is the default non-subscriber cap; `DEEP_DIVE_FREE_LIMIT_DISABLED=true` temporarily disables that cap in controlled testing.
 - `DEEP_DIVE_SUBSCRIBER_EMAILS` and `DEEP_DIVE_SUBSCRIBER_USER_IDS` can grant temporary unlimited tester/subscriber access until billing/account tables exist.
 - `DEEP_DIVE_ALLOWED_DOMAINS_US` and `DEEP_DIVE_ALLOWED_DOMAINS_CA` can override the default direct-retailer allowlists.
+- `RESEND_API_KEY` powers Price Watch email alerts when `PRICE_WATCH_EMAILS_ENABLED=true`.
+- `PRICE_WATCH_FROM_EMAIL` should stay `contact@focamai.com` until `alerts@focamai.com` is verified/usable in Resend.
+- `PRICE_WATCH_MANAGE_URL` defaults to `https://focamai.com/watches`.
 
 ## SQL to run
 
@@ -189,6 +201,63 @@ create policy "saved_searches_update_own"
 
 create policy "saved_searches_delete_own"
   on public.saved_searches
+  for delete
+  using (auth.uid() = user_id);
+```
+
+### Price watches table
+```sql
+create table if not exists public.price_watches (
+  id                  uuid primary key default gen_random_uuid(),
+  user_id             uuid not null references auth.users(id) on delete cascade,
+  asin                text not null,
+  amazon_domain       text not null default 'amazon.com',
+  product_title       text not null default '',
+  image_url           text not null default '',
+  product_url         text not null default '',
+  baseline_price      numeric not null,
+  threshold_pct       numeric not null default 5,
+  target_price        numeric,
+  last_seen_price     numeric,
+  last_checked_at     timestamptz,
+  last_notified_price numeric,
+  last_notified_at    timestamptz,
+  paused              boolean not null default false,
+  created_at          timestamptz not null default timezone('utc', now()),
+  updated_at          timestamptz not null default timezone('utc', now())
+);
+
+alter table public.price_watches
+  add constraint price_watches_baseline_positive check (baseline_price > 0),
+  add constraint price_watches_threshold_range check (threshold_pct > 0 and threshold_pct <= 100),
+  add constraint price_watches_target_positive check (target_price is null or target_price > 0);
+
+create unique index if not exists price_watches_user_asin_domain_idx
+  on public.price_watches (user_id, asin, amazon_domain);
+
+create index if not exists price_watches_active_idx
+  on public.price_watches (paused, asin, amazon_domain);
+
+alter table public.price_watches enable row level security;
+
+create policy "price_watches_select_own"
+  on public.price_watches
+  for select
+  using (auth.uid() = user_id);
+
+create policy "price_watches_insert_own"
+  on public.price_watches
+  for insert
+  with check (auth.uid() = user_id);
+
+create policy "price_watches_update_own"
+  on public.price_watches
+  for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "price_watches_delete_own"
+  on public.price_watches
   for delete
   using (auth.uid() = user_id);
 ```
@@ -348,3 +417,4 @@ create index if not exists rate_limit_events_key_created_at_idx
 - `project-notes/current-status.md`
 - `project-notes/app_flow.md`
 - `project-notes/analytics-funnel-schema.sql`
+

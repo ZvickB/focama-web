@@ -97,6 +97,8 @@ VITE_BACKEND_URL         # URL of the Render backend — used by the frontend fo
 ```
 Optional: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SEARCH_CACHE_TTL_MINUTES`, `ALLOWED_ORIGIN`, model overrides above.
 
+Price Watch email alerts: `RESEND_API_KEY`, `PRICE_WATCH_EMAILS_ENABLED`, `PRICE_WATCH_FROM_EMAIL`, `PRICE_WATCH_MANAGE_URL`.
+
 ## Current Product Direction
 - The homepage at `/` uses the `open` layout — that is the default direction for now.
 - The product should feel calm, focused, mobile-first, and not marketplace-shaped.

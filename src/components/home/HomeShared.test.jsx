@@ -87,6 +87,18 @@ describe('ProductDetailModal', () => {
 
     expect(screen.queryByLabelText(/recommendation details loading/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/extra analysis wasn't available for this pick right now/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /watch price/i })).not.toBeInTheDocument()
+  })
+
+  it('shows the price watch action for finalized products only', () => {
+    renderModal({
+      item: createMockItem({
+        numericPrice: 129.99,
+      }),
+      showRecommendationAnalysis: true,
+    })
+
+    expect(screen.getByRole('button', { name: /watch price/i })).toBeInTheDocument()
   })
 
   it('shows one compact affiliate disclosure next to the retailer CTA', () => {

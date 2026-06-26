@@ -12,6 +12,7 @@ const ContactPage = lazy(() => import('@/pages/ContactPage.jsx'))
 const HistoryPage = lazy(() => import('@/pages/HistoryPage.jsx'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage.jsx'))
 const PrivacyPage = lazy(() => import('@/pages/PrivacyPage.jsx'))
+const WatchPage = lazy(() => import('@/pages/WatchPage.jsx'))
 const WhyFocamaiPage = lazy(() => import('@/pages/WhyFocamaiPage.jsx'))
 const AnalyticsPage = import.meta.env.DEV
   ? lazy(() => import('@/pages/AnalyticsPage.jsx'))
@@ -52,6 +53,7 @@ function AppRoutes({ onReady }) {
         ) : null}
         <Route path="/why" element={<WhyFocamaiPage />} />
         <Route path="/history" element={<HistoryPage />} />
+        <Route path="/watches" element={<WatchPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/affiliate-disclosure" element={<AffiliateDisclosurePage />} />

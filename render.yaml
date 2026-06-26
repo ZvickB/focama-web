@@ -35,3 +35,24 @@ services:
         sync: false
       - key: KAILA_DEMO_PASSAGES_ENABLED
         sync: false
+  - type: cron
+    name: focama-price-watch
+    env: node
+    schedule: "0 13 * * *"
+    buildCommand: npm install
+    startCommand: node backend/jobs/check-price-watches.js
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: RAINFOREST_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: PRICE_WATCH_EMAILS_ENABLED
+        sync: false
+      - key: PRICE_WATCH_FROM_EMAIL
+        sync: false
+      - key: PRICE_WATCH_MANAGE_URL
+        sync: false

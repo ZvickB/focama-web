@@ -86,6 +86,7 @@ export function toFinalizeFastCard(candidate) {
     title: truncateText(candidate?.title, 300),
     subtitle: truncateText(candidate?.subtitle || candidate?.source, 160),
     price: truncateText(candidate?.price, 80),
+    numericPrice: Number.isFinite(Number(candidate?.numericPrice)) ? Number(candidate.numericPrice) : null,
     rating: Number.isFinite(Number(candidate?.rating)) ? Number(candidate.rating) : null,
     reviewCount: Number.isFinite(Number(candidate?.reviewCount)) ? Number(candidate.reviewCount) : null,
     isPrime: hasPrimeEligibility(candidate),
