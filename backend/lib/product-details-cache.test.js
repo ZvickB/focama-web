@@ -36,7 +36,7 @@ describe('product details cache', () => {
       ['B001', {
         feature_bullets: ['Cached fold'],
         productDescription: 'Cached stroller description.',
-        source: 'oxylabs',
+        source: 'rainforest',
         needsUpdating: false,
         nextUpdateAt: null,
       }],
@@ -51,7 +51,7 @@ describe('product details cache', () => {
 
     const result = await fetchProductDetailsWithCache({
       asins: [' B001 ', 'B002', 'B002', ''],
-      source: 'oxylabs',
+      source: 'rainforest',
       readCache,
       writeCache,
       fetchFreshDetails,
@@ -73,7 +73,7 @@ describe('product details cache', () => {
         asin: 'B002',
         feature_bullets: ['Fresh canopy'],
         productDescription: 'Fresh stroller description.',
-        source: 'oxylabs',
+        source: 'rainforest',
         needsUpdating: false,
         nextUpdateAt: null,
       }])
@@ -85,7 +85,7 @@ describe('product details cache', () => {
       ['B010', {
         feature_bullets: [],
         productDescription: 'Cached partial description.',
-        source: 'oxylabs',
+        source: 'rainforest',
         needsUpdating: true,
         nextUpdateAt: new Date(Date.now() - 1000).toISOString(),
       }],
@@ -100,7 +100,7 @@ describe('product details cache', () => {
 
     const result = await fetchProductDetailsWithCache({
       asins: ['B010'],
-      source: 'oxylabs',
+      source: 'rainforest',
       readCache,
       writeCache,
       fetchFreshDetails,
@@ -117,7 +117,7 @@ describe('product details cache', () => {
         asin: 'B010',
         feature_bullets: ['Refreshed bullet'],
         productDescription: 'Refreshed description.',
-        source: 'oxylabs',
+        source: 'rainforest',
         needsUpdating: false,
         nextUpdateAt: null,
       }])
@@ -129,7 +129,7 @@ describe('product details cache', () => {
       ['B020', {
         feature_bullets: ['Cached bullet'],
         productDescription: 'Cached description.',
-        source: 'oxylabs',
+        source: 'rainforest',
         needsUpdating: false,
         nextUpdateAt: null,
       }],
@@ -139,7 +139,7 @@ describe('product details cache', () => {
 
     const result = await fetchProductDetailsWithCache({
       asins: ['B020', 'B021'],
-      source: 'oxylabs',
+      source: 'rainforest',
       readCache,
       writeCache,
       fetchFreshDetails,
@@ -168,7 +168,7 @@ describe('product details cache', () => {
 
     const result = await fetchProductDetailsWithCache({
       asins: ['B030'],
-      source: 'oxylabs',
+      source: 'rainforest',
       readCache,
       writeCache,
       fetchFreshDetails,

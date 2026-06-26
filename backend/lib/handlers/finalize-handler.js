@@ -16,7 +16,6 @@ import { writeSearchSnapshot } from '../search-pipeline.js'
 import {
   readProductDetailsCacheEntries,
   recordSearchDiagnosticEvent,
-  recordOxylabsProductFailures,
   writeProductDetailsCacheEntries,
 } from '../search-storage.js'
 import { fetchAmazonProductDetailsByAsin } from '../product-details-provider.js'
@@ -48,7 +47,6 @@ import {
   runMiniEnrichmentAsync,
   runDeepDiveEligibilityAsync,
   mergeProductDetailsIntoCandidatePool,
-  applyLateProductDetailsToEnrichment,
 } from './enrichment-handler.js'
 
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
@@ -833,36 +831,17 @@ export async function handleFinalizeSelection(request, response) {
     if (usedHaikuSelection) {
       const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
       const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
-      const oxylabsUsername = getEnv('OXYLABS_USERNAME')
-      const oxylabsPassword = getEnv('OXYLABS_PASSWORD')
 
       runInBackground((async () => {
         try {
           const productDetailsStartedAt = nowMs()
-          const detailFailures = []
           const productDetailsById = await fetchAmazonProductDetailsByAsin({
             asins: selectedCandidateIds,
             rainforestApiKey,
-            oxylabsUsername,
-            oxylabsPassword,
             amazonDomain: sanitizedDiscoveryContext.amazonDomain,
             readCache: readProductDetailsCacheEntries,
             writeCache: writeProductDetailsCacheEntries,
-            onOxylabsAsinFailure: (asin, failureType, statusCode) => {
-              detailFailures.push({ asin, failureType, statusCode, query: sanitizedDiscoveryContext.normalizedQuery })
-            },
-            onOxylabsBackgroundRetryResolved: async (retryDetailsById) => {
-              await applyLateProductDetailsToEnrichment({
-                normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
-                discoveryToken: sanitizedDiscoveryContext.discoveryToken,
-                discoveryScope: resolvedDiscoveryContext.discoveryScope,
-                productDetailsById: retryDetailsById,
-              })
-            },
           })
-          if (detailFailures.length > 0) {
-            await recordOxylabsProductFailures(detailFailures)
-          }
           const productDetailsDuration = nowMs() - productDetailsStartedAt
           const enrichedCandidatePool = mergeProductDetailsIntoCandidatePool(nextCandidatePool, productDetailsById)
 

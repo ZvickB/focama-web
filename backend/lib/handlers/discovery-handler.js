@@ -9,14 +9,12 @@ import {
   writeSearchSnapshot,
 } from '../search-pipeline.js'
 import { recordSearchDiagnosticEvent } from '../search-storage.js'
-import { fetchOxylabsArtifacts } from '../oxylabs-pipeline.js'
 import { buildCacheKey, getEnv } from '../search-data.js'
 import { fetchRainforestArtifacts } from '../rainforest-pipeline.js'
 import {
   CACHE_SCOPE_LIVE_SEARCH,
   CACHE_SCOPE_RAINFOREST,
   LIVE_RESULT_FILTER_CONFIG,
-  MIN_DISCOVERY_PROVIDER_RESULT_COUNT,
   RATE_LIMIT_WAIT_MESSAGE,
   getAmazonMarketplaceScope,
   logSearchFlowEvent,
@@ -31,36 +29,15 @@ import {
 } from '../discovery-context.js'
 import { startQueryQualityReview } from './query-quality-handler.js'
 
-function isThinDiscoveryResult(result) {
-  const resultCount = Array.isArray(result?.artifacts?.results)
-    ? result.artifacts.results.length
-    : 0
-  const candidateCount = Array.isArray(result?.artifacts?.candidatePool?.candidates)
-    ? result.artifacts.candidatePool.candidates.length
-    : 0
-
-  return (
-    !result?.error &&
-    (
-      resultCount < MIN_DISCOVERY_PROVIDER_RESULT_COUNT ||
-      candidateCount < MIN_DISCOVERY_PROVIDER_RESULT_COUNT
-    )
-  )
-}
-
-async function fetchDiscoveryArtifactsWithFallback({
+async function fetchDiscoveryArtifacts({
   filterConfig,
   productQuery,
   details,
   reasonFallback,
   rainforestApiKey,
-  oxylabsUsername,
-  oxylabsPassword,
   countryCode,
   amazonDomain,
 }) {
-  const hasOxylabsCredentials = Boolean(oxylabsUsername && oxylabsPassword)
-
   if (rainforestApiKey) {
     let rainforestResult
 
@@ -87,60 +64,17 @@ async function fetchDiscoveryArtifactsWithFallback({
       }
     }
 
-    const shouldFallbackFromThinRainforest = hasOxylabsCredentials && isThinDiscoveryResult(rainforestResult)
-
-    if ((!rainforestResult.error && !shouldFallbackFromThinRainforest) || !hasOxylabsCredentials) {
-      return {
-        ...rainforestResult,
+    return {
+      ...rainforestResult,
       source: 'rainforest_discovery',
       fallbackFrom: null,
-      fallbackReason: null,
       diagnostics: rainforestResult.diagnostics || null,
-    }
-    }
-
-    const oxylabsResult = await fetchOxylabsArtifacts({
-      filterConfig,
-      productQuery,
-      details,
-      reasonFallback,
-      oxylabsUsername,
-      oxylabsPassword,
-      amazonDomain,
-    })
-
-    return {
-      ...oxylabsResult,
-      source: 'oxylabs_discovery',
-      fallbackFrom: 'rainforest_discovery',
-      fallbackReason: shouldFallbackFromThinRainforest ? 'thin_rainforest_results' : 'rainforest_error',
-      diagnostics: oxylabsResult.diagnostics || rainforestResult.diagnostics || null,
-    }
-  }
-
-  if (hasOxylabsCredentials) {
-    const oxylabsResult = await fetchOxylabsArtifacts({
-      filterConfig,
-      productQuery,
-      details,
-      reasonFallback,
-      oxylabsUsername,
-      oxylabsPassword,
-      amazonDomain,
-    })
-
-    return {
-      ...oxylabsResult,
-      source: 'oxylabs_discovery',
-      fallbackFrom: null,
-      fallbackReason: null,
-      diagnostics: oxylabsResult.diagnostics || null,
     }
   }
 
   return {
     error: {
-      error: 'RAINFOREST_API_KEY or OXYLABS_USERNAME and OXYLABS_PASSWORD are required in the root .env file.',
+      error: 'RAINFOREST_API_KEY is required in the root .env file.',
       statusCode: 500,
     },
     artifacts: null,
@@ -278,12 +212,10 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   const requestStartedAt = nowMs()
   const diagnosticContext = getDiagnosticContext(requestUrl)
   const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
-  const oxylabsUsername = getEnv('OXYLABS_USERNAME')
-  const oxylabsPassword = getEnv('OXYLABS_PASSWORD')
 
-  if (!rainforestApiKey && (!oxylabsUsername || !oxylabsPassword)) {
+  if (!rainforestApiKey) {
     sendJson(response, 500, {
-      error: 'OXYLABS_USERNAME and OXYLABS_PASSWORD or RAINFOREST_API_KEY are required in the root .env file.',
+      error: 'RAINFOREST_API_KEY is required in the root .env file.',
     })
     return
   }
@@ -433,17 +365,14 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       artifacts,
       error: artifactsError,
       fallbackFrom,
-      fallbackReason,
       source: discoverySource,
       diagnostics,
-    } = await fetchDiscoveryArtifactsWithFallback({
+    } = await fetchDiscoveryArtifacts({
       filterConfig: LIVE_RESULT_FILTER_CONFIG,
       productQuery: normalizedQuery,
       details: normalizedDetails,
       reasonFallback: 'Returned by the Rainforest API search route',
       rainforestApiKey,
-      oxylabsUsername,
-      oxylabsPassword,
       countryCode,
       amazonDomain,
     })
@@ -498,7 +427,6 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
         candidateCountAfterInternalFilters: diagnostics?.candidateCountAfterInternalFilters,
         discoverySource,
         fallbackFrom,
-        fallbackReason,
       },
     })
     recordDiscoveryDiagnosticEvent(diagnosticContext, {
@@ -534,9 +462,8 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       }),
       {
         amazonDomain,
-      fallbackFrom,
-      fallbackReason,
-      label: 'write_guided_discovery_snapshot',
+        fallbackFrom,
+        label: 'write_guided_discovery_snapshot',
         query: normalizedQuery,
         route: '/api/search/rainforest-discover',
       },
@@ -579,7 +506,6 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       previewCount: artifacts.results.length,
       cacheMs: roundTimingDuration(cacheLookupDuration),
       fallbackFrom,
-      fallbackReason,
       providerMs: roundTimingDuration(providerDuration),
       source: discoverySource,
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
@@ -595,7 +521,6 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       previewResults: artifacts.results,
       source: discoverySource,
       fallbackFrom,
-      fallbackReason,
     }, {
       serverTiming: [
         { name: 'cache', duration: cacheLookupDuration },
@@ -672,7 +597,7 @@ export {
   ensureDiscoverySnapshotToken,
   buildDiscoveryPreviewSelection,
   createDiscoveryToken,
-  fetchDiscoveryArtifactsWithFallback,
+  fetchDiscoveryArtifacts,
   isThinDiscoveryCacheHit,
   shouldRefreshDiscoveryCache,
 }

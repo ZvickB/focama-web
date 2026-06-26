@@ -43,12 +43,12 @@
 - Frontend auth shell has started: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI are implemented. Search remains ungated. Signed-out history uses localStorage; signed-in history uses Supabase `saved_searches`; local entries migrate into the account on login. Live QA of auth/RLS/history persistence is still pending.
 
 ## Current guided flow
-- `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It uses Rainforest API first for all Amazon marketplaces when configured, with Oxylabs fallback only when Rainforest errors or returns too few usable items. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available.
+- `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It uses Rainforest API for active Amazon discovery; Oxylabs provider code is archived and is not an active fallback.
 - `GET /api/search/refine` returns one short follow-up question and optional refinement chips.
 - `POST /api/search/finalize` rebuilds the candidate pool from guided cache and returns up to 6 shortlist cards.
 - Haiku shortlist locking now ranks by inferred product fit first, then quality confidence (rating, review count, trustScore, and recognized category brand), price/value, useful shortlist variety, and raw Amazon search position (`amazonPosition`) as the final secondary signal.
 - `GET /api/search/enrichment-stream` is the first enrichment path; `GET /api/search/enrichment` is the polling fallback.
-- `GET /api/search/product-details` hydrates one skipped-refinement preview product from the per-ASIN product detail cache or Oxylabs when its modal opens.
+- `GET /api/search/product-details` hydrates one skipped-refinement preview product from the per-ASIN product detail cache or Rainforest when its modal opens.
 - `POST /api/product/deep-dive` is implemented behind `DEEP_DIVE_ENABLED=true` for signed-in users who manually click Deep Dive inside a finalized product modal. The modal button is hidden by default and appears only after mini writeup plus a separate token-scoped `gpt-5-mini` eligibility pass marks a finalized product `show` or `maybe`. The clicked endpoint validates the candidate against the finalized token-scoped snapshot, uses SerpApi Shopping -> Immersive Product, refreshes stale Immersive cache before showing lower store offers, caches useful review or store-offer Immersive data while avoiding empty provider responses, validates exact offers/direct links, compares them against the known Amazon/source price, and optionally synthesizes real review evidence with Haiku.
 - Mini enrichment now treats the first locked pick as the hero recommendation and later picks as alternatives with distinct tradeoffs.
 - `GET /api/search/query-quality` exposes polling-based query-quality suggestions.
@@ -90,3 +90,4 @@
 - For current behavior questions, read `project-notes/app_flow.md`.
 - For backend/search behavior, read `project-notes/search-flow.md`.
 - For remaining work, read `project-notes/handoff.md`.
+

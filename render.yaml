@@ -23,10 +23,6 @@ services:
         sync: false
       - key: SUPABASE_SECRET_KEY
         sync: false
-      - key: OXYLABS_USERNAME
-        sync: false
-      - key: OXYLABS_PASSWORD
-        sync: false
       - key: OPENAI_REFINEMENT_MODEL
         sync: false
       - key: OPENAI_FINALIZE_MODEL

@@ -1,8 +1,8 @@
-import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from './result-filter.js'
-import { buildProductDetailsCacheWriteEntry, fetchProductDetailsWithCache } from './product-details-cache.js'
-import { buildQuery } from './search-data.js'
+import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts } from '../../lib/result-filter.js'
+import { buildProductDetailsCacheWriteEntry, fetchProductDetailsWithCache } from '../../lib/product-details-cache.js'
+import { buildQuery } from '../../lib/search-data.js'
 import { normalizeOxylabsProduct, normalizeOxylabsSearchResult } from './oxylabs-normalizer.js'
-import { getOxylabsDomainFromAmazonDomain } from '../../shared/amazon-marketplaces.js'
+import { normalizeAmazonDomain } from '../../../shared/amazon-marketplaces.js'
 
 export const OXYLABS_ENDPOINT = 'https://realtime.oxylabs.io/v1/queries'
 const PRODUCT_DETAILS_FIRST_PASS_TIMEOUT_MS = 10000
@@ -10,6 +10,11 @@ const PRODUCT_DETAILS_RETRY_TIMEOUT_MS = 20000
 
 function buildOxylabsAuthHeader(username, password) {
   return `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`
+}
+
+function getOxylabsDomainFromAmazonDomain(domain = 'amazon.com') {
+  const normalizedDomain = normalizeAmazonDomain(domain) || 'amazon.com'
+  return normalizedDomain.replace(/^amazon\./, '')
 }
 
 async function fetchSingleOxylabsProductDetail({

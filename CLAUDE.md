@@ -63,7 +63,7 @@ project-notes/archive/      Superseded docs — read for history, don't treat as
 
 ## Tech Stack
 - **Frontend:** React 19, React Router v7, TanStack Query, Tailwind CSS 3, Vite
-- **Backend:** Node.js + Express (`backend/express-server.js`), OpenAI API, Anthropic API, SerpApi, Supabase, Oxylabs
+- **Backend:** Node.js + Express (`backend/express-server.js`), OpenAI API, Anthropic API, SerpApi, Supabase
 - **Testing:** Vitest + @testing-library/react
 - **Deploy:** Frontend on Vercel; Backend on Render (`render.yaml`). Frontend API calls go directly to Render via `VITE_BACKEND_URL`, except `api/geo.js` which stays on Vercel for geolocation headers.
 
@@ -90,8 +90,6 @@ project-notes/archive/      Superseded docs — read for history, don't treat as
 SERPAPI_API_KEY          # SerpApi (legacy discovery path)
 OPENAI_API_KEY           # OpenAI (refinement + enrichment)
 CLAUDE_API_KEY           # Anthropic (haiku finalize lock)
-OXYLABS_USERNAME         # Oxylabs (primary Rainforest-style discovery + product detail fetch)
-OXYLABS_PASSWORD
 ```
 Frontend (set in Vercel):
 ```
@@ -200,3 +198,4 @@ Read `project-notes/assistant-start.md` first at the start of every session — 
 | `project-notes/handoff.md` | Medium-term work and open product questions |
 | `project-notes/doc_briefs.md` | Product intent, UX direction, and broader decisions |
 | `project-notes/db-needs.md` | Storage/backend table behavior |
+

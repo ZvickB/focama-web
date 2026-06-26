@@ -72,7 +72,7 @@ describe('search-storage product details cache helpers', () => {
           asin: 'B001',
           feature_bullets: ['Lightweight', 'Carry-on friendly'],
           product_description: 'A compact stroller.',
-          source: 'oxylabs',
+          source: 'rainforest',
           needs_updating: false,
           next_update_at: null,
         },
@@ -105,7 +105,7 @@ describe('search-storage product details cache helpers', () => {
     expect(result.get('B001')).toEqual({
       feature_bullets: ['Lightweight', 'Carry-on friendly'],
       productDescription: 'A compact stroller.',
-      source: 'oxylabs',
+      source: 'rainforest',
       needsUpdating: false,
       nextUpdateAt: null,
     })
@@ -126,7 +126,7 @@ describe('search-storage product details cache helpers', () => {
         asin: 'B010',
         feature_bullets: ['Quiet motor', 'Compact body'],
         productDescription: 'Designed for small kitchens.',
-        source: 'oxylabs',
+        source: 'rainforest',
         needsUpdating: false,
         nextUpdateAt: null,
       },
@@ -145,7 +145,7 @@ describe('search-storage product details cache helpers', () => {
       expect.objectContaining({
         feature_bullets: ['Quiet motor', 'Compact body'],
         productDescription: 'Designed for small kitchens.',
-        source: 'oxylabs',
+        source: 'rainforest',
         needsUpdating: false,
         nextUpdateAt: null,
       }),
@@ -157,7 +157,7 @@ describe('search-storage product details cache helpers', () => {
     expect(result.get('B010')).toEqual({
       feature_bullets: ['Quiet motor', 'Compact body'],
       productDescription: 'Designed for small kitchens.',
-      source: 'oxylabs',
+      source: 'rainforest',
       needsUpdating: false,
       nextUpdateAt: null,
     })
@@ -179,7 +179,7 @@ describe('search-storage product details cache helpers', () => {
           B020: {
             feature_bullets: [],
             productDescription: 'Needs bullet refresh.',
-            source: 'oxylabs',
+            source: 'rainforest',
             needsUpdating: true,
             nextUpdateAt: '2026-04-28T12:00:00.000Z',
             cachedAt: '2026-04-21T12:00:00.000Z',
@@ -194,7 +194,7 @@ describe('search-storage product details cache helpers', () => {
     expect(result.get('B020')).toEqual({
       feature_bullets: [],
       productDescription: 'Needs bullet refresh.',
-      source: 'oxylabs',
+      source: 'rainforest',
       needsUpdating: true,
       nextUpdateAt: '2026-04-28T12:00:00.000Z',
     })
@@ -228,7 +228,7 @@ describe('search-storage product details cache helpers', () => {
           asin: 'B030',
           feature_bullets: ['Filtered water'],
           productDescription: 'Countertop unit.',
-          source: 'oxylabs',
+          source: 'rainforest',
           needsUpdating: false,
           nextUpdateAt: null,
         },

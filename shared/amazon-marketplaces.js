@@ -77,11 +77,6 @@ export function getAffiliateSupportedAmazonDomainFromCountryCode(countryCode = '
   return normalizeAffiliateSupportedAmazonDomain(domain) || 'amazon.com'
 }
 
-export function getOxylabsDomainFromAmazonDomain(domain = 'amazon.com') {
-  const normalizedDomain = normalizeAmazonDomain(domain) || 'amazon.com'
-  return normalizedDomain.replace(/^amazon\./, '')
-}
-
 export function buildAmazonBaseUrl(domain = 'amazon.com') {
   const normalizedDomain = normalizeAmazonDomain(domain) || 'amazon.com'
   return `https://www.${normalizedDomain}`
