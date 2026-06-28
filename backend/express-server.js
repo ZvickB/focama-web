@@ -2,7 +2,6 @@ import express from 'express'
 import helmet from 'helmet'
 import multer from 'multer'
 import { attachCorsOrigin, buildInternalErrorPayload, resolveCorsOrigin, sendJson } from './lib/http.js'
-import { createKailaRouter } from './kaila/router.js'
 import { initObservability, registerProcessErrorHandlers, reportBackendError } from './lib/observability.js'
 import {
   handleAnalyticsDashboard,
@@ -10,6 +9,7 @@ import {
   handleCachedSearch,
   handleCachePoolInspect,
   handleConnectivityDiagnostic,
+  handleDeepDive,
   handleEnrichmentPoll,
   handleEnrichmentStream,
   handleFeedbackSubmission,
@@ -65,8 +65,6 @@ app.get('/api/ping', (req, res) => {
   res.json({ ok: true })
 })
 
-app.use('/kaila', createKailaRouter())
-
 // Search routes
 app.get('/api/search/rainforest-discover', async (req, res) => {
   await handleRainforestDiscoverySearch(getRequestUrl(req), res, req)
@@ -108,6 +106,10 @@ app.post('/api/search/retry-advice', async (req, res) => {
 
 app.post('/api/search/finalize', async (req, res) => {
   await handleFinalizeSelection(req, res)
+})
+
+app.post('/api/product/deep-dive', async (req, res) => {
+  await handleDeepDive(req, res)
 })
 
 // Analytics

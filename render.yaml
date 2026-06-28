@@ -33,8 +33,6 @@ services:
         sync: false
       - key: FINALIZE_ENRICHMENT_MODE
         sync: false
-      - key: KAILA_DEMO_PASSAGES_ENABLED
-        sync: false
       - key: RAINFOREST_API_KEY
         sync: false
       - key: RESEND_API_KEY
