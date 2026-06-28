@@ -1,7 +1,7 @@
 # Price Drop Watch — Implementation Plan
 
 **Written:** 2026-06-25
-**Status:** Phase 3 implemented behind `PRICE_WATCH_EMAILS_ENABLED=true`. Scheduled execution now uses the existing Render web service through a protected internal endpoint; a separate Render Cron service is not required.
+**Status:** Phase 3 implemented behind `PRICE_WATCH_EMAILS_ENABLED=true`. Scheduled execution uses the existing Render web service through a protected internal endpoint; a production GitHub Actions manual run passed on 2026-06-28. A separate Render Cron service is not required.
 **Sequence:** table + gate → frontend watch CRUD → check job (dry-run) → email (live). Each phase ships on its own.
 
 ---

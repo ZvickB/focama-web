@@ -13,7 +13,7 @@
 
 ## Real remaining work
 - Verify the live golden path in the browser and confirm cards arrive quickly while modal AI copy hydrates later.
-- Continue Price Watch from `project-notes/price-watch-plan.md`: Phases 1-3 are implemented. Scheduling now uses protected `POST /api/internal/check-price-watches` on the existing Render web service, so no separate Render Cron service is required. Configure a free external scheduler with `Authorization: Bearer $PRICE_WATCH_INTERNAL_TOKEN`. Before broad rollout, verify `PRICE_WATCH_FROM_EMAIL` in Resend/domain setup, then seed a known drop and confirm one email sends, the affiliate button works, `last_notified_*` updates, and the baseline reset prevents a duplicate alert.
+- Continue Price Watch from `project-notes/price-watch-plan.md`: Phases 1-3 are implemented. The protected Render endpoint and GitHub Actions trigger passed a production manual run on 2026-06-28 with zero active watches, so no separate Render Cron service is required. Before broad rollout, verify `PRICE_WATCH_FROM_EMAIL` in Resend/domain setup, then seed a known drop and confirm one email sends, the affiliate button works, `last_notified_*` updates, and the baseline reset prevents a duplicate alert.
 - Audit modal AI tone and tighten any copy that sounds too promotional or vague.
 - Verify route chunk-load recovery and the guided search transition states in the live browser once the next frontend deploy is available.
 - Watch whether the new inline marketplace prompt feels helpful or distracting, and adjust its timing/copy if testers treat it as friction.
