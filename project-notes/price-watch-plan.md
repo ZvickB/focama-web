@@ -1,7 +1,7 @@
 # Price Drop Watch — Implementation Plan
 
 **Written:** 2026-06-25
-**Status:** Phase 3 implemented behind `PRICE_WATCH_EMAILS_ENABLED=true`. Sender/domain verification still needs live provider confirmation before broad rollout.
+**Status:** Phase 3 implemented behind `PRICE_WATCH_EMAILS_ENABLED=true`. Scheduled execution now uses the existing Render web service through a protected internal endpoint; a separate Render Cron service is not required.
 **Sequence:** table + gate → frontend watch CRUD → check job (dry-run) → email (live). Each phase ships on its own.
 
 ---
@@ -27,7 +27,7 @@
 
 ## Architecture in one line
 
-`price_watches` table → a scheduled job re-prices watched ASINs daily → email when a price crosses the user's threshold, with a debounce so it only fires on genuine new drops.
+`price_watches` table → protected web-service endpoint re-prices watched ASINs daily when called by an external scheduler → email when a price crosses the user's threshold, with a debounce so it only fires on genuine new drops.
 
 What's reused (already in the repo):
 - **Watch table shape** mirrors `saved_searches` — `user_id` ownership, Supabase RLS.
@@ -35,7 +35,7 @@ What's reused (already in the repo):
 - **Identity** reuses the existing auth shell (`AuthProvider`, `useAuth`, `AuthModal`) and the admin Supabase client (`getSupabaseAdminClient` in `backend/lib/storage/supabase-client.js`) for the server-side job.
 
 What's genuinely new to the stack (and the real work of this feature):
-1. A **scheduled job** — there is no cron/worker today; Render runs one always-on web service. Add a **Render Cron Job**.
+1. A **scheduler trigger** — the job runs inside the existing Render web service at `POST /api/internal/check-price-watches`; call it daily from GitHub Actions or another HTTP scheduler with `Authorization: Bearer $PRICE_WATCH_INTERNAL_TOKEN`.
 2. An **email sender** — no email dependency exists today. Add Resend.
 3. A **price freshness contract** — current product-detail cache is useful for modal enrichment, but price alerts need `currentPrice`, `currency/domain`, `checkedAt`, and source/freshness rules.
 
@@ -244,22 +244,13 @@ eligible    = crossed
 
 > Two failure modes this guards against: (a) a missing/zero price must never be read as a 100% drop — skip it; (b) the baseline reset after notify is the debounce — a product that settles lower won't re-email every day.
 
-**Wire as a Render Cron Job** (new service in `render.yaml`):
-```yaml
-  - type: cron
-    name: focama-price-watch
-    env: node
-    schedule: "0 13 * * *"          # daily; pick an off-peak UTC hour
-    buildCommand: npm install
-    startCommand: node backend/jobs/check-price-watches.js
-    envVars:
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SECRET_KEY
-        sync: false
-      - key: RAINFOREST_API_KEY
-        sync: false
+**Scheduling:** no separate Render Cron service. The existing Render web service exposes:
+```http
+POST /api/internal/check-price-watches
+Authorization: Bearer $PRICE_WATCH_INTERNAL_TOKEN
 ```
+
+The active scheduler is `.github/workflows/price-watch.yml`, which calls the endpoint daily at 13:00 UTC and also supports manual runs. Its URL and Bearer token come from the `FOCAMAI_PRICE_WATCH_URL` and `FOCAMAI_PRICE_WATCH_TOKEN` GitHub Actions secrets.
 
 **Ship gate:** seed a watch with a baseline above the current real price; run the job manually; confirm the log says it *would* notify, `last_seen_price`/`last_checked_at` updated, and a missing-price ASIN is skipped (no fake drop).
 
@@ -315,6 +306,7 @@ RESEND_API_KEY            # Phase 3
 PRICE_WATCH_EMAILS_ENABLED=true
 PRICE_WATCH_FROM_EMAIL=contact@focamai.com
 PRICE_WATCH_MANAGE_URL=https://focamai.com/watches
+PRICE_WATCH_INTERNAL_TOKEN=long-random-secret
 # (cron job reuses SUPABASE_* and RAINFOREST_API_KEY already in use)
 ```
 

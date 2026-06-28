@@ -39,7 +39,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - `search_history` is internal telemetry/cache visibility, not a user-facing saved-history feature.
 - User-facing search history lives at `/history`; finalized searches auto-save locally when signed out and to Supabase `saved_searches` when signed in. Entries can be expanded, deleted, cleared, or re-run.
 - Frontend auth shell has started: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI exist. Search remains ungated. Signed-out history uses localStorage; signed-in history uses Supabase `saved_searches`; local entries migrate into the account on login. Live QA of auth/RLS/history persistence is still pending.
-- Price Watch Phase 3 is implemented behind `PRICE_WATCH_EMAILS_ENABLED=true`. Signed-in users can manage up to 5 watches at `/watches`; `backend/jobs/check-price-watches.js` re-prices active watched ASINs with Rainforest, updates checked/last-seen fields, logs would-notify rows when email is disabled, and sends Resend alerts plus baseline reset after successful live sends when enabled.
+- Price Watch Phase 3 is implemented behind `PRICE_WATCH_EMAILS_ENABLED=true`. Signed-in users can manage up to 5 watches at `/watches`; protected `POST /api/internal/check-price-watches` runs on the existing Render web service and should be called by a free external scheduler with `Authorization: Bearer $PRICE_WATCH_INTERNAL_TOKEN`. The job re-prices active watched ASINs with Rainforest, updates checked/last-seen fields, logs would-notify rows when email is disabled, and sends Resend alerts plus baseline reset after successful live sends when enabled.
 
 ## Current guided flow
 - User enters a product query.
@@ -82,6 +82,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Guided search state/requests: `src/components/home/useGuidedSearch.js`
 - Price watches page/hook/store: `src/pages/WatchPage.jsx`, `src/components/watch/useWatches.js`, `src/lib/watch/watchStore.js`
 - Price watch dry-run job: `backend/jobs/check-price-watches.js`
+- Price watch protected endpoint handler: `backend/lib/handlers/price-watch-handler.js`
 - Price watch email renderer/sender: `backend/lib/price-watch/price-drop-email.js`
 - Amazon store context: `src/contexts/AmazonStoreContext.jsx`
 - Backend route handlers: `backend/server.js`

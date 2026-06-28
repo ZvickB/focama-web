@@ -35,6 +35,7 @@ import { handleProductDetails } from './lib/handlers/product-details-handler.js'
 import { createRetryAdviceHandler } from './lib/handlers/retry-advice-handler.js'
 import { createFeedbackHandler } from './lib/handlers/feedback-handler.js'
 import { createSupabaseHealthHandler } from './lib/handlers/supabase-health-handler.js'
+import { createInternalPriceWatchHandler } from './lib/handlers/price-watch-handler.js'
 import {
   handleConnectivityDiagnostic,
   handleHealth,
@@ -89,6 +90,7 @@ export const handleFeedbackSubmission = createFeedbackHandler({
 })
 
 export const handleSupabaseHealth = createSupabaseHealthHandler()
+export const handleInternalPriceWatchCheck = createInternalPriceWatchHandler()
 
 export {
   handleAnalyticsTrack,
@@ -151,6 +153,11 @@ export function createApiServer() {
 
       if (request.method === 'GET' && requestUrl.pathname === '/api/health/supabase') {
         await handleSupabaseHealth(response)
+        return
+      }
+
+      if (request.method === 'POST' && requestUrl.pathname === '/api/internal/check-price-watches') {
+        await handleInternalPriceWatchCheck(request, response)
         return
       }
 

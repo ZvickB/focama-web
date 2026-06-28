@@ -41,7 +41,7 @@
 - Product titles are normalized for user-facing display across result rows, selected panels, grid/card view, and modal headings. Raw Amazon/source titles remain in data and are exposed behind a quiet full-title disclosure in details when the display title differs.
 - User-facing search history lives at `/history`; finalized searches save locally when signed out and to Supabase `saved_searches` when signed in. Entries can expand/delete/clear and can re-run a saved query with follow-up notes prefilled.
 - Frontend auth shell has started: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI are implemented. Search remains ungated. Signed-out history uses localStorage; signed-in history uses Supabase `saved_searches`; local entries migrate into the account on login. Live QA of auth/RLS/history persistence is still pending.
-- Price Watch Phase 3 is implemented behind `PRICE_WATCH_EMAILS_ENABLED=true`: signed-in users can add watches from finalized product modals only, manage them at `/watches`, and are limited to 5 watches. The table is `price_watches` with user-owned Supabase RLS. `backend/jobs/check-price-watches.js` uses the Supabase admin client plus Rainforest to update checked/last-seen fields, log would-notify rows while email is disabled, and send Resend alerts plus baseline reset after successful live sends when enabled.
+- Price Watch Phase 3 is implemented behind `PRICE_WATCH_EMAILS_ENABLED=true`: signed-in users can add watches from finalized product modals only, manage them at `/watches`, and are limited to 5 watches. The table is `price_watches` with user-owned Supabase RLS. Protected `POST /api/internal/check-price-watches` runs on the existing Render web service and should be called by a free external scheduler with `Authorization: Bearer $PRICE_WATCH_INTERNAL_TOKEN`. `backend/jobs/check-price-watches.js` uses the Supabase admin client plus Rainforest to update checked/last-seen fields, log would-notify rows while email is disabled, and send Resend alerts plus baseline reset after successful live sends when enabled.
 
 ## Current guided flow
 - `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It uses Rainforest API for active Amazon discovery; Oxylabs provider code is archived and is not an active fallback.
@@ -64,6 +64,7 @@
 - Search history page: `src/pages/HistoryPage.jsx`
 - Price watches page/hook/store: `src/pages/WatchPage.jsx`, `src/components/watch/useWatches.js`, `src/lib/watch/watchStore.js`
 - Price watch dry-run job: `backend/jobs/check-price-watches.js`
+- Price watch protected endpoint handler: `backend/lib/handlers/price-watch-handler.js`
 - Price watch email renderer/sender: `backend/lib/price-watch/price-drop-email.js`
 - First-load homepage shell: `src/components/home/HomeShell.jsx`
 - Guided homepage experience: `src/components/home/HomeExperience.jsx`

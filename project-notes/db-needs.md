@@ -94,6 +94,7 @@ RESEND_API_KEY=your-resend-key
 PRICE_WATCH_EMAILS_ENABLED=true
 PRICE_WATCH_FROM_EMAIL=contact@focamai.com
 PRICE_WATCH_MANAGE_URL=https://focamai.com/watches
+PRICE_WATCH_INTERNAL_TOKEN=long-random-secret
 ```
 
 Notes:
@@ -110,6 +111,7 @@ Notes:
 - `RESEND_API_KEY` powers Price Watch email alerts when `PRICE_WATCH_EMAILS_ENABLED=true`.
 - `PRICE_WATCH_FROM_EMAIL` should stay `contact@focamai.com` until `alerts@focamai.com` is verified/usable in Resend.
 - `PRICE_WATCH_MANAGE_URL` defaults to `https://focamai.com/watches`.
+- `PRICE_WATCH_INTERNAL_TOKEN` protects `POST /api/internal/check-price-watches`; external schedulers must send it as a Bearer token.
 
 ## SQL to run
 
