@@ -65,6 +65,7 @@ describe('layered contracts', () => {
       title: 'Compact airport stroller',
       subtitle: 'Target',
       price: '$199.99',
+      numericPrice: null,
       rating: 4.7,
       reviewCount: 342,
       isPrime: true,
