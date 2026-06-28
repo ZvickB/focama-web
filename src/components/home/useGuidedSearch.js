@@ -712,7 +712,6 @@ export function useGuidedSearch() {
     setCandidatePool(variables.originalCandidatePool || null)
     setPreviousResults(previousDisplayResults)
     setResults(finalizedResults)
-    console.log('[PRIME-DEBUG frontend] finalizedResults:', finalizedResults.length, '| isPrime true:', finalizedResults.filter(r => r.isPrime === true).length)
     if (finalizedResults.length > 0) {
       void historyStore.save({
         amazonDomain: variables.amazonDomain || submittedAmazonDomain,
