@@ -16,7 +16,6 @@ describe('retry advice', () => {
           },
         },
         output_text: JSON.stringify({
-          recommendation: 'new_search',
           suggested_query: 'compact city stroller under 18 pounds',
           rationale: 'Focuses the search on lighter city strollers that fit daily travel better.',
         }),
@@ -55,14 +54,10 @@ describe('retry advice', () => {
 
     expect(parsedBody.reasoning.effort).toBe('minimal')
     expect(parsedBody.text.format.name).toBe('retry_advice')
-    expect(parsedBody.text.format.schema.properties.recommendation.enum).toEqual(['new_search'])
-    expect(parsedBody.text.format.schema.required).toEqual([
-      'recommendation',
-      'suggested_query',
-      'rationale',
-    ])
+    expect(parsedBody.text.format.schema.properties).not.toHaveProperty('recommendation')
+    expect(parsedBody.text.format.schema.required).toEqual(['suggested_query', 'rationale'])
     expect(parsedBody.text.format.schema.properties.suggested_query.maxLength).toBe(80)
-    expect(parsedBody.input[1].content).toContain('Always return recommendation as new_search.')
+    expect(parsedBody.input[1].content).not.toContain('Always return recommendation as new_search.')
     expect(parsedBody.input[1].content).toContain('The suggested_query must be 80 characters or fewer')
     expect(parsedBody.input[1].content).toContain('Preserve accumulated must-have constraints')
     expect(parsedBody.input[1].content).toContain('Only drop or replace a previous constraint when the latest feedback clearly says')
@@ -77,7 +72,6 @@ describe('retry advice', () => {
       ok: true,
       json: async () => ({
         output_text: JSON.stringify({
-          recommendation: 'new_search',
           suggested_query: 'Yupik dairy-free white chocolate chips',
           rationale: 'Keeps the brand and product type while adding the dietary need.',
         }),
@@ -183,7 +177,6 @@ describe('retry advice', () => {
             content: [
               {
                 text: JSON.stringify({
-                  recommendation: 'new_search',
                   suggested_query: '  lightweight   stroller   for   city  travel  ',
                   rationale: '  Narrows   the search to lighter strollers for daily city trips.  ',
                 }),
@@ -221,7 +214,6 @@ describe('retry advice', () => {
       ok: true,
       json: async () => ({
         output_text: JSON.stringify({
-          recommendation: 'new_search',
           suggested_query: `compact city stroller ${'with extra lightweight foldable travel storage '.repeat(4)}`,
           rationale: 'Narrows the search to lighter strollers for daily city trips.',
         }),
@@ -246,7 +238,6 @@ describe('retry advice', () => {
       ok: true,
       json: async () => ({
         output_text: JSON.stringify({
-          recommendation: 'new_search',
           suggested_query: '   ',
           rationale: '   ',
         }),
@@ -275,7 +266,6 @@ describe('retry advice', () => {
       ok: true,
       json: async () => ({
         output_text: JSON.stringify({
-          recommendation: 'new_search',
           suggested_query: 'compact stroller',
           rationale: 'Focuses on compact options.',
         }),

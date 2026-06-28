@@ -63,10 +63,6 @@ function buildRetryAdviceSchema() {
   return {
     type: 'object',
     properties: {
-      recommendation: {
-        type: 'string',
-        enum: ['new_search'],
-      },
       suggested_query: {
         type: 'string',
         maxLength: MAX_QUERY_LENGTH,
@@ -75,7 +71,7 @@ function buildRetryAdviceSchema() {
         type: 'string',
       },
     },
-    required: ['recommendation', 'suggested_query', 'rationale'],
+    required: ['suggested_query', 'rationale'],
     additionalProperties: false,
   }
 }
@@ -104,7 +100,6 @@ function buildRetryAdviceInput({
 
   return [
     'A shopper rejected a set of product picks. Suggest a better fresh search they can try next.',
-    'Always return recommendation as new_search.',
     'Always provide a concise suggested_query that can be pasted into a normal shopping search box.',
     'The suggested_query must be 80 characters or fewer — write a tight, complete phrase.',
     'Rewrite the search more specifically around the feedback while keeping the shopper intent.',
