@@ -2,8 +2,8 @@ import { useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import PageShell from '@/components/PageShell.jsx'
 import Seo from '@/components/Seo.jsx'
+import { fetchBackend } from '@/lib/backendUrl.js'
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
 const LOOKBACK_OPTIONS = [7, 14, 30]
 
 function formatNumber(value) {
@@ -24,14 +24,14 @@ async function fetchCachePool({ query, limit = 10 }) {
   const params = new URLSearchParams()
   if (query) params.set('q', query)
   params.set('limit', String(limit))
-  const response = await fetch(`${BACKEND_URL}/api/analytics/cache-pool?${params}`)
+  const response = await fetchBackend(`/api/analytics/cache-pool?${params}`)
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw createDashboardError(response.status, payload.error || 'Unable to load cache pool.')
   return payload
 }
 
 async function fetchFinalizeHistory() {
-  const response = await fetch(`${BACKEND_URL}/api/analytics/finalize-history`)
+  const response = await fetchBackend('/api/analytics/finalize-history')
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw createDashboardError(response.status, payload.error || 'Unable to load finalize history.')
   return payload
@@ -61,7 +61,7 @@ function buildCopyAllText(entries) {
 }
 
 async function fetchAnalyticsDashboard({ days }) {
-  const response = await fetch(`${BACKEND_URL}/api/analytics/dashboard?days=${days}`)
+  const response = await fetchBackend(`/api/analytics/dashboard?days=${days}`)
 
   const payload = await response.json().catch(() => ({}))
 

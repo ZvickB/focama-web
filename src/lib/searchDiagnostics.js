@@ -1,4 +1,5 @@
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
+import { fetchBackend, getBackendUrl } from '@/lib/backendUrl.js'
+
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || import.meta.env.VITE_VERCEL_GIT_COMMIT_SHA || ''
 
 function isDiagnosticsEnabled() {
@@ -15,7 +16,7 @@ function isDiagnosticsEnabled() {
 
 function getApiBaseHost() {
   try {
-    const url = new URL(BACKEND_URL || window.location.origin)
+    const url = new URL(getBackendUrl() || window.location.origin)
     return url.host
   } catch {
     return ''
@@ -54,7 +55,7 @@ export function reportSearchDiagnosticEvent(event = {}) {
     return
   }
 
-  const request = fetch(`${BACKEND_URL}/api/search/diagnostics/event`, {
+  const request = fetchBackend('/api/search/diagnostics/event', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -84,7 +85,7 @@ export function reportSearchDiagnosticEvent(event = {}) {
 
 async function pingJson(path) {
   const startedAt = performance.now()
-  const response = await fetch(`${BACKEND_URL}${path}`, {
+  const response = await fetchBackend(path, {
     cache: 'no-store',
   })
   const payload = await response.json().catch(() => ({}))

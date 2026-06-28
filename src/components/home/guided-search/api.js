@@ -5,8 +5,7 @@ import {
   parseServerTimingHeader,
   roundTiming,
 } from '@/components/home/guided-search/constants.js'
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
+import { fetchBackend } from '@/lib/backendUrl.js'
 
 function shouldSendDiagnosticId(value) {
   return value && value !== 'analytics-disabled'
@@ -69,7 +68,7 @@ export async function fetchDiscoveryResults(query, amazonDomain = AMAZON_MARKETP
     searchParams.set('platform', 'web')
   }
   const requestStartedAt = performance.now()
-  const response = await fetch(`${BACKEND_URL}/api/search/rainforest-discover?${searchParams.toString()}`, {
+  const response = await fetchBackend(`/api/search/rainforest-discover?${searchParams.toString()}`, {
     signal,
   })
   return readJsonResponse(response, requestStartedAt)
@@ -78,7 +77,7 @@ export async function fetchDiscoveryResults(query, amazonDomain = AMAZON_MARKETP
 export async function fetchRefinementPrompt(query, signal) {
   const searchParams = new URLSearchParams({ query })
   const requestStartedAt = performance.now()
-  const response = await fetch(`${BACKEND_URL}/api/search/refine?${searchParams.toString()}`, {
+  const response = await fetchBackend(`/api/search/refine?${searchParams.toString()}`, {
     signal,
   })
   return readJsonResponse(response, requestStartedAt)
@@ -91,7 +90,7 @@ export async function fetchRetryAdvice({
   shortlist,
 }) {
   const requestStartedAt = performance.now()
-  const response = await fetch(`${BACKEND_URL}/api/search/retry-advice`, {
+  const response = await fetchBackend('/api/search/retry-advice', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -122,7 +121,7 @@ export async function finalizeGuidedSearch({
   signal,
 }) {
   const requestStartedAt = performance.now()
-  const response = await fetch(`${BACKEND_URL}/api/search/finalize`, {
+  const response = await fetchBackend('/api/search/finalize', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -149,7 +148,7 @@ export async function fetchEnrichment({ token, query, amazonDomain }) {
   const searchParams = new URLSearchParams({ token, query })
   appendAmazonDomain(searchParams, amazonDomain)
   const requestStartedAt = performance.now()
-  const response = await fetch(`${BACKEND_URL}/api/search/enrichment?${searchParams.toString()}`)
+  const response = await fetchBackend(`/api/search/enrichment?${searchParams.toString()}`)
   return readJsonResponse(response, requestStartedAt)
 }
 
@@ -157,7 +156,7 @@ export async function fetchProductDetails({ asin, amazonDomain }) {
   const searchParams = new URLSearchParams({ asin })
   appendAmazonDomain(searchParams, amazonDomain)
   const requestStartedAt = performance.now()
-  const response = await fetch(`${BACKEND_URL}/api/search/product-details?${searchParams.toString()}`)
+  const response = await fetchBackend(`/api/search/product-details?${searchParams.toString()}`)
   return readJsonResponse(response, requestStartedAt)
 }
 
@@ -165,7 +164,7 @@ export async function fetchQueryQualitySuggestion({ token, query, amazonDomain }
   const searchParams = new URLSearchParams({ token, query })
   appendAmazonDomain(searchParams, amazonDomain)
   const requestStartedAt = performance.now()
-  const response = await fetch(`${BACKEND_URL}/api/search/query-quality?${searchParams.toString()}`)
+  const response = await fetchBackend(`/api/search/query-quality?${searchParams.toString()}`)
   return readJsonResponse(response, requestStartedAt)
 }
 
@@ -179,7 +178,7 @@ export async function fetchProductDeepDive({
   token,
 }) {
   const requestStartedAt = performance.now()
-  const response = await fetch(`${BACKEND_URL}/api/product/deep-dive`, {
+  const response = await fetchBackend('/api/product/deep-dive', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
