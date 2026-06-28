@@ -86,15 +86,11 @@ function MarketplacePillToast({ domain, onConfirm, onChooseStore, onDismiss }) {
   )
 }
 
-const navItems = [
+const baseNavItems = [
   { to: '/why', label: 'Why Focamai', highlight: true },
   { to: '/history', label: 'History' },
   ...(import.meta.env.DEV ? [{ to: '/admin/analytics', label: 'Analytics' }] : []),
 ]
-
-const mobileMenuItems = navItems.filter((item) =>
-  ['/why', '/history'].includes(item.to),
-)
 const HEADER_COLLAPSE_SCROLL_Y = 72
 const HEADER_EXPAND_SCROLL_Y = 20
 const newSearchActionClass =
@@ -284,6 +280,16 @@ function SiteLayout() {
   const { loading: isAuthLoading, signOut, user } = useAuth()
   const userEmail = user?.email || ''
   const userInitial = userEmail ? userEmail.charAt(0).toUpperCase() : ''
+  const navItems = user
+    ? [
+        baseNavItems[0],
+        { to: '/watches', label: 'Watches' },
+        ...baseNavItems.slice(1),
+      ]
+    : baseNavItems
+  const mobileMenuItems = navItems.filter((item) =>
+    ['/why', '/history', '/watches'].includes(item.to),
+  )
 
   const showMarketplaceToast =
     isHomePage && progress.hasStartedSearch && !hasAskedMarketplacePreference

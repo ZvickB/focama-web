@@ -6,7 +6,7 @@
 
 ## Current app structure
 - The site uses React Router with a shared shell.
-- Current public pages are Home, Search History, Why Focamai, Contact, Privacy, and Affiliate Disclosure.
+- Current public pages are Home, Search History, Price Watches, Why Focamai, Contact, Privacy, and Affiliate Disclosure.
 - The shared header now has an optional auth entry point. When logged out, users see `Sign in`; when logged in, the header shows the account email/initial and a sign-out action.
 - The homepage is the main product experience and uses the `open` layout.
 - Public routes now set page-level SEO metadata in the client: title, description, canonical URL, Open Graph, Twitter tags, and `noindex` on the 404 page.
@@ -34,6 +34,7 @@
 - `/history` shows completed searches saved on the current device, newest first. Each entry can expand to show the saved six picks, be deleted, clear all history, or re-run the saved query with follow-up notes prefilled.
 - Auth UI is present and does not gate search. Email/password and Google sign-in are wired through the Supabase browser client when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are configured; otherwise the modal shows setup copy.
 - When signed out, user-facing search history uses localStorage. When signed in, the active history store switches to Supabase `saved_searches`; local entries are migrated into the account on login and then cleared locally after successful migration.
+- `/watches` is the signed-in Price Watch management page. Users can watch up to 5 finalized Amazon products, edit the drop percentage and optional target price, pause/resume, and remove watches. Email alerts can run from the daily job only when `PRICE_WATCH_EMAILS_ENABLED=true`.
 - `Start a new search` clears the guided state and returns to a fresh search box.
 - After final results appear, the user can open the retry panel and ask for a better search direction.
 - As soon as `HomeExperience` mounts, it prefetches the lazy `ResultsSection` and `ProductDetailModal` chunks so those UI steps are more likely to be ready before the user needs them.
@@ -45,7 +46,7 @@
 - `GET /api/search/rainforest-discover`
   - primary homepage discovery route
   - uses Rainforest API first for all Amazon marketplaces when configured
-  - falls back to Oxylabs only when Rainforest errors or returns too few usable items to support the 6-item shortlist; if Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available
+  - uses Rainforest only; Oxylabs has been archived and is not an active fallback
   - writes reusable guided discovery cache and creates a separate token-scoped session snapshot for finalize/enrichment
   - honors an explicit one-request cache refresh mode for accepted retry-advice searches, bypassing the shared discovery cache read while still writing fresh provider results back to shared cache and session state
   - also honors that refresh mode for the one-time pre-finalize discovery pass when follow-up notes contain hard constraints
@@ -95,7 +96,7 @@
   - returns `shouldSuggest: false` for quiet no-op reviews, ambiguous language, failures, or skipped reviews
 - `GET /api/search/product-details`
   - lightweight one-product detail hydration endpoint used when a user opens a skipped-refinement preview product
-  - reads the per-ASIN product details cache first and uses Oxylabs only for cache misses when credentials are configured
+  - reads the per-ASIN product details cache first and uses Rainforest for cache misses when configured
   - returns product detail bullets, product description, Prime, and delivery facts; it does not run AI recommendation analysis
 - `POST /api/search/retry-advice`
   - reads the rejected shortlist plus user feedback
@@ -129,13 +130,14 @@
 - A development-only results-view toggle can switch between the ranked rows view and the older grid/card view.
 - Result rows/cards show reliable product facts first: image, title, price, one combined ratings/reviews signal, and at most one delivery signal when available. The provider/source name is carried by the shopping clickout CTA when available, not repeated as separate card metadata.
 - Provider-confirmed Prime eligibility is preserved as structured product data and shown as a quiet factual `Prime` marker on result rows/cards plus a modal `Delivery` fact only when Prime is confirmed. Plain free-delivery text can show as `Free delivery` instead of being upgraded to Prime. Positive Rainforest delivery text such as Prime delivery/signup eligibility is promoted into `isPrime`; Focamai does not show negative/unknown Prime copy, use the official Amazon Prime logo, or turn Prime into a marketplace-style filter panel.
-- Some Oxylabs search rows underreport Prime even when the product page confirms it. Async product-detail enrichment can upgrade a result to `isPrime: true` and hydrate the row/card plus modal fact after the initial shortlist appears.
+- Async Rainforest product-detail enrichment can hydrate provider-confirmed bullets, descriptions, Prime, and delivery details after the initial shortlist appears.
 - User-facing result and detail titles are normalized for display so long Amazon keyword-stuffed titles are shortened without changing the raw product data. Long titles with commas keep the first comma chunk; otherwise display titles truncate at a word boundary before 80 characters.
 - Result, retry, and modal surfaces now share a quieter visual system: fewer decorative gradients, smaller shadows, and more consistent 16-28px radii.
 - Selecting a row or the row details action opens the modal.
 - The modal is ordered as a decision aid: image and title, an `At a glance` facts card, `Why this pick`, `Worth knowing`, then product notes from `feature_bullets` or description. The facts card stays compact with price, combined ratings/reviews, and optional delivery; source/store naming is reserved for the shopping CTA instead of repeated as passive metadata.
 - Finalized product modals include a quiet optional `Deep dive` panel only when async Deep Dive eligibility says the product is worth it. The button is hidden by default, appears after mini writeup when the separate `gpt-5-mini` eligibility pass returns `show` or `maybe`, and remains explicit/user-triggered. Signed-out users are sent to sign in before any provider call. Signed-in users can trigger the panel manually; it shows loading, gated, limited-data, store-offer, review-summary, top-insight, and critic-rating states. The existing bottom Amazon/source CTA remains unchanged and primary.
-- For skipped-refinement preview products, the modal hides the AI `Why this pick` analysis panel because finalize/enrichment has not run; opening the preview modal lazily hydrates product notes from the per-ASIN cache or Oxylabs.
+- Finalized product modals include a `Watch price` action when the product has an ASIN and a positive numeric price. Signed-out users are sent to sign in; signed-in users create or reuse a `price_watches` row for that ASIN + marketplace. Preview-product modals do not show the watch action.
+- For skipped-refinement preview products, the modal hides the AI `Why this pick` analysis panel because finalize/enrichment has not run; opening the preview modal lazily hydrates product notes from the per-ASIN cache or Rainforest.
 - If the normalized detail heading differs from the raw title, the detail header exposes the original directly under the title behind a quiet `Full Amazon title`/source-title disclosure.
 - If enrichment is still pending, result rows/panels and the modal use quiet teal/orange breathing dots instead of visible uncertainty copy; if enrichment settles without a fit reason, the modal shows a practical fallback instead of an empty section.
 - Shopping clickout CTAs happen from result rows/cards and the modal CTA, and derive their visible label from the product source/store (`View on Amazon`, `View on Walmart`, etc.) instead of using generic `retailer` wording when a source name is available.
@@ -177,13 +179,15 @@
 - Partial valid haiku output is recoverable, not final: zero picks still use rules fallback, full valid picks stay `haiku_lock`, and partial valid picks are returned as `haiku_lock_topped_up`.
 - Search cache and operational history use Supabase when configured, with local fallback in development.
 - User-facing saved-search history uses localStorage under `focamai:searchHistory:v1` for signed-out users and Supabase `saved_searches` for signed-in users.
+- Price Watch uses Supabase `price_watches` for signed-in users only; there is no localStorage watch mode because watches are intended to power account email alerts later.
+- The Price Watch job lives at `backend/jobs/check-price-watches.js` and is exposed through protected `POST /api/internal/check-price-watches` on the existing Render web service. External schedulers must send `Authorization: Bearer $PRICE_WATCH_INTERNAL_TOKEN`. The job reads non-paused watches with the Supabase admin client, dedupes ASINs by marketplace, checks fresh Rainforest numeric prices, updates `last_checked_at` and positive `last_seen_price`, and logs which watches would notify while email is disabled. With `PRICE_WATCH_EMAILS_ENABLED=true`, it sends Resend price-drop emails, then updates `last_notified_*` and resets `baseline_price` only after successful send. Failed email sends do not reset the baseline.
 - Supabase auth state is handled client-side through `AuthProvider`; the Supabase browser client is lazy-loaded so auth does not inflate the initial search bundle.
 - Product details have a separate per-ASIN cache shared across detail providers.
 - Async mini enrichment is token-scoped when it writes back into the per-session discovery snapshot so older same-query searches cannot leak context-specific `fit_reason` or `caveat` text into newer sessions.
 - Async Deep Dive eligibility is also token-scoped and stored separately at `selection.deepDiveEligibility`; it controls whether the modal button appears, not whether any Deep Dive offer/review evidence is trusted.
 - Mini enrichment treats the first locked product as the hero recommendation and writes later picks as alternatives that explain who might prefer them over the hero.
-- Oxylabs product-detail fetches use a fast first pass for finalize enrichment and retry failed ASIN detail calls in the background so cache quality can still improve without holding the modal AI copy back longer.
-- When a background detail retry later succeeds, the stored enrichment payload is updated with the new `feature_bullets` and the frontend keeps polling long enough for the open modal to hydrate those bullets in place.
+- Rainforest product-detail fetches run asynchronously after finalize so modal AI copy can hydrate without blocking the initial shortlist.
+- If product details are available after finalize, the stored enrichment payload includes the new `feature_bullets` and the frontend can hydrate those bullets in place.
 - Backend observability is now opt-in through Sentry (`SENTRY_DSN`) with sanitized error context, and background async failures are logged/reported instead of disappearing silently.
 - Search reliability diagnostics now use the existing frontend search ID as a user-facing support code. Frontend discovery/finalize failures show the support code, offer a safe `Copy debug info` action, ask testers whether they use a filter/VPN, run lightweight `/api/health` and `/api/diagnostics/connectivity` checks, and write best-effort lifecycle rows to Supabase `search_attempts` / `search_events` when those tables exist.
 - The diagnostic lifecycle covers frontend search start, backend request start/receive, Rainforest start/success/error/timeout, app filter counts, empty results, backend response sent, frontend response/display success, frontend error, backend health, and connectivity checks.
@@ -212,3 +216,4 @@
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
 - The normalized product shape should stay provider-flexible, but future multi-retailer flexibility should not make today's Amazon-first UX vague.
 - Rainforest-style Amazon discovery is the main route; SerpApi stays secondary and only matters if deliberately reactivated.
+

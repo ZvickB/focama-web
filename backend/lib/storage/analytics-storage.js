@@ -6,7 +6,6 @@ import {
   getSupabaseAdminClient,
   isSupabaseConfigured,
   logStorageWarning,
-  OXYLABS_PRODUCT_FAILURES_TABLE,
   readSupabaseRowsSince,
   SEARCH_CACHE_TABLE,
   SEARCH_HISTORY_TABLE,
@@ -193,17 +192,6 @@ export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit
   const sinceIso = new Date(now - lookbackDays * 24 * 60 * 60 * 1000).toISOString()
 
   try {
-    let oxylabsFailuresResult = { rows: [], truncated: false }
-    try {
-      oxylabsFailuresResult = await readSupabaseRowsSince(
-        OXYLABS_PRODUCT_FAILURES_TABLE,
-        'asin, failure_type, status_code, query, created_at',
-        sinceIso,
-      )
-    } catch {
-      // Table may not exist yet — failures section will show empty.
-    }
-
     const [runsResult, eventsResult, impressionsResult, clicksResult, feedbackResult] = await Promise.all([
       readSupabaseRowsSince(
         ANALYTICS_SEARCH_RUNS_TABLE,
@@ -461,29 +449,6 @@ export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit
       }))
       .sort((left, right) => right.day.localeCompare(left.day))
 
-    const oxylabsFailureRows = oxylabsFailuresResult.rows
-    const oxylabsAsinMap = new Map()
-    for (const row of oxylabsFailureRows) {
-      const entry = oxylabsAsinMap.get(row.asin) || { asin: row.asin, timeout: 0, httpError: 0, unknown: 0, total: 0 }
-      entry.total += 1
-      if (row.failure_type === 'timeout') entry.timeout += 1
-      else if (row.failure_type === 'http_error') entry.httpError += 1
-      else entry.unknown += 1
-      oxylabsAsinMap.set(row.asin, entry)
-    }
-
-    const oxylabsFailures = {
-      total: oxylabsFailureRows.length,
-      byType: {
-        timeout: oxylabsFailureRows.filter((r) => r.failure_type === 'timeout').length,
-        httpError: oxylabsFailureRows.filter((r) => r.failure_type === 'http_error').length,
-        unknown: oxylabsFailureRows.filter((r) => r.failure_type === 'unknown').length,
-      },
-      topAsins: Array.from(oxylabsAsinMap.values())
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 20),
-    }
-
     let searchDiagnostics = { available: false, reason: 'not_loaded' }
     try {
       searchDiagnostics = await readSearchDiagnosticsDashboardData({ sinceDays: lookbackDays })
@@ -517,7 +482,6 @@ export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit
       positionPerformance,
       badgePerformance,
       feedbackSummary,
-      oxylabsFailures,
       searchDiagnostics,
       recentSearches: [...runs]
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -546,30 +510,6 @@ export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit
       available: false,
       reason: 'read_failed',
     }
-  }
-}
-
-export async function recordOxylabsProductFailures(failures = []) {
-  if (!isSupabaseConfigured() || !Array.isArray(failures) || failures.length === 0) {
-    return
-  }
-
-  try {
-    const supabase = getSupabaseAdminClient()
-    const { error } = await supabase.from(OXYLABS_PRODUCT_FAILURES_TABLE).insert(
-      failures.map((f) => ({
-        asin: f.asin,
-        failure_type: f.failureType,
-        status_code: f.statusCode || null,
-        query: f.query || null,
-      })),
-    )
-
-    if (error) {
-      throw error
-    }
-  } catch {
-    // Best-effort — don't block the enrichment path.
   }
 }
 

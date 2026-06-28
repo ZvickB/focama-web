@@ -8,7 +8,6 @@ export {
   recordAnalyticsResultClick,
   recordAnalyticsResultImpressions,
   recordAnalyticsSearchEvent,
-  recordOxylabsProductFailures,
   recordSearchHistory,
   upsertAnalyticsSearchRun,
 } from './storage/analytics-storage.js'

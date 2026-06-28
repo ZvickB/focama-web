@@ -23,10 +23,6 @@ services:
         sync: false
       - key: SUPABASE_SECRET_KEY
         sync: false
-      - key: OXYLABS_USERNAME
-        sync: false
-      - key: OXYLABS_PASSWORD
-        sync: false
       - key: OPENAI_REFINEMENT_MODEL
         sync: false
       - key: OPENAI_FINALIZE_MODEL
@@ -38,4 +34,16 @@ services:
       - key: FINALIZE_ENRICHMENT_MODE
         sync: false
       - key: KAILA_DEMO_PASSAGES_ENABLED
+        sync: false
+      - key: RAINFOREST_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: PRICE_WATCH_EMAILS_ENABLED
+        sync: false
+      - key: PRICE_WATCH_FROM_EMAIL
+        sync: false
+      - key: PRICE_WATCH_MANAGE_URL
+        sync: false
+      - key: PRICE_WATCH_INTERNAL_TOKEN
         sync: false

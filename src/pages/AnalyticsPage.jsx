@@ -719,25 +719,6 @@ function AnalyticsPage() {
                 />
               </CollapsibleSection>
 
-              {dashboard.oxylabsFailures ? (
-                <CollapsibleSection
-                  title="Oxylabs product detail failures"
-                  description={`${formatNumber(dashboard.oxylabsFailures.total)} failed ASIN fetches in this window — ${formatNumber(dashboard.oxylabsFailures.byType.timeout)} timeouts, ${formatNumber(dashboard.oxylabsFailures.byType.httpError)} HTTP errors, ${formatNumber(dashboard.oxylabsFailures.byType.unknown)} unknown.`}
-                >
-                  <SimpleTable
-                    columns={[
-                      { key: 'asin', label: 'ASIN' },
-                      { key: 'timeout', label: 'Timeouts', render: (row) => formatNumber(row.timeout) },
-                      { key: 'httpError', label: 'HTTP errors', render: (row) => formatNumber(row.httpError) },
-                      { key: 'unknown', label: 'Other', render: (row) => formatNumber(row.unknown) },
-                      { key: 'total', label: 'Total', render: (row) => formatNumber(row.total) },
-                    ]}
-                    rows={dashboard.oxylabsFailures.topAsins}
-                    emptyMessage="No product detail failures recorded in this window."
-                  />
-                </CollapsibleSection>
-              ) : null}
-
               <CollapsibleSection title="Position &amp; badge performance" description="Whether ranking order and labels are earning trust.">
                 <div className="grid gap-6 xl:grid-cols-2">
                   <div className="space-y-3">

@@ -1,0 +1,22 @@
+name: Price Watch
+
+on:
+  schedule:
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-price-watches:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Trigger daily price check
+        env:
+          PRICE_WATCH_URL: ${{ secrets.FOCAMAI_PRICE_WATCH_URL }}
+          PRICE_WATCH_TOKEN: ${{ secrets.FOCAMAI_PRICE_WATCH_TOKEN }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --retry 2 \
+            --retry-all-errors \
+            --request POST "$PRICE_WATCH_URL" \
+            --header "Authorization: Bearer $PRICE_WATCH_TOKEN"

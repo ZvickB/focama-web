@@ -4,7 +4,7 @@ import {
   formatAmazonPrice,
   getAmazonPricePrefix,
   normalizeAmazonDomain,
-} from '../../shared/amazon-marketplaces.js'
+} from '../../../shared/amazon-marketplaces.js'
 
 /**
  * Normalizes Oxylabs API responses to match the shapes expected by the pipeline.

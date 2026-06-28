@@ -89,33 +89,6 @@ describeSmoke('External services', () => {
     ).toBe(true)
   }, 15_000)
 
-  it('Oxylabs credentials are valid', async () => {
-    const username = process.env.OXYLABS_USERNAME
-    const password = process.env.OXYLABS_PASSWORD
-    expect(username, 'OXYLABS_USERNAME not set').toBeTruthy()
-    expect(password, 'OXYLABS_PASSWORD not set').toBeTruthy()
-
-    // Minimal Oxylabs request — single product lookup
-    const res = await fetch('https://realtime.oxylabs.io/v1/queries', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64'),
-      },
-      body: JSON.stringify({
-        source: 'amazon_product',
-        domain: 'com',
-        query: 'B0TEST00',
-        parse: false,
-      }),
-    })
-    // 200 = ok, 400 = bad query but creds valid, 401/403 = bad creds
-    expect(
-      ![401, 403].includes(res.status),
-      `Oxylabs credentials rejected with status ${res.status}`
-    ).toBe(true)
-  }, 15_000)
-
   it('Supabase is reachable (when configured)', async () => {
     const url = process.env.SUPABASE_URL
     const key = process.env.SUPABASE_SECRET_KEY

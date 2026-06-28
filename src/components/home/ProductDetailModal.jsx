@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
-import { ArrowLeft, ArrowUpRight, CheckCircle2, ChevronDown, Info, LoaderCircle, SearchCheck, Star, X } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, Bell, CheckCircle2, ChevronDown, Info, LoaderCircle, SearchCheck, Star, X } from 'lucide-react'
 
 import logo from '@/assets/logo_master_version.svg'
 import { Button } from '@/components/ui/button.jsx'
@@ -12,6 +12,7 @@ import { getUserFacingDescription } from '@/components/home/homeContentUtils.js'
 import { getProductDisplayTitle } from '@/lib/productTitle.js'
 import { getRetailerDisplayName } from '@/lib/retailerLabel.js'
 import { getDeliverySignal } from '@/components/home/primeEligibility.js'
+import { useWatches } from '@/components/watch/useWatches.js'
 
 const MotionDiv = motion.div
 const FOCUSABLE_MODAL_SELECTOR = [
@@ -216,6 +217,19 @@ function formatDeepDiveMoney(value, currency = 'USD') {
   }).format(numericValue)
 }
 
+function parsePositivePrice(value) {
+  if (value === null || value === undefined || typeof value === 'boolean') {
+    return null
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0 ? value : null
+  }
+
+  const numericValue = Number(String(value).replace(/[^0-9.]/g, ''))
+  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : null
+}
+
 function parseReviewSignal(value) {
   const text = String(value || '').replace(/\s+/g, ' ').trim()
   const dashSplit = text.match(/^(.+?)\s*—\s*(.+)$/)
@@ -338,7 +352,13 @@ export function ProductDetailModal({
   const [deepDiveError, setDeepDiveError] = useState('')
   const [deepDiveLoading, setDeepDiveLoading] = useState(false)
   const [showingUsFallback, setShowingUsFallback] = useState(false)
+  const [watchMessage, setWatchMessage] = useState('')
+  const [watchSaving, setWatchSaving] = useState(false)
   const { session, user } = useAuth()
+  const {
+    create: createWatch,
+    watches,
+  } = useWatches({ enabled: Boolean(user && showRecommendationAnalysis) })
   const dialogRef = useRef(null)
   const previouslyFocusedElementRef = useRef(null)
 
@@ -359,6 +379,14 @@ export function ProductDetailModal({
     : deepDiveEligibility?.recommendation === 'maybe' || deepDiveEligibility?.mode === 'reviews_only'
       ? 'Check reviews and other stores'
       : 'Deep dive — store prices and reviews'
+  const asin = String(item?.asin || item?.product_id || item?.id || '').trim()
+  const watchPrice = parsePositivePrice(
+    item?.numericPrice ?? item?.extracted_price ?? item?.price_value ?? item?.price,
+  )
+  const existingWatch = watches.find((watch) =>
+    watch.asin === asin && watch.amazonDomain === (amazonDomain || 'amazon.com')
+  )
+  const canCreateWatch = Boolean(showRecommendationAnalysis && asin && watchPrice)
 
   useEffect(() => {
     previouslyFocusedElementRef.current = document.activeElement
@@ -435,6 +463,8 @@ export function ProductDetailModal({
       setDeepDiveError('')
       setDeepDiveLoading(false)
       setShowingUsFallback(false)
+      setWatchMessage('')
+      setWatchSaving(false)
     }, 0)
 
     return () => {
@@ -478,6 +508,44 @@ export function ProductDetailModal({
 
     setActiveView('deepdive')
     if (!deepDive) fetchDeepDive()
+  }
+
+  async function handleWatchPriceClick() {
+    if (!user) {
+      window.dispatchEvent(new CustomEvent('focamai:open-auth'))
+      return
+    }
+
+    if (existingWatch) {
+      setWatchMessage('Already watching this product.')
+      return
+    }
+
+    if (!canCreateWatch) {
+      setWatchMessage('This product needs a current Amazon price before Focamai can watch it.')
+      return
+    }
+
+    setWatchMessage('')
+    setWatchSaving(true)
+
+    try {
+      await createWatch({
+        amazonDomain: amazonDomain || 'amazon.com',
+        asin,
+        baselinePrice: watchPrice,
+        imageUrl: item.image || '',
+        productTitle: displayTitle || item.title || asin,
+        productUrl: item.link || '',
+        targetPrice: null,
+        thresholdPct: 5,
+      })
+      setWatchMessage('Watching this price.')
+    } catch (error) {
+      setWatchMessage(error?.message || 'Unable to add this watch right now.')
+    } finally {
+      setWatchSaving(false)
+    }
   }
 
   async function handleUsFallbackClick() {
@@ -902,6 +970,23 @@ export function ProductDetailModal({
                     <SearchCheck className="h-4 w-4" />
                     {deepDiveButtonLabel}
                   </button>
+                ) : null}
+
+                {showRecommendationAnalysis ? (
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      disabled={watchSaving || Boolean(user && existingWatch)}
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#eadfce] bg-white px-4 py-3 text-sm font-semibold text-[#80573f] shadow-[0_8px_24px_-18px_rgba(120,87,63,0.14)] transition hover:bg-[#fbf7f1] disabled:pointer-events-none disabled:opacity-60"
+                      onClick={handleWatchPriceClick}
+                    >
+                      {watchSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+                      {user && existingWatch ? 'Price watch added' : 'Watch price'}
+                    </button>
+                    {watchMessage ? (
+                      <p className="text-center text-xs leading-5 text-slate-500">{watchMessage}</p>
+                    ) : null}
+                  </div>
                 ) : null}
               </>
             )}

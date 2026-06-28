@@ -39,16 +39,17 @@
 - Priority 6 is now implemented in the first pass: search/refine/results/retry/modal surfaces use fewer gradients, lighter shadows, more consistent radii, teal-first actions, and orange mainly for shopping clickout.
 - Priority 7 is now implemented in the first pass: retry asks what felt off, uses only three broad quick prompts, shows AI advice as an editable `Next search` field, and has one `Search again` action.
 - Product titles are normalized for user-facing display across result rows, selected panels, grid/card view, and modal headings. Raw Amazon/source titles remain in data and are exposed behind a quiet full-title disclosure in details when the display title differs.
-- User-facing search history has started as a localStorage-only phase. `/history` lists completed finalized searches saved on the current device, can expand/delete/clear entries, and can re-run a saved query with follow-up notes prefilled. Account-backed history is still pending and should use `saved_searches`, not internal `search_history`.
+- User-facing search history lives at `/history`; finalized searches save locally when signed out and to Supabase `saved_searches` when signed in. Entries can expand/delete/clear and can re-run a saved query with follow-up notes prefilled.
 - Frontend auth shell has started: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI are implemented. Search remains ungated. Signed-out history uses localStorage; signed-in history uses Supabase `saved_searches`; local entries migrate into the account on login. Live QA of auth/RLS/history persistence is still pending.
+- Price Watch Phase 3 is implemented behind `PRICE_WATCH_EMAILS_ENABLED=true`: signed-in users can add watches from finalized product modals only, manage them at `/watches`, and are limited to 5 watches. The table is `price_watches` with user-owned Supabase RLS. Protected `POST /api/internal/check-price-watches` runs on the existing Render web service and should be called by a free external scheduler with `Authorization: Bearer $PRICE_WATCH_INTERNAL_TOKEN`. `backend/jobs/check-price-watches.js` uses the Supabase admin client plus Rainforest to update checked/last-seen fields, log would-notify rows while email is disabled, and send Resend alerts plus baseline reset after successful live sends when enabled.
 
 ## Current guided flow
-- `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It uses Rainforest API first for all Amazon marketplaces when configured, with Oxylabs fallback only when Rainforest errors or returns too few usable items. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available.
+- `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It uses Rainforest API for active Amazon discovery; Oxylabs provider code is archived and is not an active fallback.
 - `GET /api/search/refine` returns one short follow-up question and optional refinement chips.
 - `POST /api/search/finalize` rebuilds the candidate pool from guided cache and returns up to 6 shortlist cards.
 - Haiku shortlist locking now ranks by inferred product fit first, then quality confidence (rating, review count, trustScore, and recognized category brand), price/value, useful shortlist variety, and raw Amazon search position (`amazonPosition`) as the final secondary signal.
 - `GET /api/search/enrichment-stream` is the first enrichment path; `GET /api/search/enrichment` is the polling fallback.
-- `GET /api/search/product-details` hydrates one skipped-refinement preview product from the per-ASIN product detail cache or Oxylabs when its modal opens.
+- `GET /api/search/product-details` hydrates one skipped-refinement preview product from the per-ASIN product detail cache or Rainforest when its modal opens.
 - `POST /api/product/deep-dive` is implemented behind `DEEP_DIVE_ENABLED=true` for signed-in users who manually click Deep Dive inside a finalized product modal. The modal button is hidden by default and appears only after mini writeup plus a separate token-scoped `gpt-5-mini` eligibility pass marks a finalized product `show` or `maybe`. The clicked endpoint validates the candidate against the finalized token-scoped snapshot, uses SerpApi Shopping -> Immersive Product, refreshes stale Immersive cache before showing lower store offers, caches useful review or store-offer Immersive data while avoiding empty provider responses, validates exact offers/direct links, compares them against the known Amazon/source price, and optionally synthesizes real review evidence with Haiku.
 - Mini enrichment now treats the first locked pick as the hero recommendation and later picks as alternatives with distinct tradeoffs.
 - `GET /api/search/query-quality` exposes polling-based query-quality suggestions.
@@ -61,6 +62,10 @@
 - App route shell: `src/App.jsx`
 - Homepage entry: `src/pages/HomePage.jsx`
 - Search history page: `src/pages/HistoryPage.jsx`
+- Price watches page/hook/store: `src/pages/WatchPage.jsx`, `src/components/watch/useWatches.js`, `src/lib/watch/watchStore.js`
+- Price watch dry-run job: `backend/jobs/check-price-watches.js`
+- Price watch protected endpoint handler: `backend/lib/handlers/price-watch-handler.js`
+- Price watch email renderer/sender: `backend/lib/price-watch/price-drop-email.js`
 - First-load homepage shell: `src/components/home/HomeShell.jsx`
 - Guided homepage experience: `src/components/home/HomeExperience.jsx`
 - Result UI: `src/components/home/ResultsSection.jsx`
@@ -90,3 +95,4 @@
 - For current behavior questions, read `project-notes/app_flow.md`.
 - For backend/search behavior, read `project-notes/search-flow.md`.
 - For remaining work, read `project-notes/handoff.md`.
+

@@ -57,7 +57,6 @@ vi.mock('./lib/search-storage.js', () => ({
   isSupabaseConfigured: vi.fn(() => false),
   readProductDetailsCacheEntries: vi.fn().mockResolvedValue(new Map()),
   readStoredSearchCacheEntry: vi.fn(),
-  recordOxylabsProductFailures: vi.fn().mockResolvedValue(undefined),
   recordTesterFeedback: vi.fn().mockResolvedValue(undefined),
   recordSearchHistory: vi.fn(),
   writeProductDetailsCacheEntries: vi.fn().mockResolvedValue(undefined),
@@ -344,7 +343,7 @@ describe('server handlers', () => {
       ['B001', {
         feature_bullets: ['Cached bullet'],
         productDescription: 'Cached product description.',
-        source: 'oxylabs',
+        source: 'rainforest',
       }],
     ]))
     vi.stubGlobal('fetch', vi.fn())
@@ -362,26 +361,24 @@ describe('server handlers', () => {
       ready: true,
       feature_bullets: ['Cached bullet'],
       productDescription: 'Cached product description.',
-      source: 'oxylabs',
+      source: 'rainforest',
     })
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('fetches and caches Oxylabs product details for a preview product cache miss', async () => {
+  it('fetches and caches Rainforest product details for a preview product cache miss', async () => {
     getEnv.mockImplementation((name) => ({
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
+      RAINFOREST_API_KEY: 'rf-key',
     })[name] || '')
     readProductDetailsCacheEntries.mockResolvedValue(new Map())
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       json: async () => ({
-        results: [{
-          content: {
-            bullet_points: 'Fresh bullet one\nFresh bullet two',
-            description: 'Fresh product description.',
-          },
-        }],
+        product: {
+          asin: 'B002',
+          feature_bullets: ['Fresh bullet one', 'Fresh bullet two'],
+          description: 'Fresh product description.',
+        },
       }),
     })))
 
@@ -407,7 +404,7 @@ describe('server handlers', () => {
           asin: 'B002',
           feature_bullets: ['Fresh bullet one', 'Fresh bullet two'],
           productDescription: 'Fresh product description.',
-          source: 'oxylabs',
+          source: 'rainforest',
         }),
       ])
     })
@@ -784,8 +781,7 @@ describe('server handlers', () => {
 
   it('creates a fresh token-scoped session snapshot on discovery cache hits', async () => {
     getEnv.mockImplementation((name) => ({
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
+      RAINFOREST_API_KEY: 'rf-key',
     })[name] || '')
     vi.stubGlobal('fetch', vi.fn())
     const cachedCandidates = Array.from({ length: 6 }, (_, index) => ({
@@ -853,8 +849,7 @@ describe('server handlers', () => {
 
   it('refreshes discovery from the provider instead of returning an existing cache hit when requested', async () => {
     getEnv.mockImplementation((name) => ({
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
+      RAINFOREST_API_KEY: 'rf-key',
     })[name] || '')
 
     readStoredSearchCacheEntry.mockResolvedValueOnce({
@@ -902,7 +897,7 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(200)
 
     const payload = JSON.parse(response.body)
-    expect(payload.source).toBe('oxylabs_discovery')
+    expect(payload.source).toBe('rainforest_discovery')
     expect(payload.discoveryToken).toBeTruthy()
     expect(payload.discoveryToken).not.toBe('old-token')
     expect(payload.previewResults).toEqual([
@@ -937,8 +932,7 @@ describe('server handlers', () => {
 
   it('bypasses thin discovery cache hits so one-result snapshots do not trap normal searches', async () => {
     getEnv.mockImplementation((name) => ({
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
+      RAINFOREST_API_KEY: 'rf-key',
     })[name] || '')
 
     readStoredSearchCacheEntry.mockResolvedValueOnce({
@@ -993,7 +987,7 @@ describe('server handlers', () => {
     expect(response.statusCode).toBe(200)
 
     const payload = JSON.parse(response.body)
-    expect(payload.source).toBe('oxylabs_discovery')
+    expect(payload.source).toBe('rainforest_discovery')
     expect(payload.previewResults).toHaveLength(6)
     expect(payload.previewResults[0]).toEqual(
       expect.objectContaining({
@@ -1017,8 +1011,7 @@ describe('server handlers', () => {
 
     getEnv.mockImplementation((name) => ({
       OPENAI_API_KEY: 'openai-key',
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
+      RAINFOREST_API_KEY: 'rf-key',
     })[name] || '')
     generateQueryQualityReview.mockReturnValue(reviewDeferred.promise)
     getFilteredSearchArtifacts.mockReturnValue({
@@ -1085,8 +1078,6 @@ describe('server handlers', () => {
   it('uses Rainforest for Canada discovery when both providers are configured', async () => {
     getEnv.mockImplementation((name) => ({
       RAINFOREST_API_KEY: 'rf-key',
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
     })[name] || '')
     getFilteredSearchArtifacts.mockReturnValue({
       candidatePool: {
@@ -1140,55 +1131,14 @@ describe('server handlers', () => {
     expect(fetch.mock.calls[0][0].searchParams.get('amazon_domain')).toBe('amazon.ca')
   })
 
-  it('falls back to Oxylabs for Canada discovery when Rainforest fails', async () => {
+  it('returns a Rainforest provider error for Canada discovery when Rainforest fails', async () => {
     getEnv.mockImplementation((name) => ({
       RAINFOREST_API_KEY: 'rf-key',
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
     })[name] || '')
-    getFilteredSearchArtifacts.mockReturnValue({
-      candidatePool: {
-        query: 'yupik white chocolate chips',
-        details: '',
-        combinedSearchText: 'yupik white chocolate chips',
-        searchState: '',
-        similarQueries: [],
-        candidates: Array.from({ length: 6 }, (_, index) => ({
-          ...createFinalizeCandidate(`oxy-${index + 1}`),
-          title: `Oxylabs White Chocolate Chips ${index + 1}`,
-        })),
-      },
-      results: Array.from({ length: 6 }, (_, index) => ({
-        id: `oxy-${index + 1}`,
-        title: `Oxylabs White Chocolate Chips ${index + 1}`,
-        price: '$28.03',
-      })),
-    })
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 402,
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          results: [
-            {
-              content: {
-                results: {
-                  organic: Array.from({ length: 6 }, (_, index) => ({
-                    asin: `oxy-${index + 1}`,
-                    title: `Oxylabs White Chocolate Chips ${index + 1}`,
-                    price: '$28.03',
-                    url: `https://www.amazon.ca/dp/oxy-${index + 1}`,
-                    images: [`https://example.com/oxy-${index + 1}.jpg`],
-                  })),
-                },
-              },
-            },
-          ],
-        }),
-      }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 402,
+    }))
 
     const response = createResponseRecorder()
 
@@ -1200,88 +1150,42 @@ describe('server handlers', () => {
 
     const payload = JSON.parse(response.body)
 
-    expect(response.statusCode).toBe(200)
-    expect(payload.amazonDomain).toBe('amazon.ca')
-    expect(payload.source).toBe('oxylabs_discovery')
-    expect(payload.fallbackFrom).toBe('rainforest_discovery')
-    expect(payload.fallbackReason).toBe('rainforest_error')
-    expect(payload.previewResults).toHaveLength(6)
-    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(response.statusCode).toBe(502)
+    expect(payload.error).toBe('Rainforest API request failed.')
+    expect(fetch).toHaveBeenCalledTimes(1)
     expect(fetch.mock.calls[0][0]).toBeInstanceOf(URL)
-    expect(fetch.mock.calls[1][1].method).toBe('POST')
+    expect(fetch.mock.calls[0][0].searchParams.get('amazon_domain')).toBe('amazon.ca')
   })
 
-  it('falls back to Oxylabs discovery when Rainforest returns too few usable results', async () => {
+  it('keeps thin Rainforest discovery results instead of using an archived fallback provider', async () => {
     getEnv.mockImplementation((name) => ({
       RAINFOREST_API_KEY: 'rf-key',
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
     })[name] || '')
-    getFilteredSearchArtifacts
-      .mockReturnValueOnce({
-        candidatePool: {
-          query: 'thermos',
-          details: '',
-          combinedSearchText: 'thermos',
-          searchState: '',
-          similarQueries: [],
-          candidates: [{ ...createFinalizeCandidate('thin-one'), title: 'Weak Thermos Result' }],
-        },
-        results: [{ id: 'thin-one', title: 'Weak Thermos Result', price: '$28.03' }],
+    getFilteredSearchArtifacts.mockReturnValueOnce({
+      candidatePool: {
+        query: 'thermos',
+        details: '',
+        combinedSearchText: 'thermos',
+        searchState: '',
+        similarQueries: [],
+        candidates: [{ ...createFinalizeCandidate('thin-one'), title: 'Weak Thermos Result' }],
+      },
+      results: [{ id: 'thin-one', title: 'Weak Thermos Result', price: '$28.03' }],
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        search_results: [
+          {
+            asin: 'thin-one',
+            title: 'Weak Thermos Result',
+            price: { value: 28.03, raw: '$28.03' },
+            link: 'https://www.amazon.com/dp/thin-one',
+            image: 'https://example.com/thin-one.jpg',
+          },
+        ],
       })
-      .mockReturnValueOnce({
-        candidatePool: {
-          query: 'thermos',
-          details: '',
-          combinedSearchText: 'thermos',
-          searchState: '',
-          similarQueries: [],
-          candidates: Array.from({ length: 6 }, (_, index) => ({
-            ...createFinalizeCandidate(`oxy-${index + 1}`),
-            title: `Oxylabs Thermos ${index + 1}`,
-          })),
-        },
-        results: Array.from({ length: 6 }, (_, index) => ({
-          id: `oxy-${index + 1}`,
-          title: `Oxylabs Thermos ${index + 1}`,
-          price: '$31.99',
-        })),
-      })
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          search_results: [
-            {
-              asin: 'thin-one',
-              title: 'Weak Thermos Result',
-              price: { value: 28.03, raw: '$28.03' },
-              link: 'https://www.amazon.com/dp/thin-one',
-              image: 'https://example.com/thin-one.jpg',
-            },
-          ],
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          results: [
-            {
-              content: {
-                results: {
-                  organic: Array.from({ length: 6 }, (_, index) => ({
-                    asin: `oxy-${index + 1}`,
-                    title: `Oxylabs Thermos ${index + 1}`,
-                    price: '$31.99',
-                    url: `https://www.amazon.com/dp/oxy-${index + 1}`,
-                    images: [`https://example.com/oxy-${index + 1}.jpg`],
-                  })),
-                },
-              },
-            },
-          ],
-        }),
-      }))
+    }))
 
     const response = createResponseRecorder()
 
@@ -1294,58 +1198,21 @@ describe('server handlers', () => {
     const payload = JSON.parse(response.body)
 
     expect(response.statusCode).toBe(200)
-    expect(payload.source).toBe('oxylabs_discovery')
-    expect(payload.fallbackFrom).toBe('rainforest_discovery')
-    expect(payload.fallbackReason).toBe('thin_rainforest_results')
-    expect(payload.previewResults).toHaveLength(6)
-    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(payload.source).toBe('rainforest_discovery')
+    expect(payload.fallbackFrom).toBeNull()
+    expect(payload.previewResults).toHaveLength(1)
+    expect(fetch).toHaveBeenCalledTimes(1)
     expect(fetch.mock.calls[0][0]).toBeInstanceOf(URL)
-    expect(fetch.mock.calls[1][1].method).toBe('POST')
   })
 
-  it('falls back to Oxylabs discovery when Rainforest fails', async () => {
+  it('returns a provider error when Rainforest fails', async () => {
     getEnv.mockImplementation((name) => ({
       RAINFOREST_API_KEY: 'rf-key',
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
     })[name] || '')
-    getFilteredSearchArtifacts.mockReturnValue({
-      candidatePool: {
-        query: 'yupik white chocolate chips',
-        details: '',
-        combinedSearchText: 'yupik white chocolate chips',
-        searchState: '',
-        similarQueries: [],
-        candidates: [{ ...createFinalizeCandidate('one'), title: 'Fallback White Chocolate Chips' }],
-      },
-      results: [{ id: 'one', title: 'Fallback White Chocolate Chips', price: '$28.03' }],
-    })
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce({
-        ok: false,
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          results: [
-            {
-              content: {
-                results: {
-                  organic: [
-                    {
-                      asin: 'one',
-                      title: 'Fallback White Chocolate Chips',
-                      price: '$28.03',
-                      url: 'https://www.amazon.com/dp/one',
-                      images: ['https://example.com/one.jpg'],
-                    },
-                  ],
-                },
-              },
-            },
-          ],
-        }),
-      }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+    }))
 
     const response = createResponseRecorder()
 
@@ -1357,13 +1224,10 @@ describe('server handlers', () => {
 
     const payload = JSON.parse(response.body)
 
-    expect(response.statusCode).toBe(200)
-    expect(payload.source).toBe('oxylabs_discovery')
-    expect(payload.fallbackFrom).toBe('rainforest_discovery')
-    expect(payload.fallbackReason).toBe('rainforest_error')
-    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(response.statusCode).toBe(502)
+    expect(payload.error).toBe('Rainforest API request failed.')
+    expect(fetch).toHaveBeenCalledTimes(1)
     expect(fetch.mock.calls[0][0]).toBeInstanceOf(URL)
-    expect(fetch.mock.calls[1][1].method).toBe('POST')
   })
 
   it('stores query-quality review state on the token-scoped discovery snapshot', async () => {
@@ -1371,8 +1235,7 @@ describe('server handlers', () => {
 
     getEnv.mockImplementation((name) => ({
       OPENAI_API_KEY: 'openai-key',
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
+      RAINFOREST_API_KEY: 'rf-key',
     })[name] || '')
     generateQueryQualityReview.mockResolvedValue({
       classification: 'likely_typo',
@@ -1967,10 +1830,9 @@ describe('server handlers', () => {
     )
   })
 
-  it('returns cards before Oxylabs resolves, then enriches with product details in the polling cache', async () => {
+  it('returns cards before Rainforest details resolve, then enriches with product details in the polling cache', async () => {
     mockFinalizeEnv({
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
+      RAINFOREST_API_KEY: 'rf-key',
     })
     haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
@@ -2047,12 +1909,11 @@ describe('server handlers', () => {
     detailFetch.resolve({
       ok: true,
       json: async () => ({
-        results: [{
-          content: {
-            bullet_points: 'One-hand fold\nCompact enough for overhead bins',
-            description: 'A compact stroller built for airport travel.',
-          },
-        }],
+        product: {
+          asin: 'one',
+          feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+          description: 'A compact stroller built for airport travel.',
+        },
       }),
     })
 
@@ -2093,10 +1954,9 @@ describe('server handlers', () => {
     })
   })
 
-  it('keeps initial cards usable while an Oxylabs detail call fails, then enriches with available details', async () => {
+  it('keeps initial cards usable while a Rainforest detail call fails, then enriches with available details', async () => {
     mockFinalizeEnv({
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
+      RAINFOREST_API_KEY: 'rf-key',
     })
     haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
@@ -2114,19 +1974,18 @@ describe('server handlers', () => {
       preservedOrder: true,
     })
 
-    const fetchMock = vi.fn(async (_requestUrl, requestInit) => {
-      const asin = JSON.parse(requestInit.body).query
+    const fetchMock = vi.fn(async (requestUrl) => {
+      const asin = requestUrl.searchParams.get('asin')
 
       if (asin === 'one') {
         return {
           ok: true,
           json: async () => ({
-            results: [{
-              content: {
-                bullet_points: 'One-hand fold\nCompact enough for overhead bins',
-                description: 'A compact stroller built for airport travel.',
-              },
-            }],
+            product: {
+              asin: 'one',
+              feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+              description: 'A compact stroller built for airport travel.',
+            },
           }),
         }
       }
@@ -2209,10 +2068,9 @@ describe('server handlers', () => {
     expect(miniEnrichSelectedCandidates.mock.calls[0][0].candidatePool.candidates[1].productDescription ?? '').toBe('')
   })
 
-  it('hydrates stored enrichment bullets when a background detail retry succeeds later', async () => {
+  it('does not run a late provider retry after Rainforest detail misses', async () => {
     mockFinalizeEnv({
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
+      RAINFOREST_API_KEY: 'rf-key',
     })
     haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
@@ -2251,8 +2109,8 @@ describe('server handlers', () => {
     })
 
     const callsByAsin = new Map()
-    const fetchMock = vi.fn(async (_requestUrl, requestInit) => {
-      const asin = JSON.parse(requestInit.body).query
+    const fetchMock = vi.fn(async (requestUrl) => {
+      const asin = requestUrl.searchParams.get('asin')
       const callCount = (callsByAsin.get(asin) ?? 0) + 1
       callsByAsin.set(asin, callCount)
 
@@ -2260,31 +2118,16 @@ describe('server handlers', () => {
         return {
           ok: true,
           json: async () => ({
-            results: [{
-              content: {
-                bullet_points: 'One-hand fold\nCompact enough for overhead bins',
-                description: 'A compact stroller built for airport travel.',
-              },
-            }],
+            product: {
+              asin: 'one',
+              feature_bullets: ['One-hand fold', 'Compact enough for overhead bins'],
+              description: 'A compact stroller built for airport travel.',
+            },
           }),
         }
       }
 
-      if (asin === 'two' && callCount === 1) {
-        throw new Error('detail request timed out')
-      }
-
-      return {
-        ok: true,
-        json: async () => ({
-          results: [{
-            content: {
-              bullet_points: 'Roomier basket\nCup holder included',
-              description: 'A flexible backup stroller for daily errands.',
-            },
-          }],
-        }),
-      }
+      throw new Error('detail request timed out')
     })
 
     vi.stubGlobal('fetch', fetchMock)
@@ -2305,7 +2148,9 @@ describe('server handlers', () => {
 
     expect(response.statusCode).toBe(200)
 
-    await new Promise((resolve) => setTimeout(resolve, 700))
+    await waitForExpectation(() => {
+      expect(miniEnrichSelectedCandidates).toHaveBeenCalled()
+    })
 
     expect(writeStoredSearchCacheEntry.mock.calls.at(-1)?.[0]).toEqual(
       expect.objectContaining({
@@ -2318,14 +2163,14 @@ describe('server handlers', () => {
               }),
               expect.objectContaining({
                 candidate_id: 'two',
-                feature_bullets: ['Roomier basket', 'Cup holder included'],
+                feature_bullets: [],
               }),
             ],
           }),
         }),
       }),
     )
-    expect(callsByAsin.get('two')).toBe(2)
+    expect(callsByAsin.get('two')).toBe(1)
   })
 
   it('reports Haiku finalize model metadata for context-added requests', async () => {
@@ -2653,8 +2498,7 @@ describe('server handlers', () => {
 
   it('uses the final merged shortlist ids for async detail fetch and mini enrichment', async () => {
     mockFinalizeEnv({
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
+      RAINFOREST_API_KEY: 'rf-key',
     })
     haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'claude-haiku-4-5-20251001',
@@ -2700,7 +2544,7 @@ describe('server handlers', () => {
     await waitForExpectation(() => {
       expect(fetchMock).toHaveBeenCalledTimes(6)
       expect(
-        fetchMock.mock.calls.map(([, requestInit]) => JSON.parse(requestInit.body).query),
+        fetchMock.mock.calls.map(([requestUrl]) => requestUrl.searchParams.get('asin')),
       ).toEqual(['one', 'three', 'five', 'six', 'two', 'four'])
       expect(miniEnrichSelectedCandidates).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2875,6 +2719,7 @@ describe('server handlers', () => {
     expect(JSON.parse(response.body)).toEqual({
       ready: true,
       entries: [{ candidate_id: 'one', fit_reason: 'Good city stroller', caveat: 'Slightly pricey' }],
+      deepDiveEligibility: null,
       model: 'gpt-5-mini',
     })
   })
@@ -3107,8 +2952,7 @@ describe('server handlers', () => {
 
   it('does not write stale mini enrichment onto a newer discovery token for the same query', async () => {
     mockFinalizeEnv({
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
+      RAINFOREST_API_KEY: 'rf-key',
     })
     haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
@@ -3155,11 +2999,21 @@ describe('server handlers', () => {
     )
 
     expect(response.statusCode).toBe(200)
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productQuery: 'stroller',
+        scope: 'guided_discovery_session:opaque-discovery-token',
+        selection: expect.objectContaining({
+          strategy: 'haiku_lock',
+        }),
+      }),
+    )
+    writeStoredSearchCacheEntry.mockClear()
 
     detailFetch.resolve({
       ok: true,
       json: async () => ({
-        results: [{ content: { bullet_points: '', description: '' } }],
+        product: { asin: 'one', feature_bullets: [], description: '' },
       }),
     })
 
@@ -3172,8 +3026,7 @@ describe('server handlers', () => {
 
   it('keeps finalize async while product details and mini enrichment run in the background', async () => {
     mockFinalizeEnv({
-      OXYLABS_USERNAME: 'oxy-user',
-      OXYLABS_PASSWORD: 'oxy-pass',
+      RAINFOREST_API_KEY: 'rf-key',
     })
     haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'gpt-5.4-nano',
@@ -3218,12 +3071,21 @@ describe('server handlers', () => {
         }),
       }),
     )
-    expect(writeStoredSearchCacheEntry).not.toHaveBeenCalled()
+    expect(writeStoredSearchCacheEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productQuery: 'stroller',
+        scope: 'guided_discovery_session:opaque-discovery-token',
+        selection: expect.objectContaining({
+          strategy: 'haiku_lock',
+        }),
+      }),
+    )
+    writeStoredSearchCacheEntry.mockClear()
 
     detailFetch.resolve({
       ok: true,
       json: async () => ({
-        results: [{ content: { bullet_points: '', description: '' } }],
+        product: { asin: 'one', feature_bullets: [], description: '' },
       }),
     })
 

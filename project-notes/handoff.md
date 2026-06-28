@@ -13,6 +13,7 @@
 
 ## Real remaining work
 - Verify the live golden path in the browser and confirm cards arrive quickly while modal AI copy hydrates later.
+- Continue Price Watch from `project-notes/price-watch-plan.md`: Phases 1-3 are implemented. Scheduling now uses protected `POST /api/internal/check-price-watches` on the existing Render web service, so no separate Render Cron service is required. Configure a free external scheduler with `Authorization: Bearer $PRICE_WATCH_INTERNAL_TOKEN`. Before broad rollout, verify `PRICE_WATCH_FROM_EMAIL` in Resend/domain setup, then seed a known drop and confirm one email sends, the affiliate button works, `last_notified_*` updates, and the baseline reset prevents a duplicate alert.
 - Audit modal AI tone and tighten any copy that sounds too promotional or vague.
 - Verify route chunk-load recovery and the guided search transition states in the live browser once the next frontend deploy is available.
 - Watch whether the new inline marketplace prompt feels helpful or distracting, and adjust its timing/copy if testers treat it as friction.
@@ -35,9 +36,9 @@
 - If live QA passes, decide whether to add a small post-finalize nudge telling logged-out users that sign-in syncs history across devices.
 
 ## Backend/provider follow-ups
-- Discovery uses Rainforest API first for all Amazon marketplaces when configured. Oxylabs is now the discovery fallback only: it runs when Rainforest errors or returns too few usable items to support the 6-item shortlist. If Rainforest is not configured, Oxylabs remains the emergency provider when credentials are available; validate this Rainforest-first order on live tester searches.
+- Discovery uses Rainforest API for active Amazon discovery. Oxylabs provider code has been archived and is not an active fallback.
 - Active Amazon discovery is currently constrained to affiliate-tagged marketplaces (`amazon.com`, `amazon.ca`) for Associates compliance; broader Amazon marketplace support is deferred until valid tracking IDs exist.
-- The current shortlist-detail helper is still Oxylabs-backed so modal bullets/descriptions stay on the stronger detail path for now.
+- The current shortlist-detail helper is Rainforest-backed through `fetchAmazonProductDetailsByAsin`.
 - Keep the SerpApi route inactive unless there is a deliberate reason to reactivate multi-retailer discovery.
 - Keep automatic hybrid price-intel surfacing inactive. The current approved pivot is explicit Deep Dive only: no shortlist badges, no automatic background price checks, no Serper, no Google Light, and no Google Custom Search unless live review proves the SerpApi Shopping -> Immersive path cannot locate product groups reliably.
 - Create the `rate_limit_events` table in Supabase before public traffic so Render instances share the same rate-limit bucket; the app falls back to process-local limiting if the table is unavailable.
@@ -56,3 +57,4 @@
 - Account-backed saved searches as an explicit user-facing feature in `saved_searches`, not by repurposing internal `search_history`.
 - Preference learning only after the core shortlist experience proves useful.
 - Subscriber-tier expansion only after the free core flow is solid.
+

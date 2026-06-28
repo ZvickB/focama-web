@@ -16,6 +16,7 @@ import {
   handleFinalizeSelection,
   handleFinalizeHistory,
   handleHealth,
+  handleInternalPriceWatchCheck,
   handleProductDetails,
   handleQueryQualityPoll,
   handleRainforestDiscoverySearch,
@@ -42,7 +43,7 @@ app.use((req, res, next) => {
     res.set({
       'Access-Control-Allow-Origin': resolveCorsOrigin(req.headers.origin),
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       Vary: 'Origin',
     })
     res.sendStatus(204)
@@ -132,6 +133,10 @@ app.post('/api/search/diagnostics/event', async (req, res) => {
 
 app.post('/api/feedback', async (req, res) => {
   await handleFeedbackSubmission(req, res)
+})
+
+app.post('/api/internal/check-price-watches', async (req, res) => {
+  await handleInternalPriceWatchCheck(req, res)
 })
 
 // Voice transcription
