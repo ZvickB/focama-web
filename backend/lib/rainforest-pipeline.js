@@ -155,6 +155,8 @@ export async function fetchRainforestArtifacts({
     normalizeRainforestItem(item, { amazonDomain: resolvedAmazonDomain }),
   )
 
+  console.log('[PRIME-DEBUG backend] rawItems:', rawItems.length, '| rawItems is_prime true:', rawItems.filter(i => i.is_prime === true).length, '| normalizedItems isPrime true:', normalizedItems.filter(i => i.isPrime === true).length)
+
   const normalizedPayload = {
     shopping_results: normalizedItems,
     search_information: { shopping_results_state: '' },
