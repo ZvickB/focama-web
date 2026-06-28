@@ -19,9 +19,9 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Backend: Node/Express on Render.
 - Frontend deploy: Vercel.
 - Backend deploy: Render, starting from `backend/express-server.js`.
-- The frontend calls the backend through `VITE_BACKEND_URL`.
+- The frontend calls the Render backend directly through `VITE_BACKEND_URL`, then retries browser-level network failures through same-origin Vercel rewrites and remembers the healthy route.
 - `api/geo.js` intentionally stays on Vercel so the UI can use Vercel geolocation headers.
-- The same Render Express service also hosts the separate KAILA scaffold under `/kaila` so KAILA can share the paid service without replacing Focamai.
+- KAILA has been removed from this repo and Render service; Focamai no longer mounts `/kaila`.
 
 ## Current product direction
 - The homepage at `/` is the main product experience.
@@ -38,7 +38,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Do not let future multi-retailer flexibility make today's Amazon-first UX vague. If more retailers become active, revisit frontend labels based on the real source mix.
 - `search_history` is internal telemetry/cache visibility, not a user-facing saved-history feature.
 - User-facing search history lives at `/history`; finalized searches auto-save locally when signed out and to Supabase `saved_searches` when signed in. Entries can be expanded, deleted, cleared, or re-run.
-- Frontend auth shell has started: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI exist. Search remains ungated. Signed-out history uses localStorage; signed-in history uses Supabase `saved_searches`; local entries migrate into the account on login. Live QA of auth/RLS/history persistence is still pending.
+- Frontend auth shell is implemented: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, header sign-in/sign-out UI, and Supabase forgot-password email plus recovery-callback password update. Search remains ungated. Signed-out history uses localStorage; signed-in history uses Supabase `saved_searches`; local entries migrate into the account on login. Live QA of recovery email/link behavior and auth/RLS/history persistence is still pending.
 - Price Watch Phase 3 is implemented behind `PRICE_WATCH_EMAILS_ENABLED=true`. Signed-in users can manage up to 5 watches at `/watches`; protected `POST /api/internal/check-price-watches` runs on the existing Render web service and should be called by a free external scheduler with `Authorization: Bearer $PRICE_WATCH_INTERNAL_TOKEN`. The job re-prices active watched ASINs with Rainforest, updates checked/last-seen fields, logs would-notify rows when email is disabled, and sends Resend alerts plus baseline reset after successful live sends when enabled.
 
 ## Current guided flow
@@ -71,7 +71,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - `/api/search/live` and debug/cache routes are not the main user path.
 - `/admin/analytics` is local-only during development.
 - `/admin/analytics` includes a Search reliability section when Supabase `search_attempts` and `search_events` exist; it shows failed support codes, Rainforest timeout/error/empty-result patterns, backend reachability, filter/VPN reports, platform, and marketplace grouping.
-- Guided discovery/finalize Render logs and Sentry contexts include the frontend support/search ID. Diagnostic POST storage failure returns `503` and is visible as a browser warning in development instead of being silently reported as successful.
+- Guided discovery/finalize Render logs and Sentry contexts include the frontend support/search ID. Diagnostic POST storage failure returns `503` and is visible as a browser warning in development instead of being silently reported as successful. Background query-quality timeouts are Sentry warnings because they do not block the search response.
 
 ## Key files
 - App route shell: `src/App.jsx`

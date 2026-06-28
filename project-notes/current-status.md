@@ -11,10 +11,10 @@
 - The homepage now ships in the plain white visual mode by default; the temporary homepage background toggle is no longer part of the active UI.
 - Homepage first load is now split: `HomePage` boots a lightweight `HomeShell`, warms the heavier guided search experience during idle time, and only swaps into that guided experience after the user starts a search.
 - Basic SEO plumbing is now in place: route-level metadata, canonicals, OG/Twitter tags, sitemap, robots, and manifest.
-- The homepage now preconnects Google Fonts in `index.html`, preconnects the configured backend origin from `VITE_BACKEND_URL`, gives the hero wordmark higher fetch priority, and prefetches the results plus modal chunks immediately after `HomeExperience` mounts.
+- The homepage now preconnects Google Fonts in `index.html`, probes and preconnects the configured backend origin from `VITE_BACKEND_URL`, gives the hero wordmark higher fetch priority, and prefetches the results plus modal chunks immediately after `HomeExperience` mounts. Browser-level direct-backend failures retry through same-origin Vercel rewrites and remember proxy mode.
 - A local-only internal analytics dashboard now lives at `/admin/analytics` during development and reads a backend funnel summary instead of querying Supabase directly from the browser.
 - A device-local Search History page now lives at `/history`. Completed finalized searches auto-save to localStorage and can be reopened, deleted, cleared, or re-run.
-- A frontend auth shell now exists: `AuthProvider`, lazy Supabase browser client, sign-in/create-account modal, Google sign-in button, and header sign-in/sign-out UI. Search is still ungated.
+- A frontend auth shell now exists: `AuthProvider`, lazy Supabase browser client, sign-in/create-account modal, Google sign-in button, forgot-password email plus recovery-callback new-password form, and header sign-in/sign-out UI. Search is still ungated. The recovery flow still needs one live production email/link test, and the production Focamai origin must remain allowed in Supabase Auth redirect URLs.
 - User-facing history now switches by auth state: signed-out users use localStorage; signed-in users use Supabase `saved_searches`. Local entries migrate into the account on login after successful remote upsert.
 - Account-backed price watches now use Supabase `price_watches` directly from the browser under RLS. Paused watches still count toward the current 5-watch maximum.
 - The current user path is: search -> collapsed search summary -> active refine panel -> collapsed refine summary/focused ranked shortlist with a desktop selected-product preview -> modal details -> Amazon/source clickout.
@@ -62,17 +62,17 @@
 ## Current backend/deployment reality
 - Frontend is deployed on Vercel.
 - Backend is deployed on Render through `backend/express-server.js`.
-- The Render backend also mounts the separate KAILA API under `/kaila` so KAILA can share the paid Focamai web service without replacing Focamai routes. Current KAILA endpoints are `GET /kaila/health`, `POST /kaila/ask`, and `POST /kaila/ask/stream`; the ask routes resolve the public store ref, retrieve product-scoped passages, and return grounded answer payloads with citations. `/kaila/ask/stream` sends status-only SSE progress before the final `done` payload, without streaming answer tokens before validation. KAILA OpenAI usage stays gated behind `KAILA_OPENAI_API_KEY` and `KAILA_RESPONSE_MODEL`.
+- KAILA has been removed from the Focamai backend and is no longer mounted under `/kaila`.
 - Render CORS now explicitly accepts the current `focamai.com` and `www.focamai.com` frontend origins, while still tolerating the older `focama.vercel.app` origin during transition.
 - `GET /api/search/rainforest-discover` is the primary homepage discovery route. It uses Rainforest API first for all Amazon marketplaces when configured.
 - Oxylabs provider code is archived. Active Amazon discovery and product-detail hydration use Rainforest-backed paths only.
 - `GET /api/search/rainforest-discover` normally reuses the shared discovery cache when available, but retry-accepted searches and hard-constraint pre-finalize refreshes send `cacheMode=refresh` so the route bypasses the cache hit once, fetches fresh provider evidence, and writes the new shared/session snapshots normally.
 - Discovery now also bypasses cached snapshots that are too thin to support the 6-item shortlist, preventing a bad one-result cache entry from trapping common searches such as `thermos`.
-- `GET /api/search/rainforest-discover` now starts a timed background query-quality review after the normal discovery response when OpenAI is configured, stores the review state under `selection.queryQuality` on the token-scoped session snapshot, and reports external request failures with service/url/timing/error context without affecting the discovery response.
+- `GET /api/search/rainforest-discover` now starts a timed background query-quality review after the normal discovery response when OpenAI is configured, stores the review state under `selection.queryQuality` on the token-scoped session snapshot, and reports external request failures with service/url/timing/error context without affecting the discovery response. Timeouts from this non-blocking review are Sentry warnings rather than errors.
 - `GET /api/search/query-quality` exposes the stored query-quality review through simple polling. The homepage uses it to show an optional suggested-query prompt only when the backend review says to suggest one.
 - `GET /api/search/refine` now uses OpenAI mini first to generate the short follow-up question and refinement chips, with Haiku as the fallback when OpenAI is unavailable or not configured.
 - `POST /api/search/finalize`, `GET /api/search/enrichment-stream`, `GET /api/search/enrichment`, `GET /api/search/query-quality`, `GET /api/search/product-details`, and `POST /api/search/retry-advice` are all active in the Render app.
-- `POST /api/product/deep-dive` is implemented but disabled unless `DEEP_DIVE_ENABLED=true`. It requires a Supabase bearer token, validates the clicked candidate against the finalized token-scoped search snapshot, uses separate Deep Dive cache/usage storage, and returns ready/limited/gated/unavailable states.
+- `POST /api/product/deep-dive` is mounted in the active Render Express app but disabled unless `DEEP_DIVE_ENABLED=true`. It requires a Supabase bearer token, validates the clicked candidate against the finalized token-scoped search snapshot, uses separate Deep Dive cache/usage storage, and returns ready/limited/gated/unavailable states.
 - `GET /api/analytics/dashboard` is a localhost-only development endpoint for the internal analytics page and returns `404` in production.
 - `GET /api/geo` intentionally stays on Vercel so the frontend can resolve the user’s country from Vercel headers and send an explicit Amazon domain on guided requests when the store picker is left on `Auto`.
 - The Amazon marketplace context now remembers the last saved marketplace in localStorage (`focamai_marketplace`) so repeat visits skip geo lookup when a preference or confident detection already exists.
@@ -118,7 +118,7 @@
 - Do not let future multi-retailer flexibility make today's Amazon-first UX vague. If more retailers become active, revisit frontend labels based on the real source mix.
 - Keep `search_history` as internal telemetry, not user-facing saved history.
 - Keep user-facing saved history separate from internal `search_history`; account-backed history uses `saved_searches`.
-- Live QA is still needed for Supabase auth plus `saved_searches` RLS: sign in, migrate local entries, save a new finalized search while signed in, reload, delete, clear, and verify account history on another browser/device.
+- Live QA is still needed for Supabase auth plus `saved_searches` RLS: sign in, complete one forgot-password email/link update, migrate local entries, save a new finalized search while signed in, reload, delete, clear, and verify account history on another browser/device.
 - Keep current behavior and future ideas clearly separated in notes.
 
 ## Recommended next checks

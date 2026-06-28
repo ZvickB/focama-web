@@ -40,7 +40,7 @@
 - Priority 7 is now implemented in the first pass: retry asks what felt off, uses only three broad quick prompts, shows AI advice as an editable `Next search` field, and has one `Search again` action.
 - Product titles are normalized for user-facing display across result rows, selected panels, grid/card view, and modal headings. Raw Amazon/source titles remain in data and are exposed behind a quiet full-title disclosure in details when the display title differs.
 - User-facing search history lives at `/history`; finalized searches save locally when signed out and to Supabase `saved_searches` when signed in. Entries can expand/delete/clear and can re-run a saved query with follow-up notes prefilled.
-- Frontend auth shell has started: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, and header sign-in/sign-out UI are implemented. Search remains ungated. Signed-out history uses localStorage; signed-in history uses Supabase `saved_searches`; local entries migrate into the account on login. Live QA of auth/RLS/history persistence is still pending.
+- Frontend auth shell is implemented: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, header sign-in/sign-out UI, and email/password recovery through Supabase forgot-password email plus a `PASSWORD_RECOVERY` new-password state. Search remains ungated. Signed-out history uses localStorage; signed-in history uses Supabase `saved_searches`; local entries migrate into the account on login. Live QA of recovery email/link behavior and auth/RLS/history persistence is still pending.
 - Price Watch Phase 3 is implemented behind `PRICE_WATCH_EMAILS_ENABLED=true`: signed-in users can add watches from finalized product modals only, manage them at `/watches`, and are limited to 5 watches. The table is `price_watches` with user-owned Supabase RLS. Protected `POST /api/internal/check-price-watches` runs on the existing Render web service and should be called by a free external scheduler with `Authorization: Bearer $PRICE_WATCH_INTERNAL_TOKEN`. `backend/jobs/check-price-watches.js` uses the Supabase admin client plus Rainforest to update checked/last-seen fields, log would-notify rows while email is disabled, and send Resend alerts plus baseline reset after successful live sends when enabled.
 
 ## Current guided flow
@@ -87,7 +87,8 @@
 ## Deployment reality
 - Frontend is on Vercel.
 - Backend is on Render and starts from `backend/express-server.js`.
-- The frontend calls the Render backend through `VITE_BACKEND_URL`.
+- The frontend tries the Render backend through `VITE_BACKEND_URL` first, then retries browser-level network failures through same-origin Vercel rewrites and remembers proxy mode. `/api/geo` remains Vercel-local.
+- KAILA has been removed from this repo and is no longer mounted on the Focamai Render service.
 - `api/geo.js` intentionally stays on Vercel so the UI can read Vercel geolocation headers through a relative `/api/geo` request.
 
 ## If continuing from here

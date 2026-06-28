@@ -7,6 +7,7 @@
 
 ## Current reality
 - Frontend is on Vercel; backend is on Render.
+- Production browser requests prefer the direct Render backend and fall back to same-origin Vercel rewrites after a network-level failure. Keep `/api/geo` Vercel-local when changing rewrite coverage.
 - The product path is `rainforest-discover -> refine -> finalize -> enrichment`.
 - Retry currently suggests a better next search instead of showing endless same-pool results.
 - Discovery cache, internal operational `search_history`, local saved-search history, analytics, and product-details cache are the main active storage paths.
@@ -31,8 +32,7 @@
 - Keep trimming `backend/server.js` so route orchestration and flow logic do not keep growing in one file.
 - Use the local `/admin/analytics` dashboard during development against live data and decide which weak-query, weak-ranking, or refine-friction fixes to prioritize first.
 - The configured Supabase currently exposes `search_attempts` and `search_events`; verify the deployed Render service uses that same project, then run a live failed search and confirm one support code links Supabase events, Render logs/Sentry context, and `/admin/analytics` Search reliability.
-- Finish the saved-search sequence: verify local history on real finalized searches, then add Supabase auth, then move logged-in history to a separate `saved_searches` table with local-to-account migration.
-- Finish auth/history QA: verify sign up, sign in, OAuth return if Google is enabled, session persistence, sign out, local-to-account history migration, remote save on finalize, reload persistence, delete, clear, and second browser/device account history.
+- Finish auth/history QA: verify sign up, sign in, forgot-password email and recovery-link password update, OAuth return if Google is enabled, session persistence, sign out, local-to-account history migration, remote save on finalize, reload persistence, delete, clear, and second browser/device account history. Keep the production Focamai origin allowed in Supabase Auth redirect URLs.
 - If live QA passes, decide whether to add a small post-finalize nudge telling logged-out users that sign-in syncs history across devices.
 
 ## Backend/provider follow-ups
@@ -53,8 +53,6 @@
 - Keep provider-specific implementation details out of the core product identity.
 
 ## Later, not now
-- Accounts/login only if persistence becomes a real product need.
-- Account-backed saved searches as an explicit user-facing feature in `saved_searches`, not by repurposing internal `search_history`.
 - Preference learning only after the core shortlist experience proves useful.
 - Subscriber-tier expansion only after the free core flow is solid.
 
