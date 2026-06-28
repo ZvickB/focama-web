@@ -30,7 +30,7 @@
 - Deep Dive limited/empty/error copy is still too internal for users. After offer survival is reliable, rewrite those messages around plain outcomes and next steps instead of validation/provider language.
 - Keep trimming `backend/server.js` so route orchestration and flow logic do not keep growing in one file.
 - Use the local `/admin/analytics` dashboard during development against live data and decide which weak-query, weak-ranking, or refine-friction fixes to prioritize first.
-- Create the Supabase `search_attempts` and `search_events` tables from `project-notes/db-needs.md`, then verify a live failed search writes a support-code event path and appears in `/admin/analytics` under Search reliability.
+- The configured Supabase currently exposes `search_attempts` and `search_events`; verify the deployed Render service uses that same project, then run a live failed search and confirm one support code links Supabase events, Render logs/Sentry context, and `/admin/analytics` Search reliability.
 - Finish the saved-search sequence: verify local history on real finalized searches, then add Supabase auth, then move logged-in history to a separate `saved_searches` table with local-to-account migration.
 - Finish auth/history QA: verify sign up, sign in, OAuth return if Google is enabled, session persistence, sign out, local-to-account history migration, remote save on finalize, reload persistence, delete, clear, and second browser/device account history.
 - If live QA passes, decide whether to add a small post-finalize nudge telling logged-out users that sign-in syncs history across devices.

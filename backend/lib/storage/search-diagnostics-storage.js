@@ -121,7 +121,7 @@ export async function recordSearchDiagnosticEvent(rawEvent = {}) {
   const event = normalizeDiagnosticEvent(rawEvent)
 
   if (!isSupabaseConfigured() || !event.searchId || !event.stage) {
-    return
+    return false
   }
 
   try {
@@ -164,8 +164,11 @@ export async function recordSearchDiagnosticEvent(rawEvent = {}) {
     if (eventError) {
       throw eventError
     }
+
+    return true
   } catch (error) {
     logStorageWarning('Search diagnostic write failed', error)
+    return false
   }
 }
 

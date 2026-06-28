@@ -63,8 +63,22 @@ export function reportSearchDiagnosticEvent(event = {}) {
     keepalive: true,
   })
 
-  if (request && typeof request.catch === 'function') {
-    request.catch(() => {})
+  if (request && typeof request.then === 'function') {
+    request
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Diagnostic endpoint returned ${response.status}.`)
+        }
+      })
+      .catch((error) => {
+        if (import.meta.env?.DEV) {
+          console.warn('[search-diagnostics] Event write failed.', {
+            error: error instanceof Error ? error.message : String(error || 'Unknown error'),
+            searchId: event.searchId,
+            stage: event.stage,
+          })
+        }
+      })
   }
 }
 

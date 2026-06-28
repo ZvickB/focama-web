@@ -71,6 +71,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - `/api/search/live` and debug/cache routes are not the main user path.
 - `/admin/analytics` is local-only during development.
 - `/admin/analytics` includes a Search reliability section when Supabase `search_attempts` and `search_events` exist; it shows failed support codes, Rainforest timeout/error/empty-result patterns, backend reachability, filter/VPN reports, platform, and marketplace grouping.
+- Guided discovery/finalize Render logs and Sentry contexts include the frontend support/search ID. Diagnostic POST storage failure returns `503` and is visible as a browser warning in development instead of being silently reported as successful.
 
 ## Key files
 - App route shell: `src/App.jsx`

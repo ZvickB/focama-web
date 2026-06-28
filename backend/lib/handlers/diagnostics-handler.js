@@ -21,7 +21,7 @@ export async function handleSearchDiagnosticEvent(request, response) {
     return
   }
 
-  await recordSearchDiagnosticEvent({
+  const recorded = await recordSearchDiagnosticEvent({
     searchId,
     sessionId: truncateText(body?.sessionId, 120),
     stage,
@@ -49,6 +49,11 @@ export async function handleSearchDiagnosticEvent(request, response) {
     cachedOrFallbackUsed: typeof body?.cachedOrFallbackUsed === 'boolean' ? body.cachedOrFallbackUsed : null,
     metadata: sanitizeAnalyticsEventData(body?.metadata),
   })
+
+  if (!recorded) {
+    sendJson(response, 503, { error: 'Search diagnostics storage is unavailable.', ok: false })
+    return
+  }
 
   sendJson(response, 202, { ok: true })
 }

@@ -211,9 +211,20 @@ export async function handleCachedSearch(requestUrl, response) {
 export async function handleRainforestDiscoverySearch(requestUrl, response, request = { headers: {} }) {
   const requestStartedAt = nowMs()
   const diagnosticContext = getDiagnosticContext(requestUrl)
+  const supportSearchId = diagnosticContext.searchId || null
   const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
 
   if (!rainforestApiKey) {
+    logSearchFlowEvent('rainforest_discovery_configuration_error', {
+      route: '/api/search/rainforest-discover',
+      searchId: supportSearchId,
+    })
+    recordDiscoveryDiagnosticEvent(diagnosticContext, {
+      stage: 'backend_response_sent',
+      status: 'failed',
+      finalStatus: 'provider_error',
+      errorMessage: 'Rainforest API is not configured.',
+    })
     sendJson(response, 500, {
       error: 'RAINFOREST_API_KEY is required in the root .env file.',
     })
@@ -227,6 +238,17 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   const rateLimit = await takeRateLimitToken(clientIpAddress, DEFAULT_RATE_LIMIT_CONFIG)
 
   if (!rateLimit.allowed) {
+    logSearchFlowEvent('rainforest_discovery_rate_limited', {
+      route: '/api/search/rainforest-discover',
+      searchId: supportSearchId,
+    })
+    recordDiscoveryDiagnosticEvent(diagnosticContext, {
+      stage: 'backend_response_sent',
+      status: 'rate_limited',
+      amazonDomain,
+      finalStatus: 'frontend_error',
+      errorMessage: 'Search rate limit reached.',
+    })
     sendJson(response, 429, {
       error: `Too many searches from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
     })
@@ -292,6 +314,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
 
     logSearchFlowEvent('rainforest_discovery_cache_hit', {
       route: '/api/search/rainforest-discover',
+      searchId: supportSearchId,
       query: normalizedQuery,
       candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
         ? cachedEntry.candidatePool.candidates.length
@@ -341,6 +364,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   if (cachedEntry?.candidatePool && cachedEntry?.results?.length && (refreshCache || thinCacheHit)) {
     logSearchFlowEvent('rainforest_discovery_cache_refresh', {
       route: '/api/search/rainforest-discover',
+      searchId: supportSearchId,
       query: normalizedQuery,
       cacheStatus: thinCacheHit ? 'thin_cache_bypass' : 'refresh_bypass',
       cachedCandidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
@@ -383,6 +407,15 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
         : artifactsError.statusCode === 404
           ? 'empty'
           : 'provider_error'
+      logSearchFlowEvent('rainforest_discovery_provider_failed', {
+        route: '/api/search/rainforest-discover',
+        searchId: supportSearchId,
+        query: normalizedQuery,
+        amazonDomain,
+        finalStatus,
+        providerStatusCode: artifactsError.providerStatusCode || artifactsError.statusCode,
+        error: artifactsError.error,
+      })
       recordDiscoveryDiagnosticEvent(diagnosticContext, {
         stage: artifactsError.failureType === 'timeout'
           ? 'rainforest_timeout'
@@ -466,6 +499,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
         label: 'write_guided_discovery_snapshot',
         query: normalizedQuery,
         route: '/api/search/rainforest-discover',
+        searchId: supportSearchId,
       },
     )
 
@@ -498,6 +532,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
 
     logSearchFlowEvent('rainforest_discovery_completed', {
       route: '/api/search/rainforest-discover',
+      searchId: supportSearchId,
       query: normalizedQuery,
       cacheStatus: providerCacheStatus,
       candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
@@ -555,6 +590,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   } catch (error) {
     logSearchFlowEvent('rainforest_discovery_failed', {
       route: '/api/search/rainforest-discover',
+      searchId: supportSearchId,
       query: normalizedQuery,
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -563,6 +599,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       amazonDomain,
       query: normalizedQuery,
       route: '/api/search/rainforest-discover',
+      searchId: supportSearchId,
       source: 'rainforest_discovery',
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })

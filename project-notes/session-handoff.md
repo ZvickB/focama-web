@@ -55,7 +55,7 @@
 - `GET /api/search/query-quality` exposes polling-based query-quality suggestions.
 - `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist.
 - `POST /api/feedback` stores tester feedback.
-- Search diagnostics now run outside Sentry. The frontend search ID is the support code; failed searches show that code, `Copy debug info`, and an optional filter/VPN selector. Frontend/backend lifecycle events write to Supabase `search_attempts` and `search_events` when those tables exist. `/admin/analytics` has a Search reliability section for failed support codes and provider/network patterns.
+- Search diagnostics now run outside Sentry. The frontend search ID is the support code; failed searches show that code, `Copy debug info`, and an optional filter/VPN selector. Frontend/backend lifecycle events write to Supabase `search_attempts` and `search_events` when those tables exist. That ID also links guided discovery/finalize Render logs and Sentry context; diagnostic storage failure now returns `503` and warns in the development browser. `/admin/analytics` has a Search reliability section for failed support codes and provider/network patterns.
 - Automatic hybrid price-intel surfacing remains intentionally inactive. Deep Dive is the current comparison/review-research bet; do not add card badges, background better-price checks, Serper, Google Light, or Google Custom Search for this flow without a fresh decision.
 
 ## Key files

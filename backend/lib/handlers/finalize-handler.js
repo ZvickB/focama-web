@@ -392,27 +392,6 @@ function buildFinalizeFastResponseContract({
 
 export async function handleFinalizeSelection(request, response) {
   const requestStartedAt = nowMs()
-  const openAiApiKey = getEnv('OPENAI_API_KEY')
-
-  if (!openAiApiKey) {
-    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
-    return
-  }
-
-  const clientIpAddress = getClientIpAddress(request.headers || {})
-  const rateLimit = await takeRateLimitToken(clientIpAddress, DEFAULT_RATE_LIMIT_CONFIG)
-
-  if (!rateLimit.allowed) {
-    logSearchFlowEvent('guided_finalize_rate_limited', {
-      route: '/api/search/finalize',
-      clientIpAddress,
-    })
-    sendJson(response, 429, {
-      error: `Too many finalize requests from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
-    })
-    return
-  }
-
   let body
 
   try {
@@ -428,8 +407,48 @@ export async function handleFinalizeSelection(request, response) {
     return
   }
 
+  const supportSearchId = truncateText(body?.searchId, 120) || null
+  const openAiApiKey = getEnv('OPENAI_API_KEY')
+
+  if (!openAiApiKey) {
+    logSearchFlowEvent('guided_finalize_configuration_error', {
+      route: '/api/search/finalize',
+      searchId: supportSearchId,
+    })
+    recordFinalizeDiagnosticEvent(body, {
+      stage: 'backend_response_sent',
+      status: 'failed',
+      finalStatus: 'provider_error',
+      errorMessage: 'OpenAI API is not configured.',
+    })
+    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
+    return
+  }
+
+  const clientIpAddress = getClientIpAddress(request.headers || {})
+  const rateLimit = await takeRateLimitToken(clientIpAddress, DEFAULT_RATE_LIMIT_CONFIG)
+
+  if (!rateLimit.allowed) {
+    logSearchFlowEvent('guided_finalize_rate_limited', {
+      route: '/api/search/finalize',
+      searchId: supportSearchId,
+      clientIpAddress,
+    })
+    recordFinalizeDiagnosticEvent(body, {
+      stage: 'backend_response_sent',
+      status: 'rate_limited',
+      finalStatus: 'frontend_error',
+      errorMessage: 'Finalize rate limit reached.',
+    })
+    sendJson(response, 429, {
+      error: `Too many finalize requests from this connection. ${RATE_LIMIT_WAIT_MESSAGE}`,
+    })
+    return
+  }
+
   logSearchFlowEvent('guided_finalize_request_received', {
     route: '/api/search/finalize',
+    searchId: supportSearchId,
     bodyKeys: Object.keys(body || {}),
     hasQuery: typeof body?.query === 'string',
     hasDiscoveryToken: typeof body?.discoveryToken === 'string',
@@ -451,6 +470,7 @@ export async function handleFinalizeSelection(request, response) {
   if (!sanitizedDiscoveryContext.isValid) {
     logSearchFlowEvent('guided_finalize_invalid', {
       route: '/api/search/finalize',
+      searchId: supportSearchId,
       query: typeof body?.query === 'string' ? body.query : '',
       error: sanitizedDiscoveryContext.error,
     })
@@ -481,6 +501,7 @@ export async function handleFinalizeSelection(request, response) {
   if (!resolvedDiscoveryContext.isValid) {
     logSearchFlowEvent('guided_finalize_missing_discovery_context', {
       route: '/api/search/finalize',
+      searchId: supportSearchId,
       query: sanitizedDiscoveryContext.normalizedQuery,
       error: resolvedDiscoveryContext.error,
     })
@@ -502,6 +523,7 @@ export async function handleFinalizeSelection(request, response) {
   if (!resolvedCandidatePool.isValid) {
     logSearchFlowEvent('guided_finalize_missing_discovery_context', {
       route: '/api/search/finalize',
+      searchId: supportSearchId,
       query: sanitizedDiscoveryContext.normalizedQuery,
       error: resolvedCandidatePool.error,
     })
@@ -598,6 +620,7 @@ export async function handleFinalizeSelection(request, response) {
 
     logSearchFlowEvent('guided_finalize_retry_exhausted', {
       route: '/api/search/finalize',
+      searchId: supportSearchId,
       query: sanitizedDiscoveryContext.normalizedQuery,
       candidateCount: 0,
       retryCount,
@@ -744,6 +767,7 @@ export async function handleFinalizeSelection(request, response) {
 
     logSearchFlowEvent('guided_finalize_completed', {
       route: '/api/search/finalize',
+      searchId: supportSearchId,
       query: sanitizedDiscoveryContext.normalizedQuery,
       candidateCount: nextCandidatePool.candidates.length,
       finalCount: results.length,
@@ -867,6 +891,7 @@ export async function handleFinalizeSelection(request, response) {
             })
           } catch (error) {
             logSearchFlowEvent('deep_dive_eligibility_failed', {
+              searchId: supportSearchId,
               query: sanitizedDiscoveryContext.normalizedQuery,
               error: error instanceof Error ? error.message : 'Unknown error',
               mode: 'async',
@@ -875,17 +900,20 @@ export async function handleFinalizeSelection(request, response) {
               label: 'deep_dive_eligibility_async',
               query: sanitizedDiscoveryContext.normalizedQuery,
               route: '/api/search/finalize',
+              searchId: supportSearchId,
               source: 'guided_finalize_background',
             })
           }
 
           logSearchFlowEvent('mini_enrichment_background_completed', {
+            searchId: supportSearchId,
             query: sanitizedDiscoveryContext.normalizedQuery,
             productDetailsMs: roundTimingDuration(productDetailsDuration),
             mode: 'async',
           })
         } catch (error) {
           logSearchFlowEvent('mini_enrichment_failed', {
+            searchId: supportSearchId,
             query: sanitizedDiscoveryContext.normalizedQuery,
             error: error instanceof Error ? error.message : 'Unknown error',
             mode: 'async',
@@ -894,6 +922,7 @@ export async function handleFinalizeSelection(request, response) {
             label: 'mini_enrichment_async',
             query: sanitizedDiscoveryContext.normalizedQuery,
             route: '/api/search/finalize',
+            searchId: supportSearchId,
             source: 'guided_finalize_background',
           })
         }
@@ -901,11 +930,13 @@ export async function handleFinalizeSelection(request, response) {
         label: 'guided_finalize_async_enrichment',
         query: sanitizedDiscoveryContext.normalizedQuery,
         route: '/api/search/finalize',
+        searchId: supportSearchId,
       })
     }
   } catch (error) {
     logSearchFlowEvent('guided_finalize_failed', {
       route: '/api/search/finalize',
+      searchId: supportSearchId,
       query: sanitizedDiscoveryContext.normalizedQuery,
       candidateCount: nextCandidatePool.candidates.length,
       retryCount,
@@ -919,6 +950,7 @@ export async function handleFinalizeSelection(request, response) {
       requestMode,
       retryCount,
       route: '/api/search/finalize',
+      searchId: supportSearchId,
       source: 'guided_finalize',
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
