@@ -277,7 +277,7 @@ function SiteLayout() {
     resolvedAmazonDomain,
     setSelectedAmazonDomain,
   } = useAmazonStore()
-  const { loading: isAuthLoading, signOut, user } = useAuth()
+  const { loading: isAuthLoading, passwordRecoveryActive, signOut, user } = useAuth()
   const userEmail = user?.email || ''
   const userInitial = userEmail ? userEmail.charAt(0).toUpperCase() : ''
   const navItems = user
@@ -559,7 +559,7 @@ function SiteLayout() {
           </div>
         </div>
       </footer>
-      <AuthModal open={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+      <AuthModal open={isAuthModalOpen || passwordRecoveryActive} onClose={() => setIsAuthModalOpen(false)} />
     </div>
   )
 }

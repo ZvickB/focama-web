@@ -12,22 +12,41 @@ function getAuthErrorMessage(error) {
 export function AuthModal({ onClose, open }) {
   const emailId = useId()
   const passwordId = useId()
-  const { configured, loading: authLoading, signIn, signInWithGoogle, signUp } = useAuth()
+  const confirmPasswordId = useId()
+  const {
+    configured,
+    dismissPasswordRecovery,
+    loading: authLoading,
+    passwordRecoveryActive,
+    requestPasswordReset,
+    signIn,
+    signInWithGoogle,
+    signUp,
+    updatePassword,
+  } = useAuth()
   const [mode, setMode] = useState('sign-in')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const activeMode = passwordRecoveryActive ? 'reset-password' : mode
 
   const handleClose = useCallback(() => {
+    if (passwordRecoveryActive) {
+      dismissPasswordRecovery()
+    }
+    setMode('sign-in')
     setErrorMessage('')
+    setPassword('')
+    setConfirmPassword('')
     setShowPassword(false)
     setStatusMessage('')
     setSubmitting(false)
     onClose()
-  }, [onClose])
+  }, [dismissPasswordRecovery, onClose, passwordRecoveryActive])
 
   useEffect(() => {
     if (!open) return undefined
@@ -54,8 +73,40 @@ export function AuthModal({ onClose, open }) {
       return
     }
 
+    if (activeMode === 'reset-password' && password !== confirmPassword) {
+      setErrorMessage('Passwords do not match.')
+      return
+    }
+
     setSubmitting(true)
-    const authAction = mode === 'sign-in' ? signIn : signUp
+
+    if (activeMode === 'forgot-password') {
+      const { error } = await requestPasswordReset({ email: email.trim() })
+      setSubmitting(false)
+
+      if (error) {
+        setErrorMessage(getAuthErrorMessage(error))
+        return
+      }
+
+      setStatusMessage('If an account exists for that email, we sent a password reset link.')
+      return
+    }
+
+    if (activeMode === 'reset-password') {
+      const { error } = await updatePassword({ password })
+      setSubmitting(false)
+
+      if (error) {
+        setErrorMessage(getAuthErrorMessage(error))
+        return
+      }
+
+      handleClose()
+      return
+    }
+
+    const authAction = activeMode === 'sign-in' ? signIn : signUp
     const { data, error } = await authAction({ email: email.trim(), password })
     setSubmitting(false)
 
@@ -64,7 +115,7 @@ export function AuthModal({ onClose, open }) {
       return
     }
 
-    if (mode === 'sign-up' && !data?.session) {
+    if (activeMode === 'sign-up' && !data?.session) {
       setStatusMessage('Check your email to confirm your account, then come back to sign in.')
       return
     }
@@ -90,8 +141,23 @@ export function AuthModal({ onClose, open }) {
     }
   }
 
-  const title = mode === 'sign-in' ? 'Sign in' : 'Create account'
-  const submitLabel = mode === 'sign-in' ? 'Sign in' : 'Create account'
+  const title = {
+    'forgot-password': 'Reset your password',
+    'reset-password': 'Choose a new password',
+    'sign-in': 'Sign in',
+    'sign-up': 'Create account',
+  }[activeMode]
+  const submitLabel = {
+    'forgot-password': 'Send reset link',
+    'reset-password': 'Save new password',
+    'sign-in': 'Sign in',
+    'sign-up': 'Create account',
+  }[activeMode]
+  const description = activeMode === 'forgot-password'
+    ? 'Enter your email and we’ll send you a secure reset link.'
+    : activeMode === 'reset-password'
+      ? 'Use at least 6 characters for your new password.'
+      : 'Search stays open. Your saved searches can follow you across devices.'
   const isBusy = submitting || authLoading
 
   return (
@@ -112,7 +178,7 @@ export function AuthModal({ onClose, open }) {
                 {title}
               </h2>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                Search stays open. Your saved searches can follow you across devices.
+                {description}
               </p>
             </div>
           </div>
@@ -126,7 +192,8 @@ export function AuthModal({ onClose, open }) {
           </button>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 rounded-full bg-stone-100 p-1" role="tablist" aria-label="Authentication mode">
+        {activeMode === 'sign-in' || activeMode === 'sign-up' ? (
+          <div className="mt-5 grid grid-cols-2 rounded-full bg-stone-100 p-1" role="tablist" aria-label="Authentication mode">
           {[
             ['sign-in', 'Sign in'],
             ['sign-up', 'Create account'],
@@ -135,14 +202,14 @@ export function AuthModal({ onClose, open }) {
               key={nextMode}
               type="button"
               role="tab"
-              aria-selected={mode === nextMode}
+              aria-selected={activeMode === nextMode}
               onClick={() => {
                 setMode(nextMode)
                 setErrorMessage('')
                 setStatusMessage('')
               }}
               className={`h-10 rounded-full text-sm font-semibold transition ${
-                mode === nextMode
+                activeMode === nextMode
                   ? 'bg-white text-slate-950 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.35)]'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
@@ -150,7 +217,8 @@ export function AuthModal({ onClose, open }) {
               {label}
             </button>
           ))}
-        </div>
+          </div>
+        ) : null}
 
         {!configured ? (
           <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
@@ -159,7 +227,8 @@ export function AuthModal({ onClose, open }) {
         ) : null}
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-          <div className="space-y-2">
+          {activeMode !== 'reset-password' ? (
+            <div className="space-y-2">
             <label htmlFor={emailId} className="text-sm font-semibold text-slate-700">
               Email
             </label>
@@ -173,16 +242,34 @@ export function AuthModal({ onClose, open }) {
               placeholder="you@example.com"
               required
             />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor={passwordId} className="text-sm font-semibold text-slate-700">
-              Password
-            </label>
-            <div className="relative">
+            </div>
+          ) : null}
+          {activeMode !== 'forgot-password' ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <label htmlFor={passwordId} className="text-sm font-semibold text-slate-700">
+                  {activeMode === 'reset-password' ? 'New password' : 'Password'}
+                </label>
+                {activeMode === 'sign-in' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('forgot-password')
+                      setErrorMessage('')
+                      setStatusMessage('')
+                      setPassword('')
+                    }}
+                    className="text-sm font-semibold text-primary transition hover:text-primary/75"
+                  >
+                    Forgot password?
+                  </button>
+                ) : null}
+              </div>
+              <div className="relative">
               <input
                 id={passwordId}
                 type={showPassword ? 'text' : 'password'}
-                autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
+                autoComplete={activeMode === 'sign-in' ? 'current-password' : 'new-password'}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="h-12 w-full rounded-2xl border border-[#e5dacb] bg-white py-0 pl-4 pr-12 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
@@ -198,8 +285,27 @@ export function AuthModal({ onClose, open }) {
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
+              </div>
             </div>
-          </div>
+          ) : null}
+
+          {activeMode === 'reset-password' ? (
+            <div className="space-y-2">
+              <label htmlFor={confirmPasswordId} className="text-sm font-semibold text-slate-700">
+                Confirm new password
+              </label>
+              <input
+                id={confirmPasswordId}
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                className="h-12 w-full rounded-2xl border border-[#e5dacb] bg-white px-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
+                minLength={6}
+                required
+              />
+            </div>
+          ) : null}
 
           {errorMessage ? (
             <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
@@ -220,24 +326,42 @@ export function AuthModal({ onClose, open }) {
             {isBusy ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
             {submitLabel}
           </Button>
+
+          {activeMode === 'forgot-password' ? (
+            <button
+              type="button"
+              onClick={() => {
+                setMode('sign-in')
+                setErrorMessage('')
+                setStatusMessage('')
+              }}
+              className="w-full text-sm font-semibold text-slate-500 transition hover:text-slate-800"
+            >
+              Back to sign in
+            </button>
+          ) : null}
         </form>
 
-        <div className="my-5 flex items-center gap-3">
+        {activeMode === 'sign-in' || activeMode === 'sign-up' ? (
+          <>
+            <div className="my-5 flex items-center gap-3">
           <span className="h-px flex-1 bg-stone-200" />
           <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
             Or
           </span>
           <span className="h-px flex-1 bg-stone-200" />
-        </div>
+            </div>
 
-        <button
-          type="button"
-          onClick={handleGoogleSignIn}
-          disabled={isBusy}
-          className="inline-flex h-12 w-full items-center justify-center rounded-2xl border border-[#e5dacb] bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-[#d5c7b6] hover:bg-stone-50 disabled:pointer-events-none disabled:opacity-50"
-        >
-          Continue with Google
-        </button>
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={isBusy}
+              className="inline-flex h-12 w-full items-center justify-center rounded-2xl border border-[#e5dacb] bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-[#d5c7b6] hover:bg-stone-50 disabled:pointer-events-none disabled:opacity-50"
+            >
+              Continue with Google
+            </button>
+          </>
+        ) : null}
       </div>
     </div>
   )

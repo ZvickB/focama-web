@@ -23,6 +23,7 @@ async function migrateLocalHistoryToAccount(remoteHistoryStore) {
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(isSupabaseAuthConfigured)
+  const [passwordRecoveryActive, setPasswordRecoveryActive] = useState(false)
 
   useEffect(() => {
     if (!isSupabaseAuthConfigured) {
@@ -41,9 +42,12 @@ export function AuthProvider({ children }) {
         setLoading(false)
       })
 
-    const { data: subscriptionData } = client.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: subscriptionData } = client.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession || null)
       setLoading(false)
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordRecoveryActive(true)
+      }
     })
       subscription = subscriptionData.subscription
     })
@@ -107,6 +111,34 @@ export function AuthProvider({ children }) {
     return client.auth.signUp({ email, password })
   }, [])
 
+  const requestPasswordReset = useCallback(async ({ email }) => {
+    const client = await getSupabaseClient()
+    if (!client) {
+      return { error: new Error('Supabase auth is not configured.') }
+    }
+
+    return client.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    })
+  }, [])
+
+  const updatePassword = useCallback(async ({ password }) => {
+    const client = await getSupabaseClient()
+    if (!client) {
+      return { error: new Error('Supabase auth is not configured.') }
+    }
+
+    const result = await client.auth.updateUser({ password })
+    if (!result.error) {
+      setPasswordRecoveryActive(false)
+    }
+    return result
+  }, [])
+
+  const dismissPasswordRecovery = useCallback(() => {
+    setPasswordRecoveryActive(false)
+  }, [])
+
   const signInWithGoogle = useCallback(async () => {
     const client = await getSupabaseClient()
     if (!client) {
@@ -133,15 +165,30 @@ export function AuthProvider({ children }) {
   const value = useMemo(
     () => ({
       configured: isSupabaseAuthConfigured,
+      dismissPasswordRecovery,
       loading,
+      passwordRecoveryActive,
+      requestPasswordReset,
       session,
       signIn,
       signInWithGoogle,
       signOut,
       signUp,
+      updatePassword,
       user: session?.user || null,
     }),
-    [loading, session, signIn, signInWithGoogle, signOut, signUp],
+    [
+      dismissPasswordRecovery,
+      loading,
+      passwordRecoveryActive,
+      requestPasswordReset,
+      session,
+      signIn,
+      signInWithGoogle,
+      signOut,
+      signUp,
+      updatePassword,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
