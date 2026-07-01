@@ -50,6 +50,10 @@ function normalizeRainforestItem(item, { amazonDomain = 'amazon.com' } = {}) {
   return {
     product_id: item.asin || null,
     title: item.title || '',
+    brand: item.brand || '',
+    category: item.category || '',
+    categories: Array.isArray(item.categories) ? item.categories : [],
+    categories_flat: item.categories_flat || '',
     extracted_price: numericPrice,
     price: item.price?.raw || (numericPrice !== null ? formatAmazonPrice(numericPrice, amazonDomain) : null),
     rating: item.rating ?? null,

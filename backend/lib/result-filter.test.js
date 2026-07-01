@@ -25,6 +25,25 @@ function createShoppingResult(overrides = {}) {
 }
 
 describe('result filter', () => {
+  it('blocks explicit products and keeps sensitive products without images', () => {
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: [
+          createShoppingResult({ product_id: 'safe', title: 'Office Chair' }),
+          createShoppingResult({ product_id: 'hidden', title: 'Women’s Swimsuit', thumbnail: 'swimsuit.jpg' }),
+          createShoppingResult({ product_id: 'blocked', title: 'Adult Sex Toy' }),
+        ],
+      },
+      { productQuery: 'chair swimsuit', skipHardFilter: true, diversifyBySource: false },
+    )
+
+    expect(artifacts.candidatePool.candidates.map((item) => item.id)).not.toContain('blocked')
+    expect(artifacts.candidatePool.candidates.find((item) => item.id === 'hidden')).toMatchObject({
+      image: '',
+      moderation: { outcome: 'hide_image' },
+    })
+  })
+
   it('keeps strong relevant results and removes obvious off-topic items', () => {
     const results = getFilteredNormalizedResults(
       {

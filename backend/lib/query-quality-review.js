@@ -1,4 +1,5 @@
 import { DEFAULT_REFINEMENT_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
+import { moderateQuery, MODERATION_OUTCOMES } from './content-moderation.js'
 
 const MAX_QUERY_LENGTH = 100
 const MAX_REASON_LENGTH = 180
@@ -222,6 +223,7 @@ function buildQueryQualityReviewInput({
     'Review whether a shopping search appears to have returned a weak or mismatched product pool.',
     'The original results have already been shown. Only suggest a new query if the evidence is strong.',
     'Do not silently correct or rewrite meaning-bearing language.',
+    'Do not normalize, correct, or suggest searches for explicit adult products, erotic content, sexual wellness, or personal lubricants.',
     'Treat community terms, transliterations, slang, regional spelling, aesthetic phrasing, and niche wording as possible intent.',
     'Only rewrite those terms when the returned product pool strongly indicates a mismatch.',
     'Use classification ok when the pool seems reasonable.',
@@ -254,7 +256,8 @@ function normalizeReviewOutput(parsed, { originalQuery, usage = null } = {}) {
       SUGGESTABLE_CLASSIFICATIONS.has(classification) &&
       suggestedQuery &&
       suggestionComparable &&
-      suggestionComparable !== originalComparable,
+      suggestionComparable !== originalComparable &&
+      moderateQuery(suggestedQuery).outcome !== MODERATION_OUTCOMES.BLOCK,
   )
 
   return {

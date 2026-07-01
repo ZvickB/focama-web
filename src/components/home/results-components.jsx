@@ -51,8 +51,16 @@ export function DeliverySignalPill({ signal, className = '' }) {
   )
 }
 
-export function ProductImage({ className = '', image, title }) {
+export function ProductImage({ className = '', image, moderation, title }) {
   const [imgError, setImgError] = useState(false)
+
+  if (moderation?.outcome === 'hide_image') {
+    return (
+      <div className={`flex items-center justify-center bg-[#fbf7f1] px-2 ${className}`}>
+        <span className="text-center text-[11px] font-medium leading-4 text-slate-500">Image hidden</span>
+      </div>
+    )
+  }
 
   if (imgError || !image) {
     return (
@@ -112,7 +120,7 @@ export function RankedPickRow({
         onMouseEnter={onActivate}
       >
         <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-[#eee5da] bg-[#fbf7f1]">
-          <ProductImage className="h-full w-full rounded-xl" image={item.image} title={displayTitle || item.title} />
+          <ProductImage className="h-full w-full rounded-xl" image={item.image} moderation={item.moderation} title={displayTitle || item.title} />
         </div>
         <div className="min-w-0 flex-1 space-y-1.5">
           <p className="line-clamp-2 text-sm font-medium leading-5 text-slate-900">{displayTitle || item.title}</p>
@@ -181,6 +189,7 @@ export function SelectedResultPanel({ hasFinalResults, isEnrichmentSettled, item
         <ProductImage
           className="h-full w-full rounded-[28px]"
           image={item.image}
+          moderation={item.moderation}
           title={displayTitle || item.title}
         />
       </div>

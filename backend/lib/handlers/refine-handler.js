@@ -3,6 +3,7 @@ import { reportBackendError } from '../observability.js'
 import { getValidatedSearchRequest } from '../search-pipeline.js'
 import { getEnv } from '../search-data.js'
 import { generateRefinementPrompt } from '../refinement-assistant.js'
+import { moderateQuery, MODERATION_OUTCOMES } from '../content-moderation.js'
 import {
   DEFAULT_HAIKU_MODEL,
   DEFAULT_REFINEMENT_MODEL,
@@ -36,6 +37,13 @@ export async function handleRefinementPrompt(requestUrl, response) {
       error,
     })
     sendJson(response, 400, { error })
+    return
+  }
+
+  if (moderateQuery(normalizedQuery).outcome === MODERATION_OUTCOMES.BLOCK) {
+    sendJson(response, 400, {
+      error: 'Focamai can’t help with this search. Try searching for a different product.',
+    })
     return
   }
 

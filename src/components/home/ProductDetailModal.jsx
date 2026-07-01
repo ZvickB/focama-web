@@ -347,6 +347,7 @@ export function ProductDetailModal({
   const [bulletsExpanded, setBulletsExpanded] = useState(false)
   const [fullTitleExpanded, setFullTitleExpanded] = useState(false)
   const [imgError, setImgError] = useState(false)
+  const isImageHidden = item?.moderation?.outcome === 'hide_image'
   const [activeView, setActiveView] = useState('product')
   const [deepDive, setDeepDive] = useState(null)
   const [deepDiveError, setDeepDiveError] = useState('')
@@ -642,7 +643,11 @@ export function ProductDetailModal({
                 'linear-gradient(180deg, rgba(250,246,240,0.92), rgba(255,255,255,0.96))',
             }}
           >
-            {imgError ? (
+            {isImageHidden ? (
+              <div className="flex h-full w-full items-center justify-center bg-[#fbf7f1] px-6">
+                <p className="text-center text-sm font-medium text-slate-500">Image hidden for sensitive content</p>
+              </div>
+            ) : imgError || !item.image ? (
               <div className="flex h-full w-full items-center justify-center bg-stone-200/55">
                 <img
                   src={logo}

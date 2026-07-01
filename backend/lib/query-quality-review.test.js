@@ -65,6 +65,7 @@ describe('query quality review', () => {
       'should_suggest',
     ])
     expect(parsedBody.input[1].content).toContain('Do not silently correct or rewrite meaning-bearing language.')
+    expect(parsedBody.input[1].content).toContain('Do not normalize, correct, or suggest searches for explicit adult products')
     expect(parsedBody.input[1].content).toContain('Query "celcius drink"')
     expect(parsedBody.input[1].content).toContain('Query "shabbos art"')
   })
@@ -137,6 +138,28 @@ describe('query quality review', () => {
       reason: 'The term could be intentional community wording.',
       shouldSuggest: false,
     })
+  })
+
+  it('suppresses a sensitive query produced from evasive input', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          classification: 'likely_typo',
+          suggested_query: 'sex toy',
+          confidence: 'high',
+          reason: 'The model normalized the spaced query.',
+          should_suggest: true,
+        }),
+      }),
+    })
+
+    const result = await generateQueryQualityReview(
+      { originalQuery: 's e x toy', apiKey: 'test-key' },
+      fetchMock,
+    )
+
+    expect(result).toMatchObject({ suggestedQuery: '', shouldSuggest: false })
   })
 
   it('suppresses same-query suggestions after normalization', async () => {

@@ -59,6 +59,7 @@ describe('retry advice', () => {
     expect(parsedBody.text.format.schema.properties.suggested_query.maxLength).toBe(80)
     expect(parsedBody.input[1].content).not.toContain('Always return recommendation as new_search.')
     expect(parsedBody.input[1].content).toContain('The suggested_query must be 80 characters or fewer')
+    expect(parsedBody.input[1].content).toContain('Do not normalize, correct, or suggest searches for explicit adult products')
     expect(parsedBody.input[1].content).toContain('Preserve accumulated must-have constraints')
     expect(parsedBody.input[1].content).toContain('Only drop or replace a previous constraint when the latest feedback clearly says')
     expect(parsedBody.input[1].content).toContain('keep the earlier requirements and add the new one')
@@ -99,6 +100,29 @@ describe('retry advice', () => {
     expect(prompt).toContain('Follow-up notes: non dairy')
     expect(prompt).toContain('User feedback: i wanted Yupik brand and white chocolate chips')
     expect(prompt).toContain('Only drop or replace a previous constraint when the latest feedback clearly says')
+  })
+
+  it('discards a sensitive generated suggestion', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          suggested_query: 'personal lubricant',
+          rationale: 'The model should not expose this suggestion.',
+        }),
+      }),
+    })
+
+    const result = await generateRetryAdvice(
+      {
+        productQuery: 'personal product',
+        rejectionFeedback: 'Wrong results.',
+        apiKey: 'test-key',
+      },
+      fetchMock,
+    )
+
+    expect(result).toMatchObject({ recommendation: 'none', suggestedQuery: '', rationale: '' })
   })
 
   it('throws a useful error when OpenAI rejects the request', async () => {

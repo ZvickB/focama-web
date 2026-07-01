@@ -146,7 +146,10 @@ export function mergeFinalizeResults(results, sourceCandidatePool) {
 
     return {
       ...result,
-      image: sourceCandidate.image || result.image,
+      image: sourceCandidate.moderation?.outcome === 'hide_image'
+        ? ''
+        : sourceCandidate.image || result.image,
+      moderation: sourceCandidate.moderation || result.moderation,
       link: sourceCandidate.link || result.link,
       isPrime: hasPrimeEligibility(result, sourceCandidate),
       productDescription: sourceCandidate.productDescription || result.productDescription || '',

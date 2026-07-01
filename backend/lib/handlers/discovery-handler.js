@@ -28,6 +28,7 @@ import {
   resolveDiscoveryContext,
 } from '../discovery-context.js'
 import { startQueryQualityReview } from './query-quality-handler.js'
+import { moderateProductList, moderateQuery, MODERATION_OUTCOMES } from '../content-moderation.js'
 
 async function fetchDiscoveryArtifacts({
   filterConfig,
@@ -129,6 +130,23 @@ function isThinDiscoveryCacheHit(cachedEntry, normalizedCachedResults = []) {
   return candidateCount < minimumUsefulCount || resultCount < minimumUsefulCount
 }
 
+function moderateCachedSnapshot(snapshot) {
+  if (!snapshot?.cachedEntry) return snapshot
+  const candidates = moderateProductList(snapshot.cachedEntry.candidatePool?.candidates)
+  const results = moderateProductList(snapshot.normalizedCachedResults)
+  return {
+    ...snapshot,
+    normalizedCachedResults: results,
+    cachedEntry: {
+      ...snapshot.cachedEntry,
+      results,
+      candidatePool: snapshot.cachedEntry.candidatePool
+        ? { ...snapshot.cachedEntry.candidatePool, candidates }
+        : snapshot.cachedEntry.candidatePool,
+    },
+  }
+}
+
 function createDiscoveryToken() {
   return randomUUID()
 }
@@ -187,11 +205,11 @@ export async function handleCachedSearch(requestUrl, response) {
     return
   }
 
-  const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
+  const { cachedEntry, normalizedCachedResults } = moderateCachedSnapshot(await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
     scope: CACHE_SCOPE_LIVE_SEARCH,
-  })
+  }))
 
   if (cachedEntry?.results?.length) {
     sendJson(response, 200, {
@@ -272,6 +290,14 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
     return
   }
 
+  const queryModeration = moderateQuery(normalizedQuery)
+  if (queryModeration.outcome === MODERATION_OUTCOMES.BLOCK) {
+    sendJson(response, 400, {
+      error: 'Focamai can’t help with this search. Try searching for a different product.',
+    })
+    return
+  }
+
   recordDiscoveryDiagnosticEvent(diagnosticContext, {
     stage: 'backend_received',
     status: 'ok',
@@ -282,11 +308,11 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   const normalizedDetails = ''
   const discoveryCacheKey = buildCacheKey(normalizedQuery, normalizedDetails, rainforestScope)
   const cacheLookupStartedAt = nowMs()
-  const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
+  const { cachedEntry, normalizedCachedResults } = moderateCachedSnapshot(await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
     scope: rainforestScope,
-  })
+  }))
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
   const refreshCache = shouldRefreshDiscoveryCache(requestUrl)
   const thinCacheHit = isThinDiscoveryCacheHit(cachedEntry, normalizedCachedResults)

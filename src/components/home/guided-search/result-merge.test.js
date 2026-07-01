@@ -130,6 +130,14 @@ describe('mergeFinalizeResults', () => {
     expect(merged[0].isPrime).toBe(true)
     expect(merged[0].delivery).toBe('Free delivery')
   })
+
+  it('does not restore an image hidden by moderation', () => {
+    const results = [{ id: '1', title: 'Women’s Swimsuit', image: 'final.jpg' }]
+    const pool = { candidates: [{ id: '1', image: 'source.jpg', moderation: { outcome: 'hide_image' } }] }
+    const merged = mergeFinalizeResults(results, pool)
+    expect(merged[0].image).toBe('')
+    expect(merged[0].moderation.outcome).toBe('hide_image')
+  })
 })
 
 describe('findResultById', () => {

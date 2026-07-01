@@ -894,8 +894,9 @@ export function useGuidedSearch() {
         return
       }
 
-      setRetryAdvice(payload)
-      setSuggestedRetryQuery(payload.suggestedQuery || '')
+      const safeSuggestedQuery = String(payload.suggestedQuery || '').trim()
+      setRetryAdvice(payload.recommendation === 'none' ? null : payload)
+      setSuggestedRetryQuery(safeSuggestedQuery)
       recordSearchDebugEvent('retry-advice', 'success', {
         activeSearchId: snapshot.searchId,
         amazonDomain: submittedAmazonDomain,

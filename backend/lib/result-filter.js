@@ -1,4 +1,5 @@
 import { buildQuery, normalizeResult } from './search-data.js'
+import { moderateProductList } from './content-moderation.js'
 
 export const DEFAULT_FILTER_CONFIG = {
   finalResultLimit: 6,
@@ -474,7 +475,8 @@ function buildAiCandidate(item, index, score, matchSignals, reasonFallback) {
     extensions: Array.isArray(item.extensions) ? item.extensions.filter(Boolean) : [],
     multipleSources: Boolean(item.multiple_sources),
     link: normalized.link,
-    image: normalized.image,
+    image: item.moderation?.outcome === 'hide_image' ? '' : normalized.image,
+    moderation: item.moderation,
     reasons: normalized.reasons,
     duplicateFamilyKey,
     matchSignals,
@@ -500,7 +502,7 @@ export function getFilteredSearchArtifacts(
     reasonFallback,
   },
 ) {
-  const shoppingResults = Array.isArray(payload.shopping_results) ? payload.shopping_results : []
+  const shoppingResults = moderateProductList(payload.shopping_results)
   const queryTokens = uniqueTokens(productQuery)
   const detailsTokens = uniqueTokens(details)
   const searchState = payload.search_information?.shopping_results_state || ''
@@ -573,6 +575,7 @@ export function getFilteredSearchArtifacts(
       description: candidate.description,
       reasons: candidate.reasons,
       image: candidate.image,
+      moderation: candidate.moderation,
       link: candidate.link,
       badgeLabel: index === 0 ? 'Best match' : '',
     })),

@@ -1,4 +1,5 @@
 import { DEFAULT_REFINEMENT_MODEL, OPENAI_RESPONSES_ENDPOINT } from './ai-selector.js'
+import { moderateQuery, MODERATION_OUTCOMES } from './content-moderation.js'
 
 const MAX_QUERY_LENGTH = 80
 const MAX_SHORTLIST_ITEMS = 6
@@ -103,6 +104,7 @@ function buildRetryAdviceInput({
     'Always provide a concise suggested_query that can be pasted into a normal shopping search box.',
     'The suggested_query must be 80 characters or fewer — write a tight, complete phrase.',
     'Rewrite the search more specifically around the feedback while keeping the shopper intent.',
+    'Do not normalize, correct, or suggest searches for explicit adult products, erotic content, sexual wellness, or personal lubricants.',
     'Preserve accumulated must-have constraints from the original search, follow-up notes, and feedback by default, including brand names, product type, dietary/material needs, size, budget, and exclusions.',
     'Only drop or replace a previous constraint when the latest feedback clearly says the shopper changed their mind or no longer wants it.',
     'If the latest feedback adds one missing requirement, keep the earlier requirements and add the new one instead of optimizing only for the latest complaint.',
@@ -188,11 +190,13 @@ export async function generateRetryAdvice(
 
   const parsed = JSON.parse(responseText)
   const suggestedQuery = clampText(parsed.suggested_query, MAX_QUERY_LENGTH)
+  const candidateQuery = suggestedQuery || normalizeText(productQuery)
+  const isBlockedSuggestion = moderateQuery(candidateQuery).outcome === MODERATION_OUTCOMES.BLOCK
 
   return {
-    recommendation: 'new_search',
-    suggestedQuery: suggestedQuery || normalizeText(productQuery),
-    rationale: normalizeRationale(parsed.rationale),
+    recommendation: isBlockedSuggestion ? 'none' : 'new_search',
+    suggestedQuery: isBlockedSuggestion ? '' : candidateQuery,
+    rationale: isBlockedSuggestion ? '' : normalizeRationale(parsed.rationale),
     usage: normalizeOpenAiUsage(payload),
     generatedAt: new Date().toISOString(),
   }

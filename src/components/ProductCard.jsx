@@ -57,6 +57,7 @@ function ProductCard({
   isPrimeEligible = false,
   is_prime = false,
   link,
+  moderation,
   onRetailerClick,
   onSelect,
   price,
@@ -80,6 +81,7 @@ function ProductCard({
     is_prime,
     primeEligible,
   })
+  const isImageHidden = moderation?.outcome === 'hide_image'
 
   return (
     <Card
@@ -116,7 +118,11 @@ function ProductCard({
           }}
         />
         <ProductBadge label={badgeLabel} />
-        {imgError ? (
+        {isImageHidden ? (
+          <div className="flex aspect-square w-full items-center justify-center bg-[#fbf7f1] px-6">
+            <p className="text-center text-sm font-medium text-slate-500">Image hidden for sensitive content</p>
+          </div>
+        ) : imgError || !image ? (
           <div className="flex aspect-square w-full items-center justify-center bg-stone-200/55">
             <img
               src={logo}
