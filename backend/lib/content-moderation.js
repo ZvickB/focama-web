@@ -13,8 +13,14 @@ const SAFE_ACCESSORIES = [
   /\bbra (?:extender|strap|insert|pads?|laundry bag)\b/i,
   /\bswimsuit (?:cleaner|detergent|hanger)\b/i,
 ]
+const ORDINARY_UNDERWEAR = /\b(?:underwear|briefs?|pant(?:y|ies))\b/i
+const CHILD_APPAREL_CONTEXT = /\b(?:bab(?:y|ies)|children|children'?s|child|kids?|toddler|youth|boys?|girls?)\b/i
+const MALE_APPAREL_CONTEXT = /\b(?:men|men'?s|mens|man|male)\b/i
+const FEMALE_APPAREL_CONTEXT = /\b(?:women|woman'?s|womens|lad(?:y|ies)|lady'?s|female)\b/i
+const BOXER_CONTEXT = /\bboxers?(?:\s+briefs?)?\b/i
+const NON_ORDINARY_CHILD_INTIMATES = /\b(?:bras?|lingerie|bikinis?)\b/i
 const HIDE_IMAGE_RULES = [
-  ['womens-intimate-apparel', /\bbras?\b|\bpant(?:y|ies)\b|\b(?:women'?s|womens|girls?) (?:underwear|briefs?|lingerie)\b/i],
+  ['womens-intimate-apparel', /\bbras?\b|\bpant(?:y|ies)\b|\bunderwear\b|\bbriefs?\b|\b(?:women|woman'?s|womens|lad(?:y|ies)|lady'?s|female)\s+lingerie\b/i],
   ['swimwear', /\bbikinis?\b|\bswimwear\b|\bswimsuits?\b|\b(?:women'?s|womens|girls?) bathing suits?\b/i],
   ['intimate-shapewear', /\bshapewear\b|\b(?:women'?s|womens) bodysuits?\b/i],
   ['revealing-apparel', /\bcrop tops?\b|\blingerie\b/i],
@@ -24,7 +30,13 @@ const BOOK_CONTEXT = /\b(?:book|novel|paperback|hardcover|kindle|audiobook|workb
 const SENSITIVE_BOOK_TOPICS = /\b(?:romance|marriage|marital intimacy|pregnancy|anatomy|sexual health|women'?s health)\b/i
 
 function text(value) {
-  return String(value ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[_/]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return String(value ?? '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u2018\u2019\u02bc]/g, "'")
+    .replace(/[_/\u2010-\u2015-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function fieldsFor(product) {
@@ -61,6 +73,18 @@ export function moderateProduct(product) {
   const blocked = matchRules(BLOCK_RULES, fields, ['title', 'category', 'metadata'])
   if (blocked) return result(MODERATION_OUTCOMES.BLOCK, blocked.reason, blocked.matchedField)
   if (SAFE_ACCESSORIES.some((pattern) => pattern.test(fields.title))) return result(MODERATION_OUTCOMES.ALLOW, 'safe-accessory-allowlist', 'title')
+  const apparelContext = `${fields.title} ${fields.category}`.trim()
+  const ordinaryUnderwear = ORDINARY_UNDERWEAR.test(apparelContext)
+  if (ordinaryUnderwear && CHILD_APPAREL_CONTEXT.test(apparelContext) && !NON_ORDINARY_CHILD_INTIMATES.test(apparelContext)) {
+    return result(MODERATION_OUTCOMES.ALLOW, 'child-underwear-allowlist', fields.title ? 'title' : 'category')
+  }
+  if (
+    ordinaryUnderwear &&
+    (MALE_APPAREL_CONTEXT.test(apparelContext) || BOXER_CONTEXT.test(apparelContext)) &&
+    !FEMALE_APPAREL_CONTEXT.test(apparelContext)
+  ) {
+    return result(MODERATION_OUTCOMES.ALLOW, 'mens-underwear-allowlist', fields.title ? 'title' : 'category')
+  }
   const hidden = matchRules(HIDE_IMAGE_RULES, fields, ['title', 'category', 'metadata', 'imageUrl'])
   if (hidden) return result(MODERATION_OUTCOMES.HIDE_IMAGE, hidden.reason, hidden.matchedField)
   if (BOOK_CONTEXT.test(`${fields.title} ${fields.category}`) && SENSITIVE_BOOK_TOPICS.test(`${fields.title} ${fields.metadata}`)) {
