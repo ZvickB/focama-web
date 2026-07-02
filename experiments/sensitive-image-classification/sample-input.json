@@ -1,0 +1,39 @@
+
+[
+  {
+    "id": "safe-1",
+    "title": "Safe flat-lay underwear",
+    "imageUrl": "https://m.media-amazon.com/images/I/81obfhIZFRL._AC_SX679_.jpg",
+    "expectedOutcome": "show"
+  },
+  {
+    "id": "modeled-1",
+    "title": "Men's modeled underwear",
+    "imageUrl": "https://m.media-amazon.com/images/I/81N2G2PKHeL._AC_SX679_.jpg",
+    "expectedOutcome": "hide"
+  },
+  {
+    "id": "innocuous-1",
+    "title": "Innocuous product control",
+    "imageUrl": "https://m.media-amazon.com/images/I/61KQXq71FJL._AC_SX679_.jpg",
+    "expectedOutcome": "show"
+  },
+  {
+    "id": "edge-case-1",
+    "title": "Sensitive product human-presence edge case",
+    "imageUrl": "https://m.media-amazon.com/images/I/71kMoL-HW8L._AC_SY741_.jpg",
+    "expectedOutcome": "hide"
+  },
+  {
+    "id": "edge-case-2",
+    "title": "Less human-looking sensitive product edge case",
+    "imageUrl": "https://m.media-amazon.com/images/I/61sabRr60nL._AC_SX679_.jpg",
+    "expectedOutcome": "hide"
+  },
+  {
+    "id": "edge-case-3",
+    "title": "Sensitive product with a model in the corner",
+    "imageUrl": "https://m.media-amazon.com/images/I/71ZMCUj-Y3L._AC_SX679_.jpg",
+    "expectedOutcome": "hide"
+  }
+]
