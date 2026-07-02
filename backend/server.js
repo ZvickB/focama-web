@@ -36,6 +36,7 @@ import { createRetryAdviceHandler } from './lib/handlers/retry-advice-handler.js
 import { createFeedbackHandler } from './lib/handlers/feedback-handler.js'
 import { createSupabaseHealthHandler } from './lib/handlers/supabase-health-handler.js'
 import { createInternalPriceWatchHandler } from './lib/handlers/price-watch-handler.js'
+import { createAccountDeletionHandler } from './lib/handlers/account-deletion-handler.js'
 import {
   handleConnectivityDiagnostic,
   handleHealth,
@@ -91,6 +92,7 @@ export const handleFeedbackSubmission = createFeedbackHandler({
 
 export const handleSupabaseHealth = createSupabaseHealthHandler()
 export const handleInternalPriceWatchCheck = createInternalPriceWatchHandler()
+export const handleAccountDeletion = createAccountDeletionHandler()
 
 export {
   handleAnalyticsTrack,
@@ -128,11 +130,16 @@ export function createApiServer() {
       if (request.method === 'OPTIONS') {
         response.writeHead(204, {
           'Access-Control-Allow-Origin': resolveCorsOrigin(request.headers?.origin),
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
           Vary: 'Origin',
         })
         response.end()
+        return
+      }
+
+      if (request.method === 'DELETE' && requestUrl.pathname === '/api/account') {
+        await handleAccountDeletion(request, response)
         return
       }
 

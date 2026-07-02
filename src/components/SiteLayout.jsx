@@ -554,6 +554,7 @@ function SiteLayout() {
                 ))}
               <NavLink to="/contact" className="hover:text-slate-900">Contact</NavLink>
               <NavLink to="/privacy" className="hover:text-slate-900">Privacy</NavLink>
+              <NavLink to="/delete-account" className="hover:text-slate-900">Delete account</NavLink>
               <NavLink to="/affiliate-disclosure" className="hover:text-slate-900">Affiliate Disclosure</NavLink>
             </div>
           </div>

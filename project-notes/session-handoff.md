@@ -18,6 +18,7 @@
    - current snapshot/changelog: `project-notes/current-status.md`
 
 ## Current direction
+- The 2026-07-02 privacy/account-deletion work updated the canonical `/privacy` page and mobile Privacy screen and implemented authenticated `DELETE /api/account`, mobile Settings → Account deletion, and the public `/delete-account` route. The endpoint deletes only the bearer-token-verified Supabase Auth user and relies on documented cascades for `saved_searches`, `price_watches`, and `deep_dive_usage`; anonymous operational records without a user ID remain. See `account-deletion-audit.md`. Live Supabase constraint/Render/device verification is still pending.
 - The current experiment branch is `new_web_ui`.
 - The branch is for borrowing the strongest UI/UX lessons from the mobile app while keeping web optimized for browser and desktop use.
 - The current web homepage at `/` still uses the `open` layout until changed.

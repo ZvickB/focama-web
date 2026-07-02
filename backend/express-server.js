@@ -5,6 +5,7 @@ import { attachCorsOrigin, buildInternalErrorPayload, resolveCorsOrigin, sendJso
 import { initObservability, registerProcessErrorHandlers, reportBackendError } from './lib/observability.js'
 import {
   handleAnalyticsDashboard,
+  handleAccountDeletion,
   handleAnalyticsTrack,
   handleCachedSearch,
   handleCachePoolInspect,
@@ -42,7 +43,7 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
     res.set({
       'Access-Control-Allow-Origin': resolveCorsOrigin(req.headers.origin),
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       Vary: 'Origin',
     })
@@ -139,6 +140,10 @@ app.post('/api/feedback', async (req, res) => {
 
 app.post('/api/internal/check-price-watches', async (req, res) => {
   await handleInternalPriceWatchCheck(req, res)
+})
+
+app.delete('/api/account', async (req, res) => {
+  await handleAccountDeletion(req, res)
 })
 
 // Voice transcription

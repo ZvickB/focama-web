@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/api/account",
+      "destination": "https://focama-web.onrender.com/api/account"
+    },
+    {
       "source": "/api/search/:path*",
       "destination": "https://focama-web.onrender.com/api/search/:path*"
     },

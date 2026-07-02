@@ -6,6 +6,7 @@
 - Use `project-notes/handoff.md` for remaining work and open product decisions.
 
 ## Current product state
+- Secure self-service account deletion is implemented across the Render backend, web, and mobile. Authenticated `DELETE /api/account` derives the user only from the Supabase bearer token and deletes that Auth user with the server admin client; documented cascades remove `saved_searches`, `price_watches`, and `deep_dive_usage`. The public `/delete-account` route supports signed-in deletion plus a contact fallback and is covered by Vercel API/SPA routing. Full web Vitest (`473` passed / `12` skipped), production build, and local direct-route `200` smoke check pass. See `account-deletion-audit.md`; live Supabase constraint, Render, and end-to-end deletion QA remains required before Play submission.
 - The app is Vite + React + React Router + TanStack Query + Tailwind + Vitest.
 - The homepage at `/` uses the `open` layout: single-column, search-first, calm, and mobile-first.
 - The homepage now ships in the plain white visual mode by default; the temporary homepage background toggle is no longer part of the active UI.

@@ -153,13 +153,13 @@ export function AuthProvider({ children }) {
     })
   }, [])
 
-  const signOut = useCallback(async () => {
+  const signOut = useCallback(async (options) => {
     const client = await getSupabaseClient()
     if (!client) {
       return { error: null }
     }
 
-    return client.auth.signOut()
+    return client.auth.signOut(options)
   }, [])
 
   const value = useMemo(
