@@ -11,7 +11,7 @@
  *   npm run test:smoke
  *
  * Requirements:
- *   1. Backend server running  (npm run server)
+ *   1. Render-compatible Express backend running  (npm run server:express)
  *   2. Real .env with valid API keys
  */
 

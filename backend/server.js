@@ -149,7 +149,7 @@ export function createApiServer() {
       }
 
       if (request.method === 'GET' && requestUrl.pathname === '/api/search/refine') {
-        await handleRefinementPrompt(requestUrl, response)
+        await handleRefinementPrompt(requestUrl, response, request)
         return
       }
 

@@ -3,7 +3,12 @@ import { reportBackendError } from '../observability.js'
 import { getValidatedSearchRequest } from '../search-pipeline.js'
 import { getEnv } from '../search-data.js'
 import { generateRefinementPrompt } from '../refinement-assistant.js'
-import { moderateQuery, MODERATION_OUTCOMES } from '../content-moderation.js'
+import { getClientIpAddress } from '../rate-limit.js'
+import {
+  beginOpenAiQueryModeration,
+  moderateQuery,
+  MODERATION_OUTCOMES,
+} from '../content-moderation.js'
 import {
   DEFAULT_HAIKU_MODEL,
   DEFAULT_REFINEMENT_MODEL,
@@ -22,7 +27,36 @@ export function getHaikuRefinementModel() {
   return getEnv('CLAUDE_REFINEMENT_MODEL') || getEnv('CLAUDE_MODEL') || DEFAULT_HAIKU_MODEL
 }
 
-export async function handleRefinementPrompt(requestUrl, response) {
+function logOpenAiQueryModeration({ moderation, normalizedQuery, route, synchronous }) {
+  if (moderation.outcome === MODERATION_OUTCOMES.BLOCK) {
+    logSearchFlowEvent('query_moderation_blocked', {
+      route,
+      query: normalizedQuery,
+      categories: moderation.categories,
+      moderationMode: synchronous ? 'synchronous' : 'parallel',
+      moderationMs: roundTimingDuration(moderation.durationMs),
+      penaltyApplied: moderation.penaltyApplied,
+    })
+    return
+  }
+
+  if (moderation.failedOpen) {
+    logSearchFlowEvent('query_moderation_failed_open', {
+      route,
+      failureType: moderation.failureType,
+      moderationMode: synchronous ? 'synchronous' : 'parallel',
+      moderationMs: roundTimingDuration(moderation.durationMs),
+    })
+  }
+}
+
+function sendBlockedQuery(response) {
+  sendJson(response, 400, {
+    error: 'Focamai can’t help with this search. Try searching for a different product.',
+  })
+}
+
+export async function handleRefinementPrompt(requestUrl, response, request = { headers: {} }) {
   const requestStartedAt = nowMs()
   const openAiApiKey = getEnv('OPENAI_API_KEY')
   const anthropicApiKey = getEnv('CLAUDE_API_KEY')
@@ -41,9 +75,7 @@ export async function handleRefinementPrompt(requestUrl, response) {
   }
 
   if (moderateQuery(normalizedQuery).outcome === MODERATION_OUTCOMES.BLOCK) {
-    sendJson(response, 400, {
-      error: 'Focamai can’t help with this search. Try searching for a different product.',
-    })
+    sendBlockedQuery(response)
     return
   }
 
@@ -56,15 +88,53 @@ export async function handleRefinementPrompt(requestUrl, response) {
     return
   }
 
+  const queryModeration = beginOpenAiQueryModeration(normalizedQuery, {
+    apiKey: openAiApiKey,
+    clientIp: getClientIpAddress(request.headers || {}),
+    timeoutMs: getEnv('OPENAI_MODERATION_TIMEOUT_MS'),
+  })
+
+  if (queryModeration.synchronous) {
+    const moderation = await queryModeration.promise
+    logOpenAiQueryModeration({
+      moderation,
+      normalizedQuery,
+      route: '/api/search/refine',
+      synchronous: true,
+    })
+    if (moderation.outcome === MODERATION_OUTCOMES.BLOCK) {
+      sendBlockedQuery(response)
+      return
+    }
+  }
+
   try {
     const aiStartedAt = nowMs()
-    const refinementPrompt = await generateRefinementPrompt({
+    const refinementOutcomePromise = generateRefinementPrompt({
       productQuery: normalizedQuery,
       anthropicApiKey,
       openAiApiKey,
       haikuModel: getHaikuRefinementModel(),
       model: getRefinementModel(),
-    })
+    }).then((value) => ({ value }), (error) => ({ error }))
+
+    if (!queryModeration.synchronous) {
+      const moderation = await queryModeration.promise
+      logOpenAiQueryModeration({
+        moderation,
+        normalizedQuery,
+        route: '/api/search/refine',
+        synchronous: false,
+      })
+      if (moderation.outcome === MODERATION_OUTCOMES.BLOCK) {
+        sendBlockedQuery(response)
+        return
+      }
+    }
+
+    const refinementOutcome = await refinementOutcomePromise
+    if (refinementOutcome.error) throw refinementOutcome.error
+    const refinementPrompt = refinementOutcome.value
     const aiDuration = nowMs() - aiStartedAt
     const totalDuration = nowMs() - requestStartedAt
 

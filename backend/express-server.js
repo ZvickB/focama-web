@@ -72,7 +72,7 @@ app.get('/api/search/rainforest-discover', async (req, res) => {
 })
 
 app.get('/api/search/refine', async (req, res) => {
-  await handleRefinementPrompt(getRequestUrl(req), res)
+  await handleRefinementPrompt(getRequestUrl(req), res, req)
 })
 
 

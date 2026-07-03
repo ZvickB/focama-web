@@ -28,7 +28,41 @@ import {
   resolveDiscoveryContext,
 } from '../discovery-context.js'
 import { startQueryQualityReview } from './query-quality-handler.js'
-import { moderateProductList, moderateQuery, MODERATION_OUTCOMES } from '../content-moderation.js'
+import {
+  beginOpenAiQueryModeration,
+  moderateProductList,
+  moderateQuery,
+  MODERATION_OUTCOMES,
+} from '../content-moderation.js'
+
+function logOpenAiQueryModeration({ moderation, normalizedQuery, route, synchronous }) {
+  if (moderation.outcome === MODERATION_OUTCOMES.BLOCK) {
+    logSearchFlowEvent('query_moderation_blocked', {
+      route,
+      query: normalizedQuery,
+      categories: moderation.categories,
+      moderationMode: synchronous ? 'synchronous' : 'parallel',
+      moderationMs: roundTimingDuration(moderation.durationMs),
+      penaltyApplied: moderation.penaltyApplied,
+    })
+    return
+  }
+
+  if (moderation.failedOpen) {
+    logSearchFlowEvent('query_moderation_failed_open', {
+      route,
+      failureType: moderation.failureType,
+      moderationMode: synchronous ? 'synchronous' : 'parallel',
+      moderationMs: roundTimingDuration(moderation.durationMs),
+    })
+  }
+}
+
+function sendBlockedQuery(response) {
+  sendJson(response, 400, {
+    error: 'Focamai can’t help with this search. Try searching for a different product.',
+  })
+}
 
 async function fetchDiscoveryArtifacts({
   filterConfig,
@@ -231,6 +265,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   const diagnosticContext = getDiagnosticContext(requestUrl)
   const supportSearchId = diagnosticContext.searchId || null
   const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
+  const openAiApiKey = getEnv('OPENAI_API_KEY')
 
   if (!rainforestApiKey) {
     logSearchFlowEvent('rainforest_discovery_configuration_error', {
@@ -292,10 +327,36 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
 
   const queryModeration = moderateQuery(normalizedQuery)
   if (queryModeration.outcome === MODERATION_OUTCOMES.BLOCK) {
-    sendJson(response, 400, {
-      error: 'Focamai can’t help with this search. Try searching for a different product.',
-    })
+    sendBlockedQuery(response)
     return
+  }
+
+  const openAiQueryModeration = beginOpenAiQueryModeration(normalizedQuery, {
+    apiKey: openAiApiKey,
+    clientIp: clientIpAddress,
+    timeoutMs: getEnv('OPENAI_MODERATION_TIMEOUT_MS'),
+  })
+  let resolvedOpenAiQueryModeration = null
+
+  async function awaitOpenAiQueryModeration() {
+    if (!resolvedOpenAiQueryModeration) {
+      resolvedOpenAiQueryModeration = await openAiQueryModeration.promise
+      logOpenAiQueryModeration({
+        moderation: resolvedOpenAiQueryModeration,
+        normalizedQuery,
+        route: '/api/search/rainforest-discover',
+        synchronous: openAiQueryModeration.synchronous,
+      })
+    }
+    return resolvedOpenAiQueryModeration
+  }
+
+  if (openAiQueryModeration.synchronous) {
+    const moderation = await awaitOpenAiQueryModeration()
+    if (moderation.outcome === MODERATION_OUTCOMES.BLOCK) {
+      sendBlockedQuery(response)
+      return
+    }
   }
 
   recordDiscoveryDiagnosticEvent(diagnosticContext, {
@@ -319,6 +380,14 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   const providerCacheStatus = refreshCache ? 'refresh' : thinCacheHit ? 'thin_cache_refresh' : 'miss'
 
   if (cachedEntry?.candidatePool && cachedEntry?.results?.length && !refreshCache && !thinCacheHit) {
+    if (!openAiQueryModeration.synchronous) {
+      const moderation = await awaitOpenAiQueryModeration()
+      if (moderation.outcome === MODERATION_OUTCOMES.BLOCK) {
+        sendBlockedQuery(response)
+        return
+      }
+    }
+
     const tokenizedDiscovery = await ensureDiscoverySnapshotToken({
       normalizedQuery,
       normalizedDetails,
@@ -411,13 +480,7 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       query: normalizedQuery,
       amazonDomain,
     })
-    const {
-      artifacts,
-      error: artifactsError,
-      fallbackFrom,
-      source: discoverySource,
-      diagnostics,
-    } = await fetchDiscoveryArtifacts({
+    const discoveryArtifactsOutcomePromise = fetchDiscoveryArtifacts({
       filterConfig: LIVE_RESULT_FILTER_CONFIG,
       productQuery: normalizedQuery,
       details: normalizedDetails,
@@ -425,7 +488,25 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       rainforestApiKey,
       countryCode,
       amazonDomain,
-    })
+    }).then((value) => ({ value }), (error) => ({ error }))
+
+    if (!openAiQueryModeration.synchronous) {
+      const moderation = await awaitOpenAiQueryModeration()
+      if (moderation.outcome === MODERATION_OUTCOMES.BLOCK) {
+        sendBlockedQuery(response)
+        return
+      }
+    }
+
+    const discoveryArtifactsOutcome = await discoveryArtifactsOutcomePromise
+    if (discoveryArtifactsOutcome.error) throw discoveryArtifactsOutcome.error
+    const {
+      artifacts,
+      error: artifactsError,
+      fallbackFrom,
+      source: discoverySource,
+      diagnostics,
+    } = discoveryArtifactsOutcome.value
 
     if (artifactsError) {
       const finalStatus = artifactsError.failureType === 'timeout'

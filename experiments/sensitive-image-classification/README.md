@@ -1,8 +1,8 @@
 # Sensitive image classification experiment
 
-This branch-only harness evaluates whether clearly safe product-only images can be revealed after the deterministic title/category moderator marks a product image as sensitive.
+This harness evaluates whether clearly safe product-only images can eventually be revealed after the deterministic title/category moderator marks a product image as sensitive.
 
-It does not change production moderation, API responses, or frontend behavior.
+It does not change moderation outcomes, API responses, or frontend behavior. An optional disabled-by-default shadow hook can analyze real hidden images after the response path has already cleared them.
 
 ## Decision policy
 
@@ -52,6 +52,17 @@ npm run experiment:sensitive-images -- --input path/to/input.json --output temp-
 ```
 
 The evaluator downloads at most 8 MB per image, processes images sequentially, and writes full model scores plus a summary. The most important summary metric is `dangerousFalseReveals`: images labeled `hide` that the experiment proposed showing. That number should be zero before any production integration is considered.
+
+## Automatic shadow mode
+
+Set `SENSITIVE_IMAGE_SHADOW_ENABLED=true` in a controlled local or Render environment. When deterministic moderation hides an image, Focamai queues its original Amazon image URL for sequential background analysis while continuing to return the product with empty image fields.
+
+- Local results append to `temp-data/sensitive-image-shadow/results.jsonl`.
+- Production results appear in Render logs under `[sensitive-image-shadow]`.
+- Duplicate image URLs are analyzed once per process, downloads are limited to 8 MB, and only allowlisted HTTPS image hosts are fetched.
+- `SENSITIVE_IMAGE_SHADOW_ALLOWED_HOSTS` can add comma-separated trusted image hosts.
+
+Shadow mode must remain off if the environment cannot absorb the model memory/CPU cost. A proposed `show` is evidence only; it never reveals an image.
 
 ## Evaluation target
 

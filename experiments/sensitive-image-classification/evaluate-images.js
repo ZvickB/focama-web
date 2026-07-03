@@ -3,13 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, resolve } from 'node:path'
 import process from 'node:process'
 
-import * as cocoSsd from '@tensorflow-models/coco-ssd'
-import * as faceDetection from '@tensorflow-models/face-detection'
-import * as poseDetection from '@tensorflow-models/pose-detection'
-import * as tf from '@tensorflow/tfjs'
-import sharp from 'sharp'
-
-import { decideSensitiveImage } from './decision.js'
+import { analyzeSensitiveImageBuffer } from '../../backend/lib/sensitive-image-analysis.js'
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 const FETCH_TIMEOUT_MS = 10_000
@@ -48,16 +42,6 @@ async function readImageBuffer(entry) {
   return buffer
 }
 
-async function imageTensorFrom(buffer) {
-  const { data, info } = await sharp(buffer)
-    .rotate()
-    .resize({ width: 640, height: 640, fit: 'inside', withoutEnlargement: true })
-    .removeAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true })
-  return tf.tensor3d(new Uint8Array(data), [info.height, info.width, info.channels], 'int32')
-}
-
 function summarize(results) {
   const completed = results.filter((entry) => !entry.error)
   const labeled = completed.filter((entry) => entry.expectedOutcome === 'show' || entry.expectedOutcome === 'hide')
@@ -80,43 +64,21 @@ async function main() {
   const input = JSON.parse(await readFile(resolve(process.cwd(), inputPath), 'utf8'))
   if (!Array.isArray(input)) throw new Error('Input must be a JSON array.')
 
-  tf.enableProdMode()
-  await tf.ready()
-  console.log(`Loading human-detection models with TensorFlow.js ${tf.version.tfjs} (${tf.getBackend()} backend)...`)
-  const [objectModel, faceModel, poseModel] = await Promise.all([
-    cocoSsd.load({ base: 'mobilenet_v2' }),
-    faceDetection.createDetector(faceDetection.SupportedModels.MediaPipeFaceDetector, {
-      runtime: 'tfjs',
-      modelType: 'full',
-      maxFaces: 5,
-    }),
-    poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
-      modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
-    }),
-  ])
+  console.log('Loading shared human-detection models...')
 
   const results = []
   for (const [index, entry] of input.entries()) {
     const label = entry.id || entry.title || `image-${index + 1}`
     console.log(`[${index + 1}/${input.length}] ${label}`)
-    let tensor
     try {
-      tensor = await imageTensorFrom(await readImageBuffer(entry))
-      const [objectDetections, faceDetections, poses] = await Promise.all([
-        objectModel.detect(tensor),
-        faceModel.estimateFaces(tensor),
-        poseModel.estimatePoses(tensor),
-      ])
+      const analysis = await analyzeSensitiveImageBuffer(await readImageBuffer(entry))
       results.push({
         id: entry.id || '',
         title: entry.title || '',
         imageUrl: entry.imageUrl || '',
         imagePath: entry.imagePath || '',
         expectedOutcome: entry.expectedOutcome || '',
-        ...decideSensitiveImage({ objectDetections, faceDetections, poses }),
-        objectDetections,
-        faceDetections,
-        poses,
+        ...analysis,
       })
     } catch (error) {
       results.push({
@@ -129,13 +91,8 @@ async function main() {
         reasons: ['analysis_failed'],
         error: error instanceof Error ? error.message : String(error),
       })
-    } finally {
-      tensor?.dispose()
     }
   }
-
-  faceModel.dispose()
-  poseModel.dispose()
   const report = {
     generatedAt: new Date().toISOString(),
     mode: 'offline_shadow_evaluation_only',

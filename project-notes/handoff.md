@@ -14,6 +14,7 @@
 
 ## Real remaining work
 - Verify the live golden path in the browser and confirm cards arrive quickly while modal AI copy hydrates later.
+- Run the sensitive-image analyzer in controlled shadow mode against a much broader real Amazon set, especially mannequins, cropped/partial bodies, packaging photos, and small background people. Review every proposed `show`, keep dangerous false reveals at zero, and measure Render model-load memory plus per-image CPU time before deciding whether any reveal feature is viable.
 - Continue Price Watch from `project-notes/price-watch-plan.md`: Phases 1-3 are implemented. The protected Render endpoint and GitHub Actions trigger passed a production manual run on 2026-06-28 with zero active watches, so no separate Render Cron service is required. Before broad rollout, verify `PRICE_WATCH_FROM_EMAIL` in Resend/domain setup, then seed a known drop and confirm one email sends, the affiliate button works, `last_notified_*` updates, and the baseline reset prevents a duplicate alert.
 - Audit modal AI tone and tighten any copy that sounds too promotional or vague.
 - Verify route chunk-load recovery and the guided search transition states in the live browser once the next frontend deploy is available.
@@ -55,4 +56,3 @@
 ## Later, not now
 - Preference learning only after the core shortlist experience proves useful.
 - Subscriber-tier expansion only after the free core flow is solid.
-

@@ -72,6 +72,8 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - `/admin/analytics` is local-only during development.
 - `/admin/analytics` includes a Search reliability section when Supabase `search_attempts` and `search_events` exist; it shows failed support codes, Rainforest timeout/error/empty-result patterns, backend reachability, filter/VPN reports, platform, and marketplace grouping.
 - Guided discovery/finalize Render logs and Sentry contexts include the frontend support/search ID. Diagnostic POST storage failure returns `503` and is visible as a browser warning in development instead of being silently reported as successful. Background query-quality timeouts are Sentry warnings because they do not block the search response.
+- Regex query moderation remains the synchronous floor. Regex-allowed discovery/refine requests also use the free OpenAI moderation endpoint for `sexual` and `sexual/minors`, with parallel normal execution, a 2-second fail-open timeout, in-flight deduplication, and a process-local one-hour IP penalty window that forces moderation before later work.
+- Sensitive-product images remain hidden deterministically. A disabled-by-default `SENSITIVE_IMAGE_SHADOW_ENABLED` hook can analyze already-hidden Amazon images with person/face/pose models and log proposals without changing API responses; broader edge-case accuracy and Render resource cost must be measured before any image reveal is considered.
 
 ## Key files
 - App route shell: `src/App.jsx`
@@ -113,4 +115,3 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - After meaningful backend or product-flow changes, update `app_flow.md`, `current-status.md`, and this file if future chats would otherwise be misled.
 - After meaningful UI direction changes, update `ui_improvement_plan/README.md` if the plan or priority changes.
 - After finishing a meaningful chunk of work, update `handoff.md` if remaining work or priorities changed.
-
