@@ -53,6 +53,7 @@ import {
 } from '@/components/home/guided-search/result-merge.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { historyStore } from '@/lib/history/historyStore.js'
+import { clearFlowSnapshot, readFlowSnapshot, saveFlowSnapshot } from '@/lib/search/searchFlowSnapshot.js'
 import {
   buildSearchDebugInfoText,
   reportSearchDiagnosticEvent,
@@ -968,6 +969,59 @@ export function useGuidedSearch() {
     stopQueryQualityPolling()
   }, [])
 
+  useEffect(() => {
+    if (!discoveryToken || !submittedQuery) {
+      return
+    }
+
+    const baseSnapshot = {
+      amazonDomain: submittedAmazonDomain,
+      candidatePool,
+      discoveryToken,
+      productQuery,
+      refinementPrompt,
+      submittedQuery,
+    }
+
+    if (results.length > 0) {
+      saveFlowSnapshot({ ...baseSnapshot, results, phase: 'results' })
+      return
+    }
+
+    if (refinementPrompt) {
+      saveFlowSnapshot({ ...baseSnapshot, phase: 'refine' })
+    }
+  }, [candidatePool, discoveryToken, productQuery, refinementPrompt, results, submittedAmazonDomain, submittedQuery])
+
+  useEffect(() => {
+    const snapshot = readFlowSnapshot()
+
+    if (!snapshot) {
+      return
+    }
+
+    setHasStartedSearch(true)
+    setSubmittedQuery(snapshot.submittedQuery)
+    setSubmittedAmazonDomain(snapshot.amazonDomain || '')
+    setProductQuery(snapshot.productQuery || snapshot.submittedQuery || '')
+    setDiscoveryToken(snapshot.discoveryToken)
+    setCandidatePool(snapshot.candidatePool || null)
+
+    if (snapshot.refinementPrompt) {
+      setRefinementPrompt(snapshot.refinementPrompt)
+    }
+
+    if (snapshot.phase === 'results' && Array.isArray(snapshot.results) && snapshot.results.length > 0) {
+      setResults(snapshot.results)
+      setIsEnrichmentSettled(snapshot.results.some((item) => Boolean(item?.fit_reason || item?.fitReason)))
+    }
+
+    analyticsSearchIdRef.current = createAnalyticsSearchId()
+    analyticsSessionIdRef.current = getOrCreateAnalyticsSessionId()
+    setAnalyticsSearchId(analyticsSearchIdRef.current)
+    setAnalyticsSessionId(analyticsSessionIdRef.current)
+  }, [])
+
   const isFinalizing = finalizeMutation.isPending || isRefreshingConstraintDiscovery
   const isLoading = isDiscovering || isGeneratingPrompt || isFinalizing
   const hasFinalResults = results.length > 0
@@ -1000,6 +1054,7 @@ export function useGuidedSearch() {
     constraintRefreshSearchIdRef.current = 0
     constraintRefreshResultRef.current = null
     previewDetailsRequestRef.current.clear()
+    clearFlowSnapshot()
 
     if (resetMutationState) {
       finalizeMutation.reset()
