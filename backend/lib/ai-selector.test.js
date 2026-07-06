@@ -60,9 +60,13 @@ function createCandidatePool(candidateCount = 4) {
   }
 }
 
-function mockHaikuResponse(text, usage = { input_tokens: 12, output_tokens: 4 }) {
+function mockHaikuResponse(picks, usage = { input_tokens: 12, output_tokens: 4 }) {
   anthropicMocks.create.mockResolvedValue({
-    content: [{ type: 'text', text }],
+    content: [{
+      type: 'tool_use',
+      name: 'submit_shortlist',
+      input: { picks },
+    }],
     usage,
   })
 }
@@ -96,8 +100,8 @@ describe('ai selector', () => {
     })
   })
 
-  it('parses Haiku JSON from a text response and caps picks to the requested count', async () => {
-    mockHaikuResponse('Sure:\n{"picks":[{"candidate_id":"prod-3"},{"candidate_id":"prod-1"},{"candidate_id":"prod-2"}]}')
+  it('maps Haiku candidate indices back to ids and caps picks to the requested count', async () => {
+    mockHaikuResponse([{ index: 3 }, { index: 1 }, { index: 2 }])
 
     const result = await haikuLockWinnersAndBadges({
       apiKey: 'claude-key',
@@ -111,17 +115,27 @@ describe('ai selector', () => {
       inputTokens: 12,
       outputTokens: 4,
     })
+
+    const request = anthropicMocks.create.mock.calls[0][0]
+    expect(request.tool_choice).toEqual({ type: 'tool', name: 'submit_shortlist' })
+    expect(request.tools).toEqual([
+      expect.objectContaining({
+        name: 'submit_shortlist',
+        strict: true,
+      }),
+    ])
+    expect(request.tools[0].input_schema.properties.picks.items.properties.index.enum).toEqual([1, 2, 3])
+    expect(request.messages[0].content).toContain('"index":1')
+    expect(request.messages[0].content).not.toContain('"id":"prod-1"')
   })
 
-  it('rejects duplicate and out-of-pool Haiku ids while keeping valid ids in order', async () => {
-    mockHaikuResponse(JSON.stringify({
-      picks: [
-        { candidate_id: 'prod-1' },
-        { candidate_id: 'prod-1' },
-        { candidate_id: 'not-in-pool' },
-        { candidate_id: 'prod-2' },
-      ],
-    }))
+  it('rejects duplicate and out-of-pool Haiku indices while keeping valid picks in order', async () => {
+    mockHaikuResponse([
+      { index: 1 },
+      { index: 1 },
+      { index: 99 },
+      { index: 2 },
+    ])
 
     const result = await haikuLockWinnersAndBadges({
       apiKey: 'claude-key',
@@ -132,8 +146,11 @@ describe('ai selector', () => {
     expect(result.lockedIds).toEqual(['prod-1', 'prod-2'])
   })
 
-  it('returns an empty Haiku lock instead of throwing on malformed model text', async () => {
-    mockHaikuResponse('this is not JSON')
+  it('returns an empty Haiku lock instead of throwing when the tool response is missing', async () => {
+    anthropicMocks.create.mockResolvedValue({
+      content: [{ type: 'text', text: 'No tool call' }],
+      usage: { input_tokens: 12, output_tokens: 4 },
+    })
 
     const result = await haikuLockWinnersAndBadges({
       apiKey: 'claude-key',
@@ -149,9 +166,7 @@ describe('ai selector', () => {
   })
 
   it('returns partial Haiku selections without inventing fallback ids in the selector layer', async () => {
-    mockHaikuResponse(JSON.stringify({
-      picks: [{ candidate_id: 'prod-2' }],
-    }))
+    mockHaikuResponse([{ index: 2 }])
 
     const result = await haikuLockWinnersAndBadges({
       apiKey: 'claude-key',

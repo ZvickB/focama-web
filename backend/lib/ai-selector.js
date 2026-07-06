@@ -241,9 +241,9 @@ function getCandidateSummaryDescription(candidate, candidatePoolQuery) {
   return truncateText(candidate.description, 160)
 }
 
-function buildCandidateSummary(candidatePool) {
-  return candidatePool.candidates.map((candidate) => ({
-    id: candidate.id,
+function buildIndexedCandidateSummary(candidatePool) {
+  return candidatePool.candidates.map((candidate, index) => ({
+    index: index + 1,
     amazonPosition: candidate.amazonPosition ?? null,
     title: candidate.title,
     description: getCandidateSummaryDescription(candidate, candidatePool.query),
@@ -368,14 +368,42 @@ function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit }) {
     '8. Build the best set, not just the top individual scores. Add diversity across use case, price tier, or style only after eligibility, relevance, and quality are satisfied.',
     'Within the eligible set, final order priority: (1) inferred shopper intent and exact product fit, (2) quality confidence including rating, review count, trustScore, and recognized category brand, (3) price/value, (4) useful shortlist variety, (5) amazonPosition.',
     `Return exactly ${desiredCount} picks from the candidates below.`,
-    'Only choose from the provided candidate ids. Preserve your chosen order from best overall fit to weakest acceptable fit.',
+    'Reference candidates only by the provided index numbers. Preserve your chosen order from best overall fit to weakest acceptable fit.',
     '',
     `Product query: ${candidatePool.query}`,
     `User context (top priority): ${candidatePool.details || 'None provided.'}`,
     '',
     'Candidates:',
-    JSON.stringify(buildCandidateSummary(candidatePool)),
+    JSON.stringify(buildIndexedCandidateSummary(candidatePool)),
   ].join('\n')
+}
+
+function buildHaikuShortlistTool(candidateCount) {
+  const validIndices = Array.from({ length: candidateCount }, (_entry, index) => index + 1)
+
+  return {
+    name: 'submit_shortlist',
+    description: 'Submit the final ordered shopping shortlist using only the candidate index numbers provided.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        picks: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              index: { type: 'integer', enum: validIndices },
+            },
+            required: ['index'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['picks'],
+      additionalProperties: false,
+    },
+  }
 }
 
 function buildMiniEnrichmentPrompt({ lockedCandidates, query, details }) {
@@ -517,7 +545,7 @@ export async function haikuLockWinnersAndBadges(
 
   const desiredCount = Math.min(finalResultLimit, candidates.length)
   const prompt = buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit })
-    + '\n\nRespond with valid JSON only: {"picks":[{"candidate_id":"..."},...]}. No explanation.'
+  const shortlistTool = buildHaikuShortlistTool(candidates.length)
 
   const anthropic = new Anthropic({ apiKey })
   const message = await anthropic.messages.create({
@@ -525,49 +553,39 @@ export async function haikuLockWinnersAndBadges(
     max_tokens: 256,
     temperature: 0,
     system:
-      'You are a careful shopping ranker. Follow user constraints exactly and return only the requested JSON.',
+      'You are a careful shopping ranker. Follow user constraints exactly and respond only through the submit_shortlist tool.',
+    tools: [shortlistTool],
+    tool_choice: { type: 'tool', name: shortlistTool.name },
     messages: [{ role: 'user', content: prompt }],
   })
 
-  const text = message.content?.[0]?.type === 'text' ? message.content[0].text.trim() : ''
-  const candidateById = new Map(candidates.map((c) => [String(c.id), c]))
+  const toolUseBlock = message.content?.find(
+    (block) => block?.type === 'tool_use' && block?.name === shortlistTool.name,
+  )
+  const picks = Array.isArray(toolUseBlock?.input?.picks) ? toolUseBlock.input.picks : []
   const seen = new Set()
   const lockedIds = []
-  const rejectedIds = []
+  const rejectedIndices = []
 
-  console.log('[haiku-lock] raw response:', text)
+  console.log('[haiku-lock] tool picks count:', picks.length, 'desired:', desiredCount)
 
-  try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
-    const picks = Array.isArray(parsed?.picks) ? parsed.picks : []
-
-    console.log('[haiku-lock] parsed picks count:', picks.length, 'desired:', desiredCount)
-
-    for (const pick of picks) {
-      const id = String(pick?.candidate_id || '')
-      if (!id) {
-        rejectedIds.push({ id, reason: 'empty' })
-        continue
-      }
-      if (seen.has(id)) {
-        rejectedIds.push({ id, reason: 'duplicate' })
-        continue
-      }
-      if (!candidateById.has(id)) {
-        rejectedIds.push({ id, reason: 'not_in_pool' })
-        continue
-      }
-      lockedIds.push(id)
-      seen.add(id)
-      if (lockedIds.length >= desiredCount) break
+  for (const pick of picks) {
+    const index = Number(pick?.index)
+    if (!Number.isInteger(index) || index < 1 || index > candidates.length) {
+      rejectedIndices.push({ index: pick?.index ?? null, reason: 'not_in_pool' })
+      continue
     }
-  } catch (err) {
-    console.log('[haiku-lock] parse error:', err?.message)
+    if (seen.has(index)) {
+      rejectedIndices.push({ index, reason: 'duplicate' })
+      continue
+    }
+    lockedIds.push(String(candidates[index - 1].id))
+    seen.add(index)
+    if (lockedIds.length >= desiredCount) break
   }
 
-  if (rejectedIds.length > 0) {
-    console.log('[haiku-lock] rejected ids:', JSON.stringify(rejectedIds))
+  if (rejectedIndices.length > 0) {
+    console.log('[haiku-lock] rejected indices:', JSON.stringify(rejectedIndices))
   }
   console.log('[haiku-lock] locked:', lockedIds.length, '/', desiredCount, JSON.stringify(lockedIds))
 
@@ -729,4 +747,3 @@ export async function assessDeepDiveEligibility(
     usage,
   }
 }
-
