@@ -62,6 +62,7 @@ Implemented web direction:
 - Make the follow-up area feel like the intelligent middle step.
 - Show the AI follow-up question clearly.
 - Show up to 3 short refinement chips, using backend suggestions when available and fallback chips when not.
+- Let the user replace the primary question once through `Ask a different question`; the alternate is generated in the original response and appears after a short breathing-dot transition without removing the chips or clearing notes.
 - Match mobile chip behavior: label-only chips append to notes, richer prompt chips fill the notes box, and selected chips get a subtle selected state.
 - Keep the notes box natural-language first.
 - Make "Show focused picks" the primary action.

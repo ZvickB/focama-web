@@ -6,7 +6,7 @@
 - Do not read every project note by default. Open deeper notes only when the task needs them.
 
 ## Product summary
-Focamai helps a user describe the product they want, answer one short follow-up when useful, and get a focused shortlist of 6 picks before leaving to shop. The product should feel calm, practical, and focused instead of like a prettier Amazon wall.
+Focamai helps a user describe the product they want, answer one short follow-up when useful, and get a focused shortlist of 6 picks before leaving to shop. The refinement step can replace the visible prompt once with a pre-generated alternative, while preserving anything already entered. The product should feel calm, practical, and focused instead of like a prettier Amazon wall.
 
 ## Current branch context
 - Active branch for the current experiment: `new_web_ui`.
@@ -58,10 +58,11 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 ## Important behavior notes
 - Discovery uses Rainforest API for active Amazon discovery. Oxylabs has been archived and is not an active fallback.
 - Finalize rebuilds the candidate pool server-side from guided cache.
-- Haiku locks the shortlist first, with deterministic fallback/top-up when needed. Its prompt ranks inferred product fit first, then quality confidence (rating, review count, trustScore, and recognized category brand), price/value, shortlist variety, and raw Amazon position as the final tiebreaker.
+- Haiku locks the shortlist first through short candidate indices and a strict Anthropic tool schema, then the backend maps indices to server-owned candidate IDs; validation and deterministic fallback/top-up remain in place. Its prompt ranks inferred product fit first, then quality confidence (rating, review count, trustScore, and recognized category brand), price/value, shortlist variety, and raw Amazon position as the final tiebreaker.
 - Provider-confirmed Prime eligibility is preserved as structured `isPrime` data; clear Prime delivery/eligibility requests narrow finalize to Prime-tagged candidates when available, and the UI shows only a quiet in-house Prime marker/fact. Plain free-delivery text may show as `Free delivery` but must not be upgraded to Prime. Rainforest product-detail enrichment can preserve provider-confirmed Prime and delivery details when available.
 - Result surfaces should stay compact: source/store names belong in clickout CTAs, rating plus review count are one ratings/reviews signal, and delivery is at most one optional signal.
 - Hard-constraint follow-up notes can trigger one refreshed discovery before finalize.
+- Refine generates a primary and distinct alternate question together. The UI shows one at a time; `Ask a different question` replaces the first question after a 900 ms breathing-dot transition without changing the refinement chips or notes box.
 - Query-quality suggestions are polling-based only. No SSE or prewarm path exists.
 - Modal/detail enrichment hydrates after the first shortlist cards are shown, framing the top pick as the hero recommendation and later picks as alternatives.
 - Skipped-refinement preview products do not show AI recommendation analysis. When opened, the modal can lazily hydrate product detail bullets/description from the per-ASIN cache or Rainforest through `GET /api/search/product-details`.
@@ -71,6 +72,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - `/api/search/live` and debug/cache routes are not the main user path.
 - `/admin/analytics` is local-only during development.
 - `/admin/analytics` includes a Search reliability section when Supabase `search_attempts` and `search_events` exist; it shows failed support codes, Rainforest timeout/error/empty-result patterns, backend reachability, filter/VPN reports, platform, and marketplace grouping.
+- Guided search failures hide raw provider errors behind calm recovery copy. `Try again` preserves the query and follow-up notes, records the retry on the failed support/search ID, and starts fresh discovery with cache refresh and a new search ID; support details and reporting controls stay collapsed.
 - Guided discovery/finalize Render logs and Sentry contexts include the frontend support/search ID. Diagnostic POST storage failure returns `503` and is visible as a browser warning in development instead of being silently reported as successful. Background query-quality timeouts are Sentry warnings because they do not block the search response.
 - Regex query moderation remains the synchronous floor. Regex-allowed discovery/refine requests also use the free OpenAI moderation endpoint for `sexual` and `sexual/minors`, with parallel normal execution, a 2-second fail-open timeout, in-flight deduplication, and a process-local one-hour IP penalty window that forces moderation before later work.
 - Sensitive-product images remain hidden deterministically. A disabled-by-default `SENSITIVE_IMAGE_SHADOW_ENABLED` hook can analyze already-hidden Amazon images with person/face/pose models and log proposals without changing API responses; broader edge-case accuracy and Render resource cost must be measured before any image reveal is considered.

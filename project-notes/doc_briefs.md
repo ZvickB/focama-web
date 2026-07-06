@@ -5,7 +5,7 @@ purpose: Large marketplaces are sticky and distracting. Focamai should help user
 ## Flow of app
 1. The user lands on a spacious, search-first homepage.
 2. The user enters the product they are actually looking for.
-3. Discovery and one AI follow-up question run in parallel.
+3. Discovery and AI refinement run in parallel. The UI shows one follow-up question at a time and can replace it once with a pre-generated alternative when the user asks for a different question.
 4. The backend builds and caches a cleaned candidate pool through the Rainforest-named discovery route, with Rainforest API as the active Amazon discovery provider.
 5. The user can either view the preview set immediately or ask Focamai to narrow to 6 picks.
 6. Finalize locks 6 winners with haiku, returns cards quickly, then async enrichment fills in modal reasoning afterward.
@@ -43,4 +43,3 @@ purpose: Large marketplaces are sticky and distracting. Focamai should help user
 - Put a disclosure near affiliate CTAs or affiliate links once those become real user-facing behavior.
 - Before connecting live Amazon affiliate or pricing/availability surfaces, re-check Amazon's latest agreement and help docs because those requirements can change.
 - Preserve trust in copy and UX; do not hide the affiliate relationship.
-

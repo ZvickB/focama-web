@@ -23,7 +23,8 @@
   - the follow-up question starts in parallel
   - the large search stage collapses into a compact progress line and search summary
   - the refine step becomes the active panel
-  - the refine panel shows a clear "What should Focamai keep in mind?" heading, the AI follow-up question, and up to 3 refinement chips
+  - the refine panel shows a clear "What should Focamai keep in mind?" heading, the primary AI follow-up question, and up to 3 refinement chips
+  - `Ask a different question` is available once when AI returns an alternate; it replaces only the primary question after a 900 ms breathing-dot transition while keeping the refinement chips and notes box available
   - result skeletons appear below when needed
   - the page scrolls toward the active refine/results region
 - Refinement chips use backend suggestions when available and fall back to `Good value`, `Easy to use`, and `Fits my space`; label-only chips append to the notes box, prompt-backed chips fill the notes box with richer text, and selected chips get a subtle selected state.
@@ -60,14 +61,15 @@
   - query-quality review is checked by the frontend through polling; if a high-confidence suggestion is ready, the homepage shows an optional small prompt without replacing the original results
   - there is still no query-quality SSE or suggested-query prewarm path
 - `GET /api/search/refine`
-  - returns one short follow-up question plus helper copy
+  - returns one primary short follow-up question, one distinct alternate question, refinement chips, and helper copy in the same response
   - uses OpenAI mini first for the generated question and refinement chip suggestions
   - falls back to Haiku if OpenAI fails or is not configured
 - `POST /api/search/finalize`
   - accepts lightweight context
   - rebuilds the candidate pool server-side from guided cache
   - when the query or user context clearly asks for Prime delivery/eligibility, narrows the candidate pool to provider-confirmed Prime-eligible items when any are available
-  - locks the shortlist with haiku first, ranking inferred product fit before quality confidence, price/value, shortlist variety, and raw Amazon search position
+  - locks the shortlist with Haiku first, using short candidate indices plus a strict Anthropic tool schema mapped back to server-owned candidate IDs; post-response validation and deterministic top-up remain as safety nets
+  - ranks inferred product fit before quality confidence, price/value, shortlist variety, and raw Amazon search position
   - if haiku returns a partial valid subset, tops up from deterministic fallback so the response still returns up to 6 eligible products
   - returns shortlist cards immediately
   - starts async product-detail fetch + mini enrichment in the background; after mini writeup is stored, a separate `gpt-5-mini` Deep Dive eligibility pass may mark which finalized products should show the optional Deep Dive button
@@ -195,7 +197,7 @@
 - Rainforest product-detail fetches run asynchronously after finalize so modal AI copy can hydrate without blocking the initial shortlist.
 - If product details are available after finalize, the stored enrichment payload includes the new `feature_bullets` and the frontend can hydrate those bullets in place.
 - Backend observability is now opt-in through Sentry (`SENTRY_DSN`) with sanitized error context, and background async failures are logged/reported instead of disappearing silently.
-- Search reliability diagnostics now use the existing frontend search ID as a user-facing support code. Frontend discovery/finalize failures show the support code, offer a safe `Copy debug info` action, ask testers whether they use a filter/VPN, run lightweight `/api/health` and `/api/diagnostics/connectivity` checks, and write lifecycle rows to Supabase `search_attempts` / `search_events` when those tables exist. The same ID is included in guided discovery/finalize Render logs and Sentry context, including async finalize work; the browser warns in development when its diagnostic POST fails, and the endpoint returns `503` rather than claiming success when storage is unavailable. Background query-quality timeouts are reported to Sentry at warning level because the main search has already continued.
+- Search reliability diagnostics use the existing frontend search ID as a support code. Frontend discovery/finalize failures show calm recovery copy and a primary `Try again` action that preserves the query/follow-up notes and starts fresh discovery with `cacheMode=refresh`; raw provider errors are not shown. The support code, safe `Copy report` action, and optional filter/VPN question remain under collapsed troubleshooting details. Lightweight `/api/health` and `/api/diagnostics/connectivity` checks still run, and lifecycle rows write to Supabase `search_attempts` / `search_events` when those tables exist. A retry is recorded on the failed search before the fresh attempt receives a new search ID. The same IDs are included in guided discovery/finalize Render logs and Sentry context, including async finalize work; the browser warns in development when its diagnostic POST fails, and the endpoint returns `503` rather than claiming success when storage is unavailable. Background query-quality timeouts are reported to Sentry at warning level because the main search has already continued.
 - The diagnostic lifecycle covers frontend search start, backend request start/receive, Rainforest start/success/error/timeout, app filter counts, empty results, backend response sent, frontend response/display success, frontend error, backend health, and connectivity checks.
 - `search_history` is internal telemetry, not user-facing history.
 - Account-backed saved-search history uses `saved_searches`, not the existing internal `search_history` table.

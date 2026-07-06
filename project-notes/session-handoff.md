@@ -36,7 +36,7 @@
 - The web UI improvement plan lives at `project-notes/ui_improvement_plan/README.md`.
 - Priority 1 of that plan is now implemented in a simpler form: final/preview results render as ranked rows, without a side preview.
 - Priority 2 is now implemented in the first pass: the large search stage collapses into compact progress plus a summary after submit, refinement gets its own active panel, and finalized refinement collapses above the ranked results.
-- Priority 3 is now implemented in the first pass: the active refine panel uses the mobile-inspired heading, AI follow-up prompt, up to 3 refinement chips, fallback chips, selected chip state, and chip-to-notes behavior.
+- Priority 3 is now implemented in the first pass: the active refine panel uses the mobile-inspired heading, AI follow-up prompt, up to 3 refinement chips, fallback chips, selected chip state, and chip-to-notes behavior. Refine now also returns a distinct pre-generated alternate; `Ask a different question` replaces only the first question after a 900 ms breathing transition while keeping the chips and notes available.
 - Priority 4 is now implemented in the first pass: guided finalize shows staged progress copy while it locks the shortlist.
 - Priority 5 is now implemented in the first pass: product detail modal order is image/facts, reasoning/caveat, product notes, and one compact source-specific CTA/disclosure area.
 - Priority 6 is now implemented in the first pass: search/refine/results/retry/modal surfaces use fewer gradients, lighter shadows, more consistent radii, teal-first actions, and orange mainly for shopping clickout.
@@ -48,9 +48,9 @@
 
 ## Current guided flow
 - `GET /api/search/rainforest-discover` is the main discovery route used by the homepage. It uses Rainforest API for active Amazon discovery; Oxylabs provider code is archived and is not an active fallback.
-- `GET /api/search/refine` returns one short follow-up question and optional refinement chips.
+- `GET /api/search/refine` returns a primary short follow-up question, one distinct alternate, and optional refinement chips in the same response.
 - `POST /api/search/finalize` rebuilds the candidate pool from guided cache and returns up to 6 shortlist cards.
-- Haiku shortlist locking now ranks by inferred product fit first, then quality confidence (rating, review count, trustScore, and recognized category brand), price/value, useful shortlist variety, and raw Amazon search position (`amazonPosition`) as the final secondary signal.
+- Haiku shortlist locking uses short candidate indices plus a strict Anthropic tool schema, maps accepted indices back to server-owned candidate IDs, and retains post-response validation/top-up. It ranks by inferred product fit first, then quality confidence (rating, review count, trustScore, and recognized category brand), price/value, useful shortlist variety, and raw Amazon search position (`amazonPosition`) as the final secondary signal.
 - `GET /api/search/enrichment-stream` is the first enrichment path; `GET /api/search/enrichment` is the polling fallback.
 - `GET /api/search/product-details` hydrates one skipped-refinement preview product from the per-ASIN product detail cache or Rainforest when its modal opens.
 - `POST /api/product/deep-dive` is implemented behind `DEEP_DIVE_ENABLED=true` for signed-in users who manually click Deep Dive inside a finalized product modal. The modal button is hidden by default and appears only after mini writeup plus a separate token-scoped `gpt-5-mini` eligibility pass marks a finalized product `show` or `maybe`. The clicked endpoint validates the candidate against the finalized token-scoped snapshot, uses SerpApi Shopping -> Immersive Product, refreshes stale Immersive cache before showing lower store offers, caches useful review or store-offer Immersive data while avoiding empty provider responses, validates exact offers/direct links, compares them against the known Amazon/source price, and optionally synthesizes real review evidence with Haiku.
@@ -58,7 +58,7 @@
 - `GET /api/search/query-quality` exposes polling-based query-quality suggestions.
 - `POST /api/search/retry-advice` suggests a better next search when the user rejects the shortlist.
 - `POST /api/feedback` stores tester feedback.
-- Search diagnostics now run outside Sentry. The frontend search ID is the support code; failed searches show that code, `Copy debug info`, and an optional filter/VPN selector. Frontend/backend lifecycle events write to Supabase `search_attempts` and `search_events` when those tables exist. That ID also links guided discovery/finalize Render logs and Sentry context; diagnostic storage failure now returns `503` and warns in the development browser. `/admin/analytics` has a Search reliability section for failed support codes and provider/network patterns.
+- Search diagnostics run outside Sentry. Failed searches hide raw provider errors behind calm recovery copy and a `Try again` button that preserves input and starts fresh discovery with `cacheMode=refresh`. The failed attempt records the retry request, while the new attempt gets a fresh search ID. Support code, `Copy report`, and the optional filter/VPN selector are collapsed under troubleshooting details. Frontend/backend lifecycle events write to Supabase `search_attempts` and `search_events` when those tables exist. Those IDs also link guided discovery/finalize Render logs and Sentry context; diagnostic storage failure returns `503` and warns in the development browser. `/admin/analytics` has a Search reliability section for failed support codes and provider/network patterns.
 - Automatic hybrid price-intel surfacing remains intentionally inactive. Deep Dive is the current comparison/review-research bet; do not add card badges, background better-price checks, Serper, Google Light, or Google Custom Search for this flow without a fresh decision.
 
 ## Key files
