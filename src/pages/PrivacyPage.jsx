@@ -15,7 +15,7 @@ function PrivacyPage() {
       <PageShell
         eyebrow="Privacy Policy"
         title="How Focamai handles your information."
-        description="This policy applies to the Focamai website and mobile app. It reflects the features currently implemented as of July 2, 2026."
+        description="This policy applies to the Focamai website and mobile app. It reflects the features currently implemented as of July 6, 2026."
       >
         <section className="space-y-3">
           <h2 className={sectionHeadingClassName}>Information Focamai handles</h2>
@@ -58,6 +58,11 @@ function PrivacyPage() {
               app does not request precise location or GPS permission; its marketplace is selected
               explicitly by the user.
             </li>
+            <li>
+              <strong>Mobile crash reports:</strong> when production Sentry reporting is configured,
+              serious app errors may include stack traces, app version, and device and
+              operating-system context.
+            </li>
           </ul>
         </section>
 
@@ -85,7 +90,7 @@ function PrivacyPage() {
             <li><strong>SerpApi</strong> — product and retailer evidence when an eligible signed-in user explicitly runs the optional Deep Dive feature.</li>
             <li><strong>Vercel</strong> — website hosting, Web Analytics, and Speed Insights.</li>
             <li><strong>Render</strong> — backend hosting and request logs for website and mobile API traffic.</li>
-            <li><strong>Sentry</strong> — backend error monitoring when production monitoring is enabled. Focamai configures its own error context to avoid authorization headers and known secret fields, but error and search context may still be processed when needed to diagnose a failure.</li>
+            <li><strong>Sentry</strong> — backend error monitoring and configured production mobile crash reporting. Mobile reporting is limited to crashes and serious errors: default personally identifying information, breadcrumbs, performance tracing, profiling, app-hang tracking, automatic session tracking, session replay, and feedback are disabled. Backend error and search context may still be processed when needed to diagnose a failure.</li>
             <li><strong>Resend</strong> — delivery of price-watch email alerts when those alerts are enabled.</li>
             <li><strong>Google</strong> — optional Google authentication and web-font delivery on the website.</li>
             <li><strong>Amazon and product-image hosts</strong> — product images, product pages, and affiliate attribution after a user follows an Amazon link.</li>
@@ -139,7 +144,7 @@ function PrivacyPage() {
             Search-cache entries are normally marked to expire after 24 hours, although the
             underlying database or hosting records may remain until they are cleaned up. The code
             does not currently define one automatic deletion period for account records, internal
-            search logs, analytics, diagnostics, or feedback. Those records may therefore remain
+            search logs, analytics, diagnostics, crash reports, or feedback. Those records may therefore remain
             until deleted as part of maintenance or a valid privacy request. Third-party providers
             may retain information under their own policies.
           </p>
@@ -161,8 +166,9 @@ function PrivacyPage() {
             Production traffic uses encrypted HTTPS connections. Mobile authentication sessions are
             kept in secure device storage, and account-owned saved searches and price watches use
             Supabase row-level access controls. Focamai limits server credentials to backend use and
-            sanitizes known secret and authorization fields from its configured error context. No
-            system can guarantee absolute security.
+            sanitizes known secret and authorization fields from its configured error context.
+            Mobile JavaScript crash reporting also removes user, request, extra, and breadcrumb
+            fields before an error event is sent. No system can guarantee absolute security.
           </p>
         </section>
 
