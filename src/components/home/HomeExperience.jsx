@@ -546,6 +546,7 @@ function OpenLayout(props) {
                   onSelectProduct={handleSelectProduct}
                   onRetryAdviceRequest={retry.requestAdvice}
                   onRetryFeedbackChange={retry.setFeedback}
+                  onFailureRetry={actions.retryFailedSearch}
                   onRetrySearch={handleRetrySearch}
                   previousResults={results.previous}
                   retryAdvice={retry.advice}

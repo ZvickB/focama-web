@@ -642,13 +642,45 @@ describe('HomePage', () => {
     )
   })
 
-  it('shows the backend error message when discovery fails', async () => {
+  it('shows a friendly recovery message and refreshes discovery when retrying a failure', async () => {
     const user = userEvent.setup()
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
         ok: false,
         text: async () => JSON.stringify({ error: 'SerpApi request failed.' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            prompt: 'What matters most?',
+            helperText: 'Pick priorities.',
+            followUpPlaceholder: 'Anything else?',
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            discoveryToken: 'retry-token',
+            candidatePool: {
+              query: 'stroller',
+              details: '',
+              candidates: [createMockResult()],
+            },
+            previewResults: [createMockResult()],
+          }),
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -667,8 +699,24 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
 
+    expect(await screen.findByText(/we couldn’t finish that search/i)).toBeInTheDocument()
+    expect(screen.queryByText(/serpapi request failed/i)).not.toBeInTheDocument()
     expect((await screen.findAllByText(/support code/i)).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /copy report/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /try again/i }))
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          String(url).includes('/api/search/rainforest-discover?query=stroller') &&
+          String(url).includes('cacheMode=refresh'),
+        ),
+      ).toBe(true)
+    })
+    await waitFor(() => {
+      expect(screen.queryByText(/we couldn’t finish that search/i)).not.toBeInTheDocument()
+    })
   })
 
   it('shows a session-expired recovery message when discovery returns without a token', async () => {

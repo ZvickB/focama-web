@@ -1454,6 +1454,26 @@ export function useGuidedSearch() {
     startGuidedSearch(normalizedQuery)
   }
 
+  function retryFailedSearch() {
+    const normalizedQuery = submittedQuery.trim()
+
+    if (!normalizedQuery) {
+      resetToNewSearch()
+      return
+    }
+
+    recordDiagnostic('frontend_retry_requested', {
+      amazonDomain: submittedAmazonDomain,
+      query: normalizedQuery,
+      status: 'retrying',
+    })
+    startGuidedSearch(normalizedQuery, {
+      cacheMode: 'refresh',
+      preserveFollowUpNotes: true,
+      searchEventName: 'failure_retry_started',
+    })
+  }
+
   async function refreshDiscoveryForHardConstraints({
     amazonDomain,
     constraintMatch,
@@ -1919,6 +1939,7 @@ export function useGuidedSearch() {
       beginGuidedSearch,
       finalizeRefinement: handleFinalizeRefinement,
       resetToNewSearch,
+      retryFailedSearch,
       selectProduct: handleSelectProduct,
       showProductsNow: handleShowProductsNow,
       trackRetailerClick: handleRetailerClick,

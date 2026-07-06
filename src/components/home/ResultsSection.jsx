@@ -58,6 +58,7 @@ export function ResultsSection({
   isGeneratingRetryAdvice,
   onRetailerClick,
   onSelectProduct,
+  onFailureRetry = () => {},
   onRetryAdviceRequest,
   onRetryFeedbackChange,
   onRetrySearch = () => {},
@@ -239,76 +240,83 @@ export function ResultsSection({
       ) : null}
 
       {errorMessage && diagnostics?.failure ? (
-        <div className="space-y-4 rounded-[28px] border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-800 shadow-[0_18px_46px_-34px_rgba(185,28,28,0.28)] sm:px-5">
+        <div className="space-y-4 rounded-[28px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900 shadow-[0_18px_46px_-34px_rgba(180,83,9,0.22)] sm:px-5">
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-red-200 bg-white text-red-600">
+            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-200 bg-white text-amber-700">
               <ShieldQuestion className="h-4 w-4" />
             </span>
             <div className="min-w-0 space-y-1">
-              <p className="font-medium text-red-950">Something went wrong. Please try again.</p>
-              <p className="leading-6 text-red-800/90">
-                We logged this automatically. If we asked you to report it, send this support code:{' '}
-                <span className="font-mono text-xs font-semibold break-all text-red-950">
-                  {diagnostics?.failure?.searchId || 'not available'}
-                </span>
-              </p>
-              <p className="sr-only">
-                Support code:{' '}
-                <span className="font-mono text-xs font-semibold break-all text-red-950">
-                  {diagnostics?.failure?.searchId || 'not available'}
-                </span>
+              <p className="font-medium text-amber-950">We couldn’t finish that search.</p>
+              <p className="leading-6 text-amber-900/85">
+                This is usually temporary. We kept what you entered, so you can safely try again.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 rounded-2xl border border-red-100 bg-white/72 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-red-950">Need to send more detail?</p>
-              <p className="text-xs leading-5 text-red-800/80">
-                Copy a safe report with timing, marketplace, and network checks.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-10 shrink-0 rounded-full border-red-200 bg-white px-4 text-sm text-red-900 hover:bg-red-50"
-              disabled={!diagnostics?.failure}
-              onClick={handleCopyDebugInfo}
-            >
-              {hasCopiedDebugInfo ? (
-                <Check className="mr-2 h-4 w-4" />
-              ) : (
-                <Copy className="mr-2 h-4 w-4" />
-              )}
-              {hasCopiedDebugInfo ? 'Copied' : 'Copy report'}
-            </Button>
-          </div>
+          <Button
+            type="button"
+            className="h-11 rounded-full bg-amber-950 px-5 text-white hover:bg-amber-900"
+            onClick={onFailureRetry}
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Try again
+          </Button>
 
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-[0.08em] text-red-900/70">
-              Are you using a filter or VPN?
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {FILTER_VPN_CHOICES.map((choice) => {
-                const isSelected = diagnostics?.failure?.reportedFilterType === choice.value
+          <details className="rounded-2xl border border-amber-200/80 bg-white/70 p-3">
+            <summary className="cursor-pointer text-xs font-medium text-amber-950">
+              Troubleshooting details
+            </summary>
+            <div className="mt-3 space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs leading-5 text-amber-900/80">
+                  We logged this automatically. Support code:{' '}
+                  <span className="font-mono font-semibold break-all text-amber-950">
+                    {diagnostics?.failure?.searchId || 'not available'}
+                  </span>
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 shrink-0 rounded-full border-amber-200 bg-white px-4 text-xs text-amber-950 hover:bg-amber-50"
+                  disabled={!diagnostics?.failure}
+                  onClick={handleCopyDebugInfo}
+                >
+                  {hasCopiedDebugInfo ? (
+                    <Check className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Copy className="mr-2 h-4 w-4" />
+                  )}
+                  {hasCopiedDebugInfo ? 'Copied' : 'Copy report'}
+                </Button>
+              </div>
 
-                return (
-                  <button
-                    key={choice.value}
-                    type="button"
-                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                      isSelected
-                        ? 'border-red-300 bg-red-100 text-red-950'
-                        : 'border-red-100 bg-white/82 text-red-800 hover:border-red-200 hover:bg-red-50'
-                    }`}
-                    onClick={() => diagnostics?.setReportedFilterType?.(choice.value)}
-                  >
-                    {choice.label}
-                  </button>
-                )
-              })}
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-[0.08em] text-amber-900/70">
+                  Are you using a filter or VPN?
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {FILTER_VPN_CHOICES.map((choice) => {
+                    const isSelected = diagnostics?.failure?.reportedFilterType === choice.value
+
+                    return (
+                      <button
+                        key={choice.value}
+                        type="button"
+                        className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                          isSelected
+                            ? 'border-amber-300 bg-amber-100 text-amber-950'
+                            : 'border-amber-100 bg-white/82 text-amber-900 hover:border-amber-200 hover:bg-amber-50'
+                        }`}
+                        onClick={() => diagnostics?.setReportedFilterType?.(choice.value)}
+                      >
+                        {choice.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
-          </div>
+          </details>
         </div>
       ) : null}
 
