@@ -23,7 +23,7 @@ describe('query framing', () => {
       content: [
         {
           type: 'text',
-          text: 'Here is the JSON:\n{"prompt":"What matters most: budget, size, or comfort?","refinement_suggestions":[{"label":"Lower price","prompt":"I want the lowest reasonable price"},{"label":"Small size","prompt":"I need something compact"},{"label":"Comfort fit","prompt":"Comfort matters most"}]}',
+          text: 'Here is the JSON:\n{"prompt":"What matters most: budget, size, or comfort?","alternate_prompt":"Where and how often will you use it?","refinement_suggestions":[{"label":"Lower price","prompt":"I want the lowest reasonable price"},{"label":"Small size","prompt":"I need something compact"},{"label":"Comfort fit","prompt":"Comfort matters most"}]}',
         },
       ],
       usage: {
@@ -46,6 +46,7 @@ describe('query framing', () => {
     )
     expect(result).toEqual({
       prompt: 'What matters most: budget, size, or comfort?',
+      alternatePrompt: 'Where and how often will you use it?',
       refinementSuggestions: [
         { label: 'Lower price', prompt: 'I want the lowest reasonable price' },
         { label: 'Small size', prompt: 'I need something compact' },
@@ -77,6 +78,7 @@ describe('query framing', () => {
         },
         output_text: JSON.stringify({
           prompt: 'What matters most here: airline carry-on size, one-hand fold, or lower price?',
+          alternate_prompt: 'Is there anything you want to avoid?',
           refinement_suggestions: [
             { label: 'Easy cleaning', prompt: 'I want something that cleans up quickly after use' },
             { label: 'Small batches', prompt: 'I only need to make small quantities at a time' },
@@ -97,6 +99,7 @@ describe('query framing', () => {
     expect(result.prompt).toBe(
       'What matters most here: airline carry-on size, one-hand fold, or lower price?',
     )
+    expect(result.alternatePrompt).toBe('Is there anything you want to avoid?')
     expect(result.refinementSuggestions).toEqual([
       { label: 'Easy cleaning', prompt: 'I want something that cleans up quickly after use' },
       { label: 'Small batches', prompt: 'I only need to make small quantities at a time' },
@@ -115,7 +118,11 @@ describe('query framing', () => {
 
     expect(parsedBody.reasoning.effort).toBe('minimal')
     expect(parsedBody.text.format.name).toBe('question_fast')
-    expect(parsedBody.text.format.schema.required).toEqual(['prompt', 'refinement_suggestions'])
+    expect(parsedBody.text.format.schema.required).toEqual([
+      'prompt',
+      'alternate_prompt',
+      'refinement_suggestions',
+    ])
     expect(parsedBody.text.format.schema.properties.refinement_suggestions).toEqual({
       type: 'array',
       minItems: 3,
@@ -131,6 +138,7 @@ describe('query framing', () => {
       },
     })
     expect(parsedBody.text.format.schema.properties).not.toHaveProperty('category_hint')
+    expect(parsedBody.input[1].content).toContain('two short follow-up questions')
     expect(parsedBody.input[1].content).toContain('exactly 3 short refinement chip labels')
     expect(parsedBody.input[1].content).toContain('30 characters or fewer')
   })
@@ -153,6 +161,7 @@ describe('query framing', () => {
               {
                 text: JSON.stringify({
                   prompt: `  What   matters   most if you want this for travel, daily use, and tight storage ${'x'.repeat(80)}  `,
+                  alternate_prompt: `  What   would make this a poor fit ${'y'.repeat(130)}  `,
                   refinement_suggestions: [
                     { label: '  Easy   storage ', prompt: 'I have limited space and need something compact' },
                     { label: 'Quiet operation', prompt: 'I need something that runs quietly' },
@@ -178,6 +187,8 @@ describe('query framing', () => {
     expect(result.prompt.length).toBeLessThanOrEqual(140)
     expect(result.prompt).toMatch(/^What matters most if you want this for travel, daily use/)
     expect(result.prompt).not.toContain('  ')
+    expect(result.alternatePrompt.length).toBeLessThanOrEqual(140)
+    expect(result.alternatePrompt).not.toContain('  ')
     expect(result.refinementSuggestions).toEqual([
       { label: 'Easy storage', prompt: 'I have limited space and need something compact' },
       { label: 'Quiet operation', prompt: 'I need something that runs quietly' },

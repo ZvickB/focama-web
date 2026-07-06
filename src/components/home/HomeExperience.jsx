@@ -37,6 +37,7 @@ import { Textarea } from '@/components/ui/textarea.jsx'
 import { useSearchProgress } from '@/contexts/useSearchProgress.js'
 
 const HERO_SUBLINE = "Tell us what you need. We'll find your six."
+const ALTERNATE_QUESTION_REVEAL_DELAY_MS = 900
 function loadResultsSection() {
   return import('@/components/home/ResultsSection.jsx')
 }
@@ -58,6 +59,11 @@ function OpenLayout(props) {
   const lastFinalizeScrollQueryRef = useRef('')
   const [showHeroCopy, setShowHeroCopy] = useState(false)
   const [hasOpenedModal, setHasOpenedModal] = useState(false)
+  const [alternateQuestionState, setAlternateQuestionState] = useState({
+    phase: 'primary',
+    promptKey: '',
+  })
+  const alternateQuestionTimerRef = useRef(null)
   const {
     guided,
     showTimingPanel,
@@ -69,6 +75,19 @@ function OpenLayout(props) {
   const hasStartedSearch = status.hasStartedSearch
   const isLoading = status.isLoading
   const prompt = query.refinementPrompt
+  const promptKey = JSON.stringify([
+    query.submittedQuery,
+    prompt?.prompt || '',
+    prompt?.alternatePrompt || '',
+  ])
+  const alternateQuestionPhase = alternateQuestionState.promptKey === promptKey
+    ? alternateQuestionState.phase
+    : 'primary'
+  const isShowingAlternateQuestion = alternateQuestionPhase === 'alternate'
+  const isSwitchingQuestion = alternateQuestionPhase === 'switching'
+  const displayedPrompt = isShowingAlternateQuestion && prompt?.alternatePrompt
+    ? { ...prompt, prompt: prompt.alternatePrompt }
+    : prompt
   const showPreviewResults = results.showPreview
   const submittedQuery = query.submittedQuery
   const shouldShowRefinementPanel = hasStartedSearch && !hasFinalResults
@@ -80,6 +99,19 @@ function OpenLayout(props) {
 
     return () => {
       window.clearTimeout(revealTimer)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (alternateQuestionTimerRef.current) {
+      window.clearTimeout(alternateQuestionTimerRef.current)
+      alternateQuestionTimerRef.current = null
+    }
+  }, [promptKey])
+
+  useEffect(() => () => {
+    if (alternateQuestionTimerRef.current) {
+      window.clearTimeout(alternateQuestionTimerRef.current)
     }
   }, [])
 
@@ -233,13 +265,25 @@ function OpenLayout(props) {
     }
   }
 
+  function handleAskDifferentQuestion() {
+    if (!prompt?.alternatePrompt || isShowingAlternateQuestion || isSwitchingQuestion) {
+      return
+    }
+
+    setAlternateQuestionState({ phase: 'switching', promptKey })
+    alternateQuestionTimerRef.current = window.setTimeout(() => {
+      setAlternateQuestionState({ phase: 'alternate', promptKey })
+      alternateQuestionTimerRef.current = null
+    }, ALTERNATE_QUESTION_REVEAL_DELAY_MS)
+  }
+
   const { setProgress } = useSearchProgress()
   useEffect(() => {
     setProgress({ hasStartedSearch, hasDiscoveryResults, hasFinalResults })
   }, [hasStartedSearch, hasDiscoveryResults, hasFinalResults, setProgress])
   const refinementCopy = buildRefinementCopy({
     isGeneratingPrompt: status.isGeneratingPrompt,
-    prompt,
+    prompt: displayedPrompt,
     submittedQuery,
   })
   const refinementSummary = query.followUpNotes.trim()
@@ -402,8 +446,17 @@ function OpenLayout(props) {
           >
             <div className="space-y-5">
               <RefinementCopy
+                canAskDifferentQuestion={Boolean(
+                  prompt?.alternatePrompt &&
+                  !status.isGeneratingPrompt &&
+                  !status.isFinalizing &&
+                  !isShowingAlternateQuestion &&
+                  !isSwitchingQuestion
+                )}
                 isGeneratingPrompt={status.isGeneratingPrompt}
-                prompt={prompt}
+                isSwitchingQuestion={isSwitchingQuestion}
+                onAskDifferentQuestion={handleAskDifferentQuestion}
+                prompt={displayedPrompt}
                 submittedQuery={submittedQuery}
               />
 

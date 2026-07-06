@@ -35,6 +35,7 @@ describe('refinement assistant', () => {
         },
         output_text: JSON.stringify({
           prompt: 'What matters most: budget, portability, or comfort?',
+          alternate_prompt: 'Where will you use these most often?',
           refinement_suggestions: [
             { label: 'Lower price', prompt: 'I want to keep the price low without losing the basics' },
             { label: 'Easy travel', prompt: 'I need something that is simple to carry while traveling' },
@@ -66,6 +67,7 @@ describe('refinement assistant', () => {
     expect(result).toEqual(
       expect.objectContaining({
         prompt: 'What matters most: budget, portability, or comfort?',
+        alternatePrompt: 'Where will you use these most often?',
         refinementSuggestions: [
           { label: 'Lower price', prompt: 'I want to keep the price low without losing the basics' },
           { label: 'Easy travel', prompt: 'I need something that is simple to carry while traveling' },
@@ -95,6 +97,7 @@ describe('refinement assistant', () => {
           type: 'text',
           text: JSON.stringify({
             prompt: 'What matters most here: price, size, or durability?',
+            alternate_prompt: 'How often do you expect to use it?',
             refinement_suggestions: [
               { label: 'Under $100', prompt: 'I want to stay under $100' },
               { label: 'Compact size', prompt: 'I need something compact and easy to store' },
@@ -128,6 +131,7 @@ describe('refinement assistant', () => {
     expect(result).toEqual(
       expect.objectContaining({
         prompt: 'What matters most here: price, size, or durability?',
+        alternatePrompt: 'How often do you expect to use it?',
         provider: 'anthropic',
         model: 'claude-haiku-4-5-20251001',
         fallbackFrom: 'gpt-5-mini',
@@ -149,6 +153,7 @@ describe('refinement assistant', () => {
         },
         output_text: JSON.stringify({
           prompt: 'What matters most here: portability, comfort, or battery life?',
+          alternate_prompt: 'Is there anything you want to avoid?',
           refinement_suggestions: [
             { label: 'Travel use', prompt: 'I need something that works well for travel and is easy to carry' },
             { label: 'Long battery', prompt: 'Battery life is important — I want it to last a full day' },
@@ -168,6 +173,7 @@ describe('refinement assistant', () => {
 
     expect(result).toEqual({
       prompt: 'What matters most here: portability, comfort, or battery life?',
+      alternatePrompt: 'Is there anything you want to avoid?',
       helperText: 'Or write whatever is important to you. Feel free to write in natural language.',
       followUpPlaceholder: 'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
       refinementSuggestions: [
@@ -210,7 +216,11 @@ describe('refinement assistant', () => {
 
     expect(parsedBody.reasoning.effort).toBe('minimal')
     expect(parsedBody.text.format.name).toBe('question_fast')
-    expect(parsedBody.text.format.schema.required).toEqual(['prompt', 'refinement_suggestions'])
+    expect(parsedBody.text.format.schema.required).toEqual([
+      'prompt',
+      'alternate_prompt',
+      'refinement_suggestions',
+    ])
     expect(parsedBody.text.format.schema.properties).not.toHaveProperty('tradeoff_axes')
   })
 
@@ -228,6 +238,7 @@ describe('refinement assistant', () => {
         },
         output_text: JSON.stringify({
           prompt: `What matters most for this pick if you want it for travel and also home use every day ${'x'.repeat(40)}`,
+          alternate_prompt: `What would rule an option out ${'y'.repeat(140)}`,
           refinement_suggestions: [
             { label: 'Daily use', prompt: 'I plan to use this every day so durability matters' },
             { label: 'Easy cleaning', prompt: 'I want something that is easy to clean after use' },
@@ -246,6 +257,7 @@ describe('refinement assistant', () => {
     )
 
     expect(result.prompt.length).toBeLessThanOrEqual(140)
+    expect(result.alternatePrompt.length).toBeLessThanOrEqual(140)
     expect(result.helperText).toBe('Or write whatever is important to you. Feel free to write in natural language.')
     expect(result.followUpPlaceholder).toBe('Example: I want something lightweight for daily travel, under $200, and easy to clean.')
     expect(result.refinementSuggestions).toEqual([

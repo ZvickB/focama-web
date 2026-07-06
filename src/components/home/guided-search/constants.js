@@ -148,6 +148,7 @@ export function parseServerTimingHeader(headerValue) {
 export function createFallbackRefinementPrompt(productQuery) {
   return {
     prompt: `What should we optimize for with this ${productQuery}?`,
+    alternatePrompt: 'Is there a budget, size, or must-have feature you do not want to compromise on?',
     helperText:
       'Use this step for natural-language details like budget, size, comfort, style, or where you plan to use it.',
     followUpPlaceholder:

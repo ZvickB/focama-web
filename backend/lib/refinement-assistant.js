@@ -52,6 +52,7 @@ export async function generateRefinementPrompt(
 
   return {
     prompt: questionFast.prompt,
+    alternatePrompt: questionFast.alternatePrompt,
     helperText: DEFAULT_HELPER_TEXT,
     followUpPlaceholder: DEFAULT_PLACEHOLDER,
     refinementSuggestions: questionFast.refinementSuggestions,

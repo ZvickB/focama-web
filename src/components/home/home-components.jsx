@@ -31,8 +31,16 @@ export function CharCounter({ current, max }) {
   )
 }
 
-export function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
+export function RefinementCopy({
+  canAskDifferentQuestion = false,
+  isGeneratingPrompt,
+  isSwitchingQuestion = false,
+  onAskDifferentQuestion,
+  prompt,
+  submittedQuery,
+}) {
   const displayedCopy = buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery })
+  const isWaitingForQuestion = isGeneratingPrompt || isSwitchingQuestion
 
   return (
     <div className="space-y-4 text-center sm:text-left">
@@ -49,10 +57,25 @@ export function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
       </div>
       <div className="rounded-2xl border border-[#e6d8c5] bg-white/90 p-4 shadow-[0_14px_36px_-30px_rgba(120,87,63,0.28)]">
         <div className="flex items-center justify-center gap-2 text-sm font-semibold text-[#80573f] sm:justify-start">
-          <Sparkles className={`h-4 w-4 ${isGeneratingPrompt ? 'animate-pulse' : ''}`} />
+          <Sparkles className={`h-4 w-4 ${isWaitingForQuestion ? 'animate-pulse motion-reduce:animate-none' : ''}`} />
           <span>{displayedCopy.titleEyebrow}</span>
         </div>
-        {displayedCopy.titleQuestion ? (
+        {isSwitchingQuestion ? (
+          <div
+            aria-label="Finding a different question"
+            aria-live="polite"
+            className="mt-4 flex items-center justify-center gap-2 sm:justify-start"
+            role="status"
+          >
+            {[0, 1, 2].map((dot) => (
+              <span
+                key={dot}
+                className="h-2.5 w-2.5 rounded-full bg-primary/65 animate-soft-pulse motion-reduce:animate-none"
+                style={{ animationDelay: `${dot * 160}ms` }}
+              />
+            ))}
+          </div>
+        ) : displayedCopy.titleQuestion ? (
           <p
             className="mt-2 text-base font-medium leading-7 text-[#8f4e2f] transition-opacity duration-500 sm:text-lg"
             style={{ fontFamily: '"Manrope", sans-serif' }}
@@ -63,9 +86,18 @@ export function RefinementCopy({ isGeneratingPrompt, prompt, submittedQuery }) {
         <p className="mt-2 text-sm font-medium leading-6 text-slate-600 transition-opacity duration-300">
           {displayedCopy.helper}
           {isGeneratingPrompt ? (
-            <span className="ml-0.5 inline-block h-4 w-px translate-y-0.5 animate-pulse bg-slate-400 align-middle" />
+            <span className="ml-0.5 inline-block h-4 w-px translate-y-0.5 animate-pulse bg-slate-400 align-middle motion-reduce:animate-none" />
           ) : null}
         </p>
+        {canAskDifferentQuestion ? (
+          <button
+            type="button"
+            className="mt-3 text-sm font-semibold text-primary underline decoration-primary/25 underline-offset-4 transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+            onClick={onAskDifferentQuestion}
+          >
+            Ask a different question
+          </button>
+        ) : null}
       </div>
     </div>
   )

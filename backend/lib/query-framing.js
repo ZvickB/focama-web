@@ -112,6 +112,10 @@ function buildQuestionFastSchema() {
         type: 'string',
         maxLength: MAX_PROMPT_LENGTH,
       },
+      alternate_prompt: {
+        type: 'string',
+        maxLength: MAX_PROMPT_LENGTH,
+      },
       refinement_suggestions: {
         type: 'array',
         minItems: MAX_REFINEMENT_SUGGESTIONS,
@@ -127,7 +131,7 @@ function buildQuestionFastSchema() {
         },
       },
     },
-    required: ['prompt', 'refinement_suggestions'],
+    required: ['prompt', 'alternate_prompt', 'refinement_suggestions'],
     additionalProperties: false,
   }
 }
@@ -135,16 +139,17 @@ function buildQuestionFastSchema() {
 
 function buildQuestionFastInput(productQuery) {
   return [
-    'Write one short follow-up question and exactly 3 short refinement chip labels for a shopping search before any product results exist.',
+    'Write two short follow-up questions and exactly 3 short refinement chip labels for a shopping search before any product results exist.',
     'Stay query-only. Do not assume specific products, brands, or merchants.',
     `Keep the question at or under ${MAX_PROMPT_LENGTH} characters.`,
-    'Ask only one question.',
+    'Return the strongest question as prompt and a useful alternative as alternate_prompt.',
+    'Each field must contain only one question, and the two questions must explore different decision factors.',
     `Each refinement chip label must be 1-3 words and ${MAX_REFINEMENT_SUGGESTION_LENGTH} characters or fewer.`,
     'The chip labels should be tappable preferences, constraints, use cases, or deal breakers the shopper might choose.',
     'For each chip, also write a short natural-language prompt (1-2 sentences) that expands what that chip means in the context of this specific search, written as if the shopper is saying it.',
     'Use natural shopping language.',
     'Do not use brands, merchants, hype, generic quality claims, or broad labels like "Quality", "Best option", "Top rated", or "Good product".',
-    'Do not repeat the follow-up question as chip labels.',
+    'Do not repeat either follow-up question as chip labels.',
     'Do not add helper text, examples, a placeholder, category notes, or reasoning fields.',
     'Focus on the detail most likely to change ranking, such as use case, must-have, budget, size, comfort, or what to avoid.',
     `Product request: ${productQuery}`,
@@ -156,7 +161,7 @@ function buildQuestionFastAnthropicInput(productQuery) {
     buildQuestionFastInput(productQuery),
     '',
     'Return valid JSON only with this exact shape:',
-    '{"prompt":"...","refinement_suggestions":[{"label":"...","prompt":"..."},{"label":"...","prompt":"..."},{"label":"...","prompt":"..."}]}',
+    '{"prompt":"...","alternate_prompt":"...","refinement_suggestions":[{"label":"...","prompt":"..."},{"label":"...","prompt":"..."},{"label":"...","prompt":"..."}]}',
   ].join('\n')
 }
 
@@ -362,6 +367,7 @@ export async function generateQuestionFast(
 
   return {
     prompt: clampText(parsed.prompt, MAX_PROMPT_LENGTH),
+    alternatePrompt: clampText(parsed.alternate_prompt, MAX_PROMPT_LENGTH),
     refinementSuggestions: normalizeRefinementSuggestions(parsed.refinement_suggestions),
     usage,
     generatedAt: new Date().toISOString(),
@@ -382,6 +388,7 @@ export async function generateQuestionFastHaiku(
 
   return {
     prompt: clampText(parsed.prompt, MAX_PROMPT_LENGTH),
+    alternatePrompt: clampText(parsed.alternate_prompt, MAX_PROMPT_LENGTH),
     refinementSuggestions: normalizeRefinementSuggestions(parsed.refinement_suggestions),
     usage,
     model,

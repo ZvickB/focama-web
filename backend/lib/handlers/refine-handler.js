@@ -143,6 +143,7 @@ export async function handleRefinementPrompt(requestUrl, response, request = { h
       lane: 'question_fast',
       query: normalizedQuery,
       promptLength: refinementPrompt.prompt.length,
+      alternatePromptLength: refinementPrompt.alternatePrompt?.length || 0,
       helperTextLength: refinementPrompt.helperText.length,
       placeholderLength: refinementPrompt.followUpPlaceholder.length,
       queryFramingCategoryHint: refinementPrompt.queryFraming?.categoryHint || '',

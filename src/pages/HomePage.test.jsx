@@ -75,6 +75,7 @@ describe('HomePage', () => {
         text: async () =>
           JSON.stringify({
             prompt: 'What should we optimize for with this stroller?',
+            alternatePrompt: 'Where will you use this stroller most often?',
             helperText: 'Pick anything that matters.',
             followUpPlaceholder: 'Anything else?',
           }),
@@ -281,6 +282,7 @@ describe('HomePage', () => {
         text: async () =>
           JSON.stringify({
             prompt: 'What should we optimize for with this stroller?',
+            alternatePrompt: 'Where will you use this stroller most often?',
             helperText: 'Pick anything that matters.',
             followUpPlaceholder: 'Anything else?',
             refinementSuggestions: [
@@ -312,6 +314,23 @@ describe('HomePage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Travel fit' }))
     expect(refinementTextarea).toHaveValue('I need this to fit airplane travel and fold quickly.')
+
+    await user.click(screen.getByRole('button', { name: 'Ask a different question' }))
+    expect(screen.getByRole('status', { name: /finding a different question/i })).toBeInTheDocument()
+    expect(screen.getByText('Pick anything that matters.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Easy folding' })).toBeInTheDocument()
+
+    expect(
+      await screen.findByText(/where will you use this stroller most often/i, {}, { timeout: 1500 }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/what should we optimize for with this stroller/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Travel fit' })).toBeInTheDocument()
+    expect(refinementTextarea).toHaveValue('I need this to fit airplane travel and fold quickly.')
+
+    await user.type(refinementTextarea, ' Mostly on city sidewalks.')
+    expect(refinementTextarea).toHaveValue(
+      'I need this to fit airplane travel and fold quickly. Mostly on city sidewalks.',
+    )
   })
 
   it('restarts discovery with the new marketplace and ignores the stale response', async () => {

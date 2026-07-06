@@ -60,6 +60,7 @@ function createResponseRecorder() {
 function refinementPayload() {
   return {
     prompt: 'What matters most?',
+    alternatePrompt: 'What would rule an option out?',
     helperText: 'Choose one priority.',
     followUpPlaceholder: 'For example, compact size',
     provider: 'openai',
