@@ -20,10 +20,17 @@ async function migrateLocalHistoryToAccount(remoteHistoryStore) {
   await localHistoryStore.clear()
 }
 
+function isPasswordRecoveryUrl() {
+  if (typeof window === 'undefined') return false
+
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  return window.location.pathname === '/reset-password' || hashParams.get('type') === 'recovery'
+}
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(isSupabaseAuthConfigured)
-  const [passwordRecoveryActive, setPasswordRecoveryActive] = useState(false)
+  const [passwordRecoveryActive, setPasswordRecoveryActive] = useState(isPasswordRecoveryUrl)
 
   useEffect(() => {
     if (!isSupabaseAuthConfigured) {
@@ -118,7 +125,7 @@ export function AuthProvider({ children }) {
     }
 
     return client.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo: `${window.location.origin}/reset-password`,
     })
   }, [])
 
