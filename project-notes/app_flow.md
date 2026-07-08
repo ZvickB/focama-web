@@ -153,12 +153,11 @@
 ## Retry behavior
 - Retry is not an endless-results flow.
 - The current retry UX appears as a quiet end-of-shortlist row: `Need a better fit?` with an `Improve picks` action.
-- The expanded retry panel asks `What felt off?`, offers three broad quick prompts (`Too expensive`, `Wrong style`, and `Missing a must-have`), and keeps a freeform text area for explicit corrections.
+- The expanded retry panel asks `What should we change?`, offers three broad quick prompts (`Too expensive`, `Wrong style`, and `Missing a must-have`), and keeps a freeform text area for explicit corrections.
 - `/api/search/retry-advice` suggests a more specific next query.
 - Retry advice preserves accumulated must-have constraints from the original query, follow-up notes, and retry feedback by default, but can replace or remove a previous constraint when the latest feedback clearly changes direction.
 - Quick prompts append into the existing `rejectionFeedback` text sent to `/api/search/retry-advice`; the backend contract is otherwise unchanged.
-- When retry advice returns a suggested query, the retry panel shows it immediately as an editable `Next search` field.
-- `Search again` starts a new guided search from the retry area with a one-request discovery cache refresh, then scrolls toward the loading/results region.
+- `Update my picks` asks for retry advice and, when a safe non-empty suggested query returns, automatically starts a new guided search with a one-request discovery cache refresh. There is no required second query-confirmation step.
 - The same-pool retry path is not part of the active homepage UI right now.
 
 ## Query-quality suggestion behavior

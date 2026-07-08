@@ -133,9 +133,8 @@ Mobile retry is simpler: say what felt off, get a suggested next search, edit it
 Implemented web direction:
 - Reduced correction chips to three broad prompts: too expensive, wrong style, and missing a must-have.
 - Kept the freeform correction box as the main input.
-- Renamed the action to `Prepare next search`.
-- Shows the AI `suggestedQuery` as an editable `Next search` field immediately when advice returns.
-- Uses one final action: `Search again`.
+- The panel now asks `What should we change?` and uses one action: `Update my picks`.
+- A safe non-empty AI `suggestedQuery` starts the refreshed guided search automatically; the generated query is no longer a required second confirmation field.
 - Removed the `Keeping:` tag reassurance UI and the separate `Search this` / `Edit first` split.
 - Kept the same `/api/search/retry-advice` backend contract.
 
