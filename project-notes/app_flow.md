@@ -200,7 +200,8 @@
 - The diagnostic lifecycle covers frontend search start, backend request start/receive, Rainforest start/success/error/timeout, app filter counts, empty results, backend response sent, frontend response/display success, frontend error, backend health, and connectivity checks.
 - `search_history` is internal telemetry, not user-facing history.
 - Account-backed saved-search history uses `saved_searches`, not the existing internal `search_history` table.
-- Rate limiting is a 10-second rolling window with a limit of 15 requests per client IP. In production it uses a shared Supabase `rate_limit_events` event log keyed by a hashed IP value, and falls back to the process-local memory limiter when Supabase is unavailable.
+- Rate limiting is a 10-second rolling window with a limit of 15 requests per client IP. In production it uses a shared Supabase `rate_limit_events` event log keyed by a hashed IP value; every event also has a generated non-null UUID `request_id`. It falls back to the process-local memory limiter when Supabase is unavailable.
+- Funnel analytics requests are delivered in browser queue order so the parent `analytics_search_runs` upsert reaches storage before its child events, impressions, and clicks. Child inserts also briefly retry Postgres foreign-key error `23503` to tolerate network/request scheduling races without weakening the foreign key.
 - Guided routes expose `Server-Timing`.
 - Discovery query-quality review is now a background pass plus frontend polling. It can mark the token-scoped snapshot as pending, skipped, ready, or failed under `selection.queryQuality`, while preserving any existing `selection.enrichment`.
 - Query-quality suggestion analytics track shown, accepted, and rejected events with bounded metadata such as query lengths, classification, and confidence.

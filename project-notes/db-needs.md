@@ -401,9 +401,20 @@ create index if not exists tester_feedback_created_at_idx
 ```sql
 create table if not exists public.rate_limit_events (
   id bigint generated always as identity primary key,
+  request_id uuid not null,
   rate_key text not null,
   created_at timestamptz not null default timezone('utc', now())
 );
+
+alter table public.rate_limit_events
+  add column if not exists request_id uuid;
+
+update public.rate_limit_events
+set request_id = gen_random_uuid()
+where request_id is null;
+
+alter table public.rate_limit_events
+  alter column request_id set not null;
 
 alter table public.rate_limit_events
   add column if not exists rate_key text;
@@ -419,4 +430,3 @@ create index if not exists rate_limit_events_key_created_at_idx
 - `project-notes/current-status.md`
 - `project-notes/app_flow.md`
 - `project-notes/analytics-funnel-schema.sql`
-

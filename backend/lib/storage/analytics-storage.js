@@ -14,6 +14,29 @@ import {
 import { normalizeFeedbackValue } from './feedback-storage.js'
 import { readSearchDiagnosticsDashboardData } from './search-diagnostics-storage.js'
 
+const ANALYTICS_FOREIGN_KEY_RETRY_DELAYS_MS = [50, 150]
+
+function wait(delayMs) {
+  return new Promise((resolve) => setTimeout(resolve, delayMs))
+}
+
+async function insertAnalyticsChildRow(supabase, table, row) {
+  for (let attempt = 0; attempt <= ANALYTICS_FOREIGN_KEY_RETRY_DELAYS_MS.length; attempt += 1) {
+    const { error } = await supabase.from(table).insert(row)
+
+    if (!error) {
+      return
+    }
+
+    const retryDelay = ANALYTICS_FOREIGN_KEY_RETRY_DELAYS_MS[attempt]
+    if (error.code !== '23503' || retryDelay === undefined) {
+      throw error
+    }
+
+    await wait(retryDelay)
+  }
+}
+
 export async function recordSearchHistory({
   cacheKey,
   cacheStatus,
@@ -86,7 +109,7 @@ export async function recordAnalyticsSearchEvent(event) {
 
   try {
     const supabase = getSupabaseAdminClient()
-    const { error } = await supabase.from(ANALYTICS_SEARCH_EVENTS_TABLE).insert({
+    await insertAnalyticsChildRow(supabase, ANALYTICS_SEARCH_EVENTS_TABLE, {
       search_id: event.searchId,
       session_id: event.sessionId,
       event_type: event.eventType,
@@ -95,10 +118,6 @@ export async function recordAnalyticsSearchEvent(event) {
           ? event.eventData
           : {},
     })
-
-    if (error) {
-      throw error
-    }
   } catch {
     // Analytics writes are best-effort so user flows stay resilient.
   }
@@ -111,7 +130,9 @@ export async function recordAnalyticsResultImpressions({ items, resultSet, searc
 
   try {
     const supabase = getSupabaseAdminClient()
-    const { error } = await supabase.from(ANALYTICS_RESULT_IMPRESSIONS_TABLE).insert(
+    await insertAnalyticsChildRow(
+      supabase,
+      ANALYTICS_RESULT_IMPRESSIONS_TABLE,
       items.map((item) => ({
         search_id: searchId,
         session_id: sessionId,
@@ -123,10 +144,6 @@ export async function recordAnalyticsResultImpressions({ items, resultSet, searc
         is_best_pick: Boolean(item.isBestPick),
       })),
     )
-
-    if (error) {
-      throw error
-    }
   } catch {
     // Analytics writes are best-effort so user flows stay resilient.
   }
@@ -139,7 +156,7 @@ export async function recordAnalyticsResultClick(click) {
 
   try {
     const supabase = getSupabaseAdminClient()
-    const { error } = await supabase.from(ANALYTICS_RESULT_CLICKS_TABLE).insert({
+    await insertAnalyticsChildRow(supabase, ANALYTICS_RESULT_CLICKS_TABLE, {
       search_id: click.searchId,
       session_id: click.sessionId,
       result_set: click.resultSet || 'final',
@@ -151,10 +168,6 @@ export async function recordAnalyticsResultClick(click) {
       click_target: click.clickTarget,
       retailer_url: click.retailerUrl || null,
     })
-
-    if (error) {
-      throw error
-    }
   } catch {
     // Analytics writes are best-effort so user flows stay resilient.
   }

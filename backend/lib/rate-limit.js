@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { getEnv } from './search-data.js'
 
@@ -186,6 +186,7 @@ async function takeSupabaseRateLimitToken(ipAddress, { limit, windowMs } = DEFAU
   const { error: insertError } = await supabase.from(RATE_LIMIT_EVENTS_TABLE).insert({
     created_at: createdAt,
     rate_key: rateKey,
+    request_id: randomUUID(),
   })
 
   if (insertError) {

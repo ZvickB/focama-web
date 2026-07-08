@@ -190,6 +190,9 @@ describe('rate-limit helpers', () => {
     expect(insertMock).toHaveBeenCalledWith(
       expect.objectContaining({
         rate_key: expect.stringMatching(/^[a-f0-9]{64}$/),
+        request_id: expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        ),
       }),
     )
     expect(selectMock).toHaveBeenCalledWith('created_at', { count: 'exact' })

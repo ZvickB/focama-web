@@ -6,6 +6,7 @@ const ANALYTICS_FLUSH_DELAY_MS = 2000
 let queuedEvents = []
 let flushTimerId = null
 let flushListenersBound = false
+let analyticsPostChain = Promise.resolve()
 
 function isAnalyticsEnabled() {
   if (typeof window === 'undefined') {
@@ -70,18 +71,16 @@ function clearScheduledFlush() {
 }
 
 function postAnalyticsEvent(event) {
-  const request = fetchBackend('/api/analytics/track', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(event),
-    keepalive: true,
-  })
-
-  if (request && typeof request.catch === 'function') {
-    request.catch(() => {})
-  }
+  analyticsPostChain = analyticsPostChain
+    .then(() => fetchBackend('/api/analytics/track', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(event),
+      keepalive: true,
+    }))
+    .catch(() => {})
 }
 
 function flushAnalyticsQueue() {
