@@ -28,7 +28,7 @@
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible, but do not let future multi-retailer flexibility make today's Amazon-first UX vague.
 - Existing shopping clickout CTAs should use source-derived wording: Amazon items can say `View on Amazon` or the active Amazon domain, while future non-Amazon sources can say `View on Walmart`, `View on AliExpress`, etc.
 - Product shortlists stay at 6 items.
-- Deterministic content moderation still hides every sensitive-product image in user-facing responses. Optional `SENSITIVE_IMAGE_SHADOW_ENABLED=true` background analysis can log person/face/pose proposals for those already-hidden Amazon images, but it is disabled by default and cannot reveal an image.
+- Deterministic content moderation still hides every sensitive-product image in user-facing responses. Optional `SENSITIVE_IMAGE_SHADOW_ENABLED=true` background analysis now uses Sightengine people counting plus real/artificial-face detection and logs proposals for those already-hidden Amazon images. Calls are sequential and fail closed; TensorFlow.js remains local-evaluation-only. The hook is disabled by default and cannot reveal an image.
 - Query moderation now keeps the deterministic regex floor and adds `omni-moderation-latest` for only `sexual` and `sexual/minors`. It runs alongside normal discovery/refine work, fails open after `OPENAI_MODERATION_TIMEOUT_MS` (default 2000 ms), gates all result persistence/reveal, deduplicates matching in-flight checks, and uses a process-local one-hour IP penalty box to force moderation before work after a blocked verdict.
 - The guided backend path is the real product path.
 - `/api/search/live` remains a manual/debug combined route, not the normal user flow.

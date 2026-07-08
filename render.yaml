@@ -19,6 +19,12 @@ services:
         sync: false
       - key: SENTRY_ENVIRONMENT
         sync: false
+      - key: SENSITIVE_IMAGE_SHADOW_ENABLED
+        sync: false
+      - key: SIGHTENGINE_API_USER
+        sync: false
+      - key: SIGHTENGINE_API_SECRET
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SECRET_KEY

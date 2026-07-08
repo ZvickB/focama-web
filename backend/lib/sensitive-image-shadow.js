@@ -1,12 +1,10 @@
-import { Buffer } from 'node:buffer'
 import { appendFile, mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
-import { analyzeSensitiveImageBuffer } from './sensitive-image-analysis.js'
+import { analyzeSensitiveImageWithSightengine } from './sightengine-sensitive-image.js'
 
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024
-const FETCH_TIMEOUT_MS = 10_000
 const MAX_SEEN_IMAGES = 1_000
+const MIN_REQUEST_INTERVAL_MS = 1_100
 const LOCAL_REPORT_PATH = resolve(process.cwd(), 'temp-data', 'sensitive-image-shadow', 'results.jsonl')
 const DEFAULT_ALLOWED_HOSTS = new Set([
   'm.media-amazon.com',
@@ -17,6 +15,7 @@ const DEFAULT_ALLOWED_HOSTS = new Set([
 
 const seenImages = new Map()
 let queue = Promise.resolve()
+let lastRequestStartedAt = 0
 
 export function isSensitiveImageShadowEnabled(env = process.env) {
   return String(env.SENSITIVE_IMAGE_SHADOW_ENABLED || '').trim().toLowerCase() === 'true'
@@ -36,31 +35,10 @@ export function isAllowedSensitiveImageUrl(value, env = process.env) {
   }
 }
 
-async function fetchImageBuffer(imageUrl) {
-  const response = await fetch(imageUrl, {
-    redirect: 'follow',
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  })
-  if (!response.ok) throw new Error(`image_fetch_failed_${response.status}`)
-  if (!isAllowedSensitiveImageUrl(response.url)) throw new Error('image_redirect_host_not_allowed')
-  if (!(response.headers.get('content-type') || '').toLowerCase().startsWith('image/')) {
-    throw new Error('response_is_not_an_image')
-  }
-  const reader = response.body?.getReader()
-  if (!reader) throw new Error('image_response_body_missing')
-  const chunks = []
-  let totalBytes = 0
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    totalBytes += value.byteLength
-    if (totalBytes > MAX_IMAGE_BYTES) {
-      await reader.cancel()
-      throw new Error('image_exceeds_8mb_limit')
-    }
-    chunks.push(Buffer.from(value))
-  }
-  return Buffer.concat(chunks, totalBytes)
+async function waitForProviderSlot() {
+  const waitMs = Math.max(0, MIN_REQUEST_INTERVAL_MS - (Date.now() - lastRequestStartedAt))
+  if (waitMs > 0) await new Promise((resolveWait) => setTimeout(resolveWait, waitMs))
+  lastRequestStartedAt = Date.now()
 }
 
 async function recordShadowResult(record) {
@@ -73,14 +51,19 @@ async function recordShadowResult(record) {
 async function evaluateEntry(entry) {
   const startedAt = Date.now()
   try {
-    const analysis = await analyzeSensitiveImageBuffer(await fetchImageBuffer(entry.imageUrl))
+    await waitForProviderSlot()
+    const analysis = await analyzeSensitiveImageWithSightengine(entry.imageUrl)
     await recordShadowResult({
       ...entry,
       evaluatedAt: new Date().toISOString(),
       durationMs: Date.now() - startedAt,
+      provider: analysis.provider,
+      providerRequestId: analysis.providerRequestId,
+      operations: analysis.operations,
       proposedOutcome: analysis.proposedOutcome,
       reasons: analysis.reasons,
       signals: analysis.signals,
+      thresholds: analysis.thresholds,
       shadowOnly: true,
     })
   } catch (error) {
@@ -88,6 +71,7 @@ async function evaluateEntry(entry) {
       ...entry,
       evaluatedAt: new Date().toISOString(),
       durationMs: Date.now() - startedAt,
+      provider: 'sightengine',
       proposedOutcome: 'hide',
       reasons: ['analysis_failed'],
       error: error instanceof Error ? error.message : String(error),

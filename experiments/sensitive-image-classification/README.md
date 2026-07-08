@@ -2,7 +2,7 @@
 
 This harness evaluates whether clearly safe product-only images can eventually be revealed after the deterministic title/category moderator marks a product image as sensitive.
 
-It does not change moderation outcomes, API responses, or frontend behavior. An optional disabled-by-default shadow hook can analyze real hidden images after the response path has already cleared them.
+It does not change moderation outcomes, API responses, or frontend behavior. The local harness remains TensorFlow.js-based for offline comparison. An optional disabled-by-default production shadow hook uses Sightengine after the response path has already cleared hidden images.
 
 ## Decision policy
 
@@ -55,14 +55,18 @@ The evaluator downloads at most 8 MB per image, processes images sequentially, a
 
 ## Automatic shadow mode
 
-Set `SENSITIVE_IMAGE_SHADOW_ENABLED=true` in a controlled local or Render environment. When deterministic moderation hides an image, Focamai queues its original Amazon image URL for sequential background analysis while continuing to return the product with empty image fields.
+Set `SENSITIVE_IMAGE_SHADOW_ENABLED=true` in a controlled local or Render environment after configuring `SIGHTENGINE_API_USER` and `SIGHTENGINE_API_SECRET`. When deterministic moderation hides an image, Focamai queues its original Amazon image URL for sequential Sightengine analysis while continuing to return the product with empty image fields.
 
 - Local results append to `temp-data/sensitive-image-shadow/results.jsonl`.
 - Production results appear in Render logs under `[sensitive-image-shadow]`.
-- Duplicate image URLs are analyzed once per process, downloads are limited to 8 MB, and only allowlisted HTTPS image hosts are fetched.
+- Sightengine fetches the public image URL directly, so Render does not download, decode, or run local image models.
+- Requests use `people-counting` and `face-analysis`, run sequentially at no more than roughly one request per second, and consume two Sightengine operations per image.
+- A proposed `show` requires high confidence that no person is present and zero real or artificial faces.
+- Errors, missing credentials, and uncertain people results fail closed to a proposed `hide`; TensorFlow.js is not a production fallback.
+- Duplicate image URLs are analyzed once per process, and only allowlisted HTTPS image hosts are submitted.
 - `SENSITIVE_IMAGE_SHADOW_ALLOWED_HOSTS` can add comma-separated trusted image hosts.
 
-Shadow mode must remain off if the environment cannot absorb the model memory/CPU cost. A proposed `show` is evidence only; it never reveals an image.
+Sightengine face analysis can identify mannequin faces, but headless mannequins remain a known risk and require representative evaluation. A proposed `show` is evidence only; it never reveals an image.
 
 ## Evaluation target
 
