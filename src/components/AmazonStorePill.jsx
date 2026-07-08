@@ -1,21 +1,16 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Globe2 } from 'lucide-react'
 
 import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { AFFILIATE_SUPPORTED_AMAZON_MARKETPLACES } from '../../shared/amazon-marketplaces.js'
-
-function countryCodeToFlag(code) {
-  return [...code.toUpperCase()]
-    .map((c) => String.fromCodePoint(127397 + c.charCodeAt(0)))
-    .join('')
-}
 
 // variant='header' — smaller, subtler trigger; used in the site header
 // variant='default' — standard full-size pill (fallback)
 export function AmazonStorePill({ variant = 'default' }) {
   const {
     detectedCountryCode,
+    resolvedAmazonDomain,
     selectedAmazonDomain,
     setSelectedAmazonDomain,
   } = useAmazonStore()
@@ -46,14 +41,10 @@ export function AmazonStorePill({ variant = 'default' }) {
   const isAuto = selectedAmazonDomain === AMAZON_MARKETPLACE_AUTO
   const selectedMarketplace = AFFILIATE_SUPPORTED_AMAZON_MARKETPLACES.find((m) => m.domain === selectedAmazonDomain)
 
-  let pillFlag, pillLabel
-  if (isAuto) {
-    pillFlag = detectedCountryCode ? countryCodeToFlag(detectedCountryCode) : '🌐'
-    pillLabel = detectedCountryCode ?? 'Auto'
-  } else {
-    pillFlag = selectedMarketplace ? countryCodeToFlag(selectedMarketplace.countryCode) : '🌐'
-    pillLabel = selectedMarketplace?.countryCode ?? 'Auto'
-  }
+  const activeAmazonDomain = isAuto
+    ? resolvedAmazonDomain || 'amazon.com'
+    : selectedMarketplace?.domain || 'amazon.com'
+  const pillLabel = `Shop on ${activeAmazonDomain.replace(/^amazon/i, 'Amazon')}`
 
   function handleSelect(domain) {
     setSelectedAmazonDomain(domain)
@@ -82,10 +73,10 @@ export function AmazonStorePill({ variant = 'default' }) {
           isSelected ? 'text-primary' : 'text-slate-700'
         }`}
       >
-        <span aria-hidden="true" className="text-base">
-          {countryCodeToFlag(marketplace.countryCode)}
+        <span className="flex-1">
+          <span className="block font-medium">{marketplace.domain.replace(/^amazon/i, 'Amazon')}</span>
+          <span className="block text-xs text-slate-400">{marketplace.label}</span>
         </span>
-        <span className="flex-1">{marketplace.label}</span>
         {isSelected ? <span className="h-1.5 w-1.5 rounded-full bg-primary" /> : null}
       </button>
     )
@@ -109,7 +100,7 @@ export function AmazonStorePill({ variant = 'default' }) {
 
   const triggerClass =
     variant === 'header'
-      ? 'inline-flex items-center gap-1 rounded-full border border-stone-200/50 px-2.5 py-1 text-[12px] text-slate-400 transition hover:border-stone-200 hover:bg-white/70 hover:text-slate-600'
+      ? 'inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-stone-300 bg-white/80 px-3 py-1.5 text-[12px] font-medium text-slate-600 shadow-sm transition hover:border-stone-400 hover:bg-white hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30'
       : 'inline-flex min-h-11 items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3.5 py-2 text-sm text-slate-600 transition hover:border-stone-300 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50'
 
   const chevronClass =
@@ -121,13 +112,12 @@ export function AmazonStorePill({ variant = 'default' }) {
         type="button"
         onClick={() => setIsOpen((o) => !o)}
         onKeyDown={handleTriggerKeyDown}
-        aria-label="Change Amazon store"
+        aria-label={`Change Amazon region. Current store: ${activeAmazonDomain}`}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-controls={isOpen ? popoverId : undefined}
         className={triggerClass}
       >
-        <span aria-hidden="true">{pillFlag}</span>
         <span>{pillLabel}</span>
         <ChevronDown className={`${chevronClass} ${isOpen ? 'rotate-180' : ''}`} />
       </button>
@@ -151,9 +141,7 @@ export function AmazonStorePill({ variant = 'default' }) {
                 isAuto ? 'text-primary' : 'text-slate-700'
               }`}
             >
-              <span aria-hidden="true" className="text-base">
-                🌐
-              </span>
+              <Globe2 aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400" />
               <span className="flex-1">
                 <span className="block font-medium">Auto</span>
                 <span className="block text-xs text-slate-400">
@@ -176,9 +164,7 @@ export function AmazonStorePill({ variant = 'default' }) {
                   aria-expanded={isMoreRegionsOpen}
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 transition hover:bg-stone-50"
                 >
-                  <span aria-hidden="true" className="text-base">
-                    🌍
-                  </span>
+                  <Globe2 aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400" />
                   <span className="flex-1 font-medium">More regions</span>
                   <ChevronDown
                     className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-150 ${
