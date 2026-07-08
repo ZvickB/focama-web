@@ -327,7 +327,7 @@ describe('ResultsSection retry advice', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows inline suggested-query confirmation and edit controls', () => {
+  it('does not require a second suggested-query confirmation', () => {
     const handleRetrySearch = vi.fn()
 
     render(
@@ -362,18 +362,9 @@ describe('ResultsSection retry advice', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /improve picks/i }))
 
-    expect(screen.getByLabelText(/next search/i)).toHaveValue('compact carry on stroller')
-    expect(screen.getByRole('button', { name: /search again/i })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /edit first/i })).not.toBeInTheDocument()
-    expect(screen.queryByText(/suggestion loaded above/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/scroll up to edit and try it/i)).not.toBeInTheDocument()
-
-    fireEvent.change(screen.getByLabelText(/next search/i), {
-      target: { value: 'compact umbrella stroller' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: /search again/i }))
-
-    expect(handleRetrySearch).toHaveBeenCalledWith('compact umbrella stroller')
+    expect(screen.queryByLabelText(/next search/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /search again/i })).not.toBeInTheDocument()
+    expect(handleRetrySearch).not.toHaveBeenCalled()
   })
 })
 describe('AmazonStoreProvider', () => {

@@ -12,7 +12,7 @@ import {
 describe('HomePage retry advice', () => {
   setupHomePageTest()
   it(
-    'suggests an editable new search when the user rejects a weak shortlist',
+    'automatically starts an improved search when the user rejects a weak shortlist',
     async () => {
     const user = userEvent.setup()
     const fetchMock = vi
@@ -108,18 +108,21 @@ describe('HomePage retry advice', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Compact airport stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
-    await screen.findByText(/what felt off/i)
+    await screen.findByText(/what should we change/i)
 
     await user.click(screen.getByRole('button', { name: /missing a must-have/i }))
     await user.type(
       document.getElementById('results-retry-feedback'),
       'Still too bulky for city travel.',
     )
-    await user.click(screen.getByRole('button', { name: /prepare next search/i }))
+    await user.click(screen.getByRole('button', { name: /update my picks/i }))
 
-    expect(
-      await screen.findByText(/the rejected picks sounded too bulky/i),
-    ).toBeInTheDocument()
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) =>
+        String(url).includes('/api/search/rainforest-discover?query=compact+city+stroller+under+18+pounds') &&
+        String(url).includes('cacheMode=refresh'),
+      )).toBe(true)
+    })
     expect(screen.queryByText(/retry 2 of 2\./i)).not.toBeInTheDocument()
     const retryAdviceRequest = fetchMock.mock.calls[3]
     expect(retryAdviceRequest[0]).toContain('/api/search/retry-advice')
@@ -139,19 +142,9 @@ describe('HomePage retry advice', () => {
     })
     expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/search/finalize'))).toHaveLength(1)
 
-    expect(screen.getAllByText('stroller').length).toBeGreaterThan(0)
-    expect(screen.getByLabelText(/next search/i)).toHaveValue('compact city stroller under 18 pounds')
     expect(screen.queryByText(/keeping:/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /search again/i })).toBeInTheDocument()
-
-    await user.clear(screen.getByLabelText(/next search/i))
-    await user.type(screen.getByLabelText(/next search/i), 'lightweight umbrella stroller for city travel')
-
-    expect(screen.getAllByText('stroller').length).toBeGreaterThan(0)
-    expect(screen.getByLabelText(/next search/i)).toHaveValue(
-      'lightweight umbrella stroller for city travel',
-    )
-    expect(fetchMock).toHaveBeenCalledTimes(4)
+    expect(screen.queryByLabelText(/next search/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /search again/i })).not.toBeInTheDocument()
     },
     20000,
   )
@@ -243,11 +236,11 @@ describe('HomePage retry advice', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
-    await screen.findByText(/what felt off/i)
+    await screen.findByText(/what should we change/i)
 
     const retryTextarea = document.getElementById('results-retry-feedback')
     await user.type(retryTextarea, 'Too bulky')
-    await user.click(screen.getByRole('button', { name: /prepare next search/i }))
+    await user.click(screen.getByRole('button', { name: /update my picks/i }))
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/search/retry-advice'))).toBe(true)
     })
@@ -358,10 +351,10 @@ describe('HomePage retry advice', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
-    await screen.findByText(/what felt off/i)
+    await screen.findByText(/what should we change/i)
 
     await user.type(document.getElementById('results-retry-feedback'), 'Too bulky')
-    await user.click(screen.getByRole('button', { name: /prepare next search/i }))
+    await user.click(screen.getByRole('button', { name: /update my picks/i }))
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/search/retry-advice'))).toBe(true)
     })
@@ -457,12 +450,14 @@ describe('HomePage retry advice', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
-    await screen.findByText(/what felt off/i)
+    await screen.findByText(/what should we change/i)
     await user.type(document.getElementById('results-retry-feedback'), 'Too bulky')
-    await user.click(screen.getByRole('button', { name: /prepare next search/i }))
+    await user.click(screen.getByRole('button', { name: /update my picks/i }))
 
-    expect(await screen.findByText(/a narrower search should help/i)).toBeInTheDocument()
-    expect(screen.getAllByText('stroller').length).toBeGreaterThan(0)
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/search/retry-advice'))).toBe(true)
+    })
+    expect(screen.getByText(/what should we change/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /search again/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /new search/i })).toBeInTheDocument()
   }, 10000)
@@ -601,11 +596,11 @@ describe('HomePage retry advice', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
-    await screen.findByText(/what felt off/i)
+    await screen.findByText(/what should we change/i)
 
-    expect(screen.getByText(/what felt off/i)).toBeInTheDocument()
+    expect(screen.getByText(/what should we change/i)).toBeInTheDocument()
     expect(document.getElementById('results-retry-feedback')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /prepare next search/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /update my picks/i })).toBeDisabled()
     expect(screen.queryByText(/retry 1 of 2/i)).not.toBeInTheDocument()
   })
 
@@ -707,7 +702,7 @@ describe('HomePage retry advice', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
-    await screen.findByText(/what felt off/i)
+    await screen.findByText(/what should we change/i)
 
     const retryTextarea = document.getElementById('results-retry-feedback')
     await user.type(retryTextarea, 'Line one')
@@ -718,14 +713,6 @@ describe('HomePage retry advice', () => {
     await user.clear(retryTextarea)
     await user.type(retryTextarea, 'Too bulky')
     await user.keyboard('{Enter}')
-
-    expect(
-      await screen.findByText(/a narrower city stroller search should better match that feedback/i),
-    ).toBeInTheDocument()
-    expect(screen.getAllByText('stroller').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: /search again/i })).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: /search again/i }))
 
     await screen.findByText(/what should we optimize for with this slim city stroller/i)
     expect(screen.getAllByText('slim city stroller').length).toBeGreaterThan(0)

@@ -92,8 +92,6 @@ export function useGuidedSearch() {
   const [refinementPrompt, setRefinementPrompt] = useState(null)
   const [followUpNotes, setFollowUpNotes] = useState('')
   const [retryFeedback, setRetryFeedback] = useState('')
-  const [retryAdvice, setRetryAdvice] = useState(null)
-  const [suggestedRetryQuery, setSuggestedRetryQuery] = useState('')
   const [retryCount, setRetryCount] = useState(0)
   const [selectionState, setSelectionState] = useState(null)
   const [analyticsSearchId, setAnalyticsSearchId] = useState('')
@@ -743,8 +741,6 @@ export function useGuidedSearch() {
     }))
     invalidateRetryAdviceRequests()
     setRetryFeedback('')
-    setRetryAdvice(null)
-    setSuggestedRetryQuery('')
     setRetryCount(payload.retryCount ?? variables.retryCount ?? 0)
     setSelectionState(payload.selection || null)
     recordSearchDebugEvent('finalize', 'success', {
@@ -896,8 +892,6 @@ export function useGuidedSearch() {
       }
 
       const safeSuggestedQuery = String(payload.suggestedQuery || '').trim()
-      setRetryAdvice(payload.recommendation === 'none' ? null : payload)
-      setSuggestedRetryQuery(safeSuggestedQuery)
       recordSearchDebugEvent('retry-advice', 'success', {
         activeSearchId: snapshot.searchId,
         amazonDomain: submittedAmazonDomain,
@@ -909,6 +903,10 @@ export function useGuidedSearch() {
         userFacingAction: 'new_search',
         suggestedQueryLength: String(payload.suggestedQuery || '').length,
       })
+
+      if (safeSuggestedQuery) {
+        handleTryRetrySuggestion(safeSuggestedQuery)
+      }
     },
     onError: (error, variables) => {
       const snapshot = variables?.snapshot
@@ -1078,8 +1076,6 @@ export function useGuidedSearch() {
     setPreviousResults([])
     setFollowUpNotes((current) => (preserveFollowUpNotes ? current : ''))
     setRetryFeedback('')
-    setRetryAdvice(null)
-    setSuggestedRetryQuery('')
     setRetryCount(0)
     setSelectionState(null)
     setRequestTiming({
@@ -1805,7 +1801,7 @@ export function useGuidedSearch() {
   }
 
   function handleTryRetrySuggestion(query) {
-    const nextQuery = String(query || suggestedRetryQuery || '').trim()
+    const nextQuery = String(query || '').trim()
 
     if (!nextQuery) {
       return false
@@ -1832,8 +1828,6 @@ export function useGuidedSearch() {
   function updateRetryFeedback(nextValue) {
     invalidateRetryAdviceRequests()
     setRetryFeedback(nextValue)
-    setRetryAdvice(null)
-    setSuggestedRetryQuery('')
   }
 
   async function hydratePreviewProductDetails(item) {
@@ -1984,15 +1978,11 @@ export function useGuidedSearch() {
       showPreview: showPreviewResults,
     },
     retry: {
-      advice: retryAdvice,
       count: retryCount,
       feedback: retryFeedback,
       isGeneratingAdvice: retryAdviceMutation.isPending,
       requestAdvice: handleRetryAdviceRequest,
       setFeedback: updateRetryFeedback,
-      setSuggestedQuery: setSuggestedRetryQuery,
-      suggestedQuery: suggestedRetryQuery,
-      trySuggestion: handleTryRetrySuggestion,
     },
     diagnostics: {
       copyDebugInfo: copyFailureDebugInfo,

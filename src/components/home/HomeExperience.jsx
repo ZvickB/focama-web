@@ -255,16 +255,6 @@ function OpenLayout(props) {
     actions.beginGuidedSearch(event)
   }
 
-  function handleRetrySearch(query) {
-    const didStart = retry.trySuggestion(query)
-
-    if (didStart) {
-      window.setTimeout(() => {
-        scrollElementNearTop(resultsViewportRef.current, 20)
-      }, 0)
-    }
-  }
-
   function handleAskDifferentQuestion() {
     if (!prompt?.alternatePrompt || isShowingAlternateQuestion || isSwitchingQuestion) {
       return
@@ -600,16 +590,13 @@ function OpenLayout(props) {
                   onRetryAdviceRequest={retry.requestAdvice}
                   onRetryFeedbackChange={retry.setFeedback}
                   onFailureRetry={actions.retryFailedSearch}
-                  onRetrySearch={handleRetrySearch}
                   previousResults={results.previous}
-                  retryAdvice={retry.advice}
                   selectionState={results.selectionState}
                   followUpNotes={query.followUpNotes}
                   retryCount={retry.count}
                   retryFeedback={retry.feedback}
                   showFinalResultBadges={results.showFinalBadges}
                   showPreviewResults={showPreviewResults}
-                  suggestedRetryQuery={retry.suggestedQuery}
                   submittedQuery={submittedQuery}
                 />
               </Suspense>

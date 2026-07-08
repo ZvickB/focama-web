@@ -61,31 +61,22 @@ export function ResultsSection({
   onFailureRetry = () => {},
   onRetryAdviceRequest,
   onRetryFeedbackChange,
-  onRetrySearch = () => {},
   previousResults = [],
-  retryAdvice,
   selectionState,
   retryFeedback,
   showFinalResultBadges,
   showPreviewResults,
-  suggestedRetryQuery,
   submittedQuery,
 }) {
   const { selectedAmazonDomain, resolvedAmazonDomain } = useAmazonStore()
   const retryViewRef = useRef(null)
   const [showRetryView, setShowRetryView] = useState(false)
   const [cardView, setCardView] = useState('new')
-  const [editableSuggestedQuery, setEditableSuggestedQuery] = useState('')
-  const [hasEditedSuggestedQuery, setHasEditedSuggestedQuery] = useState(false)
   const [hasCopiedDebugInfo, setHasCopiedDebugInfo] = useState(false)
   const [retryViewQuery, setRetryViewQuery] = useState('')
   const [activeResultSelection, setActiveResultSelection] = useState({ index: 0, resultsIdentity: '' })
   const resultRowsScrollRef = useRef(null)
   const isRetryViewVisible = hasFinalResults && showRetryView && retryViewQuery === submittedQuery
-  const normalizedSuggestedRetryQuery = suggestedRetryQuery.trim()
-  const visibleSuggestedQuery = hasEditedSuggestedQuery
-    ? editableSuggestedQuery
-    : normalizedSuggestedRetryQuery
 
   const shouldShowBadgeLabels = !hasFinalResults || showFinalResultBadges
   const orderedResults = displayedResults
@@ -167,15 +158,6 @@ export function ResultsSection({
     }
   }
 
-  function handleSearchSuggestedQuery() {
-    const queryToSearch = visibleSuggestedQuery.trim()
-    setShowRetryView(false)
-    setEditableSuggestedQuery('')
-    setHasEditedSuggestedQuery(false)
-    setRetryViewQuery('')
-    onRetrySearch(queryToSearch)
-  }
-
   function handleRetryFabClick() {
     handleOpenRetryView()
     setTimeout(() => {
@@ -185,8 +167,6 @@ export function ResultsSection({
 
   function handleOpenRetryView() {
     setRetryViewQuery(submittedQuery)
-    setEditableSuggestedQuery('')
-    setHasEditedSuggestedQuery(false)
     setShowRetryView(true)
   }
 
@@ -574,10 +554,10 @@ export function ResultsSection({
               Improve these picks
             </div>
             <p className="text-xl font-medium text-slate-900">
-              What felt off?
+              What should we change?
             </p>
             <p className="text-sm leading-6 text-slate-600">
-              Say what was wrong, missing, too broad, or worth keeping. Focamai will turn it into a better search.
+              Tell us what was wrong or what you want instead. We&apos;ll update your picks while keeping compatible requirements.
             </p>
           </div>
 
@@ -612,7 +592,7 @@ export function ResultsSection({
                 }
                 disabled={!isRetryReady || isRetrying || isGeneratingRetryAdvice}
                 className="min-h-32 resize-none rounded-[28px] border-0 bg-transparent px-5 py-4 text-base leading-7 shadow-none placeholder:text-slate-400 focus-visible:ring-0"
-                placeholder="Example: Too expensive, wrong style, missing one-hand folding..."
+                placeholder="Example: Make it lighter and under $100, but keep one-hand folding..."
               />
             </div>
 
@@ -623,54 +603,14 @@ export function ResultsSection({
                 className="h-12 rounded-[22px] bg-primary px-6 text-sm text-primary-foreground shadow-[0_16px_36px_-26px_rgba(15,97,117,0.34)] hover:bg-primary/90"
                 onClick={handleRetryAdviceSubmit}
               >
-                {isGeneratingRetryAdvice ? 'Preparing next search...' : 'Prepare next search'}
+                {isGeneratingRetryAdvice ? 'Updating your picks...' : 'Update my picks'}
               </Button>
             </div>
 
-            {retryAdvice ? (
-              <div className="space-y-3 rounded-2xl border border-[#e7dac8] bg-white/90 p-4 shadow-[0_14px_34px_-28px_rgba(120,87,63,0.18)]">
-                <div className="space-y-2">
-                  {retryAdvice.rationale ? (
-                    <p className="text-sm leading-6 text-slate-700">
-                      {retryAdvice.rationale}
-                    </p>
-                  ) : null}
-                  {suggestedRetryQuery.trim() ? (
-                    <div className="space-y-3 rounded-[20px] border border-[#e5dacb] bg-white p-4">
-                      <label
-                        htmlFor="results-retry-suggested-query"
-                        className="text-sm font-medium text-slate-900"
-                      >
-                        Next search
-                      </label>
-                      <Textarea
-                        id="results-retry-suggested-query"
-                        aria-label="Next search"
-                        value={visibleSuggestedQuery}
-                        onChange={(event) => {
-                          setHasEditedSuggestedQuery(true)
-                          setEditableSuggestedQuery(event.target.value)
-                        }}
-                        className="min-h-20 resize-none rounded-[18px] border-[#e5dacb] bg-[#fdfaf6] px-4 py-3 text-base font-medium leading-6 text-slate-900 shadow-none focus-visible:border-primary/50 focus-visible:ring-[4px] focus-visible:ring-[rgba(15,97,117,0.08)]"
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          className="h-11 rounded-full bg-primary px-5 text-sm text-primary-foreground shadow-[0_18px_38px_-24px_rgba(15,97,117,0.42)] hover:bg-primary/90"
-                          disabled={!visibleSuggestedQuery.trim()}
-                          onClick={handleSearchSuggestedQuery}
-                        >
-                          Search again
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm leading-6 text-slate-600">
-                      We couldn&apos;t load a suggestion above yet. Try asking again in a moment.
-                    </p>
-                  )}
-                </div>
-              </div>
+            {isGeneratingRetryAdvice ? (
+              <p role="status" className="text-sm leading-6 text-slate-600">
+                Understanding what should change, then we&apos;ll start finding better matches automatically.
+              </p>
             ) : null}
           </div>
         </div>
