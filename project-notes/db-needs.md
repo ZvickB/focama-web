@@ -69,6 +69,18 @@
 - Stores account-level Deep Dive usage for the current first-free account gate.
 - Payment/subscription tables are still deferred.
 
+### `sensitive_image_verdicts`
+- Server-owned cache of successful Sightengine `show`/`hide` decisions keyed by
+  a SHA-256 image URL hash.
+- Stores the normalized URL for debugging plus reasons, signals, thresholds,
+  provider metadata, and an application-controlled `decision_version`.
+- Provider failures are deliberately not stored as verdicts so temporary
+  failures remain retryable while current responses continue to fail closed.
+- Uses RLS with no browser policies; backend service credentials are the only
+  intended access path.
+- The table and application storage wiring are implemented. The separately
+  flagged user-facing reveal path remains off by default.
+
 ## Not used now
 - user accounts tables
 - saved item tables
@@ -90,6 +102,8 @@ SUPABASE_SECRET_KEY=your-supabase-secret-key
 SEARCH_CACHE_TTL_MINUTES=1440
 RATE_LIMIT_STORAGE=auto
 RATE_LIMIT_HASH_SALT=your-stable-random-salt
+SENSITIVE_IMAGE_SHADOW_ENABLED=true
+SENSITIVE_IMAGE_REVEAL_ENABLED=true
 RESEND_API_KEY=your-resend-key
 PRICE_WATCH_EMAILS_ENABLED=true
 PRICE_WATCH_FROM_EMAIL=contact@focamai.com
@@ -103,6 +117,8 @@ Notes:
 - Do not expose either server-side key to the browser.
 - `RATE_LIMIT_STORAGE=auto` uses Supabase when configured and memory otherwise; set `memory` only for local/debug fallback.
 - `RATE_LIMIT_HASH_SALT` is optional but recommended so rate-limit keys remain stable without relying on the Supabase secret as the hash salt.
+- `SENSITIVE_IMAGE_SHADOW_ENABLED=true` banks successful Sightengine decisions and checks the persistent cache before making a billed provider call.
+- `SENSITIVE_IMAGE_REVEAL_ENABLED=true` is approved for the current tester-only production rollout. Set it back to `false` immediately if a dangerous false reveal appears.
 - `DEEP_DIVE_ENABLED=true` is required before the Deep Dive endpoint calls SerpApi.
 - `DEEP_DIVE_REQUIRE_AUTH=true` keeps Deep Dive account-gated. Keep this on for the first release.
 - `DEEP_DIVE_FREE_LIMIT=1` is the default non-subscriber cap; `DEEP_DIVE_FREE_LIMIT_DISABLED=true` temporarily disables that cap in controlled testing.
@@ -161,6 +177,12 @@ create table if not exists public.product_details_cache (
   cached_at timestamptz not null default now()
 );
 ```
+
+### Sensitive-image verdict cache
+Run the standalone, rerunnable schema in
+`project-notes/plans/sightengine-verdict-cache-schema.sql`. Application wiring and
+user-facing reveal behavior are separately controlled; creating the table does
+not enable reveals.
 
 ### Signed-in history table
 ```sql

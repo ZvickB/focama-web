@@ -12,7 +12,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Active branch for the current experiment: `new_web_ui`.
 - The branch is intended for a new web UI direction inspired by the stronger mobile app.
 - The goal is not to port mobile wholesale. Web should stay optimized for desktop and responsive browser use.
-- The web UI improvement plan lives at `project-notes/ui_improvement_plan/README.md`.
+- The web UI improvement plan lives at `project-notes/plans/ui_improvement_plan/README.md`.
 
 ## Current app reality
 - Frontend: Vite, React, React Router, TanStack Query, Tailwind, Vitest.
@@ -30,7 +30,8 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - The PNG wordmark is the active wordmark.
 - Focamai should not feel like an Amazon clone or marketplace wall. Its product identity is the focused decision aid, not Amazon's browsing experience.
 - Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
-- Active Amazon marketplaces must have configured Associates tracking tags. The current code only enables `amazon.com` and `amazon.ca`; untagged domains fall back to `amazon.com` and should not produce Amazon clickouts without `tag=`.
+- Active Amazon marketplaces are `amazon.com` and `amazon.ca` (Associates-tagged) plus `amazon.in` (deliberately untagged, enabled 2026-07-08 for India tester access; clickouts are plain untagged URLs and earn no commission). Inactive domains still fall back to `amazon.com` with no clickout. When an Amazon.in Associates tag exists, add it to `DOMAIN_TO_AFFILIATE_TAG` in `shared/amazon-marketplaces.js` and remove `amazon.in` from `ACTIVE_UNTAGGED_AMAZON_DOMAINS`.
+- Deep Dive and Price Watch remain US/CA-shaped and are intentionally not adapted for India (user is not using them right now).
 - Do not force generic `retailer` language in user-facing UI when `Amazon` is more accurate for the current experience.
 - Existing shopping clickout CTAs should derive their visible label from the product source/store: Amazon items can say `View on Amazon` or the active Amazon domain, and future non-Amazon sources can say `View on Walmart`, `View on AliExpress`, etc.
 - Do not add new Amazon/source/retailer fields or badges as incidental work. Any new result-card or modal source labeling beyond the existing source-derived clickout CTA should be an explicit product/UI decision from the user, not bundled into unrelated search or data changes.
@@ -75,7 +76,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Guided search failures hide raw provider errors behind calm recovery copy. `Try again` preserves the query and follow-up notes, records the retry on the failed support/search ID, and starts fresh discovery with cache refresh and a new search ID; support details and reporting controls stay collapsed. Post-shortlist refinement is separate: `Update my picks` sends the user correction to retry advice and automatically starts the safe suggested search without a second confirmation field.
 - Guided discovery/finalize Render logs and Sentry contexts include the frontend support/search ID. Diagnostic POST storage failure returns `503` and is visible as a browser warning in development instead of being silently reported as successful. Background query-quality timeouts are Sentry warnings because they do not block the search response.
 - Regex query moderation remains the synchronous floor. Regex-allowed discovery/refine requests also use the free OpenAI moderation endpoint for `sexual` and `sexual/minors`, with parallel normal execution, a 2-second fail-open timeout, in-flight deduplication, and a process-local one-hour IP penalty window that forces moderation before later work.
-- Sensitive-product images remain hidden deterministically. A disabled-by-default `SENSITIVE_IMAGE_SHADOW_ENABLED` hook can submit already-hidden Amazon image URLs to Sightengine for people and real/artificial-face signals, then log show/hide proposals without changing API responses. Calls are sequential and fail closed; TensorFlow.js remains only in the local evaluation harness. Broader mannequin/partial-body accuracy must be measured before any image reveal is considered.
+- Sensitive-product images are hidden deterministically unless a current cached Sightengine `show` explicitly restores them. The `SENSITIVE_IMAGE_SHADOW_ENABLED` hook checks `sensitive_image_verdicts` before billing Sightengine, stores only successful versioned `show`/`hide` decisions, and leaves failures retryable. `SENSITIVE_IMAGE_REVEAL_ENABLED=true` is approved for the current tester-only production rollout; missing, failed, stale, ambiguous, and `hide` cases still fail closed. Cached products retain only the URL hash, while the original URL stays server-side in the verdict table. Set the reveal flag back to `false` if a dangerous false reveal appears. TensorFlow.js remains only in the local evaluation harness.
 
 ## Key files
 - App route shell: `src/App.jsx`
@@ -98,12 +99,13 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 ## Read deeper only when relevant
 - Current implemented behavior: `project-notes/app_flow.md`
 - Search/backend flow details: `project-notes/search-flow.md`
-- New web UI plan: `project-notes/ui_improvement_plan/README.md`
+- New web UI plan: `project-notes/plans/ui_improvement_plan/README.md`
 - Durable backlog/open questions: `project-notes/handoff.md`
 - Product intent and broad decisions: `project-notes/doc_briefs.md`
 - Supabase/storage table summary: `project-notes/db-needs.md`
 - Short current snapshot/changelog: `project-notes/current-status.md`
-- Price Watch plan and decisions: `project-notes/price-watch-plan.md`
+- Price Watch plan and decisions: `project-notes/plans/price-watch-plan.md`
+- Feature/implementation plan docs live in `project-notes/plans/` — put new plans there.
 
 ## Working guardrails
 - Code is current reality if notes and code disagree.
@@ -115,5 +117,5 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 
 ## Notes update rules
 - After meaningful backend or product-flow changes, update `app_flow.md`, `current-status.md`, and this file if future chats would otherwise be misled.
-- After meaningful UI direction changes, update `ui_improvement_plan/README.md` if the plan or priority changes.
+- After meaningful UI direction changes, update `plans/ui_improvement_plan/README.md` if the plan or priority changes.
 - After finishing a meaningful chunk of work, update `handoff.md` if remaining work or priorities changed.

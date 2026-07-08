@@ -11,7 +11,7 @@
 3. Open deeper notes only as needed for the task:
    - implemented app behavior: `project-notes/app_flow.md`
    - search/backend flow: `project-notes/search-flow.md`
-   - new web UI plan: `project-notes/ui_improvement_plan/README.md`
+   - new web UI plan: `project-notes/plans/ui_improvement_plan/README.md`
    - backlog/open questions: `project-notes/handoff.md`
    - product intent: `project-notes/doc_briefs.md`
    - storage tables: `project-notes/db-needs.md`
@@ -28,12 +28,12 @@
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible, but do not let future multi-retailer flexibility make today's Amazon-first UX vague.
 - Existing shopping clickout CTAs should use source-derived wording: Amazon items can say `View on Amazon` or the active Amazon domain, while future non-Amazon sources can say `View on Walmart`, `View on AliExpress`, etc.
 - Product shortlists stay at 6 items.
-- Deterministic content moderation still hides every sensitive-product image in user-facing responses. Optional `SENSITIVE_IMAGE_SHADOW_ENABLED=true` background analysis now uses Sightengine people counting plus real/artificial-face detection and logs proposals for those already-hidden Amazon images. Calls are sequential and fail closed; TensorFlow.js remains local-evaluation-only. The hook is disabled by default and cannot reveal an image.
+- Deterministic content moderation hides sensitive-product images unless a current explicit Sightengine `show` restores them. `SENSITIVE_IMAGE_SHADOW_ENABLED=true` checks and populates the versioned `sensitive_image_verdicts` table; only successful decisions persist, while failures remain retryable and fail closed. Cached products retain only an image URL hash. `SENSITIVE_IMAGE_REVEAL_ENABLED=true` is approved for the current tester-only production rollout in `render.yaml`; disable it immediately if a dangerous false reveal appears. TensorFlow.js remains local-evaluation-only.
 - Query moderation now keeps the deterministic regex floor and adds `omni-moderation-latest` for only `sexual` and `sexual/minors`. It runs alongside normal discovery/refine work, fails open after `OPENAI_MODERATION_TIMEOUT_MS` (default 2000 ms), gates all result persistence/reveal, deduplicates matching in-flight checks, and uses a process-local one-hour IP penalty box to force moderation before work after a blocked verdict.
 - The guided backend path is the real product path.
 - `/api/search/live` remains a manual/debug combined route, not the normal user flow.
 - The PNG wordmark is the active wordmark.
-- The web UI improvement plan lives at `project-notes/ui_improvement_plan/README.md`.
+- The web UI improvement plan lives at `project-notes/plans/ui_improvement_plan/README.md`.
 - Priority 1 of that plan is now implemented in a simpler form: final/preview results render as ranked rows, without a side preview.
 - Priority 2 is now implemented in the first pass: the large search stage collapses into compact progress plus a summary after submit, refinement gets its own active panel, and finalized refinement collapses above the ranked results.
 - Priority 3 is now implemented in the first pass: the active refine panel uses the mobile-inspired heading, AI follow-up prompt, up to 3 refinement chips, fallback chips, selected chip state, and chip-to-notes behavior. Refine now also returns a distinct pre-generated alternate; `Ask a different question` replaces only the first question after a 900 ms breathing transition while keeping the chips and notes available.
@@ -95,7 +95,7 @@
 - `api/geo.js` intentionally stays on Vercel so the UI can read Vercel geolocation headers through a relative `/api/geo` request.
 
 ## If continuing from here
-- For UI redesign work, read `project-notes/ui_improvement_plan/README.md` next.
+- For UI redesign work, read `project-notes/plans/ui_improvement_plan/README.md` next.
 - For current behavior questions, read `project-notes/app_flow.md`.
 - For backend/search behavior, read `project-notes/search-flow.md`.
 - For remaining work, read `project-notes/handoff.md`.
