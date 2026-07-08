@@ -401,7 +401,7 @@ describe('HomePage', () => {
     await screen.findByLabelText(/tell us more/i)
 
     // Switch marketplace via the header store pill (two pills exist — desktop + mobile — pick the first)
-    await user.click(screen.getAllByRole('button', { name: /change amazon store/i })[0])
+    await user.click(screen.getAllByRole('button', { name: /change amazon region/i })[0])
     await user.click(screen.getByRole('option', { name: /canada/i }))
 
     resolveSecondDiscovery({
@@ -504,7 +504,7 @@ describe('HomePage', () => {
 
     renderHomePage()
 
-    await user.click(screen.getAllByRole('button', { name: /change amazon store/i })[0])
+    await user.click(screen.getAllByRole('button', { name: /change amazon region/i })[0])
     await user.click(screen.getByText('Canada'))
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
@@ -578,7 +578,7 @@ describe('HomePage', () => {
     renderHomePage()
 
     await waitFor(() => {
-      expect(screen.getAllByRole('button', { name: /change amazon store/i })[0]).toHaveTextContent('CA')
+      expect(screen.getAllByRole('button', { name: /change amazon region/i })[0]).toHaveTextContent('Amazon.ca')
     })
 
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
@@ -645,7 +645,7 @@ describe('HomePage', () => {
 
     renderHomePage()
 
-    expect(screen.getAllByRole('button', { name: /change amazon store/i })[0]).toHaveTextContent('CA')
+    expect(screen.getAllByRole('button', { name: /change amazon region/i })[0]).toHaveTextContent('Amazon.ca')
 
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))

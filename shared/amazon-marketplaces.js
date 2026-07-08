@@ -14,7 +14,7 @@ export const AMAZON_MARKETPLACES = [
   { countryCode: 'AU', domain: 'amazon.com.au', label: 'Australia', pricePrefix: 'A$' },
   { countryCode: 'SG', domain: 'amazon.sg', label: 'Singapore', pricePrefix: 'S$' },
   { countryCode: 'JP', domain: 'amazon.co.jp', label: 'Japan', pricePrefix: 'JPY ' },
-  { countryCode: 'IN', domain: 'amazon.in', label: 'India', pricePrefix: 'INR ' },
+  { countryCode: 'IN', domain: 'amazon.in', label: 'India', pricePrefix: '₹' },
   { countryCode: 'MX', domain: 'amazon.com.mx', label: 'Mexico', pricePrefix: 'MX$' },
   { countryCode: 'BR', domain: 'amazon.com.br', label: 'Brazil', pricePrefix: 'R$' },
   { countryCode: 'AE', domain: 'amazon.ae', label: 'United Arab Emirates', pricePrefix: 'AED ' },
@@ -27,6 +27,10 @@ const DOMAIN_TO_AFFILIATE_TAG = {
   'amazon.com': 'focamai-20',
   'amazon.ca': 'focamai4203-20',
 }
+
+// Marketplaces enabled without an Associates tag (tester access; clickouts stay untagged
+// and earn no commission until a tag is added to DOMAIN_TO_AFFILIATE_TAG).
+const ACTIVE_UNTAGGED_AMAZON_DOMAINS = new Set(['amazon.in'])
 
 const COUNTRY_TO_AMAZON_DOMAIN = Object.fromEntries(
   AMAZON_MARKETPLACES.map(({ countryCode, domain }) => [countryCode, domain]),
@@ -55,13 +59,21 @@ export function hasAmazonAffiliateTag(domain = 'amazon.com') {
   return Boolean(getAmazonAffiliateTag(domain))
 }
 
-export const AFFILIATE_SUPPORTED_AMAZON_MARKETPLACES = AMAZON_MARKETPLACES.filter(({ domain }) =>
-  hasAmazonAffiliateTag(domain),
+export function isActiveAmazonDomain(domain = '') {
+  const normalizedDomain = normalizeAmazonDomain(domain)
+  if (!normalizedDomain) {
+    return false
+  }
+  return hasAmazonAffiliateTag(normalizedDomain) || ACTIVE_UNTAGGED_AMAZON_DOMAINS.has(normalizedDomain)
+}
+
+export const ACTIVE_AMAZON_MARKETPLACES = AMAZON_MARKETPLACES.filter(({ domain }) =>
+  isActiveAmazonDomain(domain),
 )
 
-export function normalizeAffiliateSupportedAmazonDomain(value = '') {
+export function normalizeActiveAmazonDomain(value = '') {
   const normalizedDomain = normalizeAmazonDomain(value)
-  return hasAmazonAffiliateTag(normalizedDomain) ? normalizedDomain : ''
+  return isActiveAmazonDomain(normalizedDomain) ? normalizedDomain : ''
 }
 
 export function isSupportedAmazonDomain(value = '') {
@@ -72,9 +84,9 @@ export function getAmazonDomainFromCountryCode(countryCode = 'US') {
   return COUNTRY_TO_AMAZON_DOMAIN[countryCode] ?? 'amazon.com'
 }
 
-export function getAffiliateSupportedAmazonDomainFromCountryCode(countryCode = 'US') {
+export function getActiveAmazonDomainFromCountryCode(countryCode = 'US') {
   const domain = getAmazonDomainFromCountryCode(countryCode)
-  return normalizeAffiliateSupportedAmazonDomain(domain) || 'amazon.com'
+  return normalizeActiveAmazonDomain(domain) || 'amazon.com'
 }
 
 export function buildAmazonBaseUrl(domain = 'amazon.com') {
@@ -90,8 +102,9 @@ export function getAmazonPricePrefix(domain = 'amazon.com') {
 export function appendAffiliateTag(url, domain = 'amazon.com') {
   if (!url) return url
   const normalizedDomain = normalizeAmazonDomain(domain)
+  if (!isActiveAmazonDomain(normalizedDomain)) return ''
+  // Active marketplaces without a tag keep the plain URL — no commission, but clickouts work.
   const tag = getAmazonAffiliateTag(normalizedDomain)
-  if (!tag) return ''
   try {
     const u = new URL(url)
     const urlDomain = u.hostname.toLowerCase().replace(/^www\./, '')
@@ -101,6 +114,9 @@ export function appendAffiliateTag(url, domain = 'amazon.com') {
     }
     if (normalizedUrlDomain && normalizedUrlDomain !== normalizedDomain) {
       return ''
+    }
+    if (!tag) {
+      return u.toString()
     }
     u.searchParams.set('tag', tag)
     return u.toString()

@@ -3,7 +3,7 @@ import { ChevronDown, Globe2 } from 'lucide-react'
 
 import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
-import { AFFILIATE_SUPPORTED_AMAZON_MARKETPLACES } from '../../shared/amazon-marketplaces.js'
+import { ACTIVE_AMAZON_MARKETPLACES } from '../../shared/amazon-marketplaces.js'
 
 // variant='header' — smaller, subtler trigger; used in the site header
 // variant='default' — standard full-size pill (fallback)
@@ -39,7 +39,7 @@ export function AmazonStorePill({ variant = 'default' }) {
   }, [isOpen])
 
   const isAuto = selectedAmazonDomain === AMAZON_MARKETPLACE_AUTO
-  const selectedMarketplace = AFFILIATE_SUPPORTED_AMAZON_MARKETPLACES.find((m) => m.domain === selectedAmazonDomain)
+  const selectedMarketplace = ACTIVE_AMAZON_MARKETPLACES.find((m) => m.domain === selectedAmazonDomain)
 
   const activeAmazonDomain = isAuto
     ? resolvedAmazonDomain || 'amazon.com'
@@ -53,9 +53,9 @@ export function AmazonStorePill({ variant = 'default' }) {
 
   const primaryMarketplaceDomains = ['amazon.com', 'amazon.ca', 'amazon.co.uk']
   const primaryMarketplaces = primaryMarketplaceDomains
-    .map((domain) => AFFILIATE_SUPPORTED_AMAZON_MARKETPLACES.find((marketplace) => marketplace.domain === domain))
+    .map((domain) => ACTIVE_AMAZON_MARKETPLACES.find((marketplace) => marketplace.domain === domain))
     .filter(Boolean)
-  const additionalMarketplaces = AFFILIATE_SUPPORTED_AMAZON_MARKETPLACES.filter(
+  const additionalMarketplaces = ACTIVE_AMAZON_MARKETPLACES.filter(
     (marketplace) => !primaryMarketplaceDomains.includes(marketplace.domain),
   )
 

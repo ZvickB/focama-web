@@ -21,6 +21,8 @@ services:
         sync: false
       - key: SENSITIVE_IMAGE_SHADOW_ENABLED
         sync: false
+      - key: SENSITIVE_IMAGE_REVEAL_ENABLED
+        value: true
       - key: SIGHTENGINE_API_USER
         sync: false
       - key: SIGHTENGINE_API_SECRET

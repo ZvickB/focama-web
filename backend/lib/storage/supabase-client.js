@@ -12,6 +12,7 @@ export const TESTER_FEEDBACK_TABLE = 'tester_feedback'
 export const RATE_LIMIT_EVENTS_TABLE = 'rate_limit_events'
 export const SEARCH_ATTEMPTS_TABLE = 'search_attempts'
 export const SEARCH_EVENTS_TABLE = 'search_events'
+export const SENSITIVE_IMAGE_VERDICTS_TABLE = 'sensitive_image_verdicts'
 const DEFAULT_CACHE_TTL_MINUTES = 1440
 
 let supabaseAdminClient = null

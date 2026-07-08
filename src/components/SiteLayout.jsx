@@ -15,6 +15,7 @@ const MARKETPLACE_DISPLAY = {
   'amazon.com': { location: 'the US', storeLabel: 'Amazon US' },
   'amazon.ca': { location: 'Canada', storeLabel: 'Amazon Canada' },
   'amazon.co.uk': { location: 'the UK', storeLabel: 'Amazon UK' },
+  'amazon.in': { location: 'India', storeLabel: 'Amazon India' },
 }
 const MotionDiv = motion.div
 

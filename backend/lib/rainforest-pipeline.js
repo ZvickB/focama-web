@@ -6,8 +6,8 @@ import { buildQuery } from './search-data.js'
 import {
   appendAffiliateTag,
   formatAmazonPrice,
-  getAffiliateSupportedAmazonDomainFromCountryCode,
-  normalizeAffiliateSupportedAmazonDomain,
+  getActiveAmazonDomainFromCountryCode,
+  normalizeActiveAmazonDomain,
 } from '../../shared/amazon-marketplaces.js'
 
 const SAMPLES_DIR = join(process.cwd(), 'temp-data', 'rainforest-samples')
@@ -24,8 +24,8 @@ function saveRainforestSample(query, payload) {
 export const RAINFOREST_ENDPOINT = 'https://api.rainforestapi.com/request'
 
 export function getAmazonDomain({ countryCode = 'US', amazonDomain = '' } = {}) {
-  return normalizeAffiliateSupportedAmazonDomain(amazonDomain) ||
-    getAffiliateSupportedAmazonDomainFromCountryCode(countryCode)
+  return normalizeActiveAmazonDomain(amazonDomain) ||
+    getActiveAmazonDomainFromCountryCode(countryCode)
 }
 
 function getRainforestDeliveryTagline(value) {

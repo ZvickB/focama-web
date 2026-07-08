@@ -11,16 +11,18 @@ describe('getAmazonDomain', () => {
     vi.restoreAllMocks()
   })
 
-  it('returns affiliate-tagged domains and falls back to amazon.com for untagged countries', () => {
+  it('returns active domains and falls back to amazon.com for inactive countries', () => {
     expect(getAmazonDomain({ countryCode: 'CA' })).toBe('amazon.ca')
+    expect(getAmazonDomain({ countryCode: 'IN' })).toBe('amazon.in')
     expect(getAmazonDomain({ countryCode: 'GB' })).toBe('amazon.com')
     expect(getAmazonDomain({ countryCode: 'DE' })).toBe('amazon.com')
     expect(getAmazonDomain({ countryCode: 'US' })).toBe('amazon.com')
     expect(getAmazonDomain({ countryCode: 'ZZ' })).toBe('amazon.com')
   })
 
-  it('prefers an explicit affiliate-tagged amazon domain override', () => {
+  it('prefers an explicit active amazon domain override', () => {
     expect(getAmazonDomain({ countryCode: 'US', amazonDomain: 'amazon.ca' })).toBe('amazon.ca')
+    expect(getAmazonDomain({ countryCode: 'US', amazonDomain: 'amazon.in' })).toBe('amazon.in')
     expect(getAmazonDomain({ countryCode: 'GB', amazonDomain: 'amazon.com.au' })).toBe('amazon.com')
   })
 
@@ -107,6 +109,41 @@ describe('getAmazonDomain', () => {
     expect(fetch.mock.calls[0][0].searchParams.get('amazon_domain')).toBe('amazon.com')
     expect(result.error).toBeNull()
     expect(result.artifacts.results[0].link).toBe('')
+  })
+
+  it('keeps plain untagged links for active marketplaces without an affiliate tag', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        search_results: [
+          {
+            asin: 'B001',
+            title: 'Compact Travel Stroller',
+            price: {
+              value: 4999,
+            },
+            rating: 4.6,
+            ratings_total: 321,
+            image: 'https://example.com/stroller.jpg',
+            link: 'https://www.amazon.in/dp/B001',
+            position: 1,
+          },
+        ],
+        related_searches: [],
+      }),
+    })
+
+    const result = await fetchRainforestArtifacts({
+      productQuery: 'travel stroller',
+      reasonFallback: 'Returned by the Rainforest API search route',
+      rainforestApiKey: 'rf-key',
+      amazonDomain: 'amazon.in',
+    })
+
+    expect(fetch.mock.calls[0][0].searchParams.get('amazon_domain')).toBe('amazon.in')
+    expect(result.error).toBeNull()
+    expect(result.artifacts.results[0].link).toBe('https://www.amazon.in/dp/B001')
+    expect(result.artifacts.results[0].price).toBe('₹4999')
   })
 
   it('promotes Rainforest delivery Prime text into structured Prime data', async () => {

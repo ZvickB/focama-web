@@ -1,7 +1,9 @@
 import { DEFAULT_FILTER_CONFIG, getFilteredSearchArtifacts, lacksKnownPositivePrice } from './result-filter.js'
 import { SERPAPI_ENDPOINT, buildCacheKey, buildQuery, validateSearchInput } from './search-data.js'
 import { readStoredSearchCacheEntry, recordSearchHistory, writeStoredSearchCacheEntry } from './search-storage.js'
-import { appendAffiliateTag, normalizeAffiliateSupportedAmazonDomain } from '../../shared/amazon-marketplaces.js'
+import { appendAffiliateTag, normalizeActiveAmazonDomain } from '../../shared/amazon-marketplaces.js'
+import { moderateProductList } from './content-moderation.js'
+import { applyCachedSensitiveImageVerdictsToGroups } from './sensitive-image-reveal.js'
 
 export function ensureBadges(results = []) {
   if (!Array.isArray(results) || results.length === 0) {
@@ -21,17 +23,17 @@ export function ensureBadges(results = []) {
 }
 
 function getCachedAmazonDomain(cachedEntry, scope = '') {
-  const candidatePoolDomain = normalizeAffiliateSupportedAmazonDomain(cachedEntry?.candidatePool?.amazonDomain || '')
+  const candidatePoolDomain = normalizeActiveAmazonDomain(cachedEntry?.candidatePool?.amazonDomain || '')
 
   if (candidatePoolDomain) {
     return candidatePoolDomain
   }
 
   const scopeDomain = String(scope).split(':').find((part) =>
-    Boolean(normalizeAffiliateSupportedAmazonDomain(part)),
+    Boolean(normalizeActiveAmazonDomain(part)),
   )
 
-  return normalizeAffiliateSupportedAmazonDomain(scopeDomain || '') || 'amazon.com'
+  return normalizeActiveAmazonDomain(scopeDomain || '') || 'amazon.com'
 }
 
 function sanitizeCachedAffiliateLink(link, amazonDomain) {
@@ -85,7 +87,7 @@ export async function readCachedSearchSnapshot({ productQuery, details, scope = 
     scope,
   })
   const cachedAmazonDomain = getCachedAmazonDomain(storedEntry, scope)
-  const cachedEntry = storedEntry
+  const cachedEntryBeforeModeration = storedEntry
     ? {
         ...storedEntry,
         candidatePool: storedEntry.candidatePool && typeof storedEntry.candidatePool === 'object'
@@ -107,7 +109,22 @@ export async function readCachedSearchSnapshot({ productQuery, details, scope = 
           : [],
       }
     : storedEntry
-  const normalizedCachedResults = ensureBadges(cachedEntry?.results || [])
+  const moderatedCandidates = moderateProductList(cachedEntryBeforeModeration?.candidatePool?.candidates)
+  const moderatedResults = moderateProductList(cachedEntryBeforeModeration?.results)
+  const [candidates, results] = await applyCachedSensitiveImageVerdictsToGroups([
+    moderatedCandidates,
+    moderatedResults,
+  ])
+  const cachedEntry = cachedEntryBeforeModeration
+    ? {
+        ...cachedEntryBeforeModeration,
+        candidatePool: cachedEntryBeforeModeration.candidatePool
+          ? { ...cachedEntryBeforeModeration.candidatePool, candidates }
+          : cachedEntryBeforeModeration.candidatePool,
+        results,
+      }
+    : cachedEntryBeforeModeration
+  const normalizedCachedResults = ensureBadges(results)
 
   return {
     cachedEntry,

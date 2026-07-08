@@ -1,3 +1,5 @@
+import { hashSensitiveImageUrl } from './sensitive-image-verdict.js'
+
 export const MODERATION_OUTCOMES = { ALLOW: 'allow', HIDE_IMAGE: 'hide_image', BLOCK: 'block' }
 export const OPENAI_MODERATION_ENDPOINT = 'https://api.openai.com/v1/moderations'
 export const OPENAI_MODERATION_MODEL = 'omni-moderation-latest'
@@ -311,9 +313,18 @@ export function applyProductModeration(product) {
     })
   }
   if (moderation.outcome === MODERATION_OUTCOMES.BLOCK) return null
-  if (moderation.outcome === MODERATION_OUTCOMES.HIDE_IMAGE) queueSensitiveImageShadowEvaluation(product, moderation)
+  const hiddenImageUrl = moderation.outcome === MODERATION_OUTCOMES.HIDE_IMAGE
+    ? String(product?.image || product?.thumbnail || product?.thumbnail_hd || '').trim()
+    : ''
+  const imageUrlHash = hiddenImageUrl
+    ? hashSensitiveImageUrl(hiddenImageUrl)
+    : String(product?.moderation?.imageUrlHash || '')
+  const storedModeration = imageUrlHash
+    ? { ...moderation, imageUrlHash }
+    : moderation
+  if (moderation.outcome === MODERATION_OUTCOMES.HIDE_IMAGE) queueSensitiveImageShadowEvaluation(product, storedModeration)
   return moderation.outcome === MODERATION_OUTCOMES.HIDE_IMAGE
-    ? { ...product, image: '', thumbnail: '', thumbnail_hd: '', moderation }
+    ? { ...product, image: '', thumbnail: '', thumbnail_hd: '', moderation: storedModeration }
     : product
 }
 

@@ -30,10 +30,10 @@ import {
 import { startQueryQualityReview } from './query-quality-handler.js'
 import {
   beginOpenAiQueryModeration,
-  moderateProductList,
   moderateQuery,
   MODERATION_OUTCOMES,
 } from '../content-moderation.js'
+import { applyCachedSensitiveImageVerdictsToGroups } from '../sensitive-image-reveal.js'
 
 function logOpenAiQueryModeration({ moderation, normalizedQuery, route, synchronous }) {
   if (moderation.outcome === MODERATION_OUTCOMES.BLOCK) {
@@ -164,23 +164,6 @@ function isThinDiscoveryCacheHit(cachedEntry, normalizedCachedResults = []) {
   return candidateCount < minimumUsefulCount || resultCount < minimumUsefulCount
 }
 
-function moderateCachedSnapshot(snapshot) {
-  if (!snapshot?.cachedEntry) return snapshot
-  const candidates = moderateProductList(snapshot.cachedEntry.candidatePool?.candidates)
-  const results = moderateProductList(snapshot.normalizedCachedResults)
-  return {
-    ...snapshot,
-    normalizedCachedResults: results,
-    cachedEntry: {
-      ...snapshot.cachedEntry,
-      results,
-      candidatePool: snapshot.cachedEntry.candidatePool
-        ? { ...snapshot.cachedEntry.candidatePool, candidates }
-        : snapshot.cachedEntry.candidatePool,
-    },
-  }
-}
-
 function createDiscoveryToken() {
   return randomUUID()
 }
@@ -239,11 +222,11 @@ export async function handleCachedSearch(requestUrl, response) {
     return
   }
 
-  const { cachedEntry, normalizedCachedResults } = moderateCachedSnapshot(await readCachedSearchSnapshot({
+  const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
     scope: CACHE_SCOPE_LIVE_SEARCH,
-  }))
+  })
 
   if (cachedEntry?.results?.length) {
     sendJson(response, 200, {
@@ -369,11 +352,11 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   const normalizedDetails = ''
   const discoveryCacheKey = buildCacheKey(normalizedQuery, normalizedDetails, rainforestScope)
   const cacheLookupStartedAt = nowMs()
-  const { cachedEntry, normalizedCachedResults } = moderateCachedSnapshot(await readCachedSearchSnapshot({
+  const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
     productQuery: normalizedQuery,
     details: normalizedDetails,
     scope: rainforestScope,
-  }))
+  })
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
   const refreshCache = shouldRefreshDiscoveryCache(requestUrl)
   const thinCacheHit = isThinDiscoveryCacheHit(cachedEntry, normalizedCachedResults)
@@ -554,6 +537,12 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       return
     }
     const providerDuration = nowMs() - providerStartedAt
+    const [revealedCandidates, revealedResults] = await applyCachedSensitiveImageVerdictsToGroups([
+      artifacts.candidatePool?.candidates,
+      artifacts.results,
+    ])
+    artifacts.candidatePool = { ...artifacts.candidatePool, candidates: revealedCandidates }
+    artifacts.results = revealedResults
     recordDiscoveryDiagnosticEvent(diagnosticContext, {
       stage: 'rainforest_success',
       status: 'success',
