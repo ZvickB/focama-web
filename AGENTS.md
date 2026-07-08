@@ -15,7 +15,7 @@ Read this file first at the start of every chat.
 - Read `project-notes/current-status.md` when you need the current snapshot/changelog.
 - Read `project-notes/app_flow.md` when changing or explaining implemented product behavior.
 - Read `project-notes/search-flow.md` when changing or explaining search/backend flow.
-- Read `project-notes/ui_improvement_plan/README.md` when working on the new web UI direction.
+- Read `project-notes/plans/ui_improvement_plan/README.md` when working on the new web UI direction.
 - Read `project-notes/handoff.md` for medium-term work and open product questions.
 - Read `project-notes/doc_briefs.md` for product intent, UX direction, and broader decisions.
 - Read `project-notes/db-needs.md` when storage/backend table behavior matters.
@@ -25,7 +25,7 @@ Read this file first at the start of every chat.
 - `project-notes/app_flow.md`: what the app does now.
 - `project-notes/current-status.md`: short snapshot for the next chat.
 - `project-notes/search-flow.md`: search/backend flow details.
-- `project-notes/ui_improvement_plan/README.md`: planned web UI improvements inspired by mobile.
+- `project-notes/plans/ui_improvement_plan/README.md`: planned web UI improvements inspired by mobile.
 - `project-notes/handoff.md`: durable remaining work and open questions.
 - `project-notes/doc_briefs.md`: product intent and longer-term direction.
 - `project-notes/db-needs.md`: plain-language summary of the current required Supabase tables.

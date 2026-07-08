@@ -58,6 +58,7 @@ backend/express-server.js   Express server — Render production entry point (no
 backend/lib/                Business logic modules (ai-selector, rate-limiter, search-cache, etc.)
 api/geo.js                  Deliberate Vercel-only geo helper used by the frontend Auto marketplace flow
 project-notes/              Living docs: flow, status, decisions, experiment notes
+project-notes/plans/        Feature/implementation plan docs — new plans go here
 project-notes/archive/      Superseded docs — read for history, don't treat as current
 ```
 
@@ -196,7 +197,7 @@ Read `project-notes/assistant-start.md` first at the start of every session — 
 | `project-notes/current-status.md` | Need the current snapshot/changelog |
 | `project-notes/app_flow.md` | Changing or explaining implemented product behavior |
 | `project-notes/search-flow.md` | Changing or explaining search/backend flow |
-| `project-notes/ui_improvement_plan/README.md` | Working on the new web UI direction |
+| `project-notes/plans/ui_improvement_plan/README.md` | Working on the new web UI direction |
 | `project-notes/handoff.md` | Medium-term work and open product questions |
 | `project-notes/doc_briefs.md` | Product intent, UX direction, and broader decisions |
 | `project-notes/db-needs.md` | Storage/backend table behavior |

@@ -119,3 +119,77 @@ Design:
    (localStorage vs the preferences row).
 4. Naming of the "variety" option in user-facing copy — "a range of options" may read
    better than "variety".
+
+## Codex review — 2026-07-08
+
+The product direction is strong: an account-level setting adds meaningful sign-in
+value without turning the search flow into marketplace-style filters. Keeping the
+setting out of the refinement screen and providing a visible per-search escape hatch
+both fit Focamai's calm, focused identity.
+
+The main concern is the proposed implementation as a simple reordering of the middle
+three ranking priorities. Those concepts are not equivalent ranking dimensions:
+
+- **Lowest price:** the current prompt says "price/value," which is not the same as
+  deliberately preferring the lowest acceptable price. This mode needs explicit
+  language about choosing lower-priced credible products after eligibility and fit,
+  while retaining a reasonable quality floor.
+- **Known brands:** brand is currently one part of the larger quality-confidence
+  block alongside rating, review count, and trustScore. Moving that entire block
+  changes much more than brand preference. Brand emphasis should be its own
+  instruction between otherwise credible, similarly fitting candidates; basic
+  quality confidence should remain protected in every mode.
+- **Variety:** variety is a property of the shortlist as a set, not an ordinary
+  candidate-ranking signal. Raising it in the numbered order could weaken the top
+  recommendation merely to make the list more diverse. A range-focused mode should
+  keep the strongest overall fit first, then deliberately diversify the remaining
+  picks across meaningful price points, formats, or use cases where quality is
+  comparable.
+
+Because of that, the implementation should probably use explicit ranking strategies
+rather than mechanically permuting three prompt fragments:
+
+- `balanced`: reproduce today's prompt byte-for-byte.
+- `price`: after eligibility and exact fit, favor the lowest-priced credible options
+  while preserving a quality floor.
+- `brand`: favor recognized category brands among similarly fitting, credible
+  products without letting familiarity override fit or clear quality concerns.
+- `range`: preserve the strongest overall recommendation at #1, then make picks #2–6
+  cover useful differences where possible.
+
+Additional recommendations and implementation questions:
+
+- Use one enum vocabulary consistently. `balanced | price | brand | range` maps more
+  cleanly to the proposed user-facing labels than mixing `default`, "Balanced," and
+  "variety."
+- Decide whether the setting is genuinely account-gated. If the browser sends the
+  preference in the finalize body, "signed-out users never send one" is only a
+  frontend convention. The backend could verify the authenticated user and load the
+  stored preference itself, or the product can deliberately accept the enum as
+  harmless advisory input from any client. This should be an explicit choice.
+- Pass the effective preference into the asynchronous mini-enrichment call and/or
+  token-scoped selection state. Enrichment currently runs after Haiku locks the
+  winners, so adding the value only to the initial finalize request will not
+  automatically make it available there.
+- Record the effective ranking strategy in finalize diagnostics/history. Without
+  that context, intentional preference effects may look like ranking regressions.
+- Keep prompt snapshot tests for the byte-identical balanced path, but also test each
+  strategy against small fixed candidate pools. Correct prompt wording alone does
+  not prove that the resulting shortlist behavior is sensible.
+- Keep the per-search override limited to the current search in v1, and do not alter
+  refine-question generation yet.
+- "Range of options" is clearer user-facing language than "Variety."
+- Store the one-time educational hint dismissal in localStorage. It is lightweight
+  onboarding state rather than an important cross-device account preference.
+
+One UX behavior still needs definition: if the user taps "not this time" after the
+results have already been generated, does Focamai immediately run finalize again, or
+does the override apply only to the next search? If it triggers another finalize,
+the action should say something explicit such as **"Redo with balanced picks"** so
+the user understands that the recommendations will change and another ranking call
+will occur.
+
+Overall opinion: this is worth pursuing, but the ranking behavior should be designed
+as four explicit strategies before implementation. The settings and escape-hatch UX
+are already pointed in the right direction; strategy semantics and authenticated
+preference handling are the two areas that need more thought.
