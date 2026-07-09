@@ -9,7 +9,7 @@ function getAuthErrorMessage(error) {
   return error.message || 'Something went wrong. Please try again.'
 }
 
-export function AuthModal({ onClose, open }) {
+export function AuthModal({ contextualLine = '', onClose, open }) {
   const emailId = useId()
   const passwordId = useId()
   const confirmPasswordId = useId()
@@ -20,6 +20,7 @@ export function AuthModal({ onClose, open }) {
     passwordRecoveryActive,
     requestPasswordReset,
     signIn,
+    signInWithApple,
     signInWithGoogle,
     signUp,
     updatePassword,
@@ -123,17 +124,17 @@ export function AuthModal({ onClose, open }) {
     handleClose()
   }
 
-  async function handleGoogleSignIn() {
+  async function handleOAuthSignIn({ providerLabel, signInWithProvider }) {
     setErrorMessage('')
     setStatusMessage('')
 
     if (!configured) {
-      setErrorMessage('Supabase auth is not configured yet. Add the frontend URL and anon key to enable Google sign in.')
+      setErrorMessage(`Supabase auth is not configured yet. Add the frontend URL and anon key to enable ${providerLabel} sign in.`)
       return
     }
 
     setSubmitting(true)
-    const { error } = await signInWithGoogle()
+    const { error } = await signInWithProvider()
     setSubmitting(false)
 
     if (error) {
@@ -157,7 +158,7 @@ export function AuthModal({ onClose, open }) {
     ? 'Enter your email and we’ll send you a secure reset link.'
     : activeMode === 'reset-password'
       ? 'Use at least 6 characters for your new password.'
-      : 'Search stays open. Your saved searches can follow you across devices.'
+      : contextualLine || 'Search stays open. Your saved searches can follow you across devices.'
   const isBusy = submitting || authLoading
 
   return (
@@ -352,14 +353,30 @@ export function AuthModal({ onClose, open }) {
           <span className="h-px flex-1 bg-stone-200" />
             </div>
 
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              disabled={isBusy}
-              className="inline-flex h-12 w-full items-center justify-center rounded-2xl border border-[#e5dacb] bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-[#d5c7b6] hover:bg-stone-50 disabled:pointer-events-none disabled:opacity-50"
-            >
-              Continue with Google
-            </button>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => handleOAuthSignIn({
+                  providerLabel: 'Google',
+                  signInWithProvider: signInWithGoogle,
+                })}
+                disabled={isBusy}
+                className="inline-flex h-12 w-full items-center justify-center rounded-2xl border border-[#e5dacb] bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-[#d5c7b6] hover:bg-stone-50 disabled:pointer-events-none disabled:opacity-50"
+              >
+                Continue with Google
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOAuthSignIn({
+                  providerLabel: 'Apple',
+                  signInWithProvider: signInWithApple,
+                })}
+                disabled={isBusy}
+                className="inline-flex h-12 w-full items-center justify-center rounded-2xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:pointer-events-none disabled:opacity-50"
+              >
+                Continue with Apple
+              </button>
+            </div>
           </>
         ) : null}
       </div>

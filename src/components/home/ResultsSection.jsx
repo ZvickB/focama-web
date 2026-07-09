@@ -28,6 +28,11 @@ import { Button } from '@/components/ui/button.jsx'
 import { Textarea } from '@/components/ui/textarea.jsx'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { getRetailerDisplayName } from '@/lib/retailerLabel.js'
+import {
+  RANKING_PREFERENCE_ACTIVE_LABELS,
+  isActiveRankingPreference,
+  normalizeRankingPreference,
+} from '../../../shared/ranking-preference.js'
 
 const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 const RETRY_CORRECTION_CHIPS = [
@@ -43,6 +48,12 @@ const FILTER_VPN_CHOICES = [
   { label: 'Not sure', value: 'not_sure' },
 ]
 const MotionDiv = motion.div
+const PREFERENCE_HINT_DISMISSED_KEY = 'focamai:ranking-preference-hint-dismissed'
+
+function readPreferenceHintDismissed() {
+  if (typeof window === 'undefined') return false
+  return window.localStorage.getItem(PREFERENCE_HINT_DISMISSED_KEY) === 'true'
+}
 
 export function ResultsSection({
   displayedResults,
@@ -61,7 +72,9 @@ export function ResultsSection({
   onFailureRetry = () => {},
   onRetryAdviceRequest,
   onRetryFeedbackChange,
+  onRedoBalanced,
   previousResults = [],
+  rankingPreference = 'balanced',
   selectionState,
   retryFeedback,
   showFinalResultBadges,
@@ -75,8 +88,14 @@ export function ResultsSection({
   const [hasCopiedDebugInfo, setHasCopiedDebugInfo] = useState(false)
   const [retryViewQuery, setRetryViewQuery] = useState('')
   const [activeResultSelection, setActiveResultSelection] = useState({ index: 0, resultsIdentity: '' })
+  const [isPreferenceHintDismissed, setIsPreferenceHintDismissed] = useState(readPreferenceHintDismissed)
   const resultRowsScrollRef = useRef(null)
   const isRetryViewVisible = hasFinalResults && showRetryView && retryViewQuery === submittedQuery
+  const normalizedRankingPreference = normalizeRankingPreference(rankingPreference)
+  const hasActiveRankingPreference = hasFinalResults && isActiveRankingPreference(normalizedRankingPreference)
+  const activeRankingLabel = RANKING_PREFERENCE_ACTIVE_LABELS[normalizedRankingPreference]
+  const shouldShowPreferenceHint =
+    hasFinalResults && !hasActiveRankingPreference && !isPreferenceHintDismissed
 
   const shouldShowBadgeLabels = !hasFinalResults || showFinalResultBadges
   const orderedResults = displayedResults
@@ -170,6 +189,16 @@ export function ResultsSection({
     setShowRetryView(true)
   }
 
+  function dismissPreferenceHint() {
+    setIsPreferenceHintDismissed(true)
+    window.localStorage.setItem(PREFERENCE_HINT_DISMISSED_KEY, 'true')
+  }
+
+  function openPreferences() {
+    dismissPreferenceHint()
+    window.dispatchEvent(new CustomEvent('focamai:open-preferences'))
+  }
+
   return (
     <section className="space-y-5">
       {!hasStartedSearch || !shouldShowResultsIntro ? null : (
@@ -208,8 +237,40 @@ export function ResultsSection({
               ? 'Six picks, chosen around what you told us.'
               : hasStartedSearch
                 ? 'The shortlist is being built below while the AI helps narrow what matters.'
-                : 'Search to see a calmer shortlist with clear tradeoffs instead of a noisy marketplace wall.'}
+              : 'Search to see a calmer shortlist with clear tradeoffs instead of a noisy marketplace wall.'}
           </p>
+          {hasActiveRankingPreference ? (
+            <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-primary/15 bg-[#eef7f6] px-3 py-1.5 text-xs font-medium text-primary">
+              <span>{activeRankingLabel}</span>
+              <button
+                type="button"
+                onClick={onRedoBalanced}
+                className="rounded-full px-1 text-primary/70 underline underline-offset-2 transition hover:text-primary"
+              >
+                redo balanced
+              </button>
+            </div>
+          ) : null}
+          {shouldShowPreferenceHint ? (
+            <div className="flex max-w-3xl flex-wrap items-center gap-2 rounded-2xl border border-stone-200 bg-white/86 px-3.5 py-2.5 text-sm text-slate-500 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.22)]">
+              <span>You can tell Focamai to always prioritize price, brands, or a wider range.</span>
+              <button
+                type="button"
+                onClick={openPreferences}
+                className="font-semibold text-primary underline-offset-4 hover:underline"
+              >
+                Set preferences
+              </button>
+              <button
+                type="button"
+                aria-label="Dismiss preference tip"
+                onClick={dismissPreferenceHint}
+                className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-stone-100 hover:text-slate-700"
+              >
+                <ChevronDown className="h-4 w-4 rotate-45" />
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -609,7 +670,7 @@ export function ResultsSection({
 
             {isGeneratingRetryAdvice ? (
               <p role="status" className="text-sm leading-6 text-slate-600">
-                Understanding what should change, then we&apos;ll start finding better matches automatically.
+                Preparing a better search based on what should change.
               </p>
             ) : null}
           </div>

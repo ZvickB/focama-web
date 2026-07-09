@@ -52,6 +52,7 @@ import {
   resolveSelectedProductForDisplay,
 } from '@/components/home/guided-search/result-merge.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
+import { useAuth } from '@/contexts/useAuth.js'
 import { historyStore } from '@/lib/history/historyStore.js'
 import { clearFlowSnapshot, readFlowSnapshot, saveFlowSnapshot } from '@/lib/search/searchFlowSnapshot.js'
 import {
@@ -60,6 +61,7 @@ import {
   runSearchFailureDiagnostics,
 } from '@/lib/searchDiagnostics.js'
 import { MAX_PRODUCT_QUERY_LENGTH, validateSearchInput } from '../../../shared/search-input.js'
+import { RANKING_PREFERENCES, normalizeRankingPreference } from '../../../shared/ranking-preference.js'
 
 export { AMAZON_MARKETPLACE_AUTO }
 export { RESULT_CARD_COUNT, RESULT_CARD_SLOTS }
@@ -78,6 +80,8 @@ export function useGuidedSearch() {
     resolvedAmazonDomain,
     setSelectedAmazonDomain,
   } = useAmazonStore()
+  const { rankingPreference } = useAuth()
+  const [rankingPreferenceOverride, setRankingPreferenceOverride] = useState(null)
   const [submittedAmazonDomain, setSubmittedAmazonDomain] = useState('')
   const [selectedProductState, setSelectedProductState] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
@@ -93,6 +97,7 @@ export function useGuidedSearch() {
   const [followUpNotes, setFollowUpNotes] = useState('')
   const [retryFeedback, setRetryFeedback] = useState('')
   const [retryCount, setRetryCount] = useState(0)
+  const [retrySearchQuery, setRetrySearchQuery] = useState('')
   const [selectionState, setSelectionState] = useState(null)
   const [analyticsSearchId, setAnalyticsSearchId] = useState('')
   const [analyticsSessionId, setAnalyticsSessionId] = useState('')
@@ -844,6 +849,9 @@ export function useGuidedSearch() {
     })
     finalizeMutation.mutate({
       ...variables,
+      rankingPreference: normalizeRankingPreference(
+        variables.rankingPreference || effectiveRankingPreference,
+      ),
       searchId: activeSearchIdRef.current,
       supportSearchId: analyticsSearchIdRef.current,
       sessionId: analyticsSessionIdRef.current,
@@ -1024,6 +1032,9 @@ export function useGuidedSearch() {
   const isLoading = isDiscovering || isGeneratingPrompt || isFinalizing
   const hasFinalResults = results.length > 0
   const displayedResults = hasFinalResults ? results : showPreviewResults ? previewResults : []
+  const effectiveRankingPreference = normalizeRankingPreference(
+    rankingPreferenceOverride || rankingPreference,
+  )
   const selectedProductForDisplay = resolveSelectedProductForDisplay({
     previousResults,
     previewResults,
@@ -1041,6 +1052,7 @@ export function useGuidedSearch() {
       resetLoadingState = false,
       resetMutationState = false,
       resetProductQuery = false,
+      retrySearchQueryValue = '',
     } = {},
   ) {
     cancelDiscoveryRequest()
@@ -1077,6 +1089,7 @@ export function useGuidedSearch() {
     setFollowUpNotes((current) => (preserveFollowUpNotes ? current : ''))
     setRetryFeedback('')
     setRetryCount(0)
+    setRetrySearchQuery(retrySearchQueryValue)
     setSelectionState(null)
     setRequestTiming({
       discover: null,
@@ -1090,6 +1103,7 @@ export function useGuidedSearch() {
     setIsEnrichmentSettled(false)
     setQuerySuggestion(null)
     setIsApplyingQuerySuggestion(false)
+    setRankingPreferenceOverride(null)
 
     if (resetLoadingState) {
       setIsDiscovering(false)
@@ -1125,6 +1139,7 @@ export function useGuidedSearch() {
       preserveFollowUpNotes = false,
       reuseAnalytics = false,
       cacheMode = 'default',
+      retrySearchQueryValue = '',
       searchEventName = 'search_started',
     } = {},
   ) {
@@ -1145,7 +1160,10 @@ export function useGuidedSearch() {
     setAnalyticsSearchId(analyticsSearchId)
     setAnalyticsSessionId(analyticsSessionId)
 
-    resetGuidedState(normalizedQuery, nextAmazonDomain, { preserveFollowUpNotes })
+    resetGuidedState(normalizedQuery, nextAmazonDomain, {
+      preserveFollowUpNotes,
+      retrySearchQueryValue,
+    })
     setIsDiscovering(true)
     setIsGeneratingPrompt(true)
     recordSearchDebugEvent('startGuidedSearch', 'started', {
@@ -1673,6 +1691,7 @@ export function useGuidedSearch() {
         excludedCandidateIds: [],
         previousResults: [],
         requestMode: FINALIZE_REQUEST_MODE_REFINED,
+        rankingPreference: effectiveRankingPreference,
       }
 
       startFinalizeMutation(nextFinalizeRequest)
@@ -1690,9 +1709,31 @@ export function useGuidedSearch() {
       excludedCandidateIds: [],
       previousResults: [],
       requestMode: FINALIZE_REQUEST_MODE_EMPTY_NOTES,
+      rankingPreference: effectiveRankingPreference,
     }
 
     startFinalizeMutation(nextFinalizeRequest)
+  }
+
+  function redoCurrentSearchBalanced() {
+    if (!candidatePool || !submittedQuery || !discoveryToken || isFinalizing) {
+      return
+    }
+
+    setRankingPreferenceOverride(RANKING_PREFERENCES.BALANCED)
+    startFinalizeMutation({
+      query: submittedQuery,
+      amazonDomain: submittedAmazonDomain,
+      discoveryToken,
+      originalCandidatePool: candidatePool,
+      followUpNotes,
+      rejectionFeedback: '',
+      retryCount: 0,
+      excludedCandidateIds: [],
+      previousResults: [],
+      requestMode: FINALIZE_REQUEST_MODE_DEFAULT,
+      rankingPreference: RANKING_PREFERENCES.BALANCED,
+    })
   }
 
   function handleShowProductsNow() {
@@ -1820,6 +1861,7 @@ export function useGuidedSearch() {
     setProductQuery(normalizedQuery)
     startGuidedSearch(normalizedQuery, {
       cacheMode: 'refresh',
+      retrySearchQueryValue: normalizedQuery,
       searchEventName: 'retry_advice_search_started',
     })
     return true
@@ -1932,6 +1974,7 @@ export function useGuidedSearch() {
     actions: {
       beginGuidedSearch,
       finalizeRefinement: handleFinalizeRefinement,
+      redoCurrentSearchBalanced,
       resetToNewSearch,
       retryFailedSearch,
       selectProduct: handleSelectProduct,
@@ -1973,6 +2016,7 @@ export function useGuidedSearch() {
       previous: previousResults,
       selectedProduct: selectedProductForDisplay,
       selectionState,
+      rankingPreference: selectionState?.rankingPreference || effectiveRankingPreference,
       setSelectedProduct: setSelectedProductState,
       showFinalBadges: showFinalResultBadges,
       showPreview: showPreviewResults,
@@ -1981,6 +2025,7 @@ export function useGuidedSearch() {
       count: retryCount,
       feedback: retryFeedback,
       isGeneratingAdvice: retryAdviceMutation.isPending,
+      searchQuery: retrySearchQuery,
       requestAdvice: handleRetryAdviceRequest,
       setFeedback: updateRetryFeedback,
     },

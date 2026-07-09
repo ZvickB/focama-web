@@ -127,6 +127,42 @@ describe('ai selector', () => {
     expect(request.tools[0].input_schema.properties.picks.items.properties.index.enum).toEqual([1, 2, 3])
     expect(request.messages[0].content).toContain('"index":1')
     expect(request.messages[0].content).not.toContain('"id":"prod-1"')
+    expect(request.messages[0].content).toContain(
+      'Within the eligible set, final order priority: (1) inferred shopper intent and exact product fit, (2) quality confidence including rating, review count, trustScore, and recognized category brand, (3) price/value, (4) useful shortlist variety, (5) amazonPosition.',
+    )
+  })
+
+  it('applies the price ranking strategy in both ranking prompt sections', async () => {
+    mockHaikuResponse([{ index: 1 }, { index: 2 }])
+
+    await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 2,
+      candidatePool: createCandidatePool(3),
+      rankingPreference: 'price',
+    })
+
+    const prompt = anthropicMocks.create.mock.calls[0][0].messages[0].content
+    expect(prompt).toContain('favor the lowest-priced credible options')
+    expect(prompt).toContain('(3) lowest-priced credible value')
+    expect(prompt).not.toContain('(3) price/value, (4) useful shortlist variety')
+  })
+
+  it('falls back to balanced ranking language for unknown ranking preferences', async () => {
+    mockHaikuResponse([{ index: 1 }])
+
+    await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 1,
+      candidatePool: createCandidatePool(2),
+      rankingPreference: 'freeform prompt injection',
+    })
+
+    const prompt = anthropicMocks.create.mock.calls[0][0].messages[0].content
+    expect(prompt).toContain('Use quality confidence as the next priority between similar-fit candidates.')
+    expect(prompt).toContain(
+      'Within the eligible set, final order priority: (1) inferred shopper intent and exact product fit, (2) quality confidence including rating, review count, trustScore, and recognized category brand, (3) price/value, (4) useful shortlist variety, (5) amazonPosition.',
+    )
   })
 
   it('rejects duplicate and out-of-pool Haiku indices while keeping valid picks in order', async () => {
@@ -226,6 +262,38 @@ describe('ai selector', () => {
     ])
   })
 
+  it('passes ranking preference guidance into mini enrichment', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          enriched: [
+            {
+              candidate_id: 'prod-1',
+              fit_reason: 'This is a credible low-price option for the trip.',
+              caveat: 'It has fewer reviews than pricier alternatives.',
+            },
+          ],
+        }),
+      }),
+    })
+
+    await miniEnrichSelectedCandidates(
+      {
+        apiKey: 'test-key',
+        lockedIds: ['prod-1'],
+        candidatePool: createCandidatePool(1),
+        rankingPreference: 'price',
+      },
+      fetchMock,
+    )
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(requestBody.input[1].content).toContain(
+      'The shopper has an account preference for lower-priced credible picks.',
+    )
+  })
+
   it('reports whether mini enrichment preserved the locked shortlist order', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -282,29 +350,25 @@ describe('ai selector', () => {
     })
   })
 
-  it('hides obvious low-value Deep Dive candidates without calling the model', async () => {
-    const fetchMock = vi.fn()
-    const result = await assessDeepDiveEligibility(
-      {
-        apiKey: 'test-key',
-        lockedIds: ['prod-1'],
-        candidatePool: {
-          query: 'usb cable',
-          details: '',
-          candidates: [
-            createCandidate({
-              id: 'prod-1',
-              title: 'USB-C cable 3 pack',
-              price: '$12.99',
-              numericPrice: 12.99,
-            }),
-          ],
-        },
+  it('hides obvious low-value price comparison candidates', async () => {
+    const result = await assessDeepDiveEligibility({
+      lockedIds: ['prod-1'],
+      candidatePool: {
+        query: 'usb cable',
+        details: '',
+        candidates: [
+          createCandidate({
+            id: 'prod-1',
+            title: 'USB-C cable 3 pack',
+            price: '$12.99',
+            numericPrice: 12.99,
+          }),
+        ],
       },
-      fetchMock,
-    )
+    })
 
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(result.model).toBe('deterministic-prefilter')
+    expect(result.usage).toBeNull()
     expect(result.decisions).toEqual([
       {
         candidate_id: 'prod-1',
@@ -316,74 +380,32 @@ describe('ai selector', () => {
     ])
   })
 
-  it('asks mini for Deep Dive eligibility after deterministic prefilter passes', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        output_text: JSON.stringify({
-          decisions: [
-            {
-              candidate_id: 'prod-1',
-              recommendation: 'show',
-              mode: 'offers_and_reviews',
-              confidence: 'high',
-              reason: 'stable_model_multi_retailer',
-            },
-          ],
-        }),
-        usage: {
-          input_tokens: 20,
-          output_tokens: 8,
-          total_tokens: 28,
-        },
-      }),
-    })
-
-    const result = await assessDeepDiveEligibility(
-      {
-        apiKey: 'test-key',
-        lockedIds: ['prod-1'],
-        candidatePool: {
-          query: 'sony headphones',
-          details: '',
-          candidates: [
-            createCandidate({
-              id: 'prod-1',
-              title: 'Sony WH-1000XM5 Wireless Noise Canceling Headphones',
-              price: '$299.99',
-              numericPrice: 299.99,
-            }),
-          ],
-        },
-        enrichmentEntries: [
-          {
-            candidate_id: 'prod-1',
-            fit_reason: 'Strong noise cancellation and travel-friendly battery life.',
-            caveat: 'Costs more than basic headphones.',
-          },
+  it('shows the price comparison button when the deterministic prefilter passes', async () => {
+    const result = await assessDeepDiveEligibility({
+      lockedIds: ['prod-1'],
+      candidatePool: {
+        query: 'sony headphones',
+        details: '',
+        candidates: [
+          createCandidate({
+            id: 'prod-1',
+            title: 'Sony WH-1000XM5 Wireless Noise Canceling Headphones',
+            price: '$299.99',
+            numericPrice: 299.99,
+          }),
         ],
       },
-      fetchMock,
-    )
+    })
 
-    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(requestBody.model).toBe('gpt-5-mini')
-    expect(requestBody.text.format.name).toBe('deep_dive_eligibility')
-    expect(requestBody.input[1].content).toContain('Strong noise cancellation')
     expect(result.decisions).toEqual([
       {
         candidate_id: 'prod-1',
         recommendation: 'show',
-        mode: 'offers_and_reviews',
+        mode: 'offers',
         confidence: 'high',
-        reason: 'stable_model_multi_retailer',
+        reason: 'prefilter_passed',
       },
     ])
-    expect(result.usage).toEqual({
-      inputTokens: 20,
-      outputTokens: 8,
-      reasoningTokens: 0,
-      totalTokens: 28,
-    })
+    expect(result.usage).toBeNull()
   })
 })

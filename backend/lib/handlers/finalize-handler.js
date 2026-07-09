@@ -1,4 +1,5 @@
 import { buildInternalErrorPayload, sendJson, readJsonBody } from '../http.js'
+import { normalizeRankingPreference } from '../../../shared/ranking-preference.js'
 import {
   DEFAULT_FINALIZE_MODEL,
   haikuLockWinnersAndBadges,
@@ -409,6 +410,7 @@ export async function handleFinalizeSelection(request, response) {
 
   const supportSearchId = truncateText(body?.searchId, 120) || null
   const openAiApiKey = getEnv('OPENAI_API_KEY')
+  const rankingPreference = normalizeRankingPreference(body?.rankingPreference)
 
   if (!openAiApiKey) {
     logSearchFlowEvent('guided_finalize_configuration_error', {
@@ -455,6 +457,7 @@ export async function handleFinalizeSelection(request, response) {
     queryLength: typeof body?.query === 'string' ? body.query.length : 0,
     tokenLength: typeof body?.discoveryToken === 'string' ? body.discoveryToken.length : 0,
     requestMode: typeof body?.requestMode === 'string' ? body.requestMode : null,
+    rankingPreference,
     bodyReadDuration: body?.bodyReadDuration,
   })
   recordFinalizeDiagnosticEvent(body, {
@@ -637,6 +640,7 @@ export async function handleFinalizeSelection(request, response) {
         layer: finalizeFast.layer,
         mode: 'retry_exhausted',
         model: null,
+        rankingPreference,
         requestMode,
         shortlistLocked: finalizeFast.shortlistLocked,
         selectedCandidateIds: finalizeFast.selectedCandidateIds,
@@ -668,6 +672,7 @@ export async function handleFinalizeSelection(request, response) {
       candidatePool: nextCandidatePool,
       finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
       apiKey: getEnv('CLAUDE_API_KEY'),
+      rankingPreference,
     })
     const haikuDuration = nowMs() - haikuStartedAt
     tokenUsageByStage.finalize = haikuResult.usage || null
@@ -759,6 +764,7 @@ export async function handleFinalizeSelection(request, response) {
         strategy: selectionStrategy,
         model: usedHaikuSelection ? haikuResult.model : null,
         selectedCandidateIds: finalizeFast.selectedCandidateIds,
+        rankingPreference,
         finalizedAt: new Date().toISOString(),
       },
       source: 'guided_finalize_selection',
@@ -788,6 +794,7 @@ export async function handleFinalizeSelection(request, response) {
       flowPath,
       finalizeModel: haikuResult.model,
       finalizeModelPath: hasContextSignals ? 'context_added' : 'baseline',
+      rankingPreference,
     })
 
     sendJson(response, 200, {
@@ -817,6 +824,7 @@ export async function handleFinalizeSelection(request, response) {
         strategy: selectionStrategy,
         model: usedHaikuSelection ? haikuResult.model : null,
         modelPath: hasContextSignals ? 'context_added' : 'baseline',
+        rankingPreference,
         requestMode,
         shortlistLocked: finalizeFast.shortlistLocked,
         usage: usedHaikuSelection ? haikuResult.usage || null : null,
@@ -877,14 +885,13 @@ export async function handleFinalizeSelection(request, response) {
             normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
             discoveryToken: sanitizedDiscoveryContext.discoveryToken,
             discoveryScope: resolvedDiscoveryContext.discoveryScope,
+            rankingPreference,
           })
 
           try {
             await runDeepDiveEligibilityAsync({
               lockedIds: selectedCandidateIds,
               candidatePool: enrichedCandidatePool,
-              apiKey: openAiApiKey,
-              model: miniModel,
               normalizedQuery: sanitizedDiscoveryContext.normalizedQuery,
               discoveryToken: sanitizedDiscoveryContext.discoveryToken,
               discoveryScope: resolvedDiscoveryContext.discoveryScope,

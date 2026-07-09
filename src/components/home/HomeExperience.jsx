@@ -11,7 +11,6 @@ import {
   handleNewSearchClick,
   handleProductQueryTextareaKeyDown,
   handleRefinementTextareaKeyDown,
-  scrollElementNearTop,
   shouldShowCharCounter,
   shouldShowTimingPanel,
   smoothScrollIntoView,
@@ -348,6 +347,11 @@ function OpenLayout(props) {
                   <span className="line-clamp-2 break-words">
                     {submittedQuery || query.productQuery}
                   </span>
+                  {retry.searchQuery ? (
+                    <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">
+                      Based on your Improve picks feedback.
+                    </span>
+                  ) : null}
                 </FlowStageSummary>
               ) : (
                 <form onSubmit={handleSearchSubmit}>
@@ -589,8 +593,10 @@ function OpenLayout(props) {
                   onSelectProduct={handleSelectProduct}
                   onRetryAdviceRequest={retry.requestAdvice}
                   onRetryFeedbackChange={retry.setFeedback}
+                  onRedoBalanced={actions.redoCurrentSearchBalanced}
                   onFailureRetry={actions.retryFailedSearch}
                   previousResults={results.previous}
+                  rankingPreference={results.rankingPreference}
                   selectionState={results.selectionState}
                   followUpNotes={query.followUpNotes}
                   retryCount={retry.count}

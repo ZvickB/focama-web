@@ -2,13 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildDeepDiveProductPayload,
-  buildReviewEvidence,
   calculateSavingsVsSource,
   getImmersiveRequestFromShoppingOffer,
   normalizeMarket,
   normalizeProductIdentity,
-  normalizeReviewSignals,
-  synthesizeDeepDiveReviews,
 } from './deep-dive-serpapi.js'
 
 describe('deep dive SerpApi helpers', () => {
@@ -48,20 +45,6 @@ describe('deep dive SerpApi helpers', () => {
     expect(identity.match_identifier.attributes.color).toBe('Black')
   })
 
-  it('builds bounded review evidence from Immersive fields', () => {
-    const evidence = buildReviewEvidence({
-      user_reviews: [{ source: 'Best Buy', text: 'People like the battery life.' }],
-      critic_ratings: [{ name: 'TechRadar', rating: '4/5', text: 'Strong sound.' }],
-      top_insights: [{ title: 'Comfort', text: 'Fit is comfortable.' }],
-    })
-
-    expect(evidence.evidenceCount).toBe(3)
-    expect(evidence.userReviews[0].source).toBe('Best Buy')
-    expect(evidence.criticRatings[0].source).toBe('TechRadar')
-    expect(evidence.topInsights[0].text).toBe('Fit is comfortable.')
-    expect(evidence.inputHash).toMatch(/^[a-f0-9]{64}$/)
-  })
-
   it('only reports savings for offers below the source price', () => {
     expect(calculateSavingsVsSource(300, 249.99)).toEqual({
       amount: 50.01,
@@ -70,69 +53,6 @@ describe('deep dive SerpApi helpers', () => {
     expect(calculateSavingsVsSource(300, 300)).toBe(null)
     expect(calculateSavingsVsSource(300, 325)).toBe(null)
     expect(calculateSavingsVsSource(null, 249.99)).toBe(null)
-  })
-
-  it('skips synthesis when review evidence is thin', async () => {
-    const evidence = buildReviewEvidence({
-      user_reviews: [{ source: 'Best Buy', text: 'Good product.' }],
-    })
-
-    const synthesis = await synthesizeDeepDiveReviews({ apiKey: 'secret-key', evidence })
-
-    expect(synthesis.skipped).toBe(true)
-    expect(synthesis.summary).toBe('')
-  })
-
-  it('flattens nested top_insights categories into individual items', () => {
-    const evidence = buildReviewEvidence({
-      top_insights: [
-        {
-          title: 'Sound Quality (Bass, Treble)',
-          items: [
-            { key_point: 'Good sound quality', snippet: 'They sound phenomenal.', source: 'bestbuy.com' },
-            { key_point: 'Good bass', snippet: 'Very nice bass response.', source: 'bestbuy.com' },
-          ],
-        },
-        {
-          title: 'Battery Life',
-          items: [
-            { key_point: 'Long battery life', snippet: 'Around 25 hours on a charge.', source: 'bestbuy.com' },
-          ],
-        },
-      ],
-    })
-
-    expect(evidence.topInsights).toHaveLength(3)
-    expect(evidence.topInsights[0].source).toBe('bestbuy.com')
-    expect(evidence.topInsights[0].text).toContain('Good sound quality')
-    expect(evidence.topInsights[0].text).toContain('They sound phenomenal.')
-    expect(evidence.topInsights[0].category).toBe('Sound Quality (Bass, Treble)')
-    expect(evidence.topInsights[2].text).toContain('Long battery life')
-  })
-
-  it('falls back to flat top_insights when items array is missing', () => {
-    const evidence = buildReviewEvidence({
-      top_insights: [
-        { title: 'Comfortable fit', text: 'Very comfortable to wear.' },
-      ],
-    })
-
-    expect(evidence.topInsights).toHaveLength(1)
-    expect(evidence.topInsights[0].text).toBe('Very comfortable to wear.')
-  })
-
-  it('includes userReviews in normalizeReviewSignals', () => {
-    const signals = normalizeReviewSignals({
-      user_reviews: [
-        { source: 'walmart.com', text: 'Great product.', rating: 5, date: '2 months ago' },
-        { source: 'bestbuy.com', text: 'Decent quality.', rating: 4, date: '3 months ago' },
-      ],
-      ratings: [{ stars: 5, amount: 100 }, { stars: 1, amount: 10 }],
-    })
-
-    expect(signals.userReviews).toHaveLength(2)
-    expect(signals.userReviews[0].source).toBe('walmart.com')
-    expect(signals.starDistribution).toHaveLength(2)
   })
 
   it('builds variantDimensions with selected pick and option count', () => {

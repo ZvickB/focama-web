@@ -39,7 +39,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Do not let future multi-retailer flexibility make today's Amazon-first UX vague. If more retailers become active, revisit frontend labels based on the real source mix.
 - `search_history` is internal telemetry/cache visibility, not a user-facing saved-history feature.
 - User-facing search history lives at `/history`; finalized searches auto-save locally when signed out and to Supabase `saved_searches` when signed in. Entries can be expanded, deleted, cleared, or re-run.
-- Frontend auth shell is implemented: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, header sign-in/sign-out UI, and Supabase forgot-password email plus recovery-callback password update. Search remains ungated. Signed-out history uses localStorage; signed-in history uses Supabase `saved_searches`; local entries migrate into the account on login. Live QA of recovery email/link behavior and auth/RLS/history persistence is still pending.
+- Frontend auth shell is implemented: `AuthProvider`, `useAuth`, lazy Supabase browser client, `AuthModal`, header sign-in/sign-out UI, Google/Apple OAuth buttons, account Preferences UI for shortlist ranking priority, and Supabase forgot-password email plus recovery-callback password update. Search remains ungated. Signed-out history uses localStorage; signed-in history uses Supabase `saved_searches`; local entries migrate into the account on login. Live QA of OAuth provider setup/return behavior, recovery email/link behavior, `user_preferences` RLS, and auth/RLS/history persistence is still pending.
 - Price Watch Phase 3 is implemented behind `PRICE_WATCH_EMAILS_ENABLED=true`. Signed-in users can manage up to 5 watches at `/watches`; protected `POST /api/internal/check-price-watches` runs on the existing Render web service and should be called by a free external scheduler with `Authorization: Bearer $PRICE_WATCH_INTERNAL_TOKEN`. The job re-prices active watched ASINs with Rainforest, updates checked/last-seen fields, logs would-notify rows when email is disabled, and sends Resend alerts plus baseline reset after successful live sends when enabled.
 
 ## Current guided flow
@@ -51,7 +51,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Enrichment reads: `GET /api/search/enrichment-stream` first, with `GET /api/search/enrichment` as polling fallback.
 - Query-quality polling: `GET /api/search/query-quality`.
 - Preview product detail hydration: `GET /api/search/product-details`.
-- User-triggered finalized-product Deep Dive: `POST /api/product/deep-dive` when `DEEP_DIVE_ENABLED=true` and the user is signed in.
+- User-triggered finalized-product price comparison ("Compare prices"; internally the Deep Dive path): `POST /api/product/deep-dive` when `DEEP_DIVE_ENABLED=true` and the user is signed in.
 - Retry advice: `POST /api/search/retry-advice`.
 - Feedback: `POST /api/feedback`.
 - Search diagnostics: `POST /api/search/diagnostics/event`, `GET /api/health`, `GET /api/diagnostics/connectivity`.
@@ -59,7 +59,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 ## Important behavior notes
 - Discovery uses Rainforest API for active Amazon discovery. Oxylabs has been archived and is not an active fallback.
 - Finalize rebuilds the candidate pool server-side from guided cache.
-- Haiku locks the shortlist first through short candidate indices and a strict Anthropic tool schema, then the backend maps indices to server-owned candidate IDs; validation and deterministic fallback/top-up remain in place. Its prompt ranks inferred product fit first, then quality confidence (rating, review count, trustScore, and recognized category brand), price/value, shortlist variety, and raw Amazon position as the final tiebreaker.
+- Haiku locks the shortlist first through short candidate indices and a strict Anthropic tool schema, then the backend maps indices to server-owned candidate IDs; validation and deterministic fallback/top-up remain in place. Balanced ranking keeps the original order: inferred product fit, quality confidence (rating, review count, trustScore, and recognized category brand), price/value, shortlist variety, then raw Amazon position. The account-ranking experiment can send `rankingPreference: balanced | price | brand | range`; backend enum validation defaults unknown/missing values to balanced, and non-balanced strategies keep fit/eligibility first while adjusting price/brand/range emphasis. Mini enrichment receives the effective preference.
 - Provider-confirmed Prime eligibility is preserved as structured `isPrime` data; clear Prime delivery/eligibility requests narrow finalize to Prime-tagged candidates when available, and the UI shows only a quiet in-house Prime marker/fact. Plain free-delivery text may show as `Free delivery` but must not be upgraded to Prime. Rainforest product-detail enrichment can preserve provider-confirmed Prime and delivery details when available.
 - Result surfaces should stay compact: source/store names belong in clickout CTAs, rating plus review count are one ratings/reviews signal, and delivery is at most one optional signal.
 - Hard-constraint follow-up notes can trigger one refreshed discovery before finalize.
@@ -67,7 +67,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Query-quality suggestions are polling-based only. No SSE or prewarm path exists.
 - Modal/detail enrichment hydrates after the first shortlist cards are shown, framing the top pick as the hero recommendation and later picks as alternatives.
 - Skipped-refinement preview products do not show AI recommendation analysis. When opened, the modal can lazily hydrate product detail bullets/description from the per-ASIN cache or Rainforest through `GET /api/search/product-details`.
-- Finalized product modals have a feature-flagged, user-triggered Deep Dive panel. The button is hidden by default and appears only after async mini writeup plus a separate `gpt-5-mini` Deep Dive eligibility pass marks that product `show` or `maybe`. Deep Dive remains account-gated, uses SerpApi Shopping -> Immersive Product only after click, validates exact product/store links deterministically, shows lower store offers only when they beat the known Amazon/source price, and keeps the existing Amazon/source CTA unchanged. Do not add automatic background price surfacing or shortlist badges for this path.
+- Finalized product modals have a feature-flagged, user-triggered "Compare prices" panel (internally still named Deep Dive: route `POST /api/product/deep-dive`, `DEEP_DIVE_*` env flags, `deepDive*` code names). As of 2026-07-08 it is price comparison only — review synthesis, critic ratings, top insights, and star distribution were removed, and the former `gpt-5-mini` eligibility pass was replaced by the deterministic prefilter alone. The button appears after async mini writeup when the prefilter marks that product `show`. The panel remains account-gated, uses SerpApi Shopping -> Immersive Product only after click, validates exact product/store links deterministically, shows lower store offers only when they beat the known Amazon/source price, returns `checkedStoreCount` and a positive "No lower price found" state when nothing beats it, and keeps the existing Amazon/source CTA unchanged. Do not add automatic background price surfacing, shortlist badges, or review content for this path.
 - Marketplace listings without a known positive price are filtered out before preview/finalize.
 - Thin discovery cache hits with fewer than 6 cached results or candidates are bypassed and refreshed from the provider.
 - `/api/search/live` and debug/cache routes are not the main user path.
@@ -90,6 +90,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Price watch dry-run job: `backend/jobs/check-price-watches.js`
 - Price watch protected endpoint handler: `backend/lib/handlers/price-watch-handler.js`
 - Price watch email renderer/sender: `backend/lib/price-watch/price-drop-email.js`
+- Ranking preference enum/store: `shared/ranking-preference.js`, `src/lib/preferences/rankingPreferenceStore.js`
 - Amazon store context: `src/contexts/AmazonStoreContext.jsx`
 - Backend route handlers: `backend/server.js`
 - Render backend entry: `backend/express-server.js`
