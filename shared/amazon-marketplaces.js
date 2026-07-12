@@ -28,9 +28,22 @@ const DOMAIN_TO_AFFILIATE_TAG = {
   'amazon.ca': 'focamai4203-20',
 }
 
-// Marketplaces enabled without an Associates tag (tester access; clickouts stay untagged
-// and earn no commission until a tag is added to DOMAIN_TO_AFFILIATE_TAG).
-const ACTIVE_UNTAGGED_AMAZON_DOMAINS = new Set(['amazon.in'])
+// Major marketplaces enabled without an Associates tag. Their search results and clickouts stay
+// local to the selected Amazon store, but URLs are deliberately untagged and earn no commission
+// until a store-specific tag is added to DOMAIN_TO_AFFILIATE_TAG. Do not add OneLink here: the
+// shopper's explicit marketplace selection should remain authoritative.
+const ACTIVE_UNTAGGED_AMAZON_DOMAINS = new Set([
+  'amazon.co.uk',
+  'amazon.de',
+  'amazon.fr',
+  'amazon.it',
+  'amazon.es',
+  'amazon.com.au',
+  'amazon.co.jp',
+  'amazon.in',
+  'amazon.com.mx',
+  'amazon.com.br',
+])
 
 const COUNTRY_TO_AMAZON_DOMAIN = Object.fromEntries(
   AMAZON_MARKETPLACES.map(({ countryCode, domain }) => [countryCode, domain]),

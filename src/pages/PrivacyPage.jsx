@@ -130,11 +130,12 @@ function PrivacyPage() {
         <section className="space-y-3">
           <h2 className={sectionHeadingClassName}>Affiliate links</h2>
           <p>
-            Focamai participates in the Amazon Associates program. Amazon product links contain an
-            affiliate tag, and Focamai may earn a commission from a qualifying purchase at no extra
-            cost to the user. Affiliate relationships do not change the current recommendation logic,
-            which selects products from the available evidence based on the search and refinement
-            input rather than commission amount.
+            Focamai participates in the Amazon Associates program. Product links for stores where
+            Focamai has an Associates tag may earn a commission from a qualifying purchase at no
+            extra cost to the user. Other supported local Amazon stores use ordinary, untagged links.
+            Affiliate relationships do not change the current recommendation logic, which selects
+            products from the available evidence based on the search and refinement input rather than
+            commission amount.
           </p>
         </section>
 
