@@ -221,7 +221,7 @@
 ## Marketplace direction
 - Focamai narrows choices before the user leaves to shop, instead of becoming a marketplace wall inside the app.
 - Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
-- Amazon-first UX is currently limited to marketplaces with valid configured Associates tracking tags (`amazon.com`, `amazon.ca`). Add new locale tracking IDs before re-enabling additional Amazon domains in the store picker or backend domain resolution.
+- Amazon-first UX supports US and Canada with configured Associates tracking tags, plus the untagged major stores UK, Germany, France, Italy, Spain, Australia, Japan, India, Mexico, and Brazil. Untagged stores use the shopper's selected local Amazon domain and plain clickout URLs, so Focamai earns no commission there. OneLink is intentionally deferred and must not override an explicit store selection. Add a locale tracking ID to `DOMAIN_TO_AFFILIATE_TAG` before claiming or earning commission for an additional store.
 - Do not force generic labels like `retailer` in user-facing UI when `Amazon` is more accurate for the current experience.
 - Do not add new Amazon/source/retailer fields or badges as incidental work. For existing shopping clickout CTAs, the chosen compromise is source-derived wording: Amazon items can say `View on Amazon`/the active Amazon domain, while future non-Amazon sources should use their own source name.
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.
