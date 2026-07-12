@@ -86,8 +86,8 @@ describe('server-helpers characterization tests', () => {
       expect(helpers.getRequestedAmazonDomain('')).toBeFalsy()
     })
 
-    it('returns empty for supported Amazon domains without configured affiliate tags', () => {
-      expect(helpers.getRequestedAmazonDomain('amazon.co.uk')).toBe('')
+    it('returns active supported Amazon domains without configured affiliate tags', () => {
+      expect(helpers.getRequestedAmazonDomain('amazon.co.uk')).toBe('amazon.co.uk')
     })
   })
 
@@ -101,9 +101,9 @@ describe('server-helpers characterization tests', () => {
       expect(result).toBe('guided_discovery:amazon.ca')
     })
 
-    it('does not append untagged marketplace domains', () => {
+    it('appends active untagged marketplace domains', () => {
       const result = helpers.getAmazonMarketplaceScope('guided_discovery', 'amazon.co.uk')
-      expect(result).toBe('guided_discovery')
+      expect(result).toBe('guided_discovery:amazon.co.uk')
     })
   })
 
@@ -118,9 +118,9 @@ describe('server-helpers characterization tests', () => {
       expect(result).toBe('amazon.ca')
     })
 
-    it('falls back to a tagged domain when country domain is untagged', () => {
+    it('uses an active untagged country domain', () => {
       const result = helpers.resolveAmazonDomain({ countryCode: 'GB' })
-      expect(result).toBe('amazon.com')
+      expect(result).toBe('amazon.co.uk')
     })
   })
 
