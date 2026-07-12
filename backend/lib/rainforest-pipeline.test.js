@@ -11,11 +11,11 @@ describe('getAmazonDomain', () => {
     vi.restoreAllMocks()
   })
 
-  it('returns active domains and falls back to amazon.com for inactive countries', () => {
+  it('returns active major marketplaces and falls back to amazon.com for inactive countries', () => {
     expect(getAmazonDomain({ countryCode: 'CA' })).toBe('amazon.ca')
     expect(getAmazonDomain({ countryCode: 'IN' })).toBe('amazon.in')
-    expect(getAmazonDomain({ countryCode: 'GB' })).toBe('amazon.com')
-    expect(getAmazonDomain({ countryCode: 'DE' })).toBe('amazon.com')
+    expect(getAmazonDomain({ countryCode: 'GB' })).toBe('amazon.co.uk')
+    expect(getAmazonDomain({ countryCode: 'DE' })).toBe('amazon.de')
     expect(getAmazonDomain({ countryCode: 'US' })).toBe('amazon.com')
     expect(getAmazonDomain({ countryCode: 'ZZ' })).toBe('amazon.com')
   })
@@ -23,11 +23,11 @@ describe('getAmazonDomain', () => {
   it('prefers an explicit active amazon domain override', () => {
     expect(getAmazonDomain({ countryCode: 'US', amazonDomain: 'amazon.ca' })).toBe('amazon.ca')
     expect(getAmazonDomain({ countryCode: 'US', amazonDomain: 'amazon.in' })).toBe('amazon.in')
-    expect(getAmazonDomain({ countryCode: 'GB', amazonDomain: 'amazon.com.au' })).toBe('amazon.com')
+    expect(getAmazonDomain({ countryCode: 'GB', amazonDomain: 'amazon.com.au' })).toBe('amazon.com.au')
   })
 
   it('ignores unsupported amazon domain overrides', () => {
-    expect(getAmazonDomain({ countryCode: 'GB', amazonDomain: 'amazon.invalid' })).toBe('amazon.com')
+    expect(getAmazonDomain({ countryCode: 'ZZ', amazonDomain: 'amazon.invalid' })).toBe('amazon.com')
   })
 
   it('formats fallback prices and adds affiliate tags using the selected amazon domain', async () => {
@@ -77,7 +77,7 @@ describe('getAmazonDomain', () => {
     )
   })
 
-  it('does not emit untagged Amazon links for unsupported marketplace domains', async () => {
+  it('keeps plain local links for major marketplaces without an affiliate tag', async () => {
     fetch.mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -106,9 +106,9 @@ describe('getAmazonDomain', () => {
       amazonDomain: 'amazon.co.uk',
     })
 
-    expect(fetch.mock.calls[0][0].searchParams.get('amazon_domain')).toBe('amazon.com')
+    expect(fetch.mock.calls[0][0].searchParams.get('amazon_domain')).toBe('amazon.co.uk')
     expect(result.error).toBeNull()
-    expect(result.artifacts.results[0].link).toBe('')
+    expect(result.artifacts.results[0].link).toBe('https://www.amazon.co.uk/dp/B001')
   })
 
   it('keeps plain untagged links for active marketplaces without an affiliate tag', async () => {
