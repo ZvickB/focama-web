@@ -1,13 +1,14 @@
-# Account-Level Priority Preference — Feature Spec (PLANNED, not implemented)
+# Account-Level Priority Preference — Feature Spec
 
-Status: **experiment branch implementation** — first built 2026-07-09 on branch
-`account-ranking-preferences` for local review. Do not treat it as merged/shipped
-until UX/auth/Supabase QA passes.
+Status: **implemented and ready for deployment** — built on branch
+`account-ranking-preferences`; Supabase migrations are applied and local end-to-end
+smoke testing passed. Auth/RLS/history persistence QA and broader brand/range
+evaluation remain before a broad rollout.
 
 ## What this is
 
 Let a signed-in user set one account-level preference for how their shortlists are
-ranked: **balanced (default) / lowest price / known brands / range of options**. When set, every
+ranked: **balanced (default) / prefer lower prices / lowest prices / known brands / range of options**. When set, every
 search re-weights the finalize ranking accordingly and the UI quietly shows that the
 preference is active. Signed-out users keep exactly today's behavior.
 
@@ -220,9 +221,8 @@ Built on branch `account-ranking-preferences`:
   Preferences or signed-out auth copy.
 - Targeted selector tests and production build pass.
 
-Still required before merge/ship:
+Remaining release QA:
 
-- Create `public.user_preferences` with RLS in Supabase.
 - Live QA auth recovery/history/preferences together.
 - Try the UI on desktop/mobile and decide whether the results hint and indicator copy
   feel too visible.
