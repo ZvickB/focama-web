@@ -77,13 +77,13 @@ describe('getAmazonDomain', () => {
     )
   })
 
-  it('keeps plain local links for major marketplaces without an affiliate tag', async () => {
+  it('uses US-tagged OneLink URLs for enabled international marketplaces', async () => {
     fetch.mockResolvedValue({
       ok: true,
       json: async () => ({
         search_results: [
           {
-            asin: 'B001',
+            asin: 'B000000001',
             title: 'Compact Travel Stroller',
             price: {
               value: 149.99,
@@ -91,7 +91,7 @@ describe('getAmazonDomain', () => {
             rating: 4.6,
             ratings_total: 321,
             image: 'https://example.com/stroller.jpg',
-            link: 'https://www.amazon.co.uk/dp/B001',
+            link: 'https://www.amazon.co.uk/dp/B000000001',
             position: 1,
           },
         ],
@@ -108,7 +108,7 @@ describe('getAmazonDomain', () => {
 
     expect(fetch.mock.calls[0][0].searchParams.get('amazon_domain')).toBe('amazon.co.uk')
     expect(result.error).toBeNull()
-    expect(result.artifacts.results[0].link).toBe('https://www.amazon.co.uk/dp/B001')
+    expect(result.artifacts.results[0].link).toBe('https://www.amazon.com/dp/B000000001?tag=focamai-20')
   })
 
   it('keeps plain untagged links for active marketplaces without an affiliate tag', async () => {
