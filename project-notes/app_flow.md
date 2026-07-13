@@ -69,8 +69,8 @@
   - rebuilds the candidate pool server-side from guided cache
   - when the query or user context clearly asks for Prime delivery/eligibility, narrows the candidate pool to provider-confirmed Prime-eligible items when any are available
   - locks the shortlist with Haiku first, using short candidate indices plus a strict Anthropic tool schema mapped back to server-owned candidate IDs; post-response validation and deterministic top-up remain as safety nets
-  - accepts a strictly normalized advisory `rankingPreference` enum (`balanced | price | brand | range`), defaulting to `balanced` for missing or unknown values
-  - balanced ranks inferred product fit before quality confidence, price/value, shortlist variety, and raw Amazon search position; price/brand/range use explicit strategy wording while keeping fit/eligibility first and Amazon position last
+  - accepts a strictly normalized advisory `rankingPreference` enum (`balanced | price | lowest_price | brand | range`), defaulting to `balanced` for missing or unknown values
+  - balanced ranks inferred product fit before quality confidence, price/value, shortlist variety, and raw Amazon search position; preferences primarily shape the selected six: price retains the strongest contextual fit then favors lower-priced credible alternatives; lowest_price uses a dedicated fit-only filter prompt, retains all returned matches, then selects the six lowest-priced matches; brand fills credible known-brand options before fitting non-brand alternatives; and range covers both price and feature/style differences while keeping fit/eligibility first and Amazon position last
   - if haiku returns a partial valid subset, tops up from deterministic fallback so the response still returns up to 6 eligible products
   - returns shortlist cards immediately
   - starts async product-detail fetch + mini enrichment in the background; enrichment receives the same ranking preference so explanations match the selection strategy, and after mini writeup is stored, a deterministic prefilter-only eligibility pass (no AI call) marks which finalized products should show the optional Compare prices button
@@ -122,8 +122,9 @@
 - `api/geo.js` returns a country code from Vercel headers.
 - The marketplace context now persists the user's marketplace choice in localStorage under `focamai_marketplace`.
 - The one-time marketplace prompt state is tracked separately in localStorage under `focamai_marketplace_asked`.
-- Only Amazon marketplaces with a configured Associates tracking tag are active commerce/store choices. As of the current code, that means `amazon.com` and `amazon.ca`; untagged marketplaces such as `amazon.co.uk` fall back to `amazon.com` instead of producing untagged Amazon Special Links.
-- Amazon result-link generation fails closed for unsupported or mismatched Amazon domains: the backend will not emit an untagged Amazon clickout URL.
+- Active store choices include separately Associates-tagged `amazon.com` and `amazon.ca`; a verified US OneLink UK path; plus direct untagged Germany, France, Italy, Spain, Netherlands, Poland, Sweden, Australia, Japan, India, Mexico, and Brazil. Canada is deliberately outside OneLink.
+- The verified UK OneLink path retains the shopper's selected local domain for discovery, prices, and UI labels. When a valid local Amazon ASIN product link is available, clickout generation uses an equivalent US `amazon.com/dp/:asin?tag=focamai-20` URL so Amazon can apply its configured Close Match local-store redirect and affiliate attribution. Missing/non-product ASIN paths safely preserve the direct selected-local URL instead. France, Germany, Italy, Netherlands, Poland, Spain, and Sweden were enrolled in Amazon OneLink but remain direct untagged paths until Amazon displays usable tracking IDs after owner-completed payment/tax setup.
+- Amazon result-link generation fails closed for unsupported or mismatched Amazon domains. Direct untagged stores and OneLink fallbacks are valid exceptions: they intentionally preserve a plain local-domain Amazon URL without a `tag=` parameter.
 - If a saved marketplace preference exists, the frontend skips geo detection on load and uses that saved value immediately.
 - If there is no saved preference, the frontend resolves the geo country code to an explicit Amazon domain, sends it on guided requests when `Auto` is selected, and saves confident detections for future loads.
 - After the first search starts, the homepage shows a lightweight one-time inline marketplace prompt inside the search card until the user chooses a store or dismisses it.
@@ -133,7 +134,8 @@
 ## Final result behavior
 - Result lists show up to 6 ranked picks.
 - Results use a ranked shortlist layout rather than a marketplace grid.
-- If a non-balanced ranking preference was applied, the results intro shows a small passive indicator such as `Prioritizing lowest price` with a current-search `redo balanced` escape hatch. Balanced/default searches show no persistent control.
+- If a non-balanced ranking preference was applied, the results intro shows a small passive indicator such as `Prioritizing lower prices` with a current-search `Show balanced picks` action. It reruns the current search using the default balanced ranking; balanced/default searches show no persistent control. Preferences distinguish `Prefer lower prices` (fit, quality, and other tradeoffs still count) from `Lowest prices` (the six lowest-priced candidates returned by the dedicated basic-fit filter).
+- During every non-balanced finalize, the waiting state names the submitted search and the saved preference being applied, so users understand why the shortlist may favor a different mix of products.
 - Balanced users may see a one-time localStorage-dismissed tip near results pointing to account Preferences; signed-out users who open it are sent to the auth modal with preference-specific copy.
 - On desktop, the ranked shortlist uses a large selected-product panel on the left and an internally scrolling row list on the right. Hovering or focusing a row updates the selected panel, and scrolling the internal list updates it to the top visible row.
 - On smaller screens, results collapse into stacked ranked pick cards.
@@ -183,7 +185,7 @@
 - Finalize remains request-specific and rebuilds from discovery cache.
 - Amazon discovery and product-detail enrichment preserve provider Prime signals, including Rainforest delivery text with Prime availability, as structured `isPrime` data through candidate pools, finalize/enrichment payloads, and final UI results.
 - Cached preview results and cached candidate pools are sanitized on read so stale marketplace entries without a known positive price do not reappear or reach finalize AI selection.
-- Cached Amazon result and candidate links are also retagged or blanked on read so older cache entries cannot leak untagged or mismatched Amazon Special Links back into the UI.
+- Cached Amazon result and candidate links are rebuilt as direct tags, verified OneLink US-tagged ASIN URLs, plain local fallbacks, or blanked on read so older cache entries cannot leak mismatched Amazon domains or invalid clickouts back into the UI.
 - Thin cached discovery snapshots are treated as refresh candidates instead of reusable evidence when they have fewer than the shortlist count of cached results or candidates.
 - Partial valid haiku output is recoverable, not final: zero picks still use rules fallback, full valid picks stay `haiku_lock`, and partial valid picks are returned as `haiku_lock_topped_up`.
 - Search cache and operational history use Supabase when configured, with local fallback in development.
@@ -221,7 +223,7 @@
 ## Marketplace direction
 - Focamai narrows choices before the user leaves to shop, instead of becoming a marketplace wall inside the app.
 - Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
-- Amazon-first UX supports US and Canada with configured Associates tracking tags, plus the untagged major stores UK, Germany, France, Italy, Spain, Australia, Japan, India, Mexico, and Brazil. Untagged stores use the shopper's selected local Amazon domain and plain clickout URLs, so Focamai earns no commission there. OneLink is intentionally deferred and must not override an explicit store selection. Add a locale tracking ID to `DOMAIN_TO_AFFILIATE_TAG` before claiming or earning commission for an additional store.
+- Amazon-first UX supports separately tagged US/Canada stores, a verified US OneLink UK path, and direct untagged Germany, France, Italy, Spain, Netherlands, Poland, Sweden, Australia, Japan, India, Mexico, and Brazil. OneLink preserves the selected UK storefront outcome through Amazon's Close Match redirect while attributing valid ASIN product clickouts to the US Store ID; Canada stays separate. Expand OneLink only after Amazon exposes a usable tracking ID for each enrolled market.
 - Do not force generic labels like `retailer` in user-facing UI when `Amazon` is more accurate for the current experience.
 - Do not add new Amazon/source/retailer fields or badges as incidental work. For existing shopping clickout CTAs, the chosen compromise is source-derived wording: Amazon items can say `View on Amazon`/the active Amazon domain, while future non-Amazon sources should use their own source name.
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.

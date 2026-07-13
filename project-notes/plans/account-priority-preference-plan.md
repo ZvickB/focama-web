@@ -228,3 +228,35 @@ Still required before merge/ship:
   feel too visible.
 - Run a few real searches in each strategy and inspect whether the ranking behavior
   feels genuinely helpful.
+
+Live evaluation was run on 2026-07-12: see
+`project-notes/plans/account-ranking-preference-live-evaluation-2026-07-12.md`.
+The current prompt-only strategies are not yet reliable enough to ship as a strong
+shortlist-composition promise: price is directionally useful but inconsistent, and
+brand/range frequently return the balanced set unchanged. Do not call the selection
+work complete until deterministic brand and shortlist-coverage signals are evaluated.
+
+The proposed next iteration is documented in
+`project-notes/plans/account-ranking-preference-v2-plan.md`.
+
+## Selection direction confirmed — 2026-07-12
+
+The preference is primarily about **which six products are selected**, not merely
+the numbered order of an otherwise identical shortlist. Display order remains
+secondary to shortlist composition.
+
+- **Lowest prices:** use only a basic fit filter for the search and stated
+  requirements, then select the six lowest-priced matching products. Do not
+  preserve a more-expensive best-overall pick.
+- **Known brands:** select credible known-brand options whenever they are available
+  and fit the request. If fewer than six exist, complete the shortlist with the
+  best fitting credible non-brand alternatives.
+- **Range of options:** select useful alternatives across both price levels and
+  product styles/features, while retaining fit and quality requirements.
+- **No forced difference:** a non-balanced strategy may return the same six picks
+  when they genuinely remain the best choices.
+
+During every active-preference finalize, the waiting state should explicitly say
+that Focamai is searching for the submitted query with that saved preference. The
+message stays readable while the surrounding loading treatment communicates ongoing
+work; do not shimmer the text itself.

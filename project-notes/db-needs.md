@@ -56,7 +56,7 @@
 
 ### `user_preferences`
 - Stores signed-in account preferences such as shortlist ranking priority.
-- Current ranking enum is `balanced | price | brand | range`.
+- Current ranking enum is `balanced | price | lowest_price | brand | range`.
 - Uses Supabase auth/RLS with one row per `user_id`.
 
 ### `price_watches`
@@ -241,7 +241,7 @@ create table if not exists public.user_preferences (
   ranking_priority text not null default 'balanced',
   updated_at timestamptz not null default timezone('utc', now()),
   constraint user_preferences_ranking_priority_check
-    check (ranking_priority in ('balanced', 'price', 'brand', 'range'))
+    check (ranking_priority in ('balanced', 'price', 'lowest_price', 'brand', 'range'))
 );
 
 alter table public.user_preferences enable row level security;
