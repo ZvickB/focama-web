@@ -70,7 +70,7 @@ Read this file first at the start of every chat.
 ## Backend guardrails
 - Guided `/api/search/finalize` has explicit abuse limits. Do not expand them casually.
 - Request body limit is 32 KB.
-- Candidate pool limit is 20.
+- Candidate pool limit is 30. This was deliberately raised so Haiku can consider more of Rainforest's typical search result set without a meaningful latency increase; do not expand it casually.
 - Priorities are capped and sanitized.
 - Follow-up notes are truncated before being sent to AI.
 - Vercel API wrappers should preserve forwarded headers so IP-based rate limiting works in production.

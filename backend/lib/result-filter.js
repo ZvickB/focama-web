@@ -462,6 +462,7 @@ function buildAiCandidate(item, index, score, matchSignals, reasonFallback) {
     id: normalized.id,
     score: Number(score.toFixed(2)),
     title: normalized.title,
+    brandName: typeof item.brand === 'string' ? item.brand.trim().slice(0, 120) : '',
     description: normalized.description,
     source: normalized.subtitle,
     price: normalized.price,

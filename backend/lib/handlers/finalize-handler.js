@@ -1,5 +1,9 @@
 import { buildInternalErrorPayload, sendJson, readJsonBody } from '../http.js'
-import { normalizeRankingPreference } from '../../../shared/ranking-preference.js'
+import {
+  RANKING_PREFERENCES,
+  isActiveRankingPreference,
+  normalizeRankingPreference,
+} from '../../../shared/ranking-preference.js'
 import {
   DEFAULT_FINALIZE_MODEL,
   haikuLockWinnersAndBadges,
@@ -23,9 +27,10 @@ import { fetchAmazonProductDetailsByAsin } from '../product-details-provider.js'
 import {
   resolveDiscoveryContext,
 } from './discovery-handler.js'
+import { resolveFinalizeRequestContext } from './finalize-context.js'
+import { sanitizeFinalizeCandidate } from './finalize-candidate.js'
+import { composePreferenceShortlist } from '../ranking-preference-policy.js'
 import {
-  CACHE_SCOPE_DISCOVERY,
-  CACHE_SCOPE_RAINFOREST,
   FINALIZE_BODY_LIMIT_BYTES,
   FINALIZE_MAX_CANDIDATES,
   FINALIZE_MAX_NOTE_LENGTH,
@@ -37,7 +42,6 @@ import {
   RATE_LIMIT_WAIT_MESSAGE,
   RECENT_FINALIZATIONS_MAX,
   recentFinalizations,
-  getAmazonMarketplaceScope,
   getRequestedAmazonDomain,
   logSearchFlowEvent,
   nowMs,
@@ -154,122 +158,6 @@ function sanitizeFinalizeDiscoveryContext(body) {
     isValid: true,
     normalizedQuery,
     requestMode: truncateText(body?.requestMode, 80) || FINALIZE_REQUEST_MODE_DEFAULT,
-  }
-}
-
-function sanitizeFinalizeCandidate(candidate, index) {
-  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
-    return {
-      error: `Candidate ${index + 1} must be an object.`,
-      isValid: false,
-    }
-  }
-
-  const id = truncateText(candidate.id, 200)
-  const title = truncateText(candidate.title, 300)
-
-  if (!id || !title) {
-    return {
-      error: `Candidate ${index + 1} must include non-empty id and title fields.`,
-      isValid: false,
-    }
-  }
-
-  const numericPrice =
-    candidate.numericPrice === null || candidate.numericPrice === undefined
-      ? null
-      : Number.isFinite(Number(candidate.numericPrice))
-        ? Number(candidate.numericPrice)
-        : null
-  const rating =
-    candidate.rating === null || candidate.rating === undefined
-      ? null
-      : Number.isFinite(Number(candidate.rating))
-        ? Number(candidate.rating)
-        : null
-  const reviewCount =
-    candidate.reviewCount === null || candidate.reviewCount === undefined
-      ? null
-      : Number.isFinite(Number(candidate.reviewCount))
-        ? Number(candidate.reviewCount)
-        : null
-  const isPrime = Boolean(
-    candidate.isPrime ||
-    candidate.is_prime ||
-    candidate.primeEligible ||
-    candidate.isPrimeEligible,
-  )
-
-  return {
-    isValid: true,
-    candidate: {
-      id,
-      score: Number.isFinite(Number(candidate.score)) ? Number(candidate.score) : 0,
-      title,
-      description: truncateText(candidate.description, 1200),
-      source: truncateText(candidate.source, 160),
-      price: truncateText(candidate.price, 80),
-      numericPrice,
-      rating,
-      reviewCount,
-      isPrime,
-      delivery: truncateText(candidate.delivery, 160),
-      tag: truncateText(candidate.tag, 120),
-      extensions: sanitizeStringList(candidate.extensions, { maxItems: 6, maxItemLength: 120 }),
-      multipleSources: Boolean(candidate.multipleSources),
-      link: truncateText(candidate.link, 1000),
-      image: truncateText(candidate.image, 1000),
-      reasons: sanitizeStringList(candidate.reasons, { maxItems: 5, maxItemLength: 240 }),
-      duplicateFamilyKey: truncateText(candidate.duplicateFamilyKey, 240),
-      matchSignals:
-        candidate.matchSignals && typeof candidate.matchSignals === 'object' && !Array.isArray(candidate.matchSignals)
-          ? {
-              titleMatches: Number.isFinite(Number(candidate.matchSignals.titleMatches))
-                ? Number(candidate.matchSignals.titleMatches)
-                : 0,
-              supportMatches: Number.isFinite(Number(candidate.matchSignals.supportMatches))
-                ? Number(candidate.matchSignals.supportMatches)
-                : 0,
-              detailMatches: Number.isFinite(Number(candidate.matchSignals.detailMatches))
-                ? Number(candidate.matchSignals.detailMatches)
-                : 0,
-              exactMatchSearchState: Boolean(candidate.matchSignals.exactMatchSearchState),
-              hasMultipleSources: Boolean(candidate.matchSignals.hasMultipleSources),
-              hasDeliveryInfo: Boolean(candidate.matchSignals.hasDeliveryInfo),
-              hasPrimeDelivery: Boolean(candidate.matchSignals.hasPrimeDelivery),
-              hasTag: Boolean(candidate.matchSignals.hasTag),
-            }
-          : {
-              titleMatches: 0,
-              supportMatches: 0,
-              detailMatches: 0,
-              exactMatchSearchState: false,
-              hasMultipleSources: false,
-              hasDeliveryInfo: false,
-              hasPrimeDelivery: false,
-              hasTag: false,
-            },
-      attributes: sanitizeStringList(candidate.attributes, { maxItems: 6, maxItemLength: 60 }),
-      trustSignals:
-        candidate.trustSignals && typeof candidate.trustSignals === 'object' && !Array.isArray(candidate.trustSignals)
-          ? {
-              hasMultipleSources: Boolean(candidate.trustSignals.hasMultipleSources),
-              hasRealDescription: Boolean(candidate.trustSignals.hasRealDescription),
-              ratingBand: truncateText(candidate.trustSignals.ratingBand, 40),
-              reviewBand: truncateText(candidate.trustSignals.reviewBand, 40),
-              score: Number.isFinite(Number(candidate.trustSignals.score))
-                ? Number(candidate.trustSignals.score)
-                : 0,
-            }
-          : {
-              hasMultipleSources: false,
-              hasRealDescription: false,
-              ratingBand: '',
-              reviewBand: '',
-              score: 0,
-            },
-      variantTokens: sanitizeStringList(candidate.variantTokens, { maxItems: 4, maxItemLength: 40 }),
-    },
   }
 }
 
@@ -468,7 +356,15 @@ export async function handleFinalizeSelection(request, response) {
     retryCount: Number.isFinite(Number(body?.retryCount)) ? Number(body.retryCount) : 0,
   })
 
-  const sanitizedDiscoveryContext = sanitizeFinalizeDiscoveryContext(body)
+  const cacheLookupStartedAt = nowMs()
+  const finalizeContext = await resolveFinalizeRequestContext({
+    body,
+    resolveCandidatePool: resolveFinalizeCandidatePool,
+    resolveDiscoveryContext,
+    sanitizeDiscoveryContext: sanitizeFinalizeDiscoveryContext,
+  })
+  const cacheLookupDuration = nowMs() - cacheLookupStartedAt
+  const sanitizedDiscoveryContext = finalizeContext.discoveryContext
 
   if (!sanitizedDiscoveryContext.isValid) {
     logSearchFlowEvent('guided_finalize_invalid', {
@@ -490,16 +386,7 @@ export async function handleFinalizeSelection(request, response) {
     return
   }
 
-  const cacheLookupStartedAt = nowMs()
-  const finalizeScopes = sanitizedDiscoveryContext.amazonDomain
-    ? [getAmazonMarketplaceScope(CACHE_SCOPE_RAINFOREST, sanitizedDiscoveryContext.amazonDomain)]
-    : [CACHE_SCOPE_DISCOVERY, CACHE_SCOPE_RAINFOREST]
-  const resolvedDiscoveryContext = await resolveDiscoveryContext(
-    sanitizedDiscoveryContext.normalizedQuery,
-    sanitizedDiscoveryContext.discoveryToken,
-    finalizeScopes,
-  )
-  const cacheLookupDuration = nowMs() - cacheLookupStartedAt
+  const resolvedDiscoveryContext = finalizeContext.resolvedDiscoveryContext
 
   if (!resolvedDiscoveryContext.isValid) {
     logSearchFlowEvent('guided_finalize_missing_discovery_context', {
@@ -521,7 +408,9 @@ export async function handleFinalizeSelection(request, response) {
     return
   }
 
-  const resolvedCandidatePool = resolveFinalizeCandidatePool(resolvedDiscoveryContext.cachedEntry)
+  const resolvedCandidatePool = finalizeContext.reason === 'invalid_candidate_pool'
+    ? finalizeContext.resolvedCandidatePool
+    : { candidatePool: finalizeContext.candidatePool, isValid: true }
 
   if (!resolvedCandidatePool.isValid) {
     logSearchFlowEvent('guided_finalize_missing_discovery_context', {
@@ -668,11 +557,15 @@ export async function handleFinalizeSelection(request, response) {
 
   try {
     const haikuStartedAt = nowMs()
+    const usesPreferencePolicy = isActiveRankingPreference(rankingPreference)
     const haikuResult = await haikuLockWinnersAndBadges({
       candidatePool: nextCandidatePool,
-      finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
+      finalResultLimit: usesPreferencePolicy
+        ? Math.min(12, nextCandidatePool.candidates.length)
+        : LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
       apiKey: getEnv('CLAUDE_API_KEY'),
-      rankingPreference,
+      rankingPreference: usesPreferencePolicy ? RANKING_PREFERENCES.BALANCED : rankingPreference,
+      ...(usesPreferencePolicy ? { allowOptionalAlternatives: true } : {}),
     })
     const haikuDuration = nowMs() - haikuStartedAt
     tokenUsageByStage.finalize = haikuResult.usage || null
@@ -681,15 +574,24 @@ export async function handleFinalizeSelection(request, response) {
       nextCandidatePool.candidates.map((c) => [String(c.id), c]),
     )
     const seenHaikuIds = new Set()
-    const haikuResults = haikuResult.lockedIds
+    const fitFrontierIds = haikuResult.lockedIds
+      .filter((id) => {
+        const normalizedId = String(id)
+        if (seenHaikuIds.has(normalizedId)) return false
+        seenHaikuIds.add(normalizedId)
+        return candidateById.has(normalizedId)
+      })
+    const composition = usesPreferencePolicy
+      ? composePreferenceShortlist({
+        candidatePool: nextCandidatePool,
+        fitFrontierIds,
+        finalResultLimit: LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
+        rankingPreference,
+      })
+      : { ids: fitFrontierIds, policy: 'balanced' }
+    const haikuResults = composition.ids
       .map((id) => {
         const normalizedId = String(id)
-
-        if (seenHaikuIds.has(normalizedId)) {
-          return null
-        }
-
-        seenHaikuIds.add(normalizedId)
         const candidate = candidateById.get(normalizedId)
         return candidate ? toFinalizeFastCard(candidate) : null
       })
@@ -709,15 +611,15 @@ export async function handleFinalizeSelection(request, response) {
     if (haikuResults.length > 0) {
       if (haikuResults.length >= targetResultCount) {
         results = haikuResults.slice(0, targetResultCount)
-        selectionStrategy = 'haiku_lock'
-        flowPath = 'haiku_lock'
+        selectionStrategy = usesPreferencePolicy ? `haiku_fit_frontier_${composition.policy}` : 'haiku_lock'
+        flowPath = usesPreferencePolicy ? 'haiku_fit_frontier_policy' : 'haiku_lock'
       } else {
         results = [
           ...haikuResults,
           ...fallbackTopUpResults.slice(0, Math.max(0, targetResultCount - haikuResults.length)),
         ]
-        selectionStrategy = 'haiku_lock_topped_up'
-        flowPath = 'haiku_lock_topped_up'
+        selectionStrategy = usesPreferencePolicy ? `haiku_fit_frontier_${composition.policy}_topped_up` : 'haiku_lock_topped_up'
+        flowPath = usesPreferencePolicy ? 'haiku_fit_frontier_policy_topped_up' : 'haiku_lock_topped_up'
       }
 
       miniEnrichmentStatus = 'running_async'

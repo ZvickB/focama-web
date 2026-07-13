@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:all": "node backend/scripts/dev-all.js",
-    "server": "node backend/server.js",
+    "server": "node backend/express-server.js",
     "server:express": "node backend/express-server.js",
     "cache:search": "node backend/scripts/save-serpapi-cache.js",
     "cache:full-response": "node backend/scripts/save-serpapi-full-response.js",

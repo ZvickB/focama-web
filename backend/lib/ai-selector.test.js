@@ -144,8 +144,73 @@ describe('ai selector', () => {
 
     const prompt = anthropicMocks.create.mock.calls[0][0].messages[0].content
     expect(prompt).toContain('favor the lowest-priced credible options')
+    expect(prompt).toContain('Keep the strongest contextual fit as the best-overall pick')
+    expect(prompt).toContain('surface lower-priced credible alternatives')
     expect(prompt).toContain('(3) lowest-priced credible value')
     expect(prompt).not.toContain('(3) price/value, (4) useful shortlist variety')
+  })
+
+  it('uses only the compact fit-filter prompt for lowest-price mode', async () => {
+    mockHaikuResponse([{ index: 1 }, { index: 2 }])
+
+    await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 2,
+      candidatePool: createCandidatePool(3),
+      rankingPreference: 'lowest_price',
+    })
+
+    const prompt = anthropicMocks.create.mock.calls[0][0].messages[0].content
+    expect(prompt).toContain('Lowest prices selected.')
+    expect(prompt).toContain(
+      'Return all candidates that match the search and stated requirements. Exclude only clear mismatches, accessories, duplicates, or products that violate a requirement.',
+    )
+    expect(prompt).not.toContain('Ranking approach - apply in this order:')
+    expect(prompt).not.toContain('quality confidence')
+    expect(prompt).not.toContain('known brands')
+  })
+
+  it('keeps every lowest-price fit match instead of stopping at the shortlist size', async () => {
+    mockHaikuResponse([{ index: 1 }, { index: 2 }, { index: 3 }])
+
+    const result = await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 2,
+      candidatePool: createCandidatePool(3),
+      rankingPreference: 'lowest_price',
+    })
+
+    expect(result.lockedIds).toEqual(['prod-1', 'prod-2', 'prod-3'])
+    expect(anthropicMocks.create.mock.calls[0][0].max_tokens).toBe(512)
+  })
+
+  it('fills known-brand picks before credible non-brand alternatives', async () => {
+    mockHaikuResponse([{ index: 1 }, { index: 2 }])
+
+    await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 2,
+      candidatePool: createCandidatePool(3),
+      rankingPreference: 'brand',
+    })
+
+    const prompt = anthropicMocks.create.mock.calls[0][0].messages[0].content
+    expect(prompt).toContain('Fill the shortlist with recognized category brands')
+    expect(prompt).toContain('best fitting credible non-brand alternatives')
+  })
+
+  it('asks range mode to vary both price and product differences', async () => {
+    mockHaikuResponse([{ index: 1 }, { index: 2 }])
+
+    await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 2,
+      candidatePool: createCandidatePool(3),
+      rankingPreference: 'range',
+    })
+
+    const prompt = anthropicMocks.create.mock.calls[0][0].messages[0].content
+    expect(prompt).toContain('including both price tiers and product formats, features, or use cases')
   })
 
   it('falls back to balanced ranking language for unknown ranking preferences', async () => {
@@ -291,6 +356,28 @@ describe('ai selector', () => {
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(requestBody.input[1].content).toContain(
       'The shopper has an account preference for lower-priced credible picks.',
+    )
+  })
+
+  it('passes lowest-price guidance into mini enrichment', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ output_text: JSON.stringify({ enriched: [] }) }),
+    })
+
+    await miniEnrichSelectedCandidates(
+      {
+        apiKey: 'test-key',
+        lockedIds: ['prod-1'],
+        candidatePool: createCandidatePool(1),
+        rankingPreference: 'lowest_price',
+      },
+      fetchMock,
+    )
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(requestBody.input[1].content).toContain(
+      'The shopper chose the lowest prices among options that fit their search.',
     )
   })
 

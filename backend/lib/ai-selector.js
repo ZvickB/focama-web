@@ -248,6 +248,7 @@ function getCandidateSummaryDescription(candidate, candidatePoolQuery) {
 function buildIndexedCandidateSummary(candidatePool) {
   return candidatePool.candidates.map((candidate, index) => ({
     index: index + 1,
+    brandName: candidate.brandName || '',
     amazonPosition: candidate.amazonPosition ?? null,
     title: candidate.title,
     description: getCandidateSummaryDescription(candidate, candidatePool.query),
@@ -345,7 +346,8 @@ function buildRankingStrategyLines(rankingPreference) {
         '4. After fit and the basic quality floor are satisfied, favor the lowest-priced credible options.',
         '   Prefer real savings for the category, not simply the cheapest item if it looks flimsy, irrelevant,',
         '   under-reviewed, or likely to disappoint the shopper.',
-        '5. Build a useful shortlist, not six copies of the same choice. Include sensible variety only after',
+        '5. Keep the strongest contextual fit as the best-overall pick when it is clearly better for the shopper.',
+        '   Use the remaining shortlist to surface lower-priced credible alternatives after',
         '   eligibility, fit, quality floor, and price credibility are satisfied.',
       ],
       summary:
@@ -360,10 +362,11 @@ function buildRankingStrategyLines(rankingPreference) {
         '   Quality confidence includes rating, review count, clear product type, normal consumer relevance,',
         '   and trustScore when available. trustScore is an internal supporting signal where higher means stronger',
         '   basic marketplace confidence; use it only as a tiebreaker, not as proof of fit.',
-        '4. Favor recognized category brands among candidates that are similarly fitting and credible.',
-        '   A recognized brand is a positive signal only when the product also fits the shopper intent.',
+        '4. Fill the shortlist with recognized category brands whenever they are credible and fit the shopper intent.',
+        '   If fewer than the requested number of credible known-brand candidates exist, fill the remaining slots',
+        '   with the best fitting credible non-brand alternatives.',
         '   Do not let brand familiarity override product fit, explicit user constraints, weak ratings, or very thin review history.',
-        '5. Consider price and useful shortlist variety after fit, quality confidence, and brand relevance.',
+        '5. Consider price and useful shortlist variety after fit, quality confidence, and brand coverage.',
         '   Prefer reasonable value for the category and avoid six copies of the same choice.',
       ],
       summary:
@@ -380,7 +383,7 @@ function buildRankingStrategyLines(rankingPreference) {
         '   trustScore is an internal supporting signal where higher means stronger basic marketplace confidence;',
         '   use it only as a tiebreaker, not as proof of fit.',
         '4. Keep the strongest overall fit as pick #1. For picks #2-6, deliberately cover useful differences',
-        '   where quality and fit are comparable, such as price tiers, formats, feature tradeoffs, or use cases.',
+        '   where quality and fit are comparable, including both price tiers and product formats, features, or use cases.',
         '5. Consider price and value within that range. Prefer reasonable value for the category,',
         '   not simply the cheapest or most expensive item.',
       ],
@@ -415,6 +418,10 @@ function buildMiniPreferenceGuidance(rankingPreference) {
     return 'The shopper has an account preference for lower-priced credible picks. Explain value plainly, and call out any quality or review-history tradeoff honestly.'
   }
 
+  if (preference === RANKING_PREFERENCES.LOWEST_PRICE) {
+    return 'The shopper chose the lowest prices among options that fit their search. State the price advantage plainly and call out any meaningful quality, feature, or review-history tradeoff honestly.'
+  }
+
   if (preference === RANKING_PREFERENCES.BRAND) {
     return 'The shopper has an account preference for known brands. Mention brand confidence only when it is relevant, and keep caveats honest if a familiar brand has tradeoffs.'
   }
@@ -426,8 +433,31 @@ function buildMiniPreferenceGuidance(rankingPreference) {
   return ''
 }
 
-function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit, rankingPreference = RANKING_PREFERENCES.BALANCED }) {
+function buildNanoLockAndBadgesPrompt({
+  candidatePool,
+  finalResultLimit,
+  rankingPreference = RANKING_PREFERENCES.BALANCED,
+  allowOptionalAlternatives = false,
+}) {
   const desiredCount = Math.min(finalResultLimit, candidatePool.candidates.length)
+  const preference = normalizeRankingPreference(rankingPreference)
+
+  if (preference === RANKING_PREFERENCES.LOWEST_PRICE) {
+    return [
+      'Lowest prices selected.',
+      '',
+      'Return all candidates that match the search and stated requirements. Exclude only clear mismatches, accessories, duplicates, or products that violate a requirement.',
+      '',
+      'Reference matching candidates only by the provided index numbers. Mark every returned candidate with role "core" and confidence "high".',
+      '',
+      `Product query: ${candidatePool.query}`,
+      `User context: ${candidatePool.details || 'None provided.'}`,
+      '',
+      'Candidates:',
+      JSON.stringify(buildIndexedCandidateSummary(candidatePool)),
+    ].join('\n')
+  }
+
   const rankingStrategy = buildRankingStrategyLines(rankingPreference)
 
   return [
@@ -456,7 +486,9 @@ function buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit, ranking
     '7. Avoid near-duplicate results. Do not pick multiple sizes/colors/sellers of the same product unless that variety is genuinely useful. Use duplicateFamilyKey, title similarity, source, and attributes to spot duplicates.',
     '8. Build the best set, not just the top individual scores. Add diversity across use case, price tier, or style only after eligibility, relevance, and quality are satisfied.',
     rankingStrategy.summary,
-    `Return exactly ${desiredCount} picks from the candidates below.`,
+    allowOptionalAlternatives
+      ? `Return exactly 6 strongest core picks first with role "core" and confidence "high". You may then add up to ${Math.max(0, desiredCount - 6)} alternatives with role "alternative" only when they are genuinely credible, fitting substitutes; every alternative must also have confidence "high". Do not pad alternatives with weaker, wrong-type, or merely cheap products.`
+      : `Return exactly ${desiredCount} picks from the candidates below.`,
     'Reference candidates only by the provided index numbers. Preserve your chosen order from best overall fit to weakest acceptable fit.',
     '',
     `Product query: ${candidatePool.query}`,
@@ -483,8 +515,10 @@ function buildHaikuShortlistTool(candidateCount) {
             type: 'object',
             properties: {
               index: { type: 'integer', enum: validIndices },
+              role: { type: 'string', enum: ['core', 'alternative'] },
+              confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
             },
-            required: ['index'],
+            required: ['index', 'role', 'confidence'],
             additionalProperties: false,
           },
         },
@@ -553,6 +587,7 @@ export async function haikuLockWinnersAndBadges(
     finalResultLimit,
     apiKey,
     rankingPreference = RANKING_PREFERENCES.BALANCED,
+    allowOptionalAlternatives = false,
   },
 ) {
   if (!apiKey) {
@@ -566,13 +601,19 @@ export async function haikuLockWinnersAndBadges(
   }
 
   const desiredCount = Math.min(finalResultLimit, candidates.length)
-  const prompt = buildNanoLockAndBadgesPrompt({ candidatePool, finalResultLimit, rankingPreference })
+  const preference = normalizeRankingPreference(rankingPreference)
+  const prompt = buildNanoLockAndBadgesPrompt({
+    candidatePool,
+    finalResultLimit,
+    rankingPreference,
+    allowOptionalAlternatives,
+  })
   const shortlistTool = buildHaikuShortlistTool(candidates.length)
 
   const anthropic = new Anthropic({ apiKey })
   const message = await anthropic.messages.create({
     model: DEFAULT_HAIKU_MODEL,
-    max_tokens: 256,
+    max_tokens: preference === RANKING_PREFERENCES.LOWEST_PRICE ? 512 : 256,
     temperature: 0,
     system:
       'You are a careful shopping ranker. Follow user constraints exactly and respond only through the submit_shortlist tool.',
@@ -587,6 +628,8 @@ export async function haikuLockWinnersAndBadges(
   const picks = Array.isArray(toolUseBlock?.input?.picks) ? toolUseBlock.input.picks : []
   const seen = new Set()
   const lockedIds = []
+  const coreIds = []
+  const alternativeIds = []
   const rejectedIndices = []
 
   console.log('[haiku-lock] tool picks count:', picks.length, 'desired:', desiredCount)
@@ -601,9 +644,20 @@ export async function haikuLockWinnersAndBadges(
       rejectedIndices.push({ index, reason: 'duplicate' })
       continue
     }
-    lockedIds.push(String(candidates[index - 1].id))
+    const id = String(candidates[index - 1].id)
+    if (pick?.role === 'alternative') {
+      if (pick?.confidence !== 'high') {
+        rejectedIndices.push({ index, reason: 'alternative_not_high_confidence' })
+        continue
+      }
+      lockedIds.push(id)
+      alternativeIds.push(id)
+    } else {
+      lockedIds.push(id)
+      coreIds.push(id)
+    }
     seen.add(index)
-    if (lockedIds.length >= desiredCount) break
+    if (preference !== RANKING_PREFERENCES.LOWEST_PRICE && lockedIds.length >= desiredCount) break
   }
 
   if (rejectedIndices.length > 0) {
@@ -614,6 +668,8 @@ export async function haikuLockWinnersAndBadges(
   return {
     model: DEFAULT_HAIKU_MODEL,
     lockedIds,
+    coreIds,
+    alternativeIds,
     usage: {
       inputTokens: message.usage?.input_tokens ?? 0,
       outputTokens: message.usage?.output_tokens ?? 0,
