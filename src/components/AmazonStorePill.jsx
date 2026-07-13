@@ -1,9 +1,13 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { ChevronDown, Globe2 } from 'lucide-react'
 
 import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
-import { ACTIVE_AMAZON_MARKETPLACES } from '../../shared/amazon-marketplaces.js'
+import {
+  ACTIVE_AMAZON_MARKETPLACES,
+  getAmazonDomainFromCountryCode,
+  normalizeActiveAmazonDomain,
+} from '../../shared/amazon-marketplaces.js'
 
 // variant='header' — smaller, subtler trigger; used in the site header
 // variant='default' — standard full-size pill (fallback)
@@ -16,8 +20,17 @@ export function AmazonStorePill({ variant = 'default' }) {
   } = useAmazonStore()
   const [isOpen, setIsOpen] = useState(false)
   const [isMoreRegionsOpen, setIsMoreRegionsOpen] = useState(false)
+  const [canScrollDown, setCanScrollDown] = useState(false)
   const containerRef = useRef(null)
+  const scrollAreaRef = useRef(null)
+  const moreRegionsButtonRef = useRef(null)
   const popoverId = useId()
+
+  const updateScrollCue = useCallback(() => {
+    const el = scrollAreaRef.current
+    if (!el) return
+    setCanScrollDown(el.scrollTop + el.clientHeight < el.scrollHeight - 1)
+  }, [])
 
   useEffect(() => {
     function handleOpenRequest() {
@@ -38,6 +51,16 @@ export function AmazonStorePill({ variant = 'default' }) {
     return () => document.removeEventListener('pointerdown', handleOutsideClick)
   }, [isOpen])
 
+  useEffect(() => {
+    if (isOpen) updateScrollCue()
+  }, [isOpen, updateScrollCue])
+
+  useEffect(() => {
+    if (!isMoreRegionsOpen) return
+    moreRegionsButtonRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+    updateScrollCue()
+  }, [isMoreRegionsOpen, updateScrollCue])
+
   const isAuto = selectedAmazonDomain === AMAZON_MARKETPLACE_AUTO
   const selectedMarketplace = ACTIVE_AMAZON_MARKETPLACES.find((m) => m.domain === selectedAmazonDomain)
 
@@ -51,7 +74,15 @@ export function AmazonStorePill({ variant = 'default' }) {
     setIsOpen(false)
   }
 
+  // Promote the shopper's detected marketplace into the primary group so their
+  // own store never hides behind "More regions".
+  const detectedAmazonDomain = detectedCountryCode
+    ? normalizeActiveAmazonDomain(getAmazonDomainFromCountryCode(detectedCountryCode))
+    : ''
   const primaryMarketplaceDomains = ['amazon.com', 'amazon.ca', 'amazon.co.uk']
+  if (detectedAmazonDomain && !primaryMarketplaceDomains.includes(detectedAmazonDomain)) {
+    primaryMarketplaceDomains.push(detectedAmazonDomain)
+  }
   const primaryMarketplaces = primaryMarketplaceDomains
     .map((domain) => ACTIVE_AMAZON_MARKETPLACES.find((marketplace) => marketplace.domain === domain))
     .filter(Boolean)
@@ -131,7 +162,11 @@ export function AmazonStorePill({ variant = 'default' }) {
           className="absolute right-0 top-full z-50 mt-1.5 w-64 max-w-[calc(100vw-2rem)] rounded-[20px] border border-stone-200 bg-white py-1.5 shadow-[0_8px_32px_-8px_rgba(15,23,42,0.18)]"
         >
           <div className="relative">
-          <div className="max-h-72 overflow-y-auto">
+          <div
+            ref={scrollAreaRef}
+            onScroll={updateScrollCue}
+            className="max-h-[min(24rem,60vh)] overflow-y-auto"
+          >
             <button
               type="button"
               onClick={() => handleSelect(AMAZON_MARKETPLACE_AUTO)}
@@ -159,6 +194,7 @@ export function AmazonStorePill({ variant = 'default' }) {
               <>
                 <div className="my-1 border-t border-stone-100" />
                 <button
+                  ref={moreRegionsButtonRef}
                   type="button"
                   onClick={() => setIsMoreRegionsOpen((open) => !open)}
                   aria-expanded={isMoreRegionsOpen}
@@ -176,7 +212,7 @@ export function AmazonStorePill({ variant = 'default' }) {
               </>
             ) : null}
           </div>
-          {isMoreRegionsOpen ? (
+          {canScrollDown ? (
             <div
               aria-hidden="true"
               className="pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-[20px] bg-gradient-to-t from-white to-transparent"
