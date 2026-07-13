@@ -569,14 +569,26 @@ function OpenLayout(props) {
           ) : null}
           {showLoadingResults ? (
             <div ref={resultsViewportRef} className="max-h-[360px] scroll-mt-28 overflow-hidden">
-              <ResultsSectionFallback showFinalizeStatus={status.isFinalizing} />
+              <ResultsSectionFallback
+                rankingPreference={results.rankingPreference}
+                showFinalizeStatus={status.isFinalizing}
+                submittedQuery={submittedQuery}
+              />
             </div>
           ) : shouldLoadResultsSection ? (
             <div
               ref={resultsViewportRef}
               className="scroll-mt-28"
             >
-              <Suspense fallback={<ResultsSectionFallback showFinalizeStatus={status.isFinalizing} />}>
+              <Suspense
+                fallback={(
+                  <ResultsSectionFallback
+                    rankingPreference={results.rankingPreference}
+                    showFinalizeStatus={status.isFinalizing}
+                    submittedQuery={submittedQuery}
+                  />
+                )}
+              >
                 <ResultsSection
                   displayedResults={displayedResults}
                   diagnostics={diagnostics}

@@ -1,6 +1,7 @@
 export const RANKING_PREFERENCES = Object.freeze({
   BALANCED: 'balanced',
   PRICE: 'price',
+  LOWEST_PRICE: 'lowest_price',
   BRAND: 'brand',
   RANGE: 'range',
 })
@@ -9,13 +10,15 @@ export const RANKING_PREFERENCE_VALUES = Object.freeze(Object.values(RANKING_PRE
 
 export const RANKING_PREFERENCE_LABELS = Object.freeze({
   [RANKING_PREFERENCES.BALANCED]: 'Balanced',
-  [RANKING_PREFERENCES.PRICE]: 'Lowest price',
+  [RANKING_PREFERENCES.PRICE]: 'Prefer lower prices',
+  [RANKING_PREFERENCES.LOWEST_PRICE]: 'Lowest prices',
   [RANKING_PREFERENCES.BRAND]: 'Known brands',
   [RANKING_PREFERENCES.RANGE]: 'Range of options',
 })
 
 export const RANKING_PREFERENCE_ACTIVE_LABELS = Object.freeze({
-  [RANKING_PREFERENCES.PRICE]: 'Prioritizing lowest price',
+  [RANKING_PREFERENCES.PRICE]: 'Prioritizing lower prices',
+  [RANKING_PREFERENCES.LOWEST_PRICE]: 'Prioritizing lowest prices',
   [RANKING_PREFERENCES.BRAND]: 'Prioritizing known brands',
   [RANKING_PREFERENCES.RANGE]: 'Showing a wider range',
 })

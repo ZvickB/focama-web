@@ -2016,7 +2016,9 @@ export function useGuidedSearch() {
       previous: previousResults,
       selectedProduct: selectedProductForDisplay,
       selectionState,
-      rankingPreference: selectionState?.rankingPreference || effectiveRankingPreference,
+      rankingPreference: isFinalizing
+        ? effectiveRankingPreference
+        : selectionState?.rankingPreference || effectiveRankingPreference,
       setSelectedProduct: setSelectedProductState,
       showFinalBadges: showFinalResultBadges,
       showPreview: showPreviewResults,

@@ -329,10 +329,19 @@ export function FlowProgress({ hasDiscoveryResults, hasFinalResults, hasStartedS
 }
 
 
-export function ResultsSectionFallback({ showFinalizeStatus = false }) {
+export function ResultsSectionFallback({
+  rankingPreference = 'balanced',
+  showFinalizeStatus = false,
+  submittedQuery = '',
+}) {
   return (
     <div className="space-y-4">
-      {showFinalizeStatus ? <FinalizeLoadingState /> : null}
+      {showFinalizeStatus ? (
+        <FinalizeLoadingState
+          rankingPreference={rankingPreference}
+          submittedQuery={submittedQuery}
+        />
+      ) : null}
       <div className="mobile-landscape-results-grid grid grid-cols-1 gap-4">
         {RESULT_CARD_SLOTS.map((index) => (
           <ResultSkeleton key={index} className="opacity-95" />

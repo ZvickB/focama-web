@@ -183,7 +183,11 @@ const RANKING_PREFERENCE_OPTIONS = [
   },
   {
     value: RANKING_PREFERENCES.PRICE,
-    description: 'Favor lower-priced credible picks.',
+    description: 'Still weighs fit, quality, and other tradeoffs.',
+  },
+  {
+    value: RANKING_PREFERENCES.LOWEST_PRICE,
+    description: 'Starts with the lowest prices among options that fit your search.',
   },
   {
     value: RANKING_PREFERENCES.BRAND,
@@ -210,6 +214,7 @@ function PreferenceChoiceList({
           <button
             key={option.value}
             type="button"
+            aria-pressed={isSelected}
             disabled={disabled}
             onClick={() => onChange(option.value)}
             className={`flex w-full items-start gap-3 rounded-2xl border px-3.5 py-3 text-left transition ${
@@ -231,7 +236,7 @@ function PreferenceChoiceList({
               <span className="block text-sm font-semibold">
                 {RANKING_PREFERENCE_LABELS[option.value]}
               </span>
-              <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+              <span className="mt-0.5 block text-xs italic leading-5 text-slate-500">
                 {option.description}
               </span>
             </span>
@@ -249,6 +254,7 @@ function PreferencesModal({
   onClose,
   open,
   rankingPreference,
+  saveStatus = '',
 }) {
   if (!open) return null
 
@@ -291,6 +297,10 @@ function PreferencesModal({
             rankingPreference={rankingPreference}
           />
         </div>
+
+        <p aria-live="polite" className="mt-4 text-sm text-slate-500" role="status">
+          {isSaving ? 'Saving preference…' : saveStatus || 'Changes save automatically.'}
+        </p>
 
         {errorMessage ? (
           <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
@@ -413,6 +423,7 @@ function SiteLayout() {
   const [authContextualLine, setAuthContextualLine] = useState('')
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false)
   const [isSavingPreference, setIsSavingPreference] = useState(false)
+  const [preferenceSaveStatus, setPreferenceSaveStatus] = useState('')
   const [mobileMenuOpenPath, setMobileMenuOpenPath] = useState(null)
   const location = useLocation()
   const isMobileMenuOpen = mobileMenuOpenPath === location.pathname
@@ -477,13 +488,18 @@ function SiteLayout() {
       return
     }
 
+    setPreferenceSaveStatus('')
     setIsPreferencesOpen(true)
   }
 
   async function handlePreferenceChange(nextPreference) {
     setIsSavingPreference(true)
-    await setRankingPreference(nextPreference)
+    setPreferenceSaveStatus('')
+    const { error } = await setRankingPreference(nextPreference)
     setIsSavingPreference(false)
+    if (!error) {
+      setPreferenceSaveStatus('Saved to your account.')
+    }
   }
 
   useEffect(() => {
@@ -766,8 +782,12 @@ function SiteLayout() {
         isSaving={isSavingPreference || rankingPreferenceLoading}
         open={isPreferencesOpen}
         rankingPreference={rankingPreference}
+        saveStatus={preferenceSaveStatus}
         onChange={handlePreferenceChange}
-        onClose={() => setIsPreferencesOpen(false)}
+        onClose={() => {
+          setIsPreferencesOpen(false)
+          setPreferenceSaveStatus('')
+        }}
       />
       <AuthModal
         contextualLine={authContextualLine}

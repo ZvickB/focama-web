@@ -247,7 +247,7 @@ export function ResultsSection({
                 onClick={onRedoBalanced}
                 className="rounded-full px-1 text-primary/70 underline underline-offset-2 transition hover:text-primary"
               >
-                redo balanced
+                Show balanced picks
               </button>
             </div>
           ) : null}
@@ -405,7 +405,11 @@ export function ResultsSection({
       ) : null}
 
       {isFinalizing && hasDisplayedResults && !hasFinalResults ? (
-        <FinalizeLoadingState compact />
+        <FinalizeLoadingState
+          compact
+          rankingPreference={normalizedRankingPreference}
+          submittedQuery={submittedQuery}
+        />
       ) : null}
 
       {hasDisplayedResults ? (
