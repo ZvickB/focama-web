@@ -7,7 +7,7 @@
 ## Current app structure
 - The site uses React Router with a shared shell.
 - Current public pages are Home, Search History, Price Watches, Why Focamai, Contact, Privacy, and Affiliate Disclosure.
-- The shared header now has an optional auth entry point. When logged out, users see `Sign in`; when logged in, the header shows the account email/initial and a sign-out action.
+- The shared header now has an optional auth entry point. When logged out, users see `Sign in`; when logged in, the header shows the account email/initial plus account actions for Preferences and sign out.
 - The homepage is the main product experience and uses the `open` layout.
 - Public routes now set page-level SEO metadata in the client: title, description, canonical URL, Open Graph, Twitter tags, and `noindex` on the 404 page.
 - Static crawl assets now include `robots.txt`, `sitemap.xml`, and `site.webmanifest`.
@@ -37,7 +37,7 @@
 - After final picks appear, the refinement panel collapses into a compact summary above the ranked results.
 - After final picks appear, the completed search is saved to device-local history in localStorage. History entries dedupe by normalized query plus follow-up notes, so rerunning the same search refreshes the saved entry instead of adding a duplicate.
 - `/history` shows completed searches saved on the current device, newest first. Each entry can expand to show the saved six picks, be deleted, clear all history, or re-run the saved query with follow-up notes prefilled.
-- Auth UI is present and does not gate search. Email/password and Google sign-in are wired through the Supabase browser client when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are configured; otherwise the modal shows setup copy. Email/password sign-in includes a forgot-password email flow, and Supabase's `PASSWORD_RECOVERY` callback opens a confirm-and-save new-password state in the auth modal.
+- Auth UI is present and does not gate search. Email/password plus Google and Apple sign-in are wired through the Supabase browser client when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are configured; otherwise the modal shows setup copy. Email/password sign-in includes a forgot-password email flow, and Supabase's `PASSWORD_RECOVERY` callback opens a confirm-and-save new-password state in the auth modal. Signed-in users can save a shortlist ranking preference in account Preferences.
 - When signed out, user-facing search history uses localStorage. When signed in, the active history store switches to Supabase `saved_searches`; local entries are migrated into the account on login and then cleared locally after successful migration.
 - `/watches` is the signed-in Price Watch management page. Users can watch up to 5 finalized Amazon products, edit the drop percentage and optional target price, pause/resume, and remove watches. Email alerts can run from the daily job only when `PRICE_WATCH_EMAILS_ENABLED=true`.
 - `Start a new search` clears the guided state and returns to a fresh search box.
@@ -69,24 +69,25 @@
   - rebuilds the candidate pool server-side from guided cache
   - when the query or user context clearly asks for Prime delivery/eligibility, narrows the candidate pool to provider-confirmed Prime-eligible items when any are available
   - locks the shortlist with Haiku first, using short candidate indices plus a strict Anthropic tool schema mapped back to server-owned candidate IDs; post-response validation and deterministic top-up remain as safety nets
-  - ranks inferred product fit before quality confidence, price/value, shortlist variety, and raw Amazon search position
+  - accepts a strictly normalized advisory `rankingPreference` enum (`balanced | price | lowest_price | brand | range`), defaulting to `balanced` for missing or unknown values
+  - balanced ranks inferred product fit before quality confidence, price/value, shortlist variety, and raw Amazon search position; preferences primarily shape the selected six: price retains the strongest contextual fit then favors lower-priced credible alternatives; lowest_price uses a dedicated fit-only filter prompt, retains all returned matches, then selects the six lowest-priced matches; brand fills credible known-brand options before fitting non-brand alternatives; and range covers both price and feature/style differences while keeping fit/eligibility first and Amazon position last
   - if haiku returns a partial valid subset, tops up from deterministic fallback so the response still returns up to 6 eligible products
   - returns shortlist cards immediately
-  - starts async product-detail fetch + mini enrichment in the background; after mini writeup is stored, a separate `gpt-5-mini` Deep Dive eligibility pass may mark which finalized products should show the optional Deep Dive button
+  - starts async product-detail fetch + mini enrichment in the background; enrichment receives the same ranking preference so explanations match the selection strategy, and after mini writeup is stored, a deterministic prefilter-only eligibility pass (no AI call) marks which finalized products should show the optional Compare prices button
   - stores the finalized selected candidate IDs back into the token-scoped session snapshot so later user-triggered detail actions can validate the clicked product server-side
 - `POST /api/product/deep-dive`
   - feature-flagged behind `DEEP_DIVE_ENABLED=true`
   - requires a signed-in Supabase bearer token; search itself remains ungated
   - treats accounts with subscriber-style Supabase auth metadata (`subscriber`, `subscribed`, `is_subscriber`, or `deep_dive_unlimited`) as unlimited
   - also supports temporary unlimited tester access through `DEEP_DIVE_SUBSCRIBER_EMAILS` / `DEEP_DIVE_SUBSCRIBER_USER_IDS`
-  - runs only after the user taps `Deep dive` inside a finalized product modal
+  - runs only after the user taps `Compare prices at other stores` inside a finalized product modal (user-facing name is "Compare prices"; internal route/env/code naming keeps Deep Dive)
   - validates `query`, `discoveryToken`, and `candidateId` against the server-side finalized search snapshot
   - uses SerpApi Google Shopping to find a unique product group, then SerpApi Immersive Product with `more_stores=true`
-  - refreshes stale Immersive cache before showing store offers; if the refresh fails, stale Immersive data may still provide review signals but not prices
+  - refreshes stale Immersive cache before showing store offers; if the refresh fails, the endpoint returns an honest `limited` state (`price_data_stale`) instead of stale prices
   - caches Immersive responses when they contain review signals or store offers; truly empty Immersive responses are not cached, and old product-group cache entries without Shopping review-count metadata are refreshed so the review-count tiebreaker can run
   - shows lower store offers only after deterministic exact-product/variant proof, currency checks, positive price checks, direct retailer URL validation, and comparison against the known Amazon/source price; color is optional supporting proof, not a hard rejection reason
   - the default Canadian direct-retailer allowlist includes major trusted sources such as Best Buy, Walmart, Staples, London Drugs, Visions, Costco, Canadian Tire, Home Depot, Amazon, Newegg.ca, and Camera Canada
-  - can run Haiku review synthesis only from real Immersive user review, critic rating, and top-insight data; thin data returns a limited state instead of padded claims
+  - returns price data only (offers plus `checkedStoreCount`); review synthesis and review signals were removed 2026-07-08 — zero lower offers is a valid `ready` answer shown as "No lower price found"
 - `GET /api/search/enrichment-stream`
   - first enrichment path used by the frontend
   - responds cross-origin for the Vercel -> Render setup
@@ -121,8 +122,9 @@
 - `api/geo.js` returns a country code from Vercel headers.
 - The marketplace context now persists the user's marketplace choice in localStorage under `focamai_marketplace`.
 - The one-time marketplace prompt state is tracked separately in localStorage under `focamai_marketplace_asked`.
-- Only Amazon marketplaces with a configured Associates tracking tag are active commerce/store choices. As of the current code, that means `amazon.com` and `amazon.ca`; untagged marketplaces such as `amazon.co.uk` fall back to `amazon.com` instead of producing untagged Amazon Special Links.
-- Amazon result-link generation fails closed for unsupported or mismatched Amazon domains: the backend will not emit an untagged Amazon clickout URL.
+- Active store choices include separately Associates-tagged `amazon.com` and `amazon.ca`; a verified US OneLink UK path; plus direct untagged Germany, France, Italy, Spain, Netherlands, Poland, Sweden, Australia, Japan, India, Mexico, and Brazil. Canada is deliberately outside OneLink.
+- The verified UK OneLink path retains the shopper's selected local domain for discovery, prices, and UI labels. When a valid local Amazon ASIN product link is available, clickout generation uses an equivalent US `amazon.com/dp/:asin?tag=focamai-20` URL so Amazon can apply its configured Close Match local-store redirect and affiliate attribution. Missing/non-product ASIN paths safely preserve the direct selected-local URL instead. France, Germany, Italy, Netherlands, Poland, Spain, and Sweden were enrolled in Amazon OneLink but remain direct untagged paths until Amazon displays usable tracking IDs after owner-completed payment/tax setup.
+- Amazon result-link generation fails closed for unsupported or mismatched Amazon domains. Direct untagged stores and OneLink fallbacks are valid exceptions: they intentionally preserve a plain local-domain Amazon URL without a `tag=` parameter.
 - If a saved marketplace preference exists, the frontend skips geo detection on load and uses that saved value immediately.
 - If there is no saved preference, the frontend resolves the geo country code to an explicit Amazon domain, sends it on guided requests when `Auto` is selected, and saves confident detections for future loads.
 - After the first search starts, the homepage shows a lightweight one-time inline marketplace prompt inside the search card until the user chooses a store or dismisses it.
@@ -132,6 +134,9 @@
 ## Final result behavior
 - Result lists show up to 6 ranked picks.
 - Results use a ranked shortlist layout rather than a marketplace grid.
+- If a non-balanced ranking preference was applied, the results intro shows a small passive indicator such as `Prioritizing lower prices` with a current-search `Show balanced picks` action. It reruns the current search using the default balanced ranking; balanced/default searches show no persistent control. Preferences distinguish `Prefer lower prices` (fit, quality, and other tradeoffs still count) from `Lowest prices` (the six lowest-priced candidates returned by the dedicated basic-fit filter).
+- During every non-balanced finalize, the waiting state names the submitted search and the saved preference being applied, so users understand why the shortlist may favor a different mix of products.
+- Balanced users may see a one-time localStorage-dismissed tip near results pointing to account Preferences; signed-out users who open it are sent to the auth modal with preference-specific copy.
 - On desktop, the ranked shortlist uses a large selected-product panel on the left and an internally scrolling row list on the right. Hovering or focusing a row updates the selected panel, and scrolling the internal list updates it to the top visible row.
 - On smaller screens, results collapse into stacked ranked pick cards.
 - A development-only results-view toggle can switch between the ranked rows view and the older grid/card view.
@@ -142,7 +147,7 @@
 - Result, retry, and modal surfaces now share a quieter visual system: fewer decorative gradients, smaller shadows, and more consistent 16-28px radii.
 - Selecting a row or the row details action opens the modal.
 - The modal is ordered as a decision aid: image and title, an `At a glance` facts card, `Why this pick`, `Worth knowing`, then product notes from `feature_bullets` or description. The facts card stays compact with price, combined ratings/reviews, and optional delivery; source/store naming is reserved for the shopping CTA instead of repeated as passive metadata.
-- Finalized product modals include a quiet optional `Deep dive` panel only when async Deep Dive eligibility says the product is worth it. The button is hidden by default, appears after mini writeup when the separate `gpt-5-mini` eligibility pass returns `show` or `maybe`, and remains explicit/user-triggered. Signed-out users are sent to sign in before any provider call. Signed-in users can trigger the panel manually; it shows loading, gated, limited-data, store-offer, review-summary, top-insight, and critic-rating states. The existing bottom Amazon/source CTA remains unchanged and primary.
+- Finalized product modals include a quiet optional `Compare prices at other stores` panel only when eligibility says the product is worth it. The button is hidden by default, appears after mini writeup when the deterministic prefilter returns `show`, and remains explicit/user-triggered. Signed-out users are sent to sign in before any provider call. Signed-in users can trigger the panel manually; it shows loading, gated, limited-data, store-offer, and no-lower-price-found states (review content was removed 2026-07-08). The existing bottom Amazon/source CTA remains unchanged and primary.
 - Finalized product modals include a `Watch price` action when the product has an ASIN and a positive numeric price. Signed-out users are sent to sign in; signed-in users create or reuse a `price_watches` row for that ASIN + marketplace. Preview-product modals do not show the watch action.
 - For skipped-refinement preview products, the modal hides the AI `Why this pick` analysis panel because finalize/enrichment has not run; opening the preview modal lazily hydrates product notes from the per-ASIN cache or Rainforest.
 - If the normalized detail heading differs from the raw title, the detail header exposes the original directly under the title behind a quiet `Full Amazon title`/source-title disclosure.
@@ -157,7 +162,7 @@
 - `/api/search/retry-advice` suggests a more specific next query.
 - Retry advice preserves accumulated must-have constraints from the original query, follow-up notes, and retry feedback by default, but can replace or remove a previous constraint when the latest feedback clearly changes direction.
 - Quick prompts append into the existing `rejectionFeedback` text sent to `/api/search/retry-advice`; the backend contract is otherwise unchanged.
-- `Update my picks` asks for retry advice and, when a safe non-empty suggested query returns, automatically starts a new guided search with a one-request discovery cache refresh. There is no required second query-confirmation step.
+- `Update my picks` asks for retry advice and, when a safe non-empty suggested query returns, automatically starts a new guided search with a one-request discovery cache refresh. The compact search summary shows the actual improved query being searched for transparency, but there is no required second query-confirmation step.
 - The same-pool retry path is not part of the active homepage UI right now.
 
 ## Query-quality suggestion behavior
@@ -175,12 +180,12 @@
 
 ## Data, cache, and observability
 - Guided discovery is the reusable persistent cache layer.
-- Deep Dive has separate cache/usage storage from guided discovery and `search_history`: product-group cache is 7 days, Immersive data is 24 hours, price freshness is treated as 30 minutes, and synthesis cache is 7 days. When Immersive cache is older than the price freshness window, the handler attempts a fresh Immersive fetch before rendering offers. Useful no-review Immersive responses with store offers can be reused while price-fresh; empty no-review/no-store responses are not cached. Supabase is preferred, with local JSON fallback for development/table outages. Non-subscriber usage is capped by `DEEP_DIVE_FREE_LIMIT` unless `DEEP_DIVE_FREE_LIMIT_DISABLED=true` is set for controlled testing.
+- Compare prices (Deep Dive path) has separate cache/usage storage from guided discovery and `search_history`: product-group cache is 7 days, Immersive data is 24 hours, and price freshness is treated as 30 minutes (the synthesis cache layer is gone with review synthesis). When Immersive cache is older than the price freshness window, the handler attempts a fresh Immersive fetch before rendering offers; if the refresh fails, the response is a `limited` `price_data_stale` state. Cached Immersive review signals are still treated as cache-usefulness evidence even though reviews are no longer returned. Supabase is preferred, with local JSON fallback for development/table outages. Non-subscriber usage is capped by `DEEP_DIVE_FREE_LIMIT` unless `DEEP_DIVE_FREE_LIMIT_DISABLED=true` is set for controlled testing.
 - Rainforest guided discovery uses a versioned shared cache scope (`rainforest_discovery:v3`) so older provider/search-era candidate pools and pre-Prime-delivery-normalization rows are not reused as current evidence.
 - Finalize remains request-specific and rebuilds from discovery cache.
 - Amazon discovery and product-detail enrichment preserve provider Prime signals, including Rainforest delivery text with Prime availability, as structured `isPrime` data through candidate pools, finalize/enrichment payloads, and final UI results.
 - Cached preview results and cached candidate pools are sanitized on read so stale marketplace entries without a known positive price do not reappear or reach finalize AI selection.
-- Cached Amazon result and candidate links are also retagged or blanked on read so older cache entries cannot leak untagged or mismatched Amazon Special Links back into the UI.
+- Cached Amazon result and candidate links are rebuilt as direct tags, verified OneLink US-tagged ASIN URLs, plain local fallbacks, or blanked on read so older cache entries cannot leak mismatched Amazon domains or invalid clickouts back into the UI.
 - Thin cached discovery snapshots are treated as refresh candidates instead of reusable evidence when they have fewer than the shortlist count of cached results or candidates.
 - Partial valid haiku output is recoverable, not final: zero picks still use rules fallback, full valid picks stay `haiku_lock`, and partial valid picks are returned as `haiku_lock_topped_up`.
 - Search cache and operational history use Supabase when configured, with local fallback in development.
@@ -191,7 +196,7 @@
 - Signed-in users can permanently delete their account from the public `/delete-account` route or mobile Settings → Account. Both call authenticated `DELETE /api/account`; the server resolves the user from the bearer token, deletes the Supabase Auth user with the admin client, and documented foreign-key cascades remove `saved_searches`, `price_watches`, and `deep_dive_usage`. Client history/session state is cleared only after success.
 - Product details have a separate per-ASIN cache shared across detail providers.
 - Async mini enrichment is token-scoped when it writes back into the per-session discovery snapshot so older same-query searches cannot leak context-specific `fit_reason` or `caveat` text into newer sessions.
-- Async Deep Dive eligibility is also token-scoped and stored separately at `selection.deepDiveEligibility`; it controls whether the modal button appears, not whether any Deep Dive offer/review evidence is trusted.
+- Async Compare-prices eligibility (deterministic prefilter only) is also token-scoped and stored separately at `selection.deepDiveEligibility`; it controls whether the modal button appears, not whether any offer evidence is trusted.
 - Mini enrichment treats the first locked product as the hero recommendation and writes later picks as alternatives that explain who might prefer them over the hero.
 - Rainforest product-detail fetches run asynchronously after finalize so modal AI copy can hydrate without blocking the initial shortlist.
 - If product details are available after finalize, the stored enrichment payload includes the new `feature_bullets` and the frontend can hydrate those bullets in place.
@@ -218,7 +223,7 @@
 ## Marketplace direction
 - Focamai narrows choices before the user leaves to shop, instead of becoming a marketplace wall inside the app.
 - Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where it improves clarity, trust, or conversion.
-- Amazon-first UX supports US and Canada with configured Associates tracking tags, plus the untagged major stores UK, Germany, France, Italy, Spain, Australia, Japan, India, Mexico, and Brazil. Untagged stores use the shopper's selected local Amazon domain and plain clickout URLs, so Focamai earns no commission there. OneLink is intentionally deferred and must not override an explicit store selection. Add a locale tracking ID to `DOMAIN_TO_AFFILIATE_TAG` before claiming or earning commission for an additional store.
+- Amazon-first UX supports separately tagged US/Canada stores, a verified US OneLink UK path, and direct untagged Germany, France, Italy, Spain, Netherlands, Poland, Sweden, Australia, Japan, India, Mexico, and Brazil. OneLink preserves the selected UK storefront outcome through Amazon's Close Match redirect while attributing valid ASIN product clickouts to the US Store ID; Canada stays separate. Expand OneLink only after Amazon exposes a usable tracking ID for each enrolled market.
 - Do not force generic labels like `retailer` in user-facing UI when `Amazon` is more accurate for the current experience.
 - Do not add new Amazon/source/retailer fields or badges as incidental work. For existing shopping clickout CTAs, the chosen compromise is source-derived wording: Amazon items can say `View on Amazon`/the active Amazon domain, while future non-Amazon sources should use their own source name.
 - Keep backend/provider logic, normalized product data, and search flow reasonably provider-flexible so another source can be added or swapped later.

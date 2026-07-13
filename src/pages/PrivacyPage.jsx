@@ -27,8 +27,8 @@ function PrivacyPage() {
             </li>
             <li>
               <strong>Account information:</strong> email address, Supabase user identifier, and
-              authentication/session information. The website also supports optional Google sign-in;
-              Google sign-in is not currently available in the mobile app.
+              authentication/session information. The website also supports optional Google and
+              Apple sign-in; these OAuth options are not currently available in the mobile app.
             </li>
             <li>
               <strong>Saved searches and price watches:</strong> signed-out search history is stored
@@ -70,7 +70,7 @@ function PrivacyPage() {
           <h2 className={sectionHeadingClassName}>How the information is used</h2>
           <p>Focamai uses this information to:</p>
           <ul className={listClassName}>
-            <li>run product discovery, refinement, recommendation, transcription, and Deep Dive features;</li>
+            <li>run product discovery, refinement, recommendation, transcription, and price comparison features;</li>
             <li>save searches, maintain accounts and sessions, and operate price-watch alerts;</li>
             <li>measure search funnels and result interactions, diagnose failures, prevent abuse, and improve reliability;</li>
             <li>respond to feedback, support, correction, privacy, and account-related requests; and</li>
@@ -87,12 +87,13 @@ function PrivacyPage() {
             <li><strong>Supabase</strong> — authentication, account records, saved searches, price watches, search caches, analytics, diagnostics, feedback, and rate-limit records.</li>
             <li><strong>OpenAI and Anthropic</strong> — AI follow-up questions, query review, shortlist selection, explanations, retry suggestions, and related recommendation processing. OpenAI also transcribes mobile voice searches.</li>
             <li><strong>Rainforest API</strong> — Amazon product search, product details, and price-watch checks.</li>
-            <li><strong>SerpApi</strong> — product and retailer evidence when an eligible signed-in user explicitly runs the optional Deep Dive feature.</li>
+            <li><strong>SerpApi</strong> — product and retailer evidence when an eligible signed-in user explicitly runs the optional price comparison feature.</li>
             <li><strong>Vercel</strong> — website hosting, Web Analytics, and Speed Insights.</li>
             <li><strong>Render</strong> — backend hosting and request logs for website and mobile API traffic.</li>
             <li><strong>Sentry</strong> — backend error monitoring and configured production mobile crash reporting. Mobile reporting is limited to crashes and serious errors: default personally identifying information, breadcrumbs, performance tracing, profiling, app-hang tracking, automatic session tracking, session replay, and feedback are disabled. Backend error and search context may still be processed when needed to diagnose a failure.</li>
             <li><strong>Resend</strong> — delivery of price-watch email alerts when those alerts are enabled.</li>
             <li><strong>Google</strong> — optional Google authentication and web-font delivery on the website.</li>
+            <li><strong>Apple</strong> — optional Apple authentication on the website.</li>
             <li><strong>Amazon and product-image hosts</strong> — product images, product pages, and affiliate attribution after a user follows an Amazon link.</li>
           </ul>
           <p>
@@ -153,7 +154,7 @@ function PrivacyPage() {
             Signed-in users can permanently delete their Focamai account in the mobile app under
             Settings → Account or at <a className="text-primary underline underline-offset-4" href="/delete-account">focamai.com/delete-account</a>.
             This deletes the Supabase authentication user and the account-owned saved searches,
-            price watches, and Deep Dive usage record linked to that user ID. The app also clears its
+            price watches, and price comparison usage record linked to that user ID. The app also clears its
             local saved-search history after a successful deletion. Anonymous operational search
             logs, analytics, diagnostics, caches, rate-limit records, hosting logs, feedback, and
             third-party provider records are not deleted by this control when they cannot be

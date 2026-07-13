@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 
 import { AmazonStoreProvider } from '@/contexts/AmazonStoreContext.jsx'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
+import { FinalizeLoadingState } from './FinalizeLoadingState.jsx'
 import { ProductDetailModal } from './ProductDetailModal.jsx'
 import { ResultsSection } from './ResultsSection.jsx'
 
@@ -135,6 +136,28 @@ describe('ProductDetailModal', () => {
     expect(screen.queryByText(/prime eligible/i)).not.toBeInTheDocument()
   })
 })
+
+describe('FinalizeLoadingState', () => {
+  it('names the submitted search and active saved preference while finalizing', () => {
+    render(
+      <FinalizeLoadingState
+        rankingPreference="price"
+        submittedQuery="wireless headphones"
+      />,
+    )
+
+    expect(
+      screen.getByText(/searching for wireless headphones with your prefer lower prices preference/i),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps the preference reminder out of balanced finalizes', () => {
+    render(<FinalizeLoadingState rankingPreference="balanced" submittedQuery="wireless headphones" />)
+
+    expect(screen.queryByText(/with your .* preference/i)).not.toBeInTheDocument()
+  })
+})
+
 describe('ResultsSection retry advice', () => {
   it('shows Prime availability on result surfaces when confirmed', () => {
     render(

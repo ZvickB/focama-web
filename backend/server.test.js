@@ -64,7 +64,6 @@ vi.mock('./lib/search-storage.js', () => ({
 }))
 
 import {
-  createApiServer,
   handleCachedSearch,
   handleEnrichmentPoll,
   handleEnrichmentStream,
@@ -77,6 +76,7 @@ import {
   handleSearchDebug,
   handleSupabaseHealth,
 } from './server.js'
+import { createApiServer } from './express-server.js'
 import { ALLOWED_ORIGIN } from './lib/http.js'
 import { resetRateLimitStore } from './lib/rate-limit.js'
 import { haikuLockWinnersAndBadges, miniEnrichSelectedCandidates } from './lib/ai-selector.js'
@@ -1622,6 +1622,7 @@ describe('server handlers', () => {
       }),
       finalResultLimit: 6,
       apiKey: 'claude-key',
+      rankingPreference: 'balanced',
     })
     expect(JSON.parse(response.body)).toEqual(
       expect.objectContaining({
@@ -1719,6 +1720,7 @@ describe('server handlers', () => {
       }),
       finalResultLimit: 6,
       apiKey: 'claude-key',
+      rankingPreference: 'balanced',
     })
     expect(JSON.parse(response.body).results).toEqual([
       expect.objectContaining({ id: 'prime-pick', isPrime: true }),
@@ -1734,7 +1736,7 @@ describe('server handlers', () => {
     })
 
     const response = createResponseRecorder()
-    const candidates = Array.from({ length: 20 }, (_, index) => createFinalizeCandidate(`id-${index + 1}`))
+    const candidates = Array.from({ length: 30 }, (_, index) => createFinalizeCandidate(`id-${index + 1}`))
     const longNotes = 'n'.repeat(800)
     readStoredSearchCacheEntry.mockResolvedValueOnce(createDiscoveryCacheEntry('stroller', candidates))
 
@@ -1759,8 +1761,9 @@ describe('server handlers', () => {
       }),
       finalResultLimit: 6,
       apiKey: 'claude-key',
+      rankingPreference: 'balanced',
     })
-    expect(haikuLockWinnersAndBadges.mock.calls[0][0].candidatePool.candidates).toHaveLength(20)
+    expect(haikuLockWinnersAndBadges.mock.calls[0][0].candidatePool.candidates).toHaveLength(30)
     expect(haikuLockWinnersAndBadges.mock.calls[0][0].candidatePool.details.endsWith('n'.repeat(500))).toBe(true)
   })
 
@@ -1798,6 +1801,7 @@ describe('server handlers', () => {
       }),
       finalResultLimit: 6,
       apiKey: 'claude-key',
+      rankingPreference: 'balanced',
     })
     expect(JSON.parse(response.body)).toEqual(
       expect.objectContaining({
@@ -2631,6 +2635,7 @@ describe('server handlers', () => {
         mode: 'retry_exhausted',
         model: null,
         requestMode: 'guided_finalize',
+        rankingPreference: 'balanced',
         shortlistLocked: true,
         selectedCandidateIds: [],
         details: 'No new candidates remained after excluding the previously rejected picks.',
@@ -3118,6 +3123,11 @@ describe('server handlers', () => {
       expect(response.status).toBe(204)
       expect(response.headers.get('vary')).toBe('Origin')
       expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
+
+      const pingResponse = await fetch(`http://127.0.0.1:${port}/api/ping`)
+
+      expect(pingResponse.status).toBe(200)
+      await expect(pingResponse.json()).resolves.toEqual({ ok: true })
     } finally {
       await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
     }

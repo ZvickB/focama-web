@@ -230,27 +230,11 @@ function parsePositivePrice(value) {
   return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : null
 }
 
-function parseReviewSignal(value) {
-  const text = String(value || '').replace(/\s+/g, ' ').trim()
-  const dashSplit = text.match(/^(.+?)\s*—\s*(.+)$/)
-
-  if (dashSplit) {
-    return { label: dashSplit[1].trim(), detail: dashSplit[2].trim() }
-  }
-
-  const parenSplit = text.match(/^(.+?)\s*\((.+)\)$/)
-
-  return {
-    detail: parenSplit ? parenSplit[2].trim() : '',
-    label: (parenSplit ? parenSplit[1] : text).trim(),
-  }
-}
-
-function DeepDiveSourceNote({ product }) {
+function PriceSourceNote({ product }) {
   const dimensions = Array.isArray(product?.variantDimensions) ? product.variantDimensions : []
   const specific = dimensions
     .filter((d) => d.yourPick)
-    .map((d) => `your pick is ${d.yourPick} — reviews may include other ${d.dimension}s`)
+    .map((d) => `your pick is ${d.yourPick} — offers may include other ${d.dimension}s`)
   const unmatched = dimensions
     .filter((d) => !d.yourPick && d.optionCount > 1)
     .map((d) => `${d.dimension} (${d.optionCount} options)`)
@@ -258,20 +242,20 @@ function DeepDiveSourceNote({ product }) {
   if (specific.length === 0 && unmatched.length === 0) {
     return (
       <p className="text-xs leading-5 text-slate-400">
-        Reviews and prices are from Google Shopping for this product family. Check the store page before buying.
+        Prices are from Google Shopping for this product family. Check the store page before buying.
       </p>
     )
   }
 
   return (
     <div className="space-y-1 text-xs leading-5 text-slate-400">
-      <p>Reviews and prices are from Google Shopping for this product family:</p>
+      <p>Prices are from Google Shopping for this product family:</p>
       <ul className="list-disc pl-4 space-y-0.5">
         {specific.map((note) => (
           <li key={note} className="capitalize">{note}</li>
         ))}
         {unmatched.length > 0 ? (
-          <li>This product comes in multiple {unmatched.join(', ')} — reviews cover all of them</li>
+          <li>This product comes in multiple {unmatched.join(', ')} — offers may cover all of them</li>
         ) : null}
       </ul>
     </div>
@@ -364,7 +348,6 @@ export function ProductDetailModal({
   const previouslyFocusedElementRef = useRef(null)
 
   const ddOffers = Array.isArray(deepDive?.offers) ? deepDive.offers : []
-  const ddReviews = deepDive?.reviews || {}
   const ddLimitedMessage = deepDive?.limitedData?.message || ''
   const ddIsGated = deepDive?.status === 'gated'
   const ddIsAmbiguous = Boolean(deepDive?.ambiguous)
@@ -376,10 +359,8 @@ export function ProductDetailModal({
     showRecommendationAnalysis &&
     ['show', 'maybe'].includes(deepDiveEligibility?.recommendation)
   const deepDiveButtonLabel = ddHasLoaded
-    ? 'Back to Deep Dive'
-    : deepDiveEligibility?.recommendation === 'maybe' || deepDiveEligibility?.mode === 'reviews_only'
-      ? 'Check reviews and other stores'
-      : 'Deep dive — store prices and reviews'
+    ? 'Back to price comparison'
+    : 'Compare prices at other stores'
   const asin = String(item?.asin || item?.product_id || item?.id || '').trim()
   const watchPrice = parsePositivePrice(
     item?.numericPrice ?? item?.extracted_price ?? item?.price_value ?? item?.price,
@@ -489,7 +470,7 @@ export function ProductDetailModal({
       })
       setDeepDive(payload)
     } catch (error) {
-      setDeepDiveError(error instanceof Error ? error.message : 'Deep Dive was limited this time.')
+      setDeepDiveError(error instanceof Error ? error.message : 'Price comparison was limited this time.')
     } finally {
       setDeepDiveLoading(false)
     }
@@ -502,7 +483,7 @@ export function ProductDetailModal({
     }
 
     if (!discoveryToken || !searchQuery || !item?.id) {
-      setDeepDiveError('Deep Dive needs a finalized search session before it can run.')
+      setDeepDiveError('Price comparison needs a finalized search session before it can run.')
       setActiveView('deepdive')
       return
     }
@@ -567,6 +548,7 @@ export function ProductDetailModal({
       setDeepDive((prev) => ({
         ...prev,
         offers: Array.isArray(payload?.offers) ? payload.offers : [],
+        checkedStoreCount: payload?.checkedStoreCount ?? prev?.checkedStoreCount,
         ambiguous: prev?.ambiguous || payload?.ambiguous,
       }))
     } catch {
@@ -706,7 +688,7 @@ export function ProductDetailModal({
                     <div className="pointer-events-none absolute inset-y-0 left-0 w-1/2 -translate-x-full bg-gradient-to-r from-transparent via-white/80 to-transparent animate-shimmer" />
                     <div className="relative flex items-center gap-3">
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary/70 animate-soft-pulse" />
-                      <span>Checking store offers and review signals...</span>
+                      <span>Checking prices at other stores...</span>
                     </div>
                     <div className="relative mt-3 grid grid-cols-[1fr_3rem] gap-3">
                       <div className="h-2 rounded-full bg-[#dcebea]" />
@@ -723,20 +705,20 @@ export function ProductDetailModal({
 
                 {ddIsGated ? (
                   <div className="rounded-2xl border border-[#e5dacb] bg-[#fbf7f1] px-4 py-3 text-sm leading-6 text-slate-700">
-                    {deepDive.error || 'More Deep Dives will be available soon.'}
+                    {deepDive.error || 'Price comparison will be available again soon.'}
                   </div>
                 ) : null}
 
                 {ddLimitedMessage && !ddIsGated ? (
                   <div className="rounded-2xl border border-[#e5dacb] bg-[#fbf7f1] px-4 py-3 text-sm leading-6 text-slate-600">
-                    <p className="font-semibold text-slate-800">Store offers limited</p>
+                    <p className="font-semibold text-slate-800">Price comparison limited</p>
                     <p className="mt-1">{ddLimitedMessage}</p>
                   </div>
                 ) : null}
 
                 {ddIsAmbiguous && ddHasLoaded && !ddIsGated ? (
                   <p className="text-xs leading-5 text-amber-700">
-                    Google Shopping returned multiple similar products. The reviews and offers below may cover a different color, size, or edition of this product — not just the exact one you picked.
+                    Google Shopping returned multiple similar products. The offers below may cover a different color, size, or edition of this product — not just the exact one you picked.
                   </p>
                 ) : null}
 
@@ -802,94 +784,20 @@ export function ProductDetailModal({
                   </div>
                 ) : null}
 
-                {ddReviews.summary ? (
-                  <div className="space-y-2 border-t border-[#edf3f3] pt-4">
-                    <p className="text-sm font-semibold text-slate-900">What reviewers say</p>
-                    <p className="text-sm leading-6 text-slate-600">{ddReviews.summary}</p>
-                    {Array.isArray(ddReviews.sources) && ddReviews.sources.length > 0 ? (
-                      <p className="text-xs leading-5 text-slate-400">
-                        Sources: {ddReviews.sources.join(', ')}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {Array.isArray(ddReviews.topInsights) && ddReviews.topInsights.length > 0 ? (
-                  <div className="space-y-3 border-t border-[#edf3f3] pt-4">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">Review signals</p>
-                      <p className="mt-0.5 text-xs leading-5 text-slate-500">
-                        Themes Google surfaced from available product reviews.
-                      </p>
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {ddReviews.topInsights.slice(0, 6).map((insight, index) => (
-                        <div
-                          key={`${insight.text}-${index}`}
-                          className="rounded-2xl border border-[#d9e6e8] bg-[#f8fcfb] px-3 py-2.5"
-                        >
-                          <p className="text-sm font-semibold leading-5 text-slate-800">
-                            {parseReviewSignal(insight.text).label}
-                          </p>
-                          {parseReviewSignal(insight.text).detail ? (
-                            <p className="mt-0.5 text-xs leading-5 text-slate-500">
-                              {parseReviewSignal(insight.text).detail}
-                            </p>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {Array.isArray(ddReviews.criticRatings) && ddReviews.criticRatings.length > 0 ? (
-                  <div className="space-y-2 border-t border-[#edf3f3] pt-4">
-                    <p className="text-sm font-semibold text-slate-900">Critic ratings</p>
-                    <div className="space-y-1">
-                      {ddReviews.criticRatings.slice(0, 4).map((rating, index) => (
-                        <p key={`${rating.source}-${index}`} className="text-sm leading-6 text-slate-600">
-                          <span className="font-medium text-slate-800">{rating.source || 'Review source'}</span>
-                          {rating.rating ? `: ${rating.rating}` : ''}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {Array.isArray(ddReviews.userReviews) && ddReviews.userReviews.length > 0 ? (
-                  <div className="space-y-3 border-t border-[#edf3f3] pt-4">
-                    <p className="text-sm font-semibold text-slate-900">Buyer reviews</p>
-                    <div className="space-y-2">
-                      {ddReviews.userReviews.slice(0, 4).map((review, index) => (
-                        <div
-                          key={`${review.source}-${review.date}-${index}`}
-                          className="rounded-2xl border border-[#edf3f3] bg-[#f8fcfb] px-3 py-2.5"
-                        >
-                          {review.rating ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-medium text-amber-600">
-                                {'★'.repeat(Math.min(Math.max(Math.round(Number(review.rating)), 0), 5))}
-                                {'☆'.repeat(5 - Math.min(Math.max(Math.round(Number(review.rating)), 0), 5))}
-                              </span>
-                              <span className="text-xs text-slate-400">
-                                {[review.source, review.date].filter(Boolean).join(' · ')}
-                              </span>
-                            </div>
-                          ) : (
-                            <p className="text-xs text-slate-400">
-                              {[review.source, review.date].filter(Boolean).join(' · ')}
-                            </p>
-                          )}
-                          <p className="mt-1 text-sm leading-6 text-slate-600 line-clamp-3">{review.text}</p>
-                        </div>
-                      ))}
-                    </div>
+                {deepDive?.status === 'ready' && ddOffers.length === 0 && !deepDiveLoading && !canOfferUsFallback ? (
+                  <div className="rounded-2xl border border-[#d9e6e8] bg-[#f6fbfa] px-4 py-3 text-sm leading-6 text-slate-700">
+                    <p className="font-semibold text-slate-900">No lower price found</p>
+                    <p className="mt-1">
+                      {Number(deepDive.checkedStoreCount) > 0
+                        ? `Focamai checked ${deepDive.checkedStoreCount} store ${deepDive.checkedStoreCount === 1 ? 'offer' : 'offers'} and could not verify a lower price than the ${retailerLabel || 'Amazon'} price you're seeing.`
+                        : `Focamai could not verify a lower price at other stores than the ${retailerLabel || 'Amazon'} price you're seeing.`}
+                    </p>
                   </div>
                 ) : null}
 
                 {ddHasLoaded && !ddIsGated && !ddLimitedMessage ? (
                   <div className="border-t border-[#edf3f3] pt-3">
-                    <DeepDiveSourceNote product={deepDive?.product} />
+                    <PriceSourceNote product={deepDive?.product} />
                   </div>
                 ) : null}
               </>

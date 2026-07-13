@@ -1,9 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
-import { createHash } from 'node:crypto'
-
-import { DEFAULT_HAIKU_MODEL } from '../ai-selector.js'
 import { getEnv } from '../search-data.js'
-import { truncateText } from '../text-sanitizers.js'
 import { logSearchFlowEvent } from '../server-helpers.js'
 import {
   proveExactProductVariant,
@@ -50,10 +45,6 @@ function inferCurrency(value, market) {
   if (/\bCAD\b|CA\$|C\$/.test(text)) return 'CAD'
   if (/\bUSD\b|US\$/.test(text)) return 'USD'
   return expectedCurrencyForMarket(market)
-}
-
-function hashPayload(value) {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex')
 }
 
 function normalizeProductIdentity(candidate) {
@@ -363,118 +354,6 @@ export async function normalizeDeepDiveOffers({
 
   offers.sort((left, right) => left.knownTotal - right.knownTotal)
   return { offers: offers.slice(0, 8), rejected }
-}
-
-function sourceName(value) {
-  return clean(value?.source || value?.name || value?.author || value?.site || value?.retailer || value?.title)
-}
-
-function insightText(value) {
-  return clean(value?.text || value?.summary || value?.title || value?.snippet || value?.description)
-}
-
-export function buildReviewEvidence(productResults) {
-  const userReviews = (Array.isArray(productResults?.user_reviews) ? productResults.user_reviews : [])
-    .map((review) => ({
-      source: sourceName(review) || 'User reviews',
-      rating: review?.rating || review?.score || null,
-      text: truncateText(insightText(review) || clean(review?.review || review?.content), 600),
-      date: clean(review?.date),
-    }))
-    .filter((entry) => entry.text)
-    .slice(0, 8)
-  const criticRatings = (Array.isArray(productResults?.critic_ratings) ? productResults.critic_ratings : [])
-    .map((rating) => ({
-      source: sourceName(rating),
-      rating: clean(rating?.rating || rating?.score),
-      text: truncateText(insightText(rating), 400),
-      link: clean(rating?.link),
-    }))
-    .filter((entry) => entry.source || entry.text || entry.rating)
-    .slice(0, 8)
-  const topInsights = (Array.isArray(productResults?.top_insights) ? productResults.top_insights : [])
-    .flatMap((category) => {
-      const categoryTitle = clean(category?.title)
-      const items = Array.isArray(category?.items) ? category.items : []
-      if (items.length === 0) {
-        const text = insightText(category)
-        return text ? [{ source: sourceName(category) || 'Google Shopping', text: truncateText(text, 400) }] : []
-      }
-      return items.map((item) => ({
-        source: clean(item?.source) || sourceName(category) || 'Google Shopping',
-        text: truncateText(
-          [clean(item?.key_point), clean(item?.snippet)].filter(Boolean).join(' — ') ||
-          insightText(item),
-          400,
-        ),
-        category: categoryTitle,
-      }))
-    })
-    .filter((entry) => entry.text)
-    .slice(0, 12)
-
-  return {
-    userReviews,
-    criticRatings,
-    topInsights,
-    evidenceCount: userReviews.length + criticRatings.length + topInsights.length,
-    inputHash: hashPayload({ userReviews, criticRatings, topInsights }),
-  }
-}
-
-export function normalizeReviewSignals(productResults) {
-  const evidence = buildReviewEvidence(productResults)
-  return {
-    userReviews: evidence.userReviews,
-    criticRatings: evidence.criticRatings,
-    topInsights: evidence.topInsights,
-    starDistribution: productResults?.ratings || productResults?.rating_distribution || [],
-  }
-}
-
-export async function synthesizeDeepDiveReviews({ apiKey, evidence }) {
-  if (!apiKey || !evidence || evidence.evidenceCount < 2) {
-    return { summary: '', sources: [], limited: true, skipped: true, inputHash: evidence?.inputHash || '' }
-  }
-
-  const anthropic = new Anthropic({ apiKey })
-  const prompt = [
-    'Summarize only the provided product review evidence. Cite source names for every claim.',
-    'Do not add your own opinion. Do not state facts that are not present in the input.',
-    'If the evidence is limited, write less. Return JSON only: {"summary":"...","sources":["..."],"limited":false}.',
-    '',
-    JSON.stringify({
-      user_reviews: evidence.userReviews,
-      critic_ratings: evidence.criticRatings,
-      top_insights: evidence.topInsights,
-    }),
-  ].join('\n')
-
-  const message = await anthropic.messages.create({
-    model: DEFAULT_HAIKU_MODEL,
-    max_tokens: 320,
-    temperature: 0,
-    system: 'You summarize real product review evidence with strict source attribution.',
-    messages: [{ role: 'user', content: prompt }],
-  })
-  const text = message.content?.[0]?.type === 'text' ? message.content[0].text.trim() : ''
-  const jsonMatch = text.match(/\{[\s\S]*\}/)
-  const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {}
-  const sources = Array.isArray(parsed?.sources)
-    ? parsed.sources.map(clean).filter(Boolean).slice(0, 8)
-    : []
-
-  return {
-    summary: truncateText(clean(parsed?.summary), 900),
-    sources,
-    limited: Boolean(parsed?.limited),
-    skipped: false,
-    inputHash: evidence.inputHash,
-    usage: {
-      inputTokens: message.usage?.input_tokens ?? 0,
-      outputTokens: message.usage?.output_tokens ?? 0,
-    },
-  }
 }
 
 export function buildDeepDiveProductPayload(productResults, candidate) {

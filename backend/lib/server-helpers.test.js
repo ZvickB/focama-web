@@ -9,6 +9,13 @@ describe('server-helpers characterization tests', () => {
     helpers = await import('./server-helpers.js')
   })
 
+  describe('guided candidate-pool limit', () => {
+    it('keeps the live discovery and finalize pool at 30 candidates', () => {
+      expect(helpers.LIVE_RESULT_FILTER_CONFIG.candidatePoolSize).toBe(30)
+      expect(helpers.FINALIZE_MAX_CANDIDATES).toBe(30)
+    })
+  })
+
   describe('nowMs', () => {
     it('returns a numeric value from performance.now', () => {
       const result = helpers.nowMs()

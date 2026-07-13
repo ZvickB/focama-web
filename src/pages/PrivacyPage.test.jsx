@@ -12,7 +12,7 @@ describe('PrivacyPage', () => {
     expect(screen.getByText(/Rainforest API/i)).toBeInTheDocument()
     expect(screen.getByText(/Mobile crash reports/i)).toBeInTheDocument()
     expect(screen.getByText(/performance tracing, profiling/i)).toBeInTheDocument()
-    expect(screen.getByText(/Deep Dive usage record linked to that user ID/i)).toBeInTheDocument()
+    expect(screen.getByText(/price comparison usage record linked to that user ID/i)).toBeInTheDocument()
     expect(screen.getByText(/Anonymous operational search logs/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'contact@focamai.com' })).toHaveAttribute(
       'href',

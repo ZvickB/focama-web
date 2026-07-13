@@ -28,16 +28,24 @@ const DOMAIN_TO_AFFILIATE_TAG = {
   'amazon.ca': 'focamai4203-20',
 }
 
-// Major marketplaces enabled without an Associates tag. Their search results and clickouts stay
-// local to the selected Amazon store, but URLs are deliberately untagged and earn no commission
-// until a store-specific tag is added to DOMAIN_TO_AFFILIATE_TAG. Do not add OneLink here: the
-// shopper's explicit marketplace selection should remain authoritative.
+// This marketplace has a verified US OneLink tracking-ID preference. We retain its selected
+// local marketplace for search and UI, but use a US-tagged ASIN link for clickout so Amazon can
+// apply its configured local-store redirect and commission attribution.
+const ONELINK_AMAZON_DOMAINS = new Set([
+  'amazon.co.uk',
+])
+
+// Major marketplaces enabled without a direct Associates tag. The remaining domains stay local
+// and untagged until a verified OneLink tracking-ID preference or direct store-specific tag exists.
 const ACTIVE_UNTAGGED_AMAZON_DOMAINS = new Set([
   'amazon.co.uk',
   'amazon.de',
   'amazon.fr',
   'amazon.it',
   'amazon.es',
+  'amazon.nl',
+  'amazon.pl',
+  'amazon.se',
   'amazon.com.au',
   'amazon.co.jp',
   'amazon.in',
@@ -116,7 +124,6 @@ export function appendAffiliateTag(url, domain = 'amazon.com') {
   if (!url) return url
   const normalizedDomain = normalizeAmazonDomain(domain)
   if (!isActiveAmazonDomain(normalizedDomain)) return ''
-  // Active marketplaces without a tag keep the plain URL — no commission, but clickouts work.
   const tag = getAmazonAffiliateTag(normalizedDomain)
   try {
     const u = new URL(url)
@@ -127,6 +134,14 @@ export function appendAffiliateTag(url, domain = 'amazon.com') {
     }
     if (normalizedUrlDomain && normalizedUrlDomain !== normalizedDomain) {
       return ''
+    }
+    if (!tag && ONELINK_AMAZON_DOMAINS.has(normalizedDomain)) {
+      const asin = u.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:[/?]|$)/i)?.[1]
+      if (asin) {
+        const oneLinkUrl = new URL(`https://www.amazon.com/dp/${asin}`)
+        oneLinkUrl.searchParams.set('tag', DOMAIN_TO_AFFILIATE_TAG['amazon.com'])
+        return oneLinkUrl.toString()
+      }
     }
     if (!tag) {
       return u.toString()

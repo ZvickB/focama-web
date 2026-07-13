@@ -5,6 +5,8 @@ import { AuthContext } from '@/contexts/useAuth.js'
 import { createRemoteHistoryStore } from '@/lib/history/remoteHistoryStore.js'
 import { setHistoryStore } from '@/lib/history/historyStore.js'
 import { localHistoryStore, readLocalHistoryEntries } from '@/lib/history/localHistoryStore.js'
+import { loadRemoteRankingPreference, saveRemoteRankingPreference } from '@/lib/preferences/rankingPreferenceStore.js'
+import { normalizeRankingPreference, RANKING_PREFERENCES } from '../../shared/ranking-preference.js'
 
 async function migrateLocalHistoryToAccount(remoteHistoryStore) {
   const localEntries = await localHistoryStore.list()
@@ -31,6 +33,9 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(isSupabaseAuthConfigured)
   const [passwordRecoveryActive, setPasswordRecoveryActive] = useState(isPasswordRecoveryUrl)
+  const [rankingPreference, setRankingPreferenceState] = useState(RANKING_PREFERENCES.BALANCED)
+  const [rankingPreferenceLoading, setRankingPreferenceLoading] = useState(false)
+  const [rankingPreferenceError, setRankingPreferenceError] = useState('')
 
   useEffect(() => {
     if (!isSupabaseAuthConfigured) {
@@ -68,6 +73,9 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!session?.user?.id) {
       setHistoryStore(localHistoryStore)
+      setRankingPreferenceState(RANKING_PREFERENCES.BALANCED)
+      setRankingPreferenceLoading(false)
+      setRankingPreferenceError('')
       return undefined
     }
 
@@ -97,6 +105,68 @@ export function AuthProvider({ children }) {
 
     return () => {
       isCancelled = true
+    }
+  }, [session?.user?.id])
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      return undefined
+    }
+
+    let isCancelled = false
+    setRankingPreferenceLoading(true)
+    setRankingPreferenceError('')
+
+    getSupabaseClient().then(async (client) => {
+      if (!client || isCancelled) return
+
+      try {
+        const remotePreference = await loadRemoteRankingPreference({
+          client,
+          userId: session.user.id,
+        })
+        if (!isCancelled) {
+          setRankingPreferenceState(remotePreference)
+        }
+      } catch {
+        if (!isCancelled) {
+          setRankingPreferenceState(RANKING_PREFERENCES.BALANCED)
+          setRankingPreferenceError('Preference sync is temporarily unavailable.')
+        }
+      } finally {
+        if (!isCancelled) {
+          setRankingPreferenceLoading(false)
+        }
+      }
+    })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [session?.user?.id])
+
+  const setRankingPreference = useCallback(async (nextValue) => {
+    const nextPreference = normalizeRankingPreference(nextValue)
+
+    if (!session?.user?.id) {
+      return { error: new Error('Sign in to save preferences.') }
+    }
+
+    setRankingPreferenceState(nextPreference)
+    setRankingPreferenceError('')
+
+    try {
+      const client = await getSupabaseClient()
+      const savedPreference = await saveRemoteRankingPreference({
+        client,
+        userId: session.user.id,
+        rankingPreference: nextPreference,
+      })
+      setRankingPreferenceState(savedPreference)
+      return { error: null }
+    } catch (error) {
+      setRankingPreferenceError('Preference sync is temporarily unavailable.')
+      return { error }
     }
   }, [session?.user?.id])
 
@@ -146,19 +216,23 @@ export function AuthProvider({ children }) {
     setPasswordRecoveryActive(false)
   }, [])
 
-  const signInWithGoogle = useCallback(async () => {
+  const signInWithOAuthProvider = useCallback(async (provider) => {
     const client = await getSupabaseClient()
     if (!client) {
       return { error: new Error('Supabase auth is not configured.') }
     }
 
     return client.auth.signInWithOAuth({
-      provider: 'google',
+      provider,
       options: {
         redirectTo: window.location.origin,
       },
     })
   }, [])
+
+  const signInWithGoogle = useCallback(() => signInWithOAuthProvider('google'), [signInWithOAuthProvider])
+
+  const signInWithApple = useCallback(() => signInWithOAuthProvider('apple'), [signInWithOAuthProvider])
 
   const signOut = useCallback(async (options) => {
     const client = await getSupabaseClient()
@@ -175,9 +249,14 @@ export function AuthProvider({ children }) {
       dismissPasswordRecovery,
       loading,
       passwordRecoveryActive,
+      rankingPreference,
+      rankingPreferenceError,
+      rankingPreferenceLoading,
       requestPasswordReset,
+      setRankingPreference,
       session,
       signIn,
+      signInWithApple,
       signInWithGoogle,
       signOut,
       signUp,
@@ -188,9 +267,14 @@ export function AuthProvider({ children }) {
       dismissPasswordRecovery,
       loading,
       passwordRecoveryActive,
+      rankingPreference,
+      rankingPreferenceError,
+      rankingPreferenceLoading,
       requestPasswordReset,
+      setRankingPreference,
       session,
       signIn,
+      signInWithApple,
       signInWithGoogle,
       signOut,
       signUp,

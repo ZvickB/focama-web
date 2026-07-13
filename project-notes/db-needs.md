@@ -54,6 +54,11 @@
 - Separate from internal `search_history`.
 - Uses Supabase auth/RLS with `user_id` ownership.
 
+### `user_preferences`
+- Stores signed-in account preferences such as shortlist ranking priority.
+- Current ranking enum is `balanced | price | lowest_price | brand | range`.
+- Uses Supabase auth/RLS with one row per `user_id`.
+
 ### `price_watches`
 - Stores signed-in users' Price Watch products for the Phase 1 watchlist UI.
 - Watches a specific Amazon ASIN + marketplace, not a saved search.
@@ -62,7 +67,7 @@
 - The daily server-side job reads it with the service key, checks fresh Rainforest numeric prices, updates `last_checked_at` plus positive `last_seen_price`, and logs would-notify decisions while email is disabled. With `PRICE_WATCH_EMAILS_ENABLED=true`, it sends Resend alerts and resets `baseline_price` only after successful send.
 
 ### `deep_dive_cache`
-- Stores feature-flagged Deep Dive product-group, Immersive, and synthesis cache entries.
+- Stores feature-flagged Compare-prices (Deep Dive path) product-group and Immersive cache entries. The synthesis cache layer is unused since review synthesis was removed on 2026-07-08.
 - Separate from guided discovery cache and internal `search_history`.
 
 ### `deep_dive_usage`
@@ -90,7 +95,7 @@
 Rate limiting falls back to in-memory storage when Supabase is not configured or the table is unavailable, but production should create this table before public traffic.
 
 ## Current recommendation
-- Create the app tables above if you want full Supabase-backed storage, analytics, search diagnostics, tester feedback, shared rate limiting, signed-in history, and Deep Dive.
+- Create the app tables above if you want full Supabase-backed storage, analytics, search diagnostics, tester feedback, shared rate limiting, signed-in history, account preferences, and Deep Dive.
 - Keep user-facing memory features separate from `search_history`.
 
 ## Environment variables
@@ -227,6 +232,35 @@ create policy "saved_searches_delete_own"
   on public.saved_searches
   for delete
   using (auth.uid() = user_id);
+```
+
+### User preferences table
+```sql
+create table if not exists public.user_preferences (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  ranking_priority text not null default 'balanced',
+  updated_at timestamptz not null default timezone('utc', now()),
+  constraint user_preferences_ranking_priority_check
+    check (ranking_priority in ('balanced', 'price', 'lowest_price', 'brand', 'range'))
+);
+
+alter table public.user_preferences enable row level security;
+
+create policy "user_preferences_select_own"
+  on public.user_preferences
+  for select
+  using (auth.uid() = user_id);
+
+create policy "user_preferences_insert_own"
+  on public.user_preferences
+  for insert
+  with check (auth.uid() = user_id);
+
+create policy "user_preferences_update_own"
+  on public.user_preferences
+  for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 ```
 
 ### Price watches table

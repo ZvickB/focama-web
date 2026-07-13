@@ -1,12 +1,14 @@
-# Account-Level Priority Preference — Feature Spec (PLANNED, not implemented)
+# Account-Level Priority Preference — Feature Spec
 
-Status: **proposal / design draft** — written 2026-07-07 for review (Codex: opinions welcome on anything here).
-Nothing in this doc is built yet. Default behavior today is unchanged.
+Status: **implemented and ready for deployment** — built on branch
+`account-ranking-preferences`; Supabase migrations are applied and local end-to-end
+smoke testing passed. Auth/RLS/history persistence QA and broader brand/range
+evaluation remain before a broad rollout.
 
 ## What this is
 
 Let a signed-in user set one account-level preference for how their shortlists are
-ranked: **balanced (default) / lowest price / known brands / variety**. When set, every
+ranked: **balanced (default) / prefer lower prices / lowest prices / known brands / range of options**. When set, every
 search re-weights the finalize ranking accordingly and the UI quietly shows that the
 preference is active. Signed-out users keep exactly today's behavior.
 
@@ -30,11 +32,10 @@ The Haiku finalize lock prompt (`buildNanoLockAndBadgesPrompt` in
 
 Design:
 
-- Build the priority ordering from a **vars array** instead of hardcoded prose. The
-  default array reproduces today's prompt **byte-identically** — no preference means
-  zero behavior change.
-- A user preference reorders **only the middle three** priorities (quality/brand,
-  price/value, variety). Two things are pinned and never reorderable:
+- Build the ranking language from explicit strategy branches instead of hardcoded
+  prose. The balanced branch reproduces today's ranking order.
+- A user preference changes only ranking emphasis after fit/eligibility. Two things
+  are pinned and never reorderable:
   - **Fit/eligibility stays #1.** "Lowest price" must never beat "it's actually the
     right product." All eligibility rules (budget as hard constraint, brand-in-query,
     dedupe, etc.) are untouched.
@@ -44,7 +45,7 @@ Design:
   Both must be rendered from the same ordered structure, or the prompt contradicts
   itself and Haiku behavior gets unpredictable.
 - The preference value is a **strict server-validated enum**
-  (`default | price | brand | variety`). Never interpolate free user text into this
+  (`balanced | price | brand | range`). Never interpolate free user text into this
   part of the prompt. Unknown/missing values fall back to `default`.
 - The preference must **also reach the gpt-5-mini enrichment prompt** so fit reasons
   and caveats speak to it (e.g. for a price-focused user: "cheapest of the six, but
@@ -72,7 +73,7 @@ Design:
   chips all write text into the notes box; a navigation chip breaks that pattern and
   adds account plumbing to the one-question screen.
 - The settings surface is **one single-choice row**: Balanced (default) / Lowest
-  price / Known brands / Variety. Single choice for now — multi-select ("price AND
+  price / Known brands / Range of options. Single choice for now — multi-select ("price AND
   brands") is explicitly deferred.
 - Discovery: a **one-time quiet hint** near results ("Tip: you can tell Focamai to
   always prioritize price or known brands — Set preferences"), dismissed permanently
@@ -193,3 +194,69 @@ Overall opinion: this is worth pursuing, but the ranking behavior should be desi
 as four explicit strategies before implementation. The settings and escape-hatch UX
 are already pointed in the right direction; strategy semantics and authenticated
 preference handling are the two areas that need more thought.
+
+## Implementation pass — 2026-07-09
+
+Built on branch `account-ranking-preferences`:
+
+- Shared enum: `balanced | price | brand | range` in `shared/ranking-preference.js`.
+- Signed-in account Preferences modal from the header account menu.
+- Supabase-backed `user_preferences` frontend store with soft failure if the table is
+  absent locally.
+- Preference sent in the finalize request body as advisory input; backend strictly
+  normalizes missing/unknown values to `balanced`.
+- Haiku ranking prompt uses explicit strategy branches:
+  - `balanced`: original product-fit → quality → price/value → variety → Amazon
+    position order.
+  - `price`: fit/eligibility first, then lowest-priced credible picks after a quality
+    floor.
+  - `brand`: fit/quality first, then recognized category brands among comparable
+    credible products.
+  - `range`: strongest hero first, then meaningful range across picks #2-6 where fit
+    and quality are comparable.
+- Async mini enrichment receives the same effective preference.
+- Non-balanced final results show a passive indicator with a current-search
+  `redo balanced` action.
+- Balanced final results can show a one-time localStorage-dismissed tip that opens
+  Preferences or signed-out auth copy.
+- Targeted selector tests and production build pass.
+
+Remaining release QA:
+
+- Live QA auth recovery/history/preferences together.
+- Try the UI on desktop/mobile and decide whether the results hint and indicator copy
+  feel too visible.
+- Run a few real searches in each strategy and inspect whether the ranking behavior
+  feels genuinely helpful.
+
+Live evaluation was run on 2026-07-12: see
+`project-notes/plans/account-ranking-preference-live-evaluation-2026-07-12.md`.
+The current prompt-only strategies are not yet reliable enough to ship as a strong
+shortlist-composition promise: price is directionally useful but inconsistent, and
+brand/range frequently return the balanced set unchanged. Do not call the selection
+work complete until deterministic brand and shortlist-coverage signals are evaluated.
+
+The proposed next iteration is documented in
+`project-notes/plans/account-ranking-preference-v2-plan.md`.
+
+## Selection direction confirmed — 2026-07-12
+
+The preference is primarily about **which six products are selected**, not merely
+the numbered order of an otherwise identical shortlist. Display order remains
+secondary to shortlist composition.
+
+- **Lowest prices:** use only a basic fit filter for the search and stated
+  requirements, then select the six lowest-priced matching products. Do not
+  preserve a more-expensive best-overall pick.
+- **Known brands:** select credible known-brand options whenever they are available
+  and fit the request. If fewer than six exist, complete the shortlist with the
+  best fitting credible non-brand alternatives.
+- **Range of options:** select useful alternatives across both price levels and
+  product styles/features, while retaining fit and quality requirements.
+- **No forced difference:** a non-balanced strategy may return the same six picks
+  when they genuinely remain the best choices.
+
+During every active-preference finalize, the waiting state should explicitly say
+that Focamai is searching for the submitted query with that saved preference. The
+message stays readable while the surrounding loading treatment communicates ongoing
+work; do not shimmer the text itself.

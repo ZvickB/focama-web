@@ -45,7 +45,7 @@ describe('deep dive handler', () => {
     expect(response.statusCode).toBe(200)
     expect(JSON.parse(response.body)).toEqual({
       status: 'unavailable',
-      error: 'Deep Dive is not enabled yet.',
+      error: 'Price comparison is not enabled yet.',
     })
   })
 
@@ -58,7 +58,7 @@ describe('deep dive handler', () => {
     expect(response.statusCode).toBe(401)
     expect(JSON.parse(response.body)).toEqual({
       status: 'gated',
-      error: 'Sign in to use Deep Dive.',
+      error: 'Sign in to compare prices.',
     })
   })
 })

@@ -37,7 +37,7 @@ function DeleteAccountPage() {
     <>
       <Seo
         title="Delete your Focamai account"
-        description="Delete your Focamai account and its account-associated saved searches, price watches, and Deep Dive usage record."
+        description="Delete your Focamai account and its account-associated saved searches, price watches, and price comparison usage record."
         path="/delete-account"
       />
       <PageShell
@@ -46,7 +46,7 @@ function DeleteAccountPage() {
         description="This permanent action deletes your Supabase authentication account and account-associated data."
       >
         <p>
-          Deletion removes your account, saved searches, price watches, and Deep Dive usage record.
+          Deletion removes your account, saved searches, price watches, and price comparison usage record.
           Anonymous operational analytics, diagnostics, caches, hosting logs, and provider records
           that cannot be reliably linked to your Supabase account are not removed by this control.
         </p>

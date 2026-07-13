@@ -123,6 +123,8 @@ describe('HomePage retry advice', () => {
         String(url).includes('cacheMode=refresh'),
       )).toBe(true)
     })
+    expect(screen.getByText('compact city stroller under 18 pounds')).toBeInTheDocument()
+    expect(screen.getByText(/based on your improve picks feedback/i)).toBeInTheDocument()
     expect(screen.queryByText(/retry 2 of 2\./i)).not.toBeInTheDocument()
     const retryAdviceRequest = fetchMock.mock.calls[3]
     expect(retryAdviceRequest[0]).toContain('/api/search/retry-advice')
@@ -715,6 +717,7 @@ describe('HomePage retry advice', () => {
     await user.keyboard('{Enter}')
 
     await screen.findByText(/what should we optimize for with this slim city stroller/i)
+    expect(screen.getByText(/based on your improve picks feedback/i)).toBeInTheDocument()
     expect(screen.getAllByText('slim city stroller').length).toBeGreaterThan(0)
     expect(
       fetchMock.mock.calls.some(([url]) =>

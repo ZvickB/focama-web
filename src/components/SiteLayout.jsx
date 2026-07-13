@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { LogOut, Menu, RotateCcw, UserCircle, X } from 'lucide-react'
+import { Check, LogOut, Menu, RotateCcw, SlidersHorizontal, UserCircle, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import logo from '@/assets/logo_header_mark.svg'
 import wordmark from '@/assets/wordmark.PNG'
@@ -10,6 +10,11 @@ import { AMAZON_MARKETPLACE_AUTO } from '@/contexts/amazonStoreConstants.js'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { useAuth } from '@/contexts/useAuth.js'
 import { useSearchProgress } from '@/contexts/useSearchProgress.js'
+import {
+  RANKING_PREFERENCE_LABELS,
+  RANKING_PREFERENCES,
+  normalizeRankingPreference,
+} from '../../shared/ranking-preference.js'
 
 const MARKETPLACE_DISPLAY = {
   'amazon.com': { location: 'the US', storeLabel: 'Amazon US' },
@@ -171,9 +176,146 @@ function SlidingNav({ items, className = '' }) {
   )
 }
 
-function AvatarDropdown({ userInitial, userEmail, onSignOut }) {
+const RANKING_PREFERENCE_OPTIONS = [
+  {
+    value: RANKING_PREFERENCES.BALANCED,
+    description: 'Keep today’s balanced ranking.',
+  },
+  {
+    value: RANKING_PREFERENCES.PRICE,
+    description: 'Still weighs fit, quality, and other tradeoffs.',
+  },
+  {
+    value: RANKING_PREFERENCES.LOWEST_PRICE,
+    description: 'Starts with the lowest prices among options that fit your search.',
+  },
+  {
+    value: RANKING_PREFERENCES.BRAND,
+    description: 'Prefer known category brands when fit is close.',
+  },
+  {
+    value: RANKING_PREFERENCES.RANGE,
+    description: 'Show a wider spread after the best match.',
+  },
+]
+
+function PreferenceChoiceList({
+  disabled = false,
+  onChange,
+  rankingPreference,
+}) {
+  const activePreference = normalizeRankingPreference(rankingPreference)
+
+  return (
+    <div className="space-y-2">
+      {RANKING_PREFERENCE_OPTIONS.map((option) => {
+        const isSelected = activePreference === option.value
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={isSelected}
+            disabled={disabled}
+            onClick={() => onChange(option.value)}
+            className={`flex w-full items-start gap-3 rounded-2xl border px-3.5 py-3 text-left transition ${
+              isSelected
+                ? 'border-primary/30 bg-[#eef7f6] text-slate-900'
+                : 'border-stone-200 bg-white text-slate-600 hover:border-stone-300 hover:text-slate-900'
+            } disabled:pointer-events-none disabled:opacity-60`}
+          >
+            <span
+              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                isSelected
+                  ? 'border-primary bg-primary text-white'
+                  : 'border-stone-300 bg-white text-transparent'
+              }`}
+            >
+              <Check className="h-3.5 w-3.5" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold">
+                {RANKING_PREFERENCE_LABELS[option.value]}
+              </span>
+              <span className="mt-0.5 block text-xs italic leading-5 text-slate-500">
+                {option.description}
+              </span>
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function PreferencesModal({
+  errorMessage = '',
+  isSaving = false,
+  onChange,
+  onClose,
+  open,
+  rankingPreference,
+  saveStatus = '',
+}) {
+  if (!open) return null
+
+  return (
+    <div
+      aria-labelledby="preferences-modal-title"
+      aria-modal="true"
+      className="fixed inset-0 z-[78] flex items-start justify-center overflow-y-auto bg-[rgba(51,39,30,0.20)] px-4 py-6 backdrop-blur-[2px] sm:items-center sm:py-8"
+      role="dialog"
+    >
+      <div className="my-auto w-full max-w-md rounded-[24px] border border-[#e4d7c6] bg-white p-5 shadow-[0_30px_100px_-48px_rgba(15,23,42,0.45)] sm:rounded-[28px] sm:p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eef7f6] text-primary">
+              <SlidersHorizontal className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 id="preferences-modal-title" className="text-xl font-semibold text-slate-950">
+                Preferences
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                Choose how Focamai should lean when ranking your six picks.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close preferences"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-stone-100 hover:text-slate-700"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="mt-5">
+          <PreferenceChoiceList
+            disabled={isSaving}
+            onChange={onChange}
+            rankingPreference={rankingPreference}
+          />
+        </div>
+
+        <p aria-live="polite" className="mt-4 text-sm text-slate-500" role="status">
+          {isSaving ? 'Saving preference…' : saveStatus || 'Changes save automatically.'}
+        </p>
+
+        {errorMessage ? (
+          <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+            {errorMessage}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function AvatarDropdown({ userInitial, userEmail, onOpenPreferences, onSignOut, rankingPreference }) {
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef(null)
+  const activeLabel = RANKING_PREFERENCE_LABELS[normalizeRankingPreference(rankingPreference)]
 
   const close = useCallback(() => setIsOpen(false), [])
 
@@ -216,8 +358,20 @@ function AvatarDropdown({ userInitial, userEmail, onSignOut }) {
           >
             <div className="px-4 py-2">
               <p className="truncate text-sm font-medium text-slate-800">{userEmail}</p>
+              <p className="mt-0.5 text-xs text-slate-400">Ranking: {activeLabel}</p>
             </div>
             <div className="mx-2 border-t border-stone-100" />
+            <button
+              type="button"
+              onClick={() => {
+                close()
+                onOpenPreferences()
+              }}
+              className="mx-2 mt-1 flex w-[calc(100%-1rem)] items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-slate-600 transition hover:bg-stone-50 hover:text-slate-900"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Preferences
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -266,6 +420,10 @@ function SearchStepIndicator({ progress, isCompact }) {
 function SiteLayout() {
   const [isCompact, setIsCompact] = useState(false)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
+  const [authContextualLine, setAuthContextualLine] = useState('')
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false)
+  const [isSavingPreference, setIsSavingPreference] = useState(false)
+  const [preferenceSaveStatus, setPreferenceSaveStatus] = useState('')
   const [mobileMenuOpenPath, setMobileMenuOpenPath] = useState(null)
   const location = useLocation()
   const isMobileMenuOpen = mobileMenuOpenPath === location.pathname
@@ -278,7 +436,16 @@ function SiteLayout() {
     resolvedAmazonDomain,
     setSelectedAmazonDomain,
   } = useAmazonStore()
-  const { loading: isAuthLoading, passwordRecoveryActive, signOut, user } = useAuth()
+  const {
+    loading: isAuthLoading,
+    passwordRecoveryActive,
+    rankingPreference,
+    rankingPreferenceError,
+    rankingPreferenceLoading,
+    setRankingPreference,
+    signOut,
+    user,
+  } = useAuth()
   const userEmail = user?.email || ''
   const userInitial = userEmail ? userEmail.charAt(0).toUpperCase() : ''
   const navItems = user
@@ -310,6 +477,31 @@ function SiteLayout() {
     await signOut()
   }
 
+  function openAuthModal(contextualLine = '') {
+    setAuthContextualLine(contextualLine)
+    setIsAuthModalOpen(true)
+  }
+
+  function openPreferences() {
+    if (!user) {
+      openAuthModal('Sign in to save your preferences.')
+      return
+    }
+
+    setPreferenceSaveStatus('')
+    setIsPreferencesOpen(true)
+  }
+
+  async function handlePreferenceChange(nextPreference) {
+    setIsSavingPreference(true)
+    setPreferenceSaveStatus('')
+    const { error } = await setRankingPreference(nextPreference)
+    setIsSavingPreference(false)
+    if (!error) {
+      setPreferenceSaveStatus('Saved to your account.')
+    }
+  }
+
   useEffect(() => {
     function handleScroll() {
       const nextScrollY = window.scrollY
@@ -334,12 +526,22 @@ function SiteLayout() {
   useEffect(() => {
     function handleOpenAuth() {
       setMobileMenuOpenPath(null)
-      setIsAuthModalOpen(true)
+      openAuthModal()
     }
 
     window.addEventListener('focamai:open-auth', handleOpenAuth)
     return () => window.removeEventListener('focamai:open-auth', handleOpenAuth)
   }, [])
+
+  useEffect(() => {
+    function handleOpenPreferences() {
+      setMobileMenuOpenPath(null)
+      openPreferences()
+    }
+
+    window.addEventListener('focamai:open-preferences', handleOpenPreferences)
+    return () => window.removeEventListener('focamai:open-preferences', handleOpenPreferences)
+  })
 
   return (
     <div className="min-h-screen">
@@ -424,11 +626,17 @@ function SiteLayout() {
             ) : null}
             <SlidingNav items={navItems} />
             {user ? (
-              <AvatarDropdown userInitial={userInitial} userEmail={userEmail} onSignOut={handleSignOut} />
+              <AvatarDropdown
+                rankingPreference={rankingPreference}
+                userInitial={userInitial}
+                userEmail={userEmail}
+                onOpenPreferences={openPreferences}
+                onSignOut={handleSignOut}
+              />
             ) : (
               <button
                 type="button"
-                onClick={() => setIsAuthModalOpen(true)}
+                onClick={() => openAuthModal()}
                 disabled={isAuthLoading}
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-white/70 bg-white/78 px-3 text-sm font-medium text-slate-600 shadow-[0_12px_30px_-22px_rgba(15,23,42,0.28)] transition hover:border-[#d9e6e8] hover:bg-white hover:text-slate-900 disabled:pointer-events-none disabled:opacity-60"
               >
@@ -483,6 +691,14 @@ function SiteLayout() {
                 </div>
                 <button
                   type="button"
+                  onClick={openPreferences}
+                  className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-3 text-sm font-medium text-slate-500 transition hover:bg-stone-100 hover:text-slate-800"
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                  Preferences
+                </button>
+                <button
+                  type="button"
                   onClick={handleSignOut}
                   className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full px-3 text-sm font-medium text-slate-500 transition hover:bg-stone-100 hover:text-slate-800"
                 >
@@ -495,7 +711,7 @@ function SiteLayout() {
                 type="button"
                 onClick={() => {
                   setMobileMenuOpenPath(null)
-                  setIsAuthModalOpen(true)
+                  openAuthModal()
                 }}
                 disabled={isAuthLoading}
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-[22px] border border-white/70 bg-white/82 px-4 text-sm font-semibold text-slate-700 shadow-[0_14px_34px_-28px_rgba(15,23,42,0.22)] transition hover:border-[#d9e6e8] hover:bg-white hover:text-slate-900 disabled:pointer-events-none disabled:opacity-60"
@@ -561,7 +777,26 @@ function SiteLayout() {
           </div>
         </div>
       </footer>
-      <AuthModal open={isAuthModalOpen || passwordRecoveryActive} onClose={() => setIsAuthModalOpen(false)} />
+      <PreferencesModal
+        errorMessage={rankingPreferenceError}
+        isSaving={isSavingPreference || rankingPreferenceLoading}
+        open={isPreferencesOpen}
+        rankingPreference={rankingPreference}
+        saveStatus={preferenceSaveStatus}
+        onChange={handlePreferenceChange}
+        onClose={() => {
+          setIsPreferencesOpen(false)
+          setPreferenceSaveStatus('')
+        }}
+      />
+      <AuthModal
+        contextualLine={authContextualLine}
+        open={isAuthModalOpen || passwordRecoveryActive}
+        onClose={() => {
+          setIsAuthModalOpen(false)
+          setAuthContextualLine('')
+        }}
+      />
     </div>
   )
 }

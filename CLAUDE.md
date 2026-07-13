@@ -34,7 +34,7 @@ This is a non-negotiable product direction. Apply it to every AI prompt that gen
 ```bash
 npm run dev          # Frontend only (Vite, port 5173)
 npm run dev:all      # Frontend + backend together (recommended)
-npm run server       # Backend only — local native HTTP dev server (port 8787); NOT the Render entry point
+npm run server       # Backend only — local Express server (port 8787); same route map as Render
 npm run test         # Run all tests once
 npm run test:watch   # Watch mode
 npm run build        # Production build
@@ -201,4 +201,3 @@ Read `project-notes/assistant-start.md` first at the start of every session — 
 | `project-notes/handoff.md` | Medium-term work and open product questions |
 | `project-notes/doc_briefs.md` | Product intent, UX direction, and broader decisions |
 | `project-notes/db-needs.md` | Storage/backend table behavior |
-

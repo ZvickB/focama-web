@@ -83,12 +83,14 @@ export async function runMiniEnrichmentAsync({
   normalizedQuery,
   discoveryToken,
   discoveryScope = CACHE_SCOPE_DISCOVERY,
+  rankingPreference,
 }) {
   const miniResult = await miniEnrichSelectedCandidates({
     lockedIds,
     candidatePool,
     apiKey,
     model,
+    rankingPreference,
   })
 
   const resolvedDiscoveryContext = await resolveDiscoveryContext(
@@ -110,6 +112,7 @@ export async function runMiniEnrichmentAsync({
       model: miniResult.model,
       generatedAt: new Date().toISOString(),
       preservedOrder: miniResult.preservedOrder,
+      rankingPreference,
     },
   }
 
@@ -143,8 +146,6 @@ export async function runMiniEnrichmentAsync({
 export async function runDeepDiveEligibilityAsync({
   lockedIds,
   candidatePool,
-  apiKey,
-  model,
   normalizedQuery,
   discoveryToken,
   discoveryScope = CACHE_SCOPE_DISCOVERY,
@@ -159,15 +160,9 @@ export async function runDeepDiveEligibilityAsync({
     return
   }
 
-  const enrichmentEntries = Array.isArray(resolvedBeforeAi.cachedEntry?.selection?.enrichment?.entries)
-    ? resolvedBeforeAi.cachedEntry.selection.enrichment.entries
-    : []
   const eligibilityResult = await assessDeepDiveEligibility({
     lockedIds,
     candidatePool,
-    enrichmentEntries,
-    apiKey,
-    model,
   })
 
   const resolvedAfterAi = await resolveDiscoveryContext(

@@ -22,7 +22,6 @@ import {
   normalizeDeepDiveOffers,
   normalizeMarket,
   normalizeProductIdentity,
-  normalizeReviewSignals,
   PRICE_STALE_MS,
 } from '../price-comparison/deep-dive-serpapi.js'
 import {
@@ -79,35 +78,15 @@ function limitedPayload({ candidateId, reason, message, cache = {} }) {
     cache: {
       productGroup: cache.productGroup || 'miss',
       immersive: cache.immersive || 'miss',
-      synthesis: cache.synthesis || 'skipped',
     },
     product: null,
     offers: [],
-    reviews: {
-      summary: '',
-      sources: [],
-      userReviews: [],
-      criticRatings: [],
-      topInsights: [],
-      starDistribution: [],
-    },
+    checkedStoreCount: 0,
     limitedData: { reason, message },
   }
 }
 
-function readyOrLimitedPayload({ candidateId, product, offers, reviews, cache, ambiguous }) {
-  const hasReviews = Boolean(reviews.summary || reviews.userReviews?.length > 0 || reviews.criticRatings.length > 0 || reviews.topInsights.length > 0)
-  const hasData = offers.length > 0 || hasReviews
-
-  if (!hasData) {
-    return limitedPayload({
-      candidateId,
-      reason: 'no_review_data',
-      message: 'Deep Dive found the product group, but Google did not have enough offer or review detail to show.',
-      cache,
-    })
-  }
-
+function readyPayload({ candidateId, product, offers, checkedStoreCount, cache, ambiguous }) {
   return {
     status: 'ready',
     candidateId,
@@ -115,7 +94,7 @@ function readyOrLimitedPayload({ candidateId, product, offers, reviews, cache, a
     cache,
     product,
     offers,
-    reviews,
+    checkedStoreCount,
     ambiguous: ambiguous || false,
     limitedData: null,
   }
@@ -244,7 +223,7 @@ export async function handleDeepDive(request, response) {
   if (!isEnabled()) {
     sendJson(response, 200, {
       status: 'unavailable',
-      error: 'Deep Dive is not enabled yet.',
+      error: 'Price comparison is not enabled yet.',
     })
     return
   }
@@ -254,8 +233,8 @@ export async function handleDeepDive(request, response) {
     sendJson(response, 401, {
       status: 'gated',
       error: auth.reason === 'supabase_not_configured'
-        ? 'Sign in is not configured for Deep Dive yet.'
-        : 'Sign in to use Deep Dive.',
+        ? 'Sign in is not configured for price comparison yet.'
+        : 'Sign in to compare prices.',
     })
     return
   }
@@ -267,7 +246,7 @@ export async function handleDeepDive(request, response) {
   ])
 
   if (!ipLimit.allowed || !accountLimit.allowed) {
-    sendJson(response, 429, { status: 'unavailable', error: 'Too many Deep Dive requests. Please wait a moment and try again.' })
+    sendJson(response, 429, { status: 'unavailable', error: 'Too many price comparison requests. Please wait a moment and try again.' })
     return
   }
 
@@ -313,7 +292,7 @@ export async function handleDeepDive(request, response) {
   }
 
   if (IN_FLIGHT.has(inFlightKey)) {
-    sendJson(response, 429, { status: 'unavailable', error: 'Deep Dive is already running for this product.' })
+    sendJson(response, 429, { status: 'unavailable', error: 'A price comparison is already running for this product.' })
     return
   }
 
@@ -328,7 +307,7 @@ export async function handleDeepDive(request, response) {
     sendJson(response, 200, limitedPayload({
       candidateId,
       reason: 'provider_unavailable',
-      message: 'Deep Dive needs SerpApi to be configured before it can run.',
+      message: 'Price comparison needs SerpApi to be configured before it can run.',
     }))
     return
   }
@@ -368,14 +347,13 @@ export async function handleDeepDive(request, response) {
     const cache = {
       productGroup: productGroup.cacheStatus,
       immersive: 'miss',
-      synthesis: 'skipped',
     }
 
     if (!productGroup.value.selectedOffer) {
       sendJson(response, 200, limitedPayload({
         candidateId,
         reason: 'no_exact_product',
-        message: 'Deep Dive could not prove a unique Google Shopping product group for this exact item.',
+        message: 'Focamai could not confirm this exact product at other stores, so there are no prices to compare.',
         cache,
       }))
       return
@@ -391,36 +369,33 @@ export async function handleDeepDive(request, response) {
     cache.immersive = immersive.cacheStatus
 
     const productResults = immersive.value.productResults || {}
-    const shouldShowPrices = immersive.cacheStatus !== 'stale'
-    const offerResult = shouldShowPrices
-      ? await normalizeDeepDiveOffers({
-          candidate,
-          immersive: immersive.value,
-          market,
-          shoppingOffer: productGroup.value.selectedOffer,
-          skipSavingsFilter: crossMarketFallback,
-        })
-      : { offers: [], rejected: [] }
 
-    const signals = normalizeReviewSignals(productResults)
-    cache.synthesis = 'skipped'
-
-    const reviews = {
-      summary: '',
-      sources: [],
-      userReviews: signals.userReviews,
-      criticRatings: signals.criticRatings,
-      topInsights: signals.topInsights,
-      starDistribution: signals.starDistribution,
+    if (immersive.cacheStatus === 'stale') {
+      await incrementDeepDiveUsage(auth.user.id)
+      sendJson(response, 200, limitedPayload({
+        candidateId,
+        reason: 'price_data_stale',
+        message: 'Current store prices could not be confirmed right now. Try again in a little while.',
+        cache,
+      }))
+      return
     }
+
+    const offerResult = await normalizeDeepDiveOffers({
+      candidate,
+      immersive: immersive.value,
+      market,
+      shoppingOffer: productGroup.value.selectedOffer,
+      skipSavingsFilter: crossMarketFallback,
+    })
 
     await incrementDeepDiveUsage(auth.user.id)
 
-    const payload = readyOrLimitedPayload({
+    const payload = readyPayload({
       candidateId,
       product: buildDeepDiveProductPayload(productResults, candidate),
       offers: offerResult.offers,
-      reviews,
+      checkedStoreCount: Array.isArray(productResults.stores) ? productResults.stores.length : 0,
       cache,
       ambiguous: Boolean(productGroup.value.ambiguous),
     })
@@ -451,7 +426,7 @@ export async function handleDeepDive(request, response) {
     sendJson(response, 200, limitedPayload({
       candidateId,
       reason: 'provider_unavailable',
-      message: 'Deep Dive was limited this time because the provider request did not complete.',
+      message: 'Price comparison was limited this time because the provider request did not complete.',
     }))
   } finally {
     IN_FLIGHT.delete(inFlightKey)

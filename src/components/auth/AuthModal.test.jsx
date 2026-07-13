@@ -11,6 +11,7 @@ const auth = vi.hoisted(() => ({
   passwordRecoveryActive: false,
   requestPasswordReset: vi.fn(),
   signIn: vi.fn(),
+  signInWithApple: vi.fn(),
   signInWithGoogle: vi.fn(),
   signUp: vi.fn(),
   updatePassword: vi.fn(),
@@ -26,6 +27,8 @@ describe('AuthModal password recovery', () => {
     auth.requestPasswordReset.mockReset().mockResolvedValue({ error: null })
     auth.updatePassword.mockReset().mockResolvedValue({ error: null })
     auth.dismissPasswordRecovery.mockReset()
+    auth.signInWithApple.mockReset().mockResolvedValue({ error: null })
+    auth.signInWithGoogle.mockReset().mockResolvedValue({ error: null })
   })
 
   it('sends a password reset email from the sign-in screen', async () => {
@@ -61,5 +64,16 @@ describe('AuthModal password recovery', () => {
 
     expect(auth.updatePassword).toHaveBeenCalledWith({ password: 'new-password' })
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('starts Google OAuth while Apple remains unavailable in the UI', async () => {
+    const user = userEvent.setup()
+
+    render(<AuthModal open onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: /continue with google/i }))
+    expect(auth.signInWithGoogle).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: /continue with apple/i })).not.toBeInTheDocument()
+    expect(auth.signInWithApple).not.toHaveBeenCalled()
   })
 })

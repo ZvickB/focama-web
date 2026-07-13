@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, LoaderCircle } from 'lucide-react'
+import {
+  RANKING_PREFERENCE_LABELS,
+  isActiveRankingPreference,
+  normalizeRankingPreference,
+} from '../../../shared/ranking-preference.js'
 
 const FINALIZE_STAGES = [
   'Reading your search',
@@ -8,8 +13,11 @@ const FINALIZE_STAGES = [
   'Getting the shortlist ready',
 ]
 
-export function FinalizeLoadingState({ compact = false }) {
+export function FinalizeLoadingState({ compact = false, rankingPreference = 'balanced', submittedQuery = '' }) {
   const [activeStageIndex, setActiveStageIndex] = useState(0)
+  const normalizedPreference = normalizeRankingPreference(rankingPreference)
+  const hasActivePreference = isActiveRankingPreference(normalizedPreference)
+  const query = String(submittedQuery || '').trim()
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -41,6 +49,11 @@ export function FinalizeLoadingState({ compact = false }) {
             <p className="text-sm leading-6 text-slate-600">
               Focamai is using your search and notes to lock a focused shortlist.
             </p>
+            {hasActivePreference ? (
+              <p className="text-sm leading-6 text-primary">
+                Searching{query ? ` for ${query}` : ''} with your {RANKING_PREFERENCE_LABELS[normalizedPreference].toLowerCase()} preference.
+              </p>
+            ) : null}
           </div>
 
           <ol className="inline-grid grid-cols-2 gap-1.5">
