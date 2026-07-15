@@ -39,6 +39,8 @@ describe('DeleteAccountPage', () => {
   it('shows public deletion instructions and contact fallback when signed out', () => {
     renderPage()
     expect(screen.getByRole('heading', { name: 'Delete your Focamai account' })).toBeInTheDocument()
+    expect(screen.getByText(/account preferences, saved searches/i)).toBeInTheDocument()
+    expect(screen.getByText(/does not automatically purge the underlying database row/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'contact@focamai.com' })).toHaveAttribute('href', 'mailto:contact@focamai.com')
     expect(screen.queryByRole('button', { name: 'Delete account' })).not.toBeInTheDocument()
   })

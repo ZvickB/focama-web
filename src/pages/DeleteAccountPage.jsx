@@ -46,9 +46,25 @@ function DeleteAccountPage() {
         description="This permanent action deletes your Supabase authentication account and account-associated data."
       >
         <p>
-          Deletion removes your account, saved searches, price watches, and price comparison usage record.
-          Anonymous operational analytics, diagnostics, caches, hosting logs, and provider records
-          that cannot be reliably linked to your Supabase account are not removed by this control.
+          Deletion removes your Supabase authentication account, account preferences, saved searches,
+          price watches, and price comparison usage record. It also clears saved-search history stored
+          locally in this browser after deletion succeeds.
+        </p>
+        <p>
+          Some records are not deleted by this control because they are not reliably linked to a
+          Supabase account: anonymous operational search logs, analytics, diagnostics, search caches,
+          hashed rate-limit records, hosting logs, feedback, and records held by service providers.
+          We do not use those records to recreate your account after deletion.
+        </p>
+        <p>
+          Search-cache entries are marked to expire from active use after 24 hours, but the current
+          code does not automatically purge the underlying database row. The code also does not set
+          one automatic retention period for the other retained records. They may remain only as
+          necessary for security, fraud prevention, legal compliance, service integrity, or provider
+          operations, and are removed or anonymized through maintenance or a valid privacy request
+          when Focamai can identify the relevant record. Provider-held records follow the applicable
+          provider policy and account configuration, including any longer retention required for
+          legal or misuse-prevention reasons.
         </p>
 
         {deleted ? (

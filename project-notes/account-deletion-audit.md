@@ -2,15 +2,16 @@
 
 ## Account-owned Supabase records
 
-The canonical schema in `project-notes/db-needs.md` defines three records keyed directly to `auth.users(id)`:
+The canonical schema in `project-notes/db-needs.md` defines four records keyed directly to `auth.users(id)`:
 
 | Table | User key | Delete behavior |
 | --- | --- | --- |
 | `saved_searches` | `user_id` | Foreign key uses `ON DELETE CASCADE` |
+| `user_preferences` | `user_id` (primary key) | Foreign key uses `ON DELETE CASCADE` |
 | `price_watches` | `user_id` | Foreign key uses `ON DELETE CASCADE` |
 | `deep_dive_usage` | `user_id` (primary key) | Foreign key uses `ON DELETE CASCADE` |
 
-No repository schema or application write path was found for another account-keyed table, profile row, storage object, or user-ID-bearing record. Because all three owned tables cascade, `DELETE /api/account` does not perform client-side or pre-auth table deletion. The server verifies the bearer token and calls the Supabase admin `deleteUser` operation for that verified user ID; the database foreign keys remove the owned rows with the auth user.
+No repository schema or application write path was found for another account-keyed table, profile row, storage object, or user-ID-bearing record. Because all four owned tables cascade, `DELETE /api/account` does not perform client-side or pre-auth table deletion. The server verifies the bearer token and calls the Supabase admin `deleteUser` operation for that verified user ID; the database foreign keys remove the owned rows with the auth user.
 
 Before production release, confirm the deployed Supabase constraints still match the canonical schema. This is live-environment verification and cannot be proven by the local test suite.
 

@@ -27,14 +27,15 @@ function PrivacyPage() {
             </li>
             <li>
               <strong>Account information:</strong> email address, Supabase user identifier, and
-              authentication/session information. The website also supports optional Google and
-              Apple sign-in; these OAuth options are not currently available in the mobile app.
+              authentication/session information. Users may sign in using email and password or
+              Google Sign-In.
             </li>
             <li>
-              <strong>Saved searches and price watches:</strong> signed-out search history is stored
-              locally on the browser or device. When signed in, saved searches are stored with the
-              account. Price watches store the product, Amazon marketplace, price and alert settings,
-              and use the account email to send an alert when enabled.
+              <strong>Account-backed saved searches, preferences, and price watches:</strong> signed-out
+              search history is stored locally on the browser or device. When signed in, saved
+              searches and ranking preferences are stored with the account. Price watches store the
+              product, Amazon marketplace, price and alert settings, and use the account email to
+              send an alert when enabled.
             </li>
             <li>
               <strong>Voice search:</strong> when a mobile user chooses the microphone, Focamai
@@ -143,22 +144,26 @@ function PrivacyPage() {
         <section className="space-y-3">
           <h2 className={sectionHeadingClassName}>Retention and deletion</h2>
           <p>
-            Search-cache entries are normally marked to expire after 24 hours, although the
-            underlying database or hosting records may remain until they are cleaned up. The code
-            does not currently define one automatic deletion period for account records, internal
-            search logs, analytics, diagnostics, crash reports, or feedback. Those records may therefore remain
-            until deleted as part of maintenance or a valid privacy request. Third-party providers
-            may retain information under their own policies.
+            Search-cache entries are marked to expire from active use after 24 hours, although the
+            current code does not automatically purge the underlying database row. The code also
+            does not set one automatic retention period for internal search logs, analytics,
+            diagnostics, crash reports, hosting logs, or feedback. These records may remain only as
+            necessary for security, fraud prevention, legal compliance, service integrity, or
+            provider operations. Focamai removes or anonymizes them through maintenance or a valid
+            privacy request when the relevant record can be identified. Third-party providers retain
+            information under their applicable policies and account configurations, including any
+            longer retention required for legal or misuse-prevention reasons.
           </p>
           <p>
             Signed-in users can permanently delete their Focamai account in the mobile app under
             Settings → Account or at <a className="text-primary underline underline-offset-4" href="/delete-account">focamai.com/delete-account</a>.
-            This deletes the Supabase authentication user and the account-owned saved searches,
-            price watches, and price comparison usage record linked to that user ID. The app also clears its
-            local saved-search history after a successful deletion. Anonymous operational search
-            logs, analytics, diagnostics, caches, rate-limit records, hosting logs, feedback, and
-            third-party provider records are not deleted by this control when they cannot be
-            reliably linked to the account.
+            This deletes the Supabase authentication user and the account-owned preferences, saved
+            searches, price watches, and price comparison usage record linked to that user ID. The
+            app also clears its local saved-search history after a successful deletion. Anonymous
+            operational search logs, analytics, diagnostics, caches, hashed rate-limit records,
+            hosting logs, feedback, and third-party provider records are not deleted by this control
+            when they cannot be reliably linked to the account. They are not used to recreate the
+            account after deletion.
           </p>
         </section>
 
