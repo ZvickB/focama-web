@@ -2741,6 +2741,9 @@ describe('server handlers', () => {
           entries: [
             { candidate_id: 'one', fit_reason: 'Good city stroller', caveat: 'Slightly pricey' },
           ],
+          improvePicksSuggestions: [
+            { label: 'Lower price', feedback: 'I want lower-priced options.' },
+          ],
           model: 'gpt-5-mini',
           generatedAt: '2026-04-14T12:00:00.000Z',
           preservedOrder: true,
@@ -2760,6 +2763,9 @@ describe('server handlers', () => {
       ready: true,
       entries: [{ candidate_id: 'one', fit_reason: 'Good city stroller', caveat: 'Slightly pricey' }],
       deepDiveEligibility: null,
+      improvePicksSuggestions: [
+        { label: 'Lower price', feedback: 'I want lower-priced options.' },
+      ],
       model: 'gpt-5-mini',
     })
   })

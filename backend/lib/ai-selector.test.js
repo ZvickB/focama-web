@@ -319,6 +319,11 @@ describe('ai selector', () => {
               caveat: 'Storage is tighter than on larger everyday strollers.',
             },
           ],
+          improve_picks_suggestions: [
+            { label: 'Lower price', feedback: 'I want lower-priced options that still work for airport travel.' },
+            { label: 'Lighter carry', feedback: 'I want an even lighter stroller that is easier to carry.' },
+            { label: 'More storage', feedback: 'I need more storage for longer travel days.' },
+          ],
         }),
       }),
     })
@@ -354,6 +359,13 @@ describe('ai selector', () => {
         feature_bullets: ['One-hand fold', 'Compact carry strap'],
       },
     ])
+    expect(result.improvePicksSuggestions).toEqual([
+      { label: 'Lower price', feedback: 'I want lower-priced options that still work for airport travel.' },
+      { label: 'Lighter carry', feedback: 'I want an even lighter stroller that is easier to carry.' },
+      { label: 'More storage', feedback: 'I need more storage for longer travel days.' },
+    ])
+    expect(prompt).toContain('exactly 3 distinct improvement suggestions')
+    expect(requestBody.text.format.schema.required).toContain('improve_picks_suggestions')
   })
 
   it('passes ranking preference guidance into mini enrichment', async () => {
@@ -461,6 +473,7 @@ describe('ai selector', () => {
       model: 'gpt-5-mini',
       enriched: [],
       enrichedIds: [],
+      improvePicksSuggestions: [],
       usage: null,
       preservedOrder: true,
     })

@@ -95,7 +95,7 @@ export function RefinementCopy({
             className="mt-3 text-sm font-semibold text-primary underline decoration-primary/25 underline-offset-4 transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
             onClick={onAskDifferentQuestion}
           >
-            Ask a different question
+            Get a different question
           </button>
         ) : null}
       </div>
@@ -330,31 +330,49 @@ export function FlowProgress({ hasDiscoveryResults, hasFinalResults, hasStartedS
 
 
 export function ResultsSectionFallback({
+  isDiscovering = false,
   rankingPreference = 'balanced',
   retrySearchQuery = '',
   showFinalizeStatus = false,
   submittedQuery = '',
 }) {
   if (retrySearchQuery) {
+    const retryStatus = showFinalizeStatus
+      ? 'Narrowing to your strongest picks…'
+      : isDiscovering
+        ? 'Finding better matches…'
+        : 'Preparing a sharper search…'
+
     return (
-      <div className="rounded-[28px] border border-[#e7dac8] bg-white/94 p-6 text-center shadow-[0_24px_64px_-50px_rgba(120,87,63,0.22)] sm:p-8">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-primary/20 bg-[#eef7f6] text-primary">
-          <Sparkles className="h-5 w-5 animate-pulse motion-reduce:animate-none" />
+      <div aria-live="polite" className="rounded-[28px] border border-primary/20 bg-[#f6fbfa] p-6 text-center shadow-[0_24px_64px_-50px_rgba(15,97,117,0.22)] sm:p-8">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-primary/20 bg-white text-primary shadow-[0_12px_28px_-22px_rgba(15,97,117,0.42)]">
+          <Sparkles className="h-5 w-5 animate-soft-pulse motion-reduce:animate-none" />
         </div>
         <h2 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">
-          We&apos;re updating your picks based on your feedback.
+          Updating your picks
         </h2>
         <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
-          Focamai is using a sharper search to find six picks that fit better.
+          We&apos;re using what you changed to build a more focused set of options.
         </p>
-        <div className="mt-6 rounded-[22px] border border-[#e5dacb] bg-[#fbf7f1] p-4 text-left">
+        <div className="mt-6 rounded-[22px] border border-primary/15 bg-white/90 p-4 text-left">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
             Improved search we&apos;re using
           </p>
           <p className="mt-2 text-base font-semibold leading-6 text-primary">{retrySearchQuery}</p>
           <p className="mt-3 text-sm leading-5 text-slate-600">Based on your Improve picks feedback.</p>
         </div>
-        <p role="status" className="mt-5 text-sm text-slate-500">Finding better matches…</p>
+        <div className="mt-5 flex items-center justify-center gap-2 text-sm font-medium text-slate-600" role="status">
+          <span className="flex gap-1" aria-hidden="true">
+            {[0, 1, 2].map((dot) => (
+              <span
+                key={dot}
+                className="h-1.5 w-1.5 animate-soft-pulse rounded-full bg-primary/70 motion-reduce:animate-none"
+                style={{ animationDelay: `${dot * 160}ms` }}
+              />
+            ))}
+          </span>
+          {retryStatus}
+        </div>
       </div>
     )
   }

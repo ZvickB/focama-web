@@ -104,11 +104,15 @@ export async function runMiniEnrichmentAsync({
   }
 
   const { cachedEntry } = resolvedDiscoveryContext
+  const improvePicksSuggestions = Array.isArray(miniResult.improvePicksSuggestions)
+    ? miniResult.improvePicksSuggestions
+    : []
 
   const updatedSelection = {
     ...(cachedEntry.selection && typeof cachedEntry.selection === 'object' ? cachedEntry.selection : {}),
     enrichment: {
       entries: mergeCandidateFactsIntoEnrichmentEntries(miniResult.enriched, candidatePool),
+      improvePicksSuggestions,
       model: miniResult.model,
       generatedAt: new Date().toISOString(),
       preservedOrder: miniResult.preservedOrder,
@@ -131,11 +135,14 @@ export async function runMiniEnrichmentAsync({
     discoveryToken || cachedEntry.discoveryToken || '',
     updatedSelection.enrichment.entries,
     miniResult.model,
+    null,
+    updatedSelection.enrichment.improvePicksSuggestions,
   )
 
   logSearchFlowEvent('mini_enrichment_stored', {
     query: normalizedQuery,
     entryCount: updatedSelection.enrichment.entries.length,
+    improvePicksSuggestionCount: improvePicksSuggestions.length,
     preservedOrder: miniResult.preservedOrder,
     model: miniResult.model,
   })
@@ -385,6 +392,7 @@ export async function handleEnrichmentPoll(request, response) {
     ready: true,
     deepDiveEligibility,
     entries: enrichment.entries,
+    improvePicksSuggestions: enrichment.improvePicksSuggestions || [],
     model: enrichment.model || '',
   })
 }
@@ -435,6 +443,7 @@ export async function handleEnrichmentStream(request, response) {
       ready: true,
       deepDiveEligibility,
       entries: enrichment.entries,
+      improvePicksSuggestions: enrichment.improvePicksSuggestions || [],
       model: enrichment.model || '',
     })}\n\n`)
     response.end()
@@ -465,6 +474,7 @@ export async function handleEnrichmentStream(request, response) {
       ready: true,
       entries: payload?.entries,
       deepDiveEligibility: payload?.deepDiveEligibility || null,
+      improvePicksSuggestions: payload?.improvePicksSuggestions || [],
       model: payload?.model,
     })
   }

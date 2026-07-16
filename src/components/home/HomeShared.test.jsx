@@ -6,6 +6,7 @@ import { AmazonStoreProvider } from '@/contexts/AmazonStoreContext.jsx'
 import { useAmazonStore } from '@/contexts/useAmazonStore.js'
 import { FinalizeLoadingState } from './FinalizeLoadingState.jsx'
 import { ProductDetailModal } from './ProductDetailModal.jsx'
+import { ResultsSectionFallback } from './home-components.jsx'
 import { ResultsSection } from './ResultsSection.jsx'
 
 afterEach(() => {
@@ -159,6 +160,57 @@ describe('FinalizeLoadingState', () => {
 })
 
 describe('ResultsSection retry advice', () => {
+  it('shows the improved search and the active retry stage while replacement picks load', () => {
+    render(
+      <ResultsSectionFallback
+        isDiscovering
+        retrySearchQuery="lightweight travel stroller under $200"
+      />,
+    )
+
+    expect(screen.getByText('Updating your picks')).toBeInTheDocument()
+    expect(screen.getByText('lightweight travel stroller under $200')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Finding better matches…')
+  })
+
+  it('keeps improvement suggestions hidden until the correction panel opens, then fills the feedback field', () => {
+    const onRetryFeedbackChange = vi.fn()
+
+    render(
+      <ResultsSection
+        displayedResults={[createMockItem()]}
+        errorMessage=""
+        hasFinalResults
+        hasStartedSearch
+        improvePicksSuggestions={[
+          { label: 'Lower price', feedback: 'I want lower-priced options that still meet my important needs.' },
+        ]}
+        isFinalizing={false}
+        isLoading={false}
+        isRetryReady
+        isRetrying={false}
+        isGeneratingRetryAdvice={false}
+        onRetailerClick={vi.fn()}
+        onSelectProduct={vi.fn()}
+        onRetryAdviceRequest={vi.fn()}
+        onRetryFeedbackChange={onRetryFeedbackChange}
+        retryFeedback=""
+        showFinalResultBadges={false}
+        showPreviewResults={false}
+        submittedQuery="stroller"
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Lower price' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /improve picks/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Lower price' }))
+
+    expect(onRetryFeedbackChange).toHaveBeenCalledWith(
+      'I want lower-priced options that still meet my important needs.',
+    )
+  })
+
   it('offers a better search instead of padding a partial shortlist', () => {
     const onFindBetterMatches = vi.fn()
     const onKeepCandidateRecovery = vi.fn()

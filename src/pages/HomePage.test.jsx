@@ -315,7 +315,7 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: 'Travel fit' }))
     expect(refinementTextarea).toHaveValue('I need this to fit airplane travel and fold quickly.')
 
-    await user.click(screen.getByRole('button', { name: 'Ask a different question' }))
+    await user.click(screen.getByRole('button', { name: 'Get a different question' }))
     expect(screen.getByRole('status', { name: /finding a different question/i })).toBeInTheDocument()
     expect(screen.getByText('Pick anything that matters.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Easy folding' })).toBeInTheDocument()

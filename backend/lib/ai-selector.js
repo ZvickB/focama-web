@@ -549,6 +549,12 @@ function buildMiniEnrichmentPrompt({
     '2. caveat: One honest drawback or caveat — practical (e.g. exceeds budget, heavier than alternatives) or contextual (e.g. better if X matters more than Y). If the product conflicts with something the user stated (e.g. a different material, higher price), flag it here, not in fit_reason. Do not skip this even if the pick is strong.',
     'Use feature bullets and any richer product description when they are provided. Prefer concrete product attributes over generic praise.',
     'If richer product detail is missing, fall back to the basic title/price/rating context and do not invent attributes.',
+    'Also write exactly 3 distinct improvement suggestions for a shopper who may later reject these picks.',
+    'Infer plausible tradeoffs or missing priorities from the search and selected products, but do not claim to know why the shopper is unhappy.',
+    'Each suggestion needs a short chip label plus a fuller first-person feedback sentence the shopper could send to improve the next search.',
+    'Keep each label to 1-3 words and 30 characters or fewer. Keep each feedback sentence to 180 characters or fewer.',
+    'Do not repeat a requirement the shopper already clearly specified unless the selected products visibly compromise it.',
+    'Keep the three suggestions distinct. Do not recommend a retailer, make unsupported product claims, or change the requested product type.',
     ...(preferenceGuidance ? [preferenceGuidance] : []),
     '',
     `Product query: ${query}`,
@@ -576,10 +582,44 @@ function buildMiniEnrichmentSchema() {
           additionalProperties: false,
         },
       },
+      improve_picks_suggestions: {
+        type: 'array',
+        minItems: 3,
+        maxItems: 3,
+        items: {
+          type: 'object',
+          properties: {
+            label: { type: 'string', minLength: 1, maxLength: 30 },
+            feedback: { type: 'string', minLength: 1, maxLength: 180 },
+          },
+          required: ['label', 'feedback'],
+          additionalProperties: false,
+        },
+      },
     },
-    required: ['enriched'],
+    required: ['enriched', 'improve_picks_suggestions'],
     additionalProperties: false,
   }
+}
+
+function normalizeImprovePicksSuggestions(value) {
+  if (!Array.isArray(value)) return []
+
+  const seenLabels = new Set()
+
+  return value
+    .map((entry) => {
+      const label = String(entry?.label || '').replace(/\s+/g, ' ').trim().slice(0, 30)
+      const feedback = String(entry?.feedback || '').replace(/\s+/g, ' ').trim().slice(0, 180)
+      const normalizedLabel = label.toLocaleLowerCase()
+
+      if (!label || !feedback || seenLabels.has(normalizedLabel)) return null
+
+      seenLabels.add(normalizedLabel)
+      return { label, feedback }
+    })
+    .filter(Boolean)
+    .slice(0, 3)
 }
 
 export async function haikuLockWinnersAndBadges(
@@ -695,7 +735,14 @@ export async function miniEnrichSelectedCandidates(
   }
 
   if (!Array.isArray(lockedIds) || lockedIds.length === 0) {
-    return { model, enriched: [], enrichedIds: [], usage: null, preservedOrder: true }
+    return {
+      model,
+      enriched: [],
+      enrichedIds: [],
+      improvePicksSuggestions: [],
+      usage: null,
+      preservedOrder: true,
+    }
   }
 
   const candidateById = new Map(
@@ -739,6 +786,7 @@ export async function miniEnrichSelectedCandidates(
   )
 
   const rawEnriched = Array.isArray(parsed?.enriched) ? parsed.enriched : []
+  const improvePicksSuggestions = normalizeImprovePicksSuggestions(parsed?.improve_picks_suggestions)
   const enriched = rawEnriched.map((entry) => {
     const candidateId = String(entry?.candidate_id || '')
     const lockedCandidate = lockedCandidateById.get(candidateId)
@@ -752,7 +800,7 @@ export async function miniEnrichSelectedCandidates(
   const enrichedLockedIds = enrichedIds.filter((id) => lockedIds.includes(id))
   const preservedOrder = lockedIds.join(',') === enrichedLockedIds.join(',')
 
-  return { model, enriched, enrichedIds, usage, preservedOrder }
+  return { model, enriched, enrichedIds, improvePicksSuggestions, usage, preservedOrder }
 }
 
 export async function assessDeepDiveEligibility({ lockedIds, candidatePool }) {

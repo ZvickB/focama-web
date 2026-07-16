@@ -74,7 +74,7 @@
   - normally tops up a partial valid Haiku subset from deterministic fallback so the response returns up to 6 eligible products; during the tester rollout, a first finalize with fewer than 4 strong fits and a valid distinct Haiku suggested query returns only those fits and exposes `selection.candidateRecovery` instead
   - the partial-shortlist UI offers a fresh discovery from that suggested query while preserving follow-up notes, or lets the tester keep the credible partial picks; shown, accepted, and kept outcomes are stored as search analytics events
   - returns shortlist cards immediately
-  - starts async product-detail fetch + mini enrichment in the background; enrichment receives the same ranking preference so explanations match the selection strategy, and after mini writeup is stored, a deterministic prefilter-only eligibility pass (no AI call) marks which finalized products should show the optional Compare prices button
+  - starts async product-detail fetch + mini enrichment in the background; enrichment receives the same ranking preference so explanations match the selection strategy and produces three likely, shortlist-aware Improve Picks correction suggestions. They are stored with the exact token-scoped shortlist and delivered through the existing enrichment stream/poll paths without delaying the cards. After mini writeup is stored, a deterministic prefilter-only eligibility pass (no AI call) marks which finalized products should show the optional Compare prices button
   - stores the finalized selected candidate IDs back into the token-scoped session snapshot so later user-triggered detail actions can validate the clicked product server-side
 - `POST /api/product/deep-dive`
   - feature-flagged behind `DEEP_DIVE_ENABLED=true`
@@ -158,11 +158,11 @@
 
 ## Retry behavior
 - Retry is not an endless-results flow.
-- The current retry UX appears directly after the shortlist as one expandable `Improve these picks` card with a freeform correction box and an `Update my picks` action.
+- The current retry UX appears directly after the shortlist as one expandable `Improve these picks` card. Its three AI-generated, shortlist-aware correction chips stay hidden until the card is opened; choosing one fills the freeform correction box, which remains available for custom or edited feedback before `Update my picks`.
 - Submitting a correction replaces the editor with a non-editable update state. Once retry advice returns an improved query, that query remains visible in the results viewport while the refreshed guided search runs.
 - `/api/search/retry-advice` suggests a more specific next query.
 - Retry advice preserves accumulated must-have constraints from the original query, follow-up notes, and retry feedback by default, but can replace or remove a previous constraint when the latest feedback clearly changes direction.
-- `Update my picks` asks for retry advice and, when a safe non-empty suggested query returns, automatically starts a new guided search with a one-request discovery cache refresh. The compact search summary shows the actual improved query being searched for transparency, but there is no required second query-confirmation step.
+- `Update my picks` asks for retry advice and, when a safe non-empty suggested query returns, automatically starts a new guided search with a one-request discovery cache refresh and finalizes it with no extra follow-up question, matching mobile. The compact search summary shows the actual improved query being searched for transparency. Set `VITE_AUTO_FINALIZE_RETRY_SEARCH=false` to restore the former web-only follow-up step.
 - The same-pool retry path is not part of the active homepage UI right now.
 
 ## Query-quality suggestion behavior

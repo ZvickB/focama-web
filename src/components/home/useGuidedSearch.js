@@ -72,6 +72,28 @@ export { detectHardConstraint, resolveAmazonDomainForRequest }
 export { resolveSelectedProductForDisplay }
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
+// Set VITE_AUTO_FINALIZE_RETRY_SEARCH=false to restore the web retry follow-up step.
+const AUTO_FINALIZE_RETRY_SEARCH = import.meta.env.VITE_AUTO_FINALIZE_RETRY_SEARCH !== 'false'
+
+function normalizeImprovePicksSuggestions(value) {
+  if (!Array.isArray(value)) return []
+
+  const seenLabels = new Set()
+
+  return value
+    .map((entry) => {
+      const label = String(entry?.label || '').replace(/\s+/g, ' ').trim().slice(0, 30)
+      const feedback = String(entry?.feedback || '').replace(/\s+/g, ' ').trim().slice(0, 180)
+      const normalizedLabel = label.toLocaleLowerCase()
+
+      if (!label || !feedback || seenLabels.has(normalizedLabel)) return null
+
+      seenLabels.add(normalizedLabel)
+      return { label, feedback }
+    })
+    .filter(Boolean)
+    .slice(0, 3)
+}
 
 export function useGuidedSearch() {
   const [productQuery, setProductQuery] = useState('')
@@ -101,6 +123,8 @@ export function useGuidedSearch() {
   const [retryFeedback, setRetryFeedback] = useState('')
   const [retryCount, setRetryCount] = useState(0)
   const [retrySearchQuery, setRetrySearchQuery] = useState('')
+  const [isAutoFinalizingRetry, setIsAutoFinalizingRetry] = useState(false)
+  const [improvePicksSuggestions, setImprovePicksSuggestions] = useState([])
   const [selectionState, setSelectionState] = useState(null)
   const [analyticsSearchId, setAnalyticsSearchId] = useState('')
   const [analyticsSessionId, setAnalyticsSessionId] = useState('')
@@ -384,6 +408,7 @@ export function useGuidedSearch() {
     setResults([])
     setPreviousResults([])
     setSelectionState(null)
+    setImprovePicksSuggestions([])
     setIsEnrichmentReady(false)
     setIsEnrichmentSettled(false)
     setFailureFromError({
@@ -444,6 +469,7 @@ export function useGuidedSearch() {
           }
 
           if (payload.ready) {
+            setImprovePicksSuggestions(normalizeImprovePicksSuggestions(payload.improvePicksSuggestions))
             if (Array.isArray(payload.entries) && payload.entries.length > 0) {
               setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
               setIsEnrichmentReady(true)
@@ -507,6 +533,7 @@ export function useGuidedSearch() {
         const payload = JSON.parse(event.data)
 
         if (payload.ready) {
+          setImprovePicksSuggestions(normalizeImprovePicksSuggestions(payload.improvePicksSuggestions))
           if (Array.isArray(payload.entries) && payload.entries.length > 0) {
             setResults((current) => mergeEnrichmentIntoResults(current, payload.entries))
             setIsEnrichmentReady(true)
@@ -731,6 +758,7 @@ export function useGuidedSearch() {
     setCandidatePool(variables.originalCandidatePool || null)
     setPreviousResults(previousDisplayResults)
     setResults(finalizedResults)
+    setImprovePicksSuggestions(normalizeImprovePicksSuggestions(payload.improvePicksSuggestions))
     if (finalizedResults.length > 0) {
       void historyStore.save({
         amazonDomain: variables.amazonDomain || submittedAmazonDomain,
@@ -747,7 +775,7 @@ export function useGuidedSearch() {
     const query = variables.query
     const pollSearchId = activeSearchIdRef.current
 
-    if (!hasInlineEnrichment && token && query && finalizedResults.length > 0) {
+    if (token && query && finalizedResults.length > 0) {
       startEnrichmentStream({
         token,
         query,
@@ -1079,6 +1107,7 @@ export function useGuidedSearch() {
       resetLoadingState = false,
       resetMutationState = false,
       resetProductQuery = false,
+      autoFinalizeRetryValue = false,
       retrySearchQueryValue = '',
     } = {},
   ) {
@@ -1116,8 +1145,10 @@ export function useGuidedSearch() {
     setFollowUpNotes((current) => (preserveFollowUpNotes ? current : ''))
     setRetryFeedback('')
     setRetryCount(0)
+    setIsAutoFinalizingRetry(autoFinalizeRetryValue)
     setRetrySearchQuery(retrySearchQueryValue)
     setSelectionState(null)
+    setImprovePicksSuggestions([])
     setRequestTiming({
       discover: null,
       finalize: null,
@@ -1164,6 +1195,7 @@ export function useGuidedSearch() {
     normalizedQuery,
     {
       preserveFollowUpNotes = false,
+      autoFinalizeAfterDiscovery = false,
       reuseAnalytics = false,
       cacheMode = 'default',
       retrySearchQueryValue = '',
@@ -1189,6 +1221,7 @@ export function useGuidedSearch() {
     setAnalyticsSessionId(analyticsSessionId)
 
     resetGuidedState(normalizedQuery, nextAmazonDomain, {
+      autoFinalizeRetryValue: autoFinalizeAfterDiscovery,
       preserveFollowUpNotes,
       retrySearchQueryValue,
     })
@@ -1327,6 +1360,22 @@ export function useGuidedSearch() {
           resultCountAfterInternalFilters: Array.isArray(payload.previewResults) ? payload.previewResults.length : 0,
           status: 'success',
         }, { searchId: analyticsSearchId, sessionId: analyticsSessionId })
+
+        if (autoFinalizeAfterDiscovery && payload.candidatePool) {
+          startFinalizeMutation({
+            query: normalizedQuery,
+            amazonDomain: responseAmazonDomain,
+            discoveryToken: payload.discoveryToken,
+            originalCandidatePool: payload.candidatePool,
+            followUpNotes: '',
+            rejectionFeedback: '',
+            retryCount: 0,
+            excludedCandidateIds: [],
+            previousResults: [],
+            requestMode: FINALIZE_REQUEST_MODE_EMPTY_NOTES,
+            rankingPreference: effectiveRankingPreference,
+          })
+        }
       })
       .catch((error) => {
         if (activeSearchIdRef.current !== nextSearchId) {
@@ -1375,6 +1424,11 @@ export function useGuidedSearch() {
           setIsDiscovering(false)
         }
       })
+
+    if (autoFinalizeAfterDiscovery) {
+      setIsGeneratingPrompt(false)
+      return
+    }
 
     cancelRefinementRequest()
     const refineAbortController = new AbortController()
@@ -1898,6 +1952,7 @@ export function useGuidedSearch() {
     })
     setProductQuery(normalizedQuery)
     startGuidedSearch(normalizedQuery, {
+      autoFinalizeAfterDiscovery: AUTO_FINALIZE_RETRY_SEARCH,
       cacheMode: 'refresh',
       retrySearchQueryValue: normalizedQuery,
       searchEventName: 'retry_advice_search_started',
@@ -2087,6 +2142,7 @@ export function useGuidedSearch() {
       previous: previousResults,
       selectedProduct: selectedProductForDisplay,
       selectionState,
+      improvePicksSuggestions,
       rankingPreference: isFinalizing
         ? effectiveRankingPreference
         : selectionState?.rankingPreference || effectiveRankingPreference,
@@ -2096,6 +2152,7 @@ export function useGuidedSearch() {
     },
     retry: {
       count: retryCount,
+      autoFinalizing: isAutoFinalizingRetry,
       feedback: retryFeedback,
       isGeneratingAdvice: retryAdviceMutation.isPending,
       searchQuery: retrySearchQuery,

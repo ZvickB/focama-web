@@ -89,7 +89,7 @@ function OpenLayout(props) {
     : prompt
   const showPreviewResults = results.showPreview
   const submittedQuery = query.submittedQuery
-  const shouldShowRefinementPanel = hasStartedSearch && !hasFinalResults
+  const shouldShowRefinementPanel = hasStartedSearch && !hasFinalResults && !retry.autoFinalizing
 
   useEffect(() => {
     const revealTimer = window.setTimeout(() => {
@@ -570,6 +570,7 @@ function OpenLayout(props) {
           {showLoadingResults ? (
             <div ref={resultsViewportRef} className="max-h-[360px] scroll-mt-28 overflow-hidden">
               <ResultsSectionFallback
+                isDiscovering={status.isDiscovering}
                 rankingPreference={results.rankingPreference}
                 retrySearchQuery={retry.searchQuery}
                 showFinalizeStatus={status.isFinalizing}
@@ -584,6 +585,7 @@ function OpenLayout(props) {
               <Suspense
                 fallback={(
                   <ResultsSectionFallback
+                    isDiscovering={status.isDiscovering}
                     rankingPreference={results.rankingPreference}
                     retrySearchQuery={retry.searchQuery}
                     showFinalizeStatus={status.isFinalizing}
@@ -604,6 +606,7 @@ function OpenLayout(props) {
                   isRetrying={status.isFinalizing}
                   isGeneratingRetryAdvice={retry.isGeneratingAdvice}
                   candidateRecovery={results.selectionState?.candidateRecovery}
+                  improvePicksSuggestions={results.improvePicksSuggestions}
                   onFindBetterMatches={actions.findBetterMatches}
                   onKeepCandidateRecovery={actions.keepPartialPicks}
                   onRetailerClick={actions.trackRetailerClick}

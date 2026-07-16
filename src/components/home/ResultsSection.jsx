@@ -57,6 +57,7 @@ export function ResultsSection({
   errorMessage,
   hasFinalResults,
   hasStartedSearch,
+  improvePicksSuggestions = [],
   isEnrichmentSettled = false,
   isFinalizing,
   isLoading,
@@ -159,6 +160,14 @@ export function ResultsSection({
 
   function handleRetryAdviceSubmit() {
     onRetryAdviceRequest({ rejectionFeedback: retryFeedback.trim() })
+  }
+
+  function handleImprovePicksSuggestionSelect(suggestion) {
+    const feedback = String(suggestion?.feedback || '').trim()
+
+    if (feedback) {
+      onRetryFeedbackChange(feedback)
+    }
   }
 
   async function handleCopyDebugInfo() {
@@ -573,6 +582,36 @@ export function ResultsSection({
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {improvePicksSuggestions.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-slate-600">A few ways to adjust the direction</p>
+                      <div className="flex flex-wrap gap-2">
+                        {improvePicksSuggestions.map((suggestion) => {
+                          const feedback = String(suggestion?.feedback || '').trim()
+                          const label = String(suggestion?.label || '').trim()
+                          const isSelected = feedback && feedback === retryFeedback.trim()
+
+                          if (!label || !feedback) return null
+
+                          return (
+                            <button
+                              key={`${label}:${feedback}`}
+                              type="button"
+                              aria-pressed={isSelected}
+                              className={`rounded-full border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${
+                                isSelected
+                                  ? 'border-primary bg-primary text-primary-foreground'
+                                  : 'border-[#e5dacb] bg-white text-slate-700 hover:border-primary/45 hover:text-primary'
+                              }`}
+                              onClick={() => handleImprovePicksSuggestionSelect(suggestion)}
+                            >
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
                   <Textarea
                     id="results-retry-feedback"
                     aria-label="What should we change?"
