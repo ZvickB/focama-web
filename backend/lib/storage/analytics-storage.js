@@ -317,6 +317,70 @@ export function buildActivityDashboard({ clicks, events, runs, searchDiagnostics
   }
 }
 
+export function buildMobileDashboard({ clicks, events, impressions, runs }) {
+  const mobileRuns = runs.filter((run) => run.platform === 'mobile')
+  const mobileSearchIds = new Set(mobileRuns.map((run) => run.search_id))
+  const mobileEvents = events.filter((event) => mobileSearchIds.has(event.search_id))
+  const mobileClicks = clicks.filter((click) => mobileSearchIds.has(click.search_id))
+  const mobileImpressions = impressions.filter((entry) => mobileSearchIds.has(entry.search_id))
+  const hasEvent = (name) => new Set(mobileEvents.filter((event) => event.event_type === `mobile.${name}`).map((event) => event.search_id))
+  const refined = hasEvent('refinement_completed')
+  const resultsShown = hasEvent('results_shown')
+  const failed = hasEvent('search_failed')
+  const opened = new Set(mobileClicks.filter((click) => click.click_target === 'card').map((click) => click.search_id))
+  const clickedOut = new Set(mobileClicks.filter((click) => click.click_target === 'retailer').map((click) => click.search_id))
+  const runById = new Map(mobileRuns.map((run) => [run.search_id, run]))
+  const failureRows = mobileEvents
+    .filter((event) => event.event_type === 'mobile.search_failed')
+    .sort((left, right) => new Date(right.created_at) - new Date(left.created_at))
+    .slice(0, 8)
+    .map((event) => ({
+      createdAt: event.created_at,
+      query: runById.get(event.search_id)?.product_query || 'Search',
+      stage: event.event_data?.stage || 'unknown',
+    }))
+  const productMap = new Map()
+  for (const click of mobileClicks) {
+    if (!['card', 'retailer'].includes(click.click_target) || !click.result_key) continue
+    const entry = productMap.get(click.result_key) || { clickouts: 0, opens: 0, product: click.result_key }
+    if (click.click_target === 'card') entry.opens += 1
+    if (click.click_target === 'retailer') entry.clickouts += 1
+    productMap.set(click.result_key, entry)
+  }
+
+  return {
+    available: mobileRuns.length > 0,
+    funnel: [
+      { count: mobileRuns.length, label: 'Search started' },
+      { count: refined.size, label: 'Refinement completed' },
+      { count: resultsShown.size, label: 'Results shown' },
+      { count: opened.size, label: 'Product opened' },
+      { count: clickedOut.size, label: 'Amazon clicked' },
+    ],
+    failures: failureRows,
+    recentSearches: [...mobileRuns]
+      .sort((left, right) => new Date(right.created_at) - new Date(left.created_at))
+      .slice(0, 12)
+      .map((run) => ({
+        createdAt: run.created_at,
+        hadClickout: clickedOut.has(run.search_id),
+        openedProduct: opened.has(run.search_id),
+        query: run.product_query,
+        resultCount: mobileImpressions.filter((entry) => entry.search_id === run.search_id).length,
+        status: failed.has(run.search_id) ? 'Failed' : resultsShown.has(run.search_id) ? 'Results shown' : 'In progress',
+      })),
+    summary: {
+      amazonClickRate: safeRate(clickedOut.size, resultsShown.size),
+      failures: failed.size,
+      resultsSuccessRate: safeRate(resultsShown.size, mobileRuns.length),
+      searches: mobileRuns.length,
+    },
+    topProducts: Array.from(productMap.values())
+      .sort((left, right) => right.clickouts - left.clickouts || right.opens - left.opens)
+      .slice(0, 8),
+  }
+}
+
 export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit = 12 } = {}) {
   if (!isSupabaseConfigured()) {
     return {
@@ -339,17 +403,17 @@ export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit
       ),
       readSupabaseRowsSince(
         ANALYTICS_SEARCH_EVENTS_TABLE,
-        'search_id, event_type, event_data, created_at',
+        'search_id, platform, event_type, event_data, created_at',
         sinceIso,
       ),
       readSupabaseRowsSince(
         ANALYTICS_RESULT_IMPRESSIONS_TABLE,
-        'search_id, result_set, result_key, position, badge_type, is_best_pick, created_at',
+        'search_id, platform, result_set, result_key, position, badge_type, is_best_pick, created_at',
         sinceIso,
       ),
       readSupabaseRowsSince(
         ANALYTICS_RESULT_CLICKS_TABLE,
-        'search_id, result_set, result_key, position, badge_type, is_best_pick, click_target, created_at',
+        'search_id, platform, result_set, result_key, position, badge_type, is_best_pick, click_target, created_at',
         sinceIso,
       ),
       readSupabaseRowsSince(
@@ -602,6 +666,7 @@ export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit
         runs,
         searchDiagnostics,
       }),
+      mobile: buildMobileDashboard({ clicks, events, impressions, runs }),
       available: true,
       generatedAt: new Date().toISOString(),
       lookbackDays,

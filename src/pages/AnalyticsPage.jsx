@@ -656,6 +656,62 @@ function ActivityDashboard({ activity, error, isCustomizing, isLoading, layout, 
   )
 }
 
+function MobileDashboard({ error, isLoading, mobile }) {
+  const summary = mobile?.summary
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-[24px] border border-stone-200/80 bg-stone-50/80 p-4 text-sm leading-6 text-slate-600 sm:p-5">
+        Mobile activity is development-only. It uses per-search run IDs, not persistent devices or accounts.
+      </div>
+      {isLoading ? <p className="text-sm text-slate-500">Loading mobile activity…</p> : null}
+      {error ? <p className="rounded-[18px] border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">{error.message || 'Unable to load mobile activity right now.'}</p> : null}
+      {!isLoading && !error && !mobile?.available ? (
+        <div className="rounded-[24px] border border-dashed border-stone-300 bg-white/80 px-5 py-8 text-sm leading-6 text-slate-500">
+          No mobile events yet. Enable the internal mobile analytics flag in a development build, then complete a search.
+        </div>
+      ) : null}
+      {mobile?.available ? (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              ['Searches', summary?.searches],
+              ['Results success', formatPercent(summary?.resultsSuccessRate)],
+              ['Failures', summary?.failures],
+              ['Amazon click rate', formatPercent(summary?.amazonClickRate)],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-[20px] border border-stone-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">{label}</p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{value}</p>
+              </div>
+            ))}
+          </div>
+          <section className="rounded-[24px] border border-stone-200 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-900">Mobile funnel</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-5">
+              {(mobile.funnel || []).map((step) => <div key={step.label} className="rounded-2xl bg-stone-50 p-3"><p className="text-2xl font-semibold text-slate-900">{formatNumber(step.count)}</p><p className="mt-1 text-xs leading-5 text-slate-500">{step.label}</p></div>)}
+            </div>
+          </section>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <section className="rounded-[24px] border border-stone-200 bg-white p-5 shadow-sm">
+              <h2 className="text-base font-semibold text-slate-900">Recent mobile searches</h2>
+              <ul className="mt-3 divide-y divide-stone-100">
+                {(mobile.recentSearches || []).map((search) => <li key={`${search.query}-${search.createdAt}`} className="py-3"><p className="truncate text-sm font-medium text-slate-800">{search.query}</p><p className="mt-1 text-xs text-slate-500">{search.status} · {search.resultCount} results · {formatActivityTime(search.createdAt)}</p></li>)}
+              </ul>
+            </section>
+            <section className="rounded-[24px] border border-stone-200 bg-white p-5 shadow-sm">
+              <h2 className="text-base font-semibold text-slate-900">Failures to investigate</h2>
+              <ul className="mt-3 divide-y divide-stone-100">
+                {(mobile.failures || []).length ? mobile.failures.map((failure) => <li key={`${failure.query}-${failure.createdAt}`} className="py-3"><p className="truncate text-sm font-medium text-slate-800">{failure.query}</p><p className="mt-1 text-xs text-slate-500">{failure.stage} · {formatActivityTime(failure.createdAt)}</p></li>) : <li className="py-3 text-sm text-slate-500">No mobile failures in this window.</li>}
+              </ul>
+            </section>
+          </div>
+        </>
+      ) : null}
+    </div>
+  )
+}
+
 function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState('activity')
   const [activityLayout, setActivityLayout] = useState(readActivityLayout)
@@ -733,9 +789,11 @@ function AnalyticsPage() {
       />
       <PageShell
         eyebrow="Internal Analytics"
-        title={activeTab === 'activity' ? 'What needs attention right now.' : 'Search funnel signals, not just pageviews.'}
+        title={activeTab === 'activity' ? 'What needs attention right now.' : activeTab === 'mobile' ? 'Is the mobile search flow working?' : 'Search funnel signals, not just pageviews.'}
         description={activeTab === 'activity'
           ? 'A configurable operational view for the activity signals that will matter as Focamai grows.'
+          : activeTab === 'mobile'
+            ? 'Inspect mobile search outcomes, engagement, and failures without persistent user tracking.'
           : 'Use this page to see where searches turn into final picks, where people bail out, and which query patterns or result positions deserve attention.'}
       >
         <div className="space-y-6">
@@ -766,6 +824,19 @@ function AnalyticsPage() {
             >
               Analytics
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'mobile'}
+              onClick={() => setActiveTab('mobile')}
+              className={`border-b-2 px-3 py-2 text-sm font-medium transition ${
+                activeTab === 'mobile'
+                  ? 'border-slate-900 text-slate-900'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Mobile
+            </button>
           </div>
 
           {activeTab === 'activity' ? (
@@ -779,6 +850,12 @@ function AnalyticsPage() {
               onToggleWidget={toggleActivityWidget}
               onMoveWidget={moveActivityWidget}
               onRestoreDefaults={() => setActivityLayout(DEFAULT_ACTIVITY_LAYOUT)}
+            />
+          ) : activeTab === 'mobile' ? (
+            <MobileDashboard
+              error={dashboardQuery.isError ? dashboardQuery.error : null}
+              isLoading={dashboardQuery.isLoading}
+              mobile={dashboard?.mobile}
             />
           ) : (
         <div className="space-y-4">
