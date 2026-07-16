@@ -326,6 +326,9 @@ export function buildMobileDashboard({ clicks, events, impressions, runs }) {
   const hasEvent = (name) => new Set(mobileEvents.filter((event) => event.event_type === `mobile.${name}`).map((event) => event.search_id))
   const refined = hasEvent('refinement_completed')
   const resultsShown = hasEvent('results_shown')
+  const candidateRecoveryShown = hasEvent('candidate_recovery_shown')
+  const candidateRecoveryAccepted = hasEvent('candidate_recovery_accepted')
+  const candidateRecoveryKept = hasEvent('candidate_recovery_kept_partial_picks')
   const failed = hasEvent('search_failed')
   const opened = new Set(mobileClicks.filter((click) => click.click_target === 'card').map((click) => click.search_id))
   const clickedOut = new Set(mobileClicks.filter((click) => click.click_target === 'retailer').map((click) => click.search_id))
@@ -371,6 +374,9 @@ export function buildMobileDashboard({ clicks, events, impressions, runs }) {
       })),
     summary: {
       amazonClickRate: safeRate(clickedOut.size, resultsShown.size),
+      candidateRecoveryAccepted: candidateRecoveryAccepted.size,
+      candidateRecoveryKept: candidateRecoveryKept.size,
+      candidateRecoveryShown: candidateRecoveryShown.size,
       failures: failed.size,
       resultsSuccessRate: safeRate(resultsShown.size, mobileRuns.length),
       searches: mobileRuns.length,

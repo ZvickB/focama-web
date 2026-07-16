@@ -331,9 +331,34 @@ export function FlowProgress({ hasDiscoveryResults, hasFinalResults, hasStartedS
 
 export function ResultsSectionFallback({
   rankingPreference = 'balanced',
+  retrySearchQuery = '',
   showFinalizeStatus = false,
   submittedQuery = '',
 }) {
+  if (retrySearchQuery) {
+    return (
+      <div className="rounded-[28px] border border-[#e7dac8] bg-white/94 p-6 text-center shadow-[0_24px_64px_-50px_rgba(120,87,63,0.22)] sm:p-8">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-primary/20 bg-[#eef7f6] text-primary">
+          <Sparkles className="h-5 w-5 animate-pulse motion-reduce:animate-none" />
+        </div>
+        <h2 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">
+          We&apos;re updating your picks based on your feedback.
+        </h2>
+        <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
+          Focamai is using a sharper search to find six picks that fit better.
+        </p>
+        <div className="mt-6 rounded-[22px] border border-[#e5dacb] bg-[#fbf7f1] p-4 text-left">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+            Improved search we&apos;re using
+          </p>
+          <p className="mt-2 text-base font-semibold leading-6 text-primary">{retrySearchQuery}</p>
+          <p className="mt-3 text-sm leading-5 text-slate-600">Based on your Improve picks feedback.</p>
+        </div>
+        <p role="status" className="mt-5 text-sm text-slate-500">Finding better matches…</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       {showFinalizeStatus ? (

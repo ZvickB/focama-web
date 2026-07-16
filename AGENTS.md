@@ -53,7 +53,7 @@ Read this file first at the start of every chat.
   - `/api/search/refine`
   - `/api/search/finalize`
 - `/api/search/live` is the explicit manual/debug combined route.
-- Product shortlists are 6 items end to end.
+- Product shortlists normally target 6 items. During the current tester rollout, a first finalize with fewer than 4 AI-identified strong fits may show only those credible picks and offer a more specific AI-proposed search rather than pad the shortlist.
 - Prefer the PNG wordmark for now instead of forcing a weak SVG recreation.
 - Focamai should not feel like a prettier Amazon wall or marketplace clone. It should feel like a focused decision aid that helps the user narrow choices before leaving to shop.
 - Amazon is the current primary commerce path and affiliate target. When the active source is Amazon, frontend copy, buttons, labels, and detail UI may say Amazon directly where that improves clarity, trust, or conversion.

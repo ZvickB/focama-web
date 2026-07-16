@@ -96,6 +96,7 @@ describe('ai selector', () => {
     expect(result).toEqual({
       model: 'claude-haiku-4-5-20251001',
       lockedIds: [],
+      suggestedQuery: '',
       usage: null,
     })
   })
@@ -276,6 +277,34 @@ describe('ai selector', () => {
     })
 
     expect(result.lockedIds).toEqual(['prod-2'])
+  })
+
+  it('keeps a suggested search when Haiku finds fewer than four credible fits', async () => {
+    anthropicMocks.create.mockResolvedValue({
+      content: [{
+        type: 'tool_use',
+        name: 'submit_shortlist',
+        input: {
+          picks: [{ index: 2, role: 'core', confidence: 'high' }],
+          suggested_query: 'lightweight carry-on stroller under $200',
+        },
+      }],
+      usage: { input_tokens: 12, output_tokens: 4 },
+    })
+
+    const result = await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 6,
+      candidatePool: createCandidatePool(4),
+    })
+
+    expect(result).toMatchObject({
+      lockedIds: ['prod-2'],
+      suggestedQuery: 'lightweight carry-on stroller under $200',
+    })
+    expect(anthropicMocks.create.mock.calls[0][0].messages[0].content).toContain(
+      'unless fewer than 4 candidates genuinely fit the product query and user context',
+    )
   })
 
   it('passes feature bullets into mini enrichment and preserves them in the stored entries', async () => {

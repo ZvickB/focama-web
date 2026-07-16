@@ -2433,6 +2433,41 @@ describe('server handlers', () => {
     )
   })
 
+  it('keeps a partial first shortlist when Haiku supplies a better search suggestion', async () => {
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
+      model: 'claude-haiku-4-5-20251001',
+      lockedIds: ['three', 'one', 'four'],
+      suggestedQuery: 'lightweight carry-on stroller under $200',
+      usage: null,
+    })
+
+    const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry(
+        'stroller',
+        ['one', 'two', 'three', 'four', 'five', 'six'].map((id) => createFinalizeCandidate(id)),
+      ),
+    )
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(JSON.stringify(createFinalizeDiscoveryBody()), { 'x-forwarded-for': '203.0.113.42' }),
+      response,
+    )
+
+    const payload = JSON.parse(response.body)
+
+    expect(response.statusCode).toBe(200)
+    expect(payload.results.map((item) => item.id)).toEqual(['three', 'one', 'four'])
+    expect(payload.selection).toEqual(expect.objectContaining({
+      strategy: 'haiku_lock_partial_recovery',
+      candidateRecovery: {
+        goodCandidateCount: 3,
+        suggestedQuery: 'lightweight carry-on stroller under $200',
+      },
+    }))
+  })
+
   it('tops up a partial valid Haiku shortlist to six items', async () => {
     mockFinalizeEnv()
     haikuLockWinnersAndBadges.mockResolvedValue({

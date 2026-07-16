@@ -35,11 +35,6 @@ import {
 } from '../../../shared/ranking-preference.js'
 
 const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
-const RETRY_CORRECTION_CHIPS = [
-  'Too expensive',
-  'Wrong style',
-  'Missing a must-have',
-]
 const FILTER_VPN_CHOICES = [
   { label: 'None', value: 'none' },
   { label: 'Techloq', value: 'techloq' },
@@ -56,6 +51,7 @@ function readPreferenceHintDismissed() {
 }
 
 export function ResultsSection({
+  candidateRecovery,
   displayedResults,
   diagnostics,
   errorMessage,
@@ -70,6 +66,8 @@ export function ResultsSection({
   onRetailerClick,
   onSelectProduct,
   onFailureRetry = () => {},
+  onFindBetterMatches = () => {},
+  onKeepCandidateRecovery = () => {},
   onRetryAdviceRequest,
   onRetryFeedbackChange,
   onRedoBalanced,
@@ -82,15 +80,13 @@ export function ResultsSection({
   submittedQuery,
 }) {
   const { selectedAmazonDomain, resolvedAmazonDomain } = useAmazonStore()
-  const retryViewRef = useRef(null)
   const [showRetryView, setShowRetryView] = useState(false)
+  const [dismissedCandidateRecoveryKey, setDismissedCandidateRecoveryKey] = useState('')
   const [cardView, setCardView] = useState('new')
   const [hasCopiedDebugInfo, setHasCopiedDebugInfo] = useState(false)
-  const [retryViewQuery, setRetryViewQuery] = useState('')
   const [activeResultSelection, setActiveResultSelection] = useState({ index: 0, resultsIdentity: '' })
   const [isPreferenceHintDismissed, setIsPreferenceHintDismissed] = useState(readPreferenceHintDismissed)
   const resultRowsScrollRef = useRef(null)
-  const isRetryViewVisible = hasFinalResults && showRetryView && retryViewQuery === submittedQuery
   const normalizedRankingPreference = normalizeRankingPreference(rankingPreference)
   const hasActiveRankingPreference = hasFinalResults && isActiveRankingPreference(normalizedRankingPreference)
   const activeRankingLabel = RANKING_PREFERENCE_ACTIVE_LABELS[normalizedRankingPreference]
@@ -121,6 +117,10 @@ export function ResultsSection({
   const shouldShowResultsIntro = !hasDisplayedResults || hasFinalResults
   const orderedPreviousResults = previousResults
   const canRequestRetryAdvice = Boolean(retryFeedback.trim())
+  const recoverySuggestedQuery = String(candidateRecovery?.suggestedQuery || '').trim()
+  const candidateRecoveryKey = `${submittedQuery}:${recoverySuggestedQuery}`
+  const shouldShowCandidateRecovery =
+    hasFinalResults && recoverySuggestedQuery && dismissedCandidateRecoveryKey !== candidateRecoveryKey
 
   function getItemRetailerLabel(item) {
     return getRetailerDisplayName({
@@ -157,13 +157,6 @@ export function ResultsSection({
     }
   }
 
-  function handleCorrectionChipClick(chipLabel) {
-    const nextFeedback = retryFeedback.trim()
-      ? `${retryFeedback.trim()}\n${chipLabel}`
-      : `${chipLabel}\n`
-    onRetryFeedbackChange(nextFeedback)
-  }
-
   function handleRetryAdviceSubmit() {
     onRetryAdviceRequest({ rejectionFeedback: retryFeedback.trim() })
   }
@@ -175,18 +168,6 @@ export function ResultsSection({
     if (copied) {
       window.setTimeout(() => setHasCopiedDebugInfo(false), 2200)
     }
-  }
-
-  function handleRetryFabClick() {
-    handleOpenRetryView()
-    setTimeout(() => {
-      retryViewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 50)
-  }
-
-  function handleOpenRetryView() {
-    setRetryViewQuery(submittedQuery)
-    setShowRetryView(true)
   }
 
   function dismissPreferenceHint() {
@@ -531,6 +512,98 @@ export function ResultsSection({
         </div>
       ) : null}
 
+      {hasFinalResults ? (
+        <>
+          {shouldShowCandidateRecovery ? (
+            <div className="rounded-[28px] border border-primary/20 bg-[#eef7f6] p-5 shadow-[0_24px_64px_-50px_rgba(15,97,117,0.28)]">
+              <p className="text-lg font-medium text-slate-900">These are the strongest matches we found.</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                A more specific search may uncover better options for what you told us.
+              </p>
+              <div className="mt-4 rounded-[22px] border border-primary/15 bg-white/85 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Suggested search</p>
+                <p className="mt-2 text-base font-semibold leading-6 text-primary">{recoverySuggestedQuery}</p>
+              </div>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Button type="button" className="h-11 rounded-[18px] bg-primary px-5 text-primary-foreground hover:bg-primary/90" onClick={() => onFindBetterMatches(recoverySuggestedQuery)}>
+                  Find better matches
+                </Button>
+                <button type="button" className="text-sm font-medium text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline" onClick={() => {
+                  setDismissedCandidateRecoveryKey(candidateRecoveryKey)
+                  onKeepCandidateRecovery()
+                }}>
+                  Keep these picks
+                </button>
+              </div>
+            </div>
+          ) : null}
+        <div className="rounded-[28px] border border-[#e7dac8] bg-white/94 p-5 shadow-[0_24px_64px_-50px_rgba(120,87,63,0.22)]">
+          <button
+            type="button"
+            aria-expanded={showRetryView}
+            aria-label="Improve picks"
+            disabled={isGeneratingRetryAdvice || isRetrying}
+            className="flex w-full items-center gap-3 text-left disabled:cursor-default"
+            onClick={() => setShowRetryView((isVisible) => !isVisible)}
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#e5dacb] bg-[#fbf7f1] text-primary">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-xl font-medium text-slate-900">Improve these picks</span>
+              <span className="mt-1 block text-sm leading-6 text-slate-600">
+                Tell us what should change and Focamai will update the search direction.
+              </span>
+            </span>
+            <ChevronDown
+              className={`h-5 w-5 shrink-0 text-primary transition-transform duration-200 ${
+                showRetryView ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+
+          {showRetryView ? (
+            <div className="mt-5">
+              {isGeneratingRetryAdvice || isRetrying ? (
+                <div role="status" className="rounded-[22px] border border-[#e5dacb] bg-[#fbf7f1] px-5 py-4">
+                  <p className="font-medium text-slate-900">Updating your picks…</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    Preparing a sharper search based on what should change.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <Textarea
+                    id="results-retry-feedback"
+                    aria-label="What should we change?"
+                    value={retryFeedback}
+                    onChange={(event) => onRetryFeedbackChange(event.target.value)}
+                    onKeyDown={(event) =>
+                      handleRetryFeedbackKeyDown(event, {
+                        canSubmit: isRetryReady && canRequestRetryAdvice,
+                        onSubmit: handleRetryAdviceSubmit,
+                      })
+                    }
+                    disabled={!isRetryReady}
+                    className="min-h-32 resize-none rounded-[22px] border-[#e5dacb] bg-[#fbf7f1] px-5 py-4 text-base leading-7 placeholder:text-slate-400"
+                    placeholder="Example: Make it lighter and under $100, but keep one-hand folding."
+                  />
+                  <Button
+                    type="button"
+                    disabled={!isRetryReady || !canRequestRetryAdvice}
+                    className="h-12 w-full rounded-[22px] bg-primary px-6 text-sm text-primary-foreground shadow-[0_16px_36px_-26px_rgba(15,97,117,0.34)] hover:bg-primary/90 sm:w-auto"
+                    onClick={handleRetryAdviceSubmit}
+                  >
+                    Update my picks
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+        </>
+      ) : null}
+
       {orderedPreviousResults.length > 0 ? (
         <details className="group rounded-2xl border border-[#e7dac8] bg-white/88 px-5 py-4 shadow-[0_14px_38px_-32px_rgba(120,87,63,0.18)]">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left">
@@ -581,106 +654,6 @@ export function ResultsSection({
         </div>
       ) : null}
 
-      {hasFinalResults && !isRetryViewVisible ? (
-        <div className="rounded-2xl border border-[#e7dac8] bg-[#fbf7f1] px-4 py-4 shadow-[0_14px_38px_-34px_rgba(120,87,63,0.18)] sm:flex sm:items-center sm:justify-between sm:gap-5 sm:px-5">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#e5dacb] bg-white text-slate-500">
-              <RotateCcw className="h-4 w-4" />
-            </span>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-slate-900">Need a better fit?</p>
-              <p className="text-sm leading-6 text-slate-600">
-                Tell Focamai what felt off and it will prepare a better search.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-full border border-[#dcccc0] bg-white px-4 text-sm font-medium text-slate-700 transition hover:border-[#cbb9a3] hover:bg-[#fdfaf6] hover:text-slate-900 sm:mt-0 sm:w-auto"
-            onClick={handleOpenRetryView}
-          >
-            Improve picks
-          </button>
-        </div>
-      ) : null}
-
-      {isRetryViewVisible ? (
-        <div ref={retryViewRef} className="rounded-[28px] border border-[#e7dac8] bg-white/94 p-5 shadow-[0_24px_64px_-50px_rgba(120,87,63,0.22)]">
-          <button
-            type="button"
-            className="mb-5 flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
-            onClick={() => setShowRetryView(false)}
-          >
-            <span aria-hidden="true">←</span> Back to results
-          </button>
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#e6d8c5] bg-white/90 px-3 py-1 text-sm text-[#80573f]">
-              <Sparkles className="h-4 w-4" />
-              Improve these picks
-            </div>
-            <p className="text-xl font-medium text-slate-900">
-              What should we change?
-            </p>
-            <p className="text-sm leading-6 text-slate-600">
-              Tell us what was wrong or what you want instead. We&apos;ll update your picks while keeping compatible requirements.
-            </p>
-          </div>
-
-          <div className="mt-5 space-y-4">
-            <div className="flex flex-wrap gap-2" aria-label="Quick correction options">
-              {RETRY_CORRECTION_CHIPS.map((chipLabel) => (
-                <button
-                  key={chipLabel}
-                  type="button"
-                  className="rounded-full border border-[#e5dacb] bg-white px-3 py-2 text-sm text-slate-600 transition hover:border-[#cbb9a3] hover:text-slate-900"
-                  onClick={() => handleCorrectionChipClick(chipLabel)}
-                >
-                  {chipLabel}
-                </button>
-              ))}
-            </div>
-
-            <div className="rounded-[22px] border border-[#e5dacb] bg-white p-1 shadow-[0_14px_38px_-32px_rgba(120,87,63,0.16)]">
-              <Textarea
-                id="results-retry-feedback"
-                value={retryFeedback}
-                onChange={(event) => onRetryFeedbackChange(event.target.value)}
-                onKeyDown={(event) =>
-                  handleRetryFeedbackKeyDown(event, {
-                    canSubmit:
-                      isRetryReady &&
-                      !isRetrying &&
-                      !isGeneratingRetryAdvice &&
-                      canRequestRetryAdvice,
-                    onSubmit: handleRetryAdviceSubmit,
-                  })
-                }
-                disabled={!isRetryReady || isRetrying || isGeneratingRetryAdvice}
-                className="min-h-32 resize-none rounded-[28px] border-0 bg-transparent px-5 py-4 text-base leading-7 shadow-none placeholder:text-slate-400 focus-visible:ring-0"
-                placeholder="Example: Make it lighter and under $100, but keep one-hand folding..."
-              />
-            </div>
-
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                disabled={!isRetryReady || isRetrying || isGeneratingRetryAdvice || !canRequestRetryAdvice}
-                className="h-12 rounded-[22px] bg-primary px-6 text-sm text-primary-foreground shadow-[0_16px_36px_-26px_rgba(15,97,117,0.34)] hover:bg-primary/90"
-                onClick={handleRetryAdviceSubmit}
-              >
-                {isGeneratingRetryAdvice ? 'Updating your picks...' : 'Update my picks'}
-              </Button>
-            </div>
-
-            {isGeneratingRetryAdvice ? (
-              <p role="status" className="text-sm leading-6 text-slate-600">
-                Preparing a better search based on what should change.
-              </p>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
       {!hasStartedSearch && !errorMessage ? null : !isLoading && displayedResults.length === 0 && !errorMessage ? (
         <div className="rounded-2xl border border-dashed border-[#e6d8c5] bg-white/82 px-6 py-12 text-center shadow-[0_14px_38px_-32px_rgba(120,87,63,0.18)] sm:px-8">
           <div className="mx-auto max-w-xl space-y-3">
@@ -692,21 +665,6 @@ export function ResultsSection({
               Try a more specific search or add more context so Focamai can narrow the best options.
             </p>
           </div>
-        </div>
-      ) : null}
-      {hasFinalResults && !isRetryViewVisible ? (
-        <div className="pointer-events-none fixed right-4 bottom-[calc(env(safe-area-inset-bottom,0px)+1rem)] z-50 sm:right-6 sm:bottom-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]">
-          <button
-            type="button"
-            className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-[#dcccc0] bg-white/95 px-4 py-3 text-left shadow-[0_12px_28px_-20px_rgba(15,23,42,0.18)] backdrop-blur transition-colors hover:border-[#cbb9a3] hover:bg-[#fdfaf6]"
-            onClick={handleRetryFabClick}
-          >
-            <RotateCcw className="h-4 w-4 shrink-0 text-slate-500" />
-            <span className="flex flex-col">
-              <span className="text-sm text-slate-500">Not quite right?</span>
-              <span className="text-sm font-medium text-slate-800">Find better options</span>
-            </span>
-          </button>
         </div>
       ) : null}
     </section>

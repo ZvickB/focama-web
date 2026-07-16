@@ -108,9 +108,8 @@ describe('HomePage retry advice', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Compact airport stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
-    await screen.findByText(/what should we change/i)
+    await screen.findByLabelText(/what should we change/i)
 
-    await user.click(screen.getByRole('button', { name: /missing a must-have/i }))
     await user.type(
       document.getElementById('results-retry-feedback'),
       'Still too bulky for city travel.',
@@ -136,7 +135,7 @@ describe('HomePage retry advice', () => {
     expect(JSON.parse(retryAdviceRequest[1].body)).toEqual({
       query: 'stroller',
       followUpNotes: 'comfort matters most',
-      rejectionFeedback: 'Missing a must-have\nStill too bulky for city travel.',
+      rejectionFeedback: 'Still too bulky for city travel.',
       shortlist: [
         { title: 'Travel stroller' },
         { title: 'Compact airport stroller' },
@@ -238,7 +237,7 @@ describe('HomePage retry advice', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
-    await screen.findByText(/what should we change/i)
+    await screen.findByLabelText(/what should we change/i)
 
     const retryTextarea = document.getElementById('results-retry-feedback')
     await user.type(retryTextarea, 'Too bulky')
@@ -353,7 +352,7 @@ describe('HomePage retry advice', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
-    await screen.findByText(/what should we change/i)
+    await screen.findByLabelText(/what should we change/i)
 
     await user.type(document.getElementById('results-retry-feedback'), 'Too bulky')
     await user.click(screen.getByRole('button', { name: /update my picks/i }))
@@ -452,14 +451,14 @@ describe('HomePage retry advice', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
-    await screen.findByText(/what should we change/i)
+    await screen.findByLabelText(/what should we change/i)
     await user.type(document.getElementById('results-retry-feedback'), 'Too bulky')
     await user.click(screen.getByRole('button', { name: /update my picks/i }))
 
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/search/retry-advice'))).toBe(true)
     })
-    expect(screen.getByText(/what should we change/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/what should we change/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /search again/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /new search/i })).toBeInTheDocument()
   }, 10000)
@@ -598,9 +597,9 @@ describe('HomePage retry advice', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
-    await screen.findByText(/what should we change/i)
+    await screen.findByLabelText(/what should we change/i)
 
-    expect(screen.getByText(/what should we change/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/what should we change/i)).toBeInTheDocument()
     expect(document.getElementById('results-retry-feedback')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /update my picks/i })).toBeDisabled()
     expect(screen.queryByText(/retry 1 of 2/i)).not.toBeInTheDocument()
@@ -704,7 +703,7 @@ describe('HomePage retry advice', () => {
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Travel stroller')
     await user.click(screen.getByRole('button', { name: /improve picks/i }))
-    await screen.findByText(/what should we change/i)
+    await screen.findByLabelText(/what should we change/i)
 
     const retryTextarea = document.getElementById('results-retry-feedback')
     await user.type(retryTextarea, 'Line one')

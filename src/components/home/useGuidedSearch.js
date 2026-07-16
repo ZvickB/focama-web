@@ -793,6 +793,12 @@ export function useGuidedSearch() {
       usedIntentMatchRerank: Boolean(payload.selection?.usedIntentMatchRerank),
       flowPath: payload.selection?.flowPath || '',
     })
+    if (payload.selection?.candidateRecovery?.suggestedQuery) {
+      trackSearchEvent('candidate_recovery_shown', {
+        goodCandidateCount: Number(payload.selection.candidateRecovery.goodCandidateCount) || 0,
+        suggestedQueryLength: String(payload.selection.candidateRecovery.suggestedQuery).length,
+      })
+    }
     trackActivity(ACTIVITY_EVENT_NAMES.RECOMMENDATIONS_SHOWN, {
       resultCount: finalizedResults.length,
       resultSet,
@@ -1899,6 +1905,29 @@ export function useGuidedSearch() {
     return true
   }
 
+  function handleCandidateRecoverySearch(suggestedQuery) {
+    const { isValid, normalizedQuery } = validateSearchInput(String(suggestedQuery || '').trim(), '')
+
+    if (!isValid || !normalizedQuery) return false
+
+    trackSearchEvent('candidate_recovery_accepted', {
+      suggestedQueryLength: normalizedQuery.length,
+    })
+    setProductQuery(normalizedQuery)
+    startGuidedSearch(normalizedQuery, {
+      cacheMode: 'refresh',
+      preserveFollowUpNotes: true,
+      reuseAnalytics: true,
+      retrySearchQueryValue: normalizedQuery,
+      searchEventName: 'candidate_recovery_search_started',
+    })
+    return true
+  }
+
+  function handleKeepCandidateRecovery() {
+    trackSearchEvent('candidate_recovery_kept_partial_picks')
+  }
+
   function updateRetryFeedback(nextValue) {
     invalidateRetryAdviceRequests()
     setRetryFeedback(nextValue)
@@ -2014,6 +2043,8 @@ export function useGuidedSearch() {
     actions: {
       beginGuidedSearch,
       finalizeRefinement: handleFinalizeRefinement,
+      findBetterMatches: handleCandidateRecoverySearch,
+      keepPartialPicks: handleKeepCandidateRecovery,
       redoCurrentSearchBalanced,
       resetToNewSearch,
       retryFailedSearch,

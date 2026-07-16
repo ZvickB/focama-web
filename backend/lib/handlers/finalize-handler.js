@@ -603,12 +603,26 @@ export async function handleFinalizeSelection(request, response) {
       (item) => !haikuResults.some((haikuItem) => String(haikuItem.id) === String(item.id)),
     )
 
+    const suggestedQuery = String(haikuResult.suggestedQuery || '').trim()
+    const { isValid: hasValidSuggestedQuery, normalizedQuery: normalizedSuggestedQuery } =
+      suggestedQuery ? validateSearchInput(suggestedQuery, '') : { isValid: false, normalizedQuery: '' }
+    const needsBetterSearch =
+      retryCount === 0 &&
+      haikuResults.length < 4 &&
+      hasValidSuggestedQuery &&
+      normalizedSuggestedQuery.toLowerCase() !== sanitizedDiscoveryContext.normalizedQuery.toLowerCase()
+
     let results = fallbackResults
     let selectionStrategy = 'rules_fallback'
     let flowPath = 'nano_lock_fallback'
     let miniEnrichmentStatus = 'skipped'
 
-    if (haikuResults.length > 0) {
+    if (needsBetterSearch) {
+      results = haikuResults
+      selectionStrategy = 'haiku_lock_partial_recovery'
+      flowPath = 'haiku_lock_partial_recovery'
+      miniEnrichmentStatus = 'running_async'
+    } else if (haikuResults.length > 0) {
       if (haikuResults.length >= targetResultCount) {
         results = haikuResults.slice(0, targetResultCount)
         selectionStrategy = usesPreferencePolicy ? `haiku_fit_frontier_${composition.policy}` : 'haiku_lock'
@@ -727,11 +741,19 @@ export async function handleFinalizeSelection(request, response) {
         model: usedHaikuSelection ? haikuResult.model : null,
         modelPath: hasContextSignals ? 'context_added' : 'baseline',
         rankingPreference,
+        candidateRecovery: needsBetterSearch
+          ? {
+            goodCandidateCount: haikuResults.length,
+            suggestedQuery: normalizedSuggestedQuery,
+          }
+          : null,
         requestMode,
         shortlistLocked: finalizeFast.shortlistLocked,
         usage: usedHaikuSelection ? haikuResult.usage || null : null,
         selectedCandidateIds: finalizeFast.selectedCandidateIds,
-        details: selectionStrategy === 'haiku_lock'
+        details: selectionStrategy === 'haiku_lock_partial_recovery'
+          ? 'Fewer than four strong matches were found. The remaining candidates were not used to pad the shortlist.'
+          : selectionStrategy === 'haiku_lock'
           ? 'Haiku locked the shortlist. Product details and mini enrichment are running async.'
           : selectionStrategy === 'haiku_lock_topped_up'
             ? 'Haiku locked part of the shortlist. The remaining picks were topped up from deterministic fallback, and product details plus mini enrichment are running async.'

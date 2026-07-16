@@ -679,6 +679,9 @@ function MobileDashboard({ error, isLoading, mobile }) {
               ['Results success', formatPercent(summary?.resultsSuccessRate)],
               ['Failures', summary?.failures],
               ['Amazon click rate', formatPercent(summary?.amazonClickRate)],
+              ['Partial shortlists', summary?.candidateRecoveryShown],
+              ['Better search chosen', summary?.candidateRecoveryAccepted],
+              ['Partial picks kept', summary?.candidateRecoveryKept],
             ].map(([label, value]) => (
               <div key={label} className="rounded-[20px] border border-stone-200 bg-white p-4 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">{label}</p>

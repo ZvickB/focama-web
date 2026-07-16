@@ -29,6 +29,9 @@ import {
 const ANALYTICS_DASHBOARD_MAX_DAYS = 90
 const ANALYTICS_DASHBOARD_DEFAULT_DAYS = 14
 const MOBILE_ANALYTICS_EVENTS = new Set([
+  'candidate_recovery_accepted',
+  'candidate_recovery_kept_partial_picks',
+  'candidate_recovery_shown',
   'refinement_completed',
   'refinement_presented',
   'results_shown',
@@ -297,8 +300,13 @@ export async function handleMobileAnalyticsTrack(request, response) {
       ? { stage: ['discovery', 'refinement', 'finalize'].includes(payload.stage) ? payload.stage : 'unknown' }
       : event === 'results_shown'
         ? { resultCount: Math.max(0, Math.min(Number(payload.resultCount) || 0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit)) }
-        : event === 'search_started'
+      : event === 'search_started'
           ? { amazonDomain: truncateText(payload.amazonDomain, 80) }
+          : event.startsWith('candidate_recovery_')
+            ? {
+                goodCandidateCount: Math.max(0, Math.min(Number(payload.goodCandidateCount) || 0, 3)),
+                suggestedQueryLength: Math.max(0, Math.min(Number(payload.suggestedQueryLength) || 0, 200)),
+              }
           : {},
     eventType: `mobile.${event}`,
   })

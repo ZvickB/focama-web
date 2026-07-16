@@ -488,7 +488,7 @@ function buildNanoLockAndBadgesPrompt({
     rankingStrategy.summary,
     allowOptionalAlternatives
       ? `Return exactly 6 strongest core picks first with role "core" and confidence "high". You may then add up to ${Math.max(0, desiredCount - 6)} alternatives with role "alternative" only when they are genuinely credible, fitting substitutes; every alternative must also have confidence "high". Do not pad alternatives with weaker, wrong-type, or merely cheap products.`
-      : `Return exactly ${desiredCount} picks from the candidates below.`,
+      : `Return exactly ${desiredCount} high-confidence picks unless fewer than 4 candidates genuinely fit the product query and user context. Only in that case, return the 0-3 credible picks and do not pad with close-but-wrong alternatives. When returning fewer than 4 picks, provide a concise improved search phrase that combines the product query with the user context; otherwise return an empty suggested_query.`,
     'Reference candidates only by the provided index numbers. Preserve your chosen order from best overall fit to weakest acceptable fit.',
     '',
     `Product query: ${candidatePool.query}`,
@@ -522,8 +522,9 @@ function buildHaikuShortlistTool(candidateCount) {
             additionalProperties: false,
           },
         },
+        suggested_query: { type: 'string', maxLength: 200 },
       },
-      required: ['picks'],
+      required: ['picks', 'suggested_query'],
       additionalProperties: false,
     },
   }
@@ -597,7 +598,7 @@ export async function haikuLockWinnersAndBadges(
   const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
 
   if (candidates.length === 0) {
-    return { model: DEFAULT_HAIKU_MODEL, lockedIds: [], usage: null }
+    return { model: DEFAULT_HAIKU_MODEL, lockedIds: [], suggestedQuery: '', usage: null }
   }
 
   const desiredCount = Math.min(finalResultLimit, candidates.length)
@@ -626,6 +627,7 @@ export async function haikuLockWinnersAndBadges(
     (block) => block?.type === 'tool_use' && block?.name === shortlistTool.name,
   )
   const picks = Array.isArray(toolUseBlock?.input?.picks) ? toolUseBlock.input.picks : []
+  const suggestedQuery = String(toolUseBlock?.input?.suggested_query || '').trim().slice(0, 200)
   const seen = new Set()
   const lockedIds = []
   const coreIds = []
@@ -670,6 +672,7 @@ export async function haikuLockWinnersAndBadges(
     lockedIds,
     coreIds,
     alternativeIds,
+    suggestedQuery,
     usage: {
       inputTokens: message.usage?.input_tokens ?? 0,
       outputTokens: message.usage?.output_tokens ?? 0,

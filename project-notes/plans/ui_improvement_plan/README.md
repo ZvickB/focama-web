@@ -131,9 +131,9 @@ Status: implemented in the seventh `new_web_ui` slice.
 Mobile retry is simpler: say what felt off, get a suggested next search, edit it if needed, search again.
 
 Implemented web direction:
-- Reduced correction chips to three broad prompts: too expensive, wrong style, and missing a must-have.
-- Kept the freeform correction box as the main input.
-- The panel now asks `What should we change?` and uses one action: `Update my picks`.
+- Place one expandable `Improve these picks` card directly after the shortlist, rather than splitting the entry point, editor, and a floating reminder across the page.
+- Keep one freeform correction box and the `Update my picks` action; do not add quick-correction chips or a back-to-results detour.
+- Once submitted, replace the editor with a non-editable update state. When retry advice returns, keep its improved query visible in that same results location while the refreshed search starts.
 - A safe non-empty AI `suggestedQuery` starts the refreshed guided search automatically; the generated query is no longer a required second confirmation field.
 - Removed the `Keeping:` tag reassurance UI and the separate `Search this` / `Edit first` split.
 - Kept the same `/api/search/retry-advice` backend contract.

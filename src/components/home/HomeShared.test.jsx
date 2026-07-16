@@ -159,6 +159,43 @@ describe('FinalizeLoadingState', () => {
 })
 
 describe('ResultsSection retry advice', () => {
+  it('offers a better search instead of padding a partial shortlist', () => {
+    const onFindBetterMatches = vi.fn()
+    const onKeepCandidateRecovery = vi.fn()
+
+    render(
+      <ResultsSection
+        candidateRecovery={{ goodCandidateCount: 3, suggestedQuery: 'lightweight carry-on stroller under $200' }}
+        displayedResults={[createMockItem()]}
+        errorMessage=""
+        hasFinalResults
+        hasStartedSearch
+        isFinalizing={false}
+        isLoading={false}
+        isRetryReady
+        isRetrying={false}
+        isGeneratingRetryAdvice={false}
+        onFindBetterMatches={onFindBetterMatches}
+        onKeepCandidateRecovery={onKeepCandidateRecovery}
+        onRetailerClick={vi.fn()}
+        onSelectProduct={vi.fn()}
+        onRetryAdviceRequest={vi.fn()}
+        onRetryFeedbackChange={vi.fn()}
+        retryFeedback=""
+        showFinalResultBadges={false}
+        showPreviewResults={false}
+        submittedQuery="stroller"
+      />,
+    )
+
+    expect(screen.getByText(/these are the strongest matches we found/i)).toBeInTheDocument()
+    expect(screen.getByText('lightweight carry-on stroller under $200')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /find better matches/i }))
+    expect(onFindBetterMatches).toHaveBeenCalledWith('lightweight carry-on stroller under $200')
+    fireEvent.click(screen.getByRole('button', { name: /keep these picks/i }))
+    expect(onKeepCandidateRecovery).toHaveBeenCalledTimes(1)
+  })
+
   it('shows Prime availability on result surfaces when confirmed', () => {
     render(
       <ResultsSection

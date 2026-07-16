@@ -571,6 +571,7 @@ function OpenLayout(props) {
             <div ref={resultsViewportRef} className="max-h-[360px] scroll-mt-28 overflow-hidden">
               <ResultsSectionFallback
                 rankingPreference={results.rankingPreference}
+                retrySearchQuery={retry.searchQuery}
                 showFinalizeStatus={status.isFinalizing}
                 submittedQuery={submittedQuery}
               />
@@ -584,6 +585,7 @@ function OpenLayout(props) {
                 fallback={(
                   <ResultsSectionFallback
                     rankingPreference={results.rankingPreference}
+                    retrySearchQuery={retry.searchQuery}
                     showFinalizeStatus={status.isFinalizing}
                     submittedQuery={submittedQuery}
                   />
@@ -601,6 +603,9 @@ function OpenLayout(props) {
                   isRetryReady
                   isRetrying={status.isFinalizing}
                   isGeneratingRetryAdvice={retry.isGeneratingAdvice}
+                  candidateRecovery={results.selectionState?.candidateRecovery}
+                  onFindBetterMatches={actions.findBetterMatches}
+                  onKeepCandidateRecovery={actions.keepPartialPicks}
                   onRetailerClick={actions.trackRetailerClick}
                   onSelectProduct={handleSelectProduct}
                   onRetryAdviceRequest={retry.requestAdvice}
