@@ -9,6 +9,7 @@ import { attachCorsOrigin, buildInternalErrorPayload, resolveCorsOrigin, sendJso
 import { initObservability, registerProcessErrorHandlers, reportBackendError } from './lib/observability.js'
 import {
   handleAnalyticsDashboard,
+  handleMobileAnalyticsTrack,
   handleAccountDeletion,
   handleAnalyticsTrack,
   handleCachedSearch,
@@ -107,6 +108,9 @@ export function createExpressApp() {
 
   app.post('/api/analytics/track', async (req, res) => {
     await handleAnalyticsTrack(req, res)
+  })
+  app.post('/api/analytics/mobile', async (req, res) => {
+    await handleMobileAnalyticsTrack(req, res)
   })
   app.get('/api/analytics/dashboard', async (req, res) => {
     await handleAnalyticsDashboard(req, res)

@@ -1,12 +1,16 @@
 import { fetchBackend } from '@/lib/backendUrl.js'
 
-const SESSION_STORAGE_KEY = 'focamai_analytics_session_id'
+const LEGACY_SESSION_STORAGE_KEY = 'focamai_analytics_session_id'
+const DEVICE_STORAGE_KEY = 'focamai_analytics_device_id'
+const SESSION_STORAGE_KEY = 'focamai_analytics_session_id:v2'
 const ANALYTICS_FLUSH_DELAY_MS = 2000
 
 let queuedEvents = []
 let flushTimerId = null
 let flushListenersBound = false
 let analyticsPostChain = Promise.resolve()
+let fallbackDeviceId = ''
+let fallbackSessionId = ''
 
 function isAnalyticsEnabled() {
   if (typeof window === 'undefined') {
@@ -32,7 +36,19 @@ function getStorage() {
   }
 }
 
-export function getOrCreateAnalyticsSessionId() {
+function getSessionStorage() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    return window.sessionStorage
+  } catch {
+    return null
+  }
+}
+
+export function getOrCreateAnalyticsDeviceId() {
   if (!isAnalyticsEnabled()) {
     return 'analytics-disabled'
   }
@@ -40,7 +56,34 @@ export function getOrCreateAnalyticsSessionId() {
   const storage = getStorage()
 
   if (!storage) {
-    return crypto.randomUUID()
+    fallbackDeviceId = fallbackDeviceId || crypto.randomUUID()
+    return fallbackDeviceId
+  }
+
+  const existingDeviceId = storage.getItem(DEVICE_STORAGE_KEY)
+
+  if (existingDeviceId) {
+    return existingDeviceId
+  }
+
+  // The previous "session" value persisted across browser restarts, so it is
+  // safely reused as this device's stable identifier during the transition.
+  const legacyDeviceId = storage.getItem(LEGACY_SESSION_STORAGE_KEY)
+  const nextDeviceId = legacyDeviceId || crypto.randomUUID()
+  storage.setItem(DEVICE_STORAGE_KEY, nextDeviceId)
+  return nextDeviceId
+}
+
+export function getOrCreateAnalyticsSessionId() {
+  if (!isAnalyticsEnabled()) {
+    return 'analytics-disabled'
+  }
+
+  const storage = getSessionStorage()
+
+  if (!storage) {
+    fallbackSessionId = fallbackSessionId || crypto.randomUUID()
+    return fallbackSessionId
   }
 
   const existingSessionId = storage.getItem(SESSION_STORAGE_KEY)
@@ -71,13 +114,16 @@ function clearScheduledFlush() {
 }
 
 function postAnalyticsEvent(event) {
+  const { analyticsAccessToken, ...payload } = event
+
   analyticsPostChain = analyticsPostChain
     .then(() => fetchBackend('/api/analytics/track', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(analyticsAccessToken ? { Authorization: `Bearer ${analyticsAccessToken}` } : {}),
       },
-      body: JSON.stringify(event),
+      body: JSON.stringify(payload),
       keepalive: true,
     }))
     .catch(() => {})

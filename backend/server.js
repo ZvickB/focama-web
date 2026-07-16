@@ -2,6 +2,7 @@ import { DEFAULT_RATE_LIMIT_CONFIG } from './lib/rate-limit.js'
 import { reportBackendError } from './lib/observability.js'
 import {
   handleAnalyticsDashboard,
+  handleMobileAnalyticsTrack,
   handleAnalyticsTrack,
   handleCachePoolInspect,
   handleFinalizeHistory,
@@ -91,6 +92,7 @@ export const handleInternalPriceWatchCheck = createInternalPriceWatchHandler()
 export const handleAccountDeletion = createAccountDeletionHandler()
 
 export {
+  handleMobileAnalyticsTrack,
   handleAnalyticsTrack,
   handleAnalyticsDashboard,
   handleCachePoolInspect,

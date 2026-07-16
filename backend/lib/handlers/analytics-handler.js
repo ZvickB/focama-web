@@ -1,4 +1,5 @@
 import { sendJson, readJsonBody } from '../http.js'
+import { verifySupabaseBearerToken } from '../auth.js'
 import {
   sanitizeAnalyticsEventData,
   sanitizeAnalyticsItems,
@@ -27,6 +28,16 @@ import {
 
 const ANALYTICS_DASHBOARD_MAX_DAYS = 90
 const ANALYTICS_DASHBOARD_DEFAULT_DAYS = 14
+const MOBILE_ANALYTICS_EVENTS = new Set([
+  'refinement_completed',
+  'refinement_presented',
+  'results_shown',
+  'retailer_clicked',
+  'product_opened',
+  'retry_started',
+  'search_failed',
+  'search_started',
+])
 
 export async function handleSearchDebug(requestUrl, response) {
   const { error, isValid, normalizedDetails, normalizedQuery } = getValidatedSearchRequest(requestUrl)
@@ -104,6 +115,7 @@ export async function handleAnalyticsTrack(request, response) {
   }
 
   const searchId = truncateText(body?.searchId, 100)
+  const deviceId = truncateText(body?.deviceId, 120)
   const sessionId = truncateText(body?.sessionId, 120)
   const eventType = truncateText(body?.eventType, 80)
 
@@ -113,6 +125,11 @@ export async function handleAnalyticsTrack(request, response) {
   }
 
   const resultSet = truncateText(body?.resultSet, 40) || 'final'
+  const platform = ['mobile', 'web'].includes(truncateText(body?.platform, 20))
+    ? truncateText(body?.platform, 20)
+    : 'web'
+  const auth = await verifySupabaseBearerToken(request.headers || {})
+  const accountId = auth.ok ? auth.user.id : ''
 
   switch (eventType) {
     case 'search_run_upsert': {
@@ -125,7 +142,10 @@ export async function handleAnalyticsTrack(request, response) {
 
       await upsertAnalyticsSearchRun({
         searchId,
+        deviceId,
         sessionId,
+        accountId,
+        platform,
         productQuery,
         details: truncateText(body?.details, 500),
         enteredAiRefinement: Boolean(body?.enteredAiRefinement),
@@ -139,7 +159,10 @@ export async function handleAnalyticsTrack(request, response) {
     case 'search_event':
       await recordAnalyticsSearchEvent({
         searchId,
+        deviceId,
         sessionId,
+        accountId,
+        platform,
         eventType: truncateText(body?.name, 80) || 'unknown',
         eventData: sanitizeAnalyticsEventData(body?.eventData),
       })
@@ -156,7 +179,10 @@ export async function handleAnalyticsTrack(request, response) {
 
       await recordAnalyticsResultImpressions({
         searchId,
+        deviceId,
         sessionId,
+        accountId,
+        platform,
         resultSet,
         items,
       })
@@ -165,7 +191,10 @@ export async function handleAnalyticsTrack(request, response) {
     case 'result_click':
       await recordAnalyticsResultClick({
         searchId,
+        deviceId,
         sessionId,
+        accountId,
+        platform,
         resultSet,
         resultKey: truncateText(body?.resultKey, 200),
         position: Number.isFinite(Number(body?.position)) ? Number(body.position) : 0,
@@ -180,6 +209,99 @@ export async function handleAnalyticsTrack(request, response) {
       sendJson(response, 400, { error: 'Unsupported analytics event type.' })
       return
   }
+
+  sendJson(response, 202, { ok: true })
+}
+
+// Mobile has a deliberately narrow contract. It shares the existing analytics
+// storage, but cannot send the free-form fields accepted by the legacy web route.
+export async function handleMobileAnalyticsTrack(request, response) {
+  let body
+
+  try {
+    body = await readJsonBody(request, { maxBytes: 20 * 1024 })
+  } catch (error) {
+    sendJson(response, 400, { error: error instanceof Error ? error.message : 'Invalid request body.' })
+    return
+  }
+
+  const event = truncateText(body?.event, 80)
+  const searchId = truncateText(body?.searchId, 100)
+  const sessionId = truncateText(body?.sessionId, 120)
+  const payload = body?.payload && typeof body.payload === 'object' && !Array.isArray(body.payload)
+    ? body.payload
+    : {}
+
+  if (!MOBILE_ANALYTICS_EVENTS.has(event) || !searchId || !sessionId) {
+    sendJson(response, 400, { error: 'A supported event, searchId, and sessionId are required.' })
+    return
+  }
+
+  const base = { accountId: '', deviceId: '', platform: 'mobile', searchId, sessionId }
+
+  if (event === 'search_started') {
+    const productQuery = truncateText(payload.query, 200)
+
+    if (!productQuery) {
+      sendJson(response, 400, { error: 'A search query is required when a mobile search starts.' })
+      return
+    }
+
+    await upsertAnalyticsSearchRun({
+      ...base,
+      bestResultKey: '',
+      completedFinalize: false,
+      details: '',
+      enteredAiRefinement: false,
+      productQuery,
+      retryRound: 0,
+      usedShowProductsNow: false,
+    })
+  }
+
+  if (event === 'results_shown') {
+    const productQuery = truncateText(payload.query, 200)
+    await upsertAnalyticsSearchRun({
+      ...base,
+      bestResultKey: '',
+      completedFinalize: true,
+      details: '',
+      enteredAiRefinement: true,
+      productQuery,
+      retryRound: 0,
+      usedShowProductsNow: false,
+    })
+    const items = sanitizeAnalyticsItems(payload.items, { maxItems: LIVE_RESULT_FILTER_CONFIG.finalResultLimit })
+    if (items.length) {
+      await recordAnalyticsResultImpressions({ ...base, items, resultSet: 'final' })
+    }
+  }
+
+  if (event === 'product_opened' || event === 'retailer_clicked') {
+    await recordAnalyticsResultClick({
+      ...base,
+      badgeType: '',
+      clickTarget: event === 'product_opened' ? 'card' : 'retailer',
+      isBestPick: Number(payload.position) === 1,
+      position: Number.isFinite(Number(payload.position)) ? Number(payload.position) : 0,
+      provider: truncateText(payload.provider, 160),
+      resultKey: truncateText(payload.resultKey, 200),
+      resultSet: 'final',
+      retailerUrl: '',
+    })
+  }
+
+  await recordAnalyticsSearchEvent({
+    ...base,
+    eventData: event === 'search_failed'
+      ? { stage: ['discovery', 'refinement', 'finalize'].includes(payload.stage) ? payload.stage : 'unknown' }
+      : event === 'results_shown'
+        ? { resultCount: Math.max(0, Math.min(Number(payload.resultCount) || 0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit)) }
+        : event === 'search_started'
+          ? { amazonDomain: truncateText(payload.amazonDomain, 80) }
+          : {},
+    eventType: `mobile.${event}`,
+  })
 
   sendJson(response, 202, { ok: true })
 }

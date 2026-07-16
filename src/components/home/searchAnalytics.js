@@ -1,4 +1,8 @@
 import { trackAnalytics } from '@/lib/analytics.js'
+import {
+  ACTIVITY_EVENT_SCHEMA_VERSION,
+  toActivityEventType,
+} from '../../../shared/activity-events.js'
 
 export function buildResultAnalyticsItems(results) {
   if (!Array.isArray(results)) {
@@ -27,7 +31,15 @@ export function buildQuerySuggestionAnalyticsData(suggestion = {}) {
 }
 
 function hasAnalyticsIds(ids = {}) {
-  return Boolean(ids.searchId && ids.sessionId)
+  return Boolean(ids.deviceId && ids.searchId && ids.sessionId)
+}
+
+function getIdentityFields(ids = {}) {
+  return {
+    deviceId: ids.deviceId,
+    platform: 'web',
+    ...(ids.accessToken ? { analyticsAccessToken: ids.accessToken } : {}),
+  }
 }
 
 export function trackSearchAnalyticsEvent(name, eventData = {}, ids = {}) {
@@ -39,8 +51,33 @@ export function trackSearchAnalyticsEvent(name, eventData = {}, ids = {}) {
     eventType: 'search_event',
     searchId: ids.searchId,
     sessionId: ids.sessionId,
+    ...getIdentityFields(ids),
     name,
     eventData,
+  })
+}
+
+export function trackActivityEvent(name, eventData = {}, ids = {}) {
+  if (!hasAnalyticsIds(ids)) {
+    return
+  }
+
+  const eventType = toActivityEventType(name)
+
+  if (!eventType) {
+    return
+  }
+
+  trackAnalytics({
+    eventType: 'search_event',
+    searchId: ids.searchId,
+    sessionId: ids.sessionId,
+    ...getIdentityFields(ids),
+    name: eventType,
+    eventData: {
+      schemaVersion: ACTIVITY_EVENT_SCHEMA_VERSION,
+      ...eventData,
+    },
   })
 }
 
@@ -61,6 +98,7 @@ export function trackSearchRunAnalytics({
     eventType: 'search_run_upsert',
     searchId: ids.searchId,
     sessionId: ids.sessionId,
+    ...getIdentityFields(ids),
     productQuery,
     details,
     enteredAiRefinement,
@@ -80,6 +118,7 @@ export function trackResultImpressionsAnalytics({ items = [], resultSet = 'final
     eventType: 'result_impressions',
     searchId: ids.searchId,
     sessionId: ids.sessionId,
+    ...getIdentityFields(ids),
     resultSet,
     items,
   })
@@ -103,6 +142,7 @@ export function trackResultClickAnalytics({
     eventType: 'result_click',
     searchId: ids.searchId,
     sessionId: ids.sessionId,
+    ...getIdentityFields(ids),
     resultSet,
     resultKey,
     position,
