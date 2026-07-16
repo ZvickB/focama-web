@@ -1,4 +1,5 @@
 import { sendJson, readJsonBody } from '../http.js'
+import { verifySupabaseBearerToken } from '../auth.js'
 import {
   sanitizeAnalyticsEventData,
   sanitizeAnalyticsItems,
@@ -104,6 +105,7 @@ export async function handleAnalyticsTrack(request, response) {
   }
 
   const searchId = truncateText(body?.searchId, 100)
+  const deviceId = truncateText(body?.deviceId, 120)
   const sessionId = truncateText(body?.sessionId, 120)
   const eventType = truncateText(body?.eventType, 80)
 
@@ -113,6 +115,11 @@ export async function handleAnalyticsTrack(request, response) {
   }
 
   const resultSet = truncateText(body?.resultSet, 40) || 'final'
+  const platform = ['mobile', 'web'].includes(truncateText(body?.platform, 20))
+    ? truncateText(body?.platform, 20)
+    : 'web'
+  const auth = await verifySupabaseBearerToken(request.headers || {})
+  const accountId = auth.ok ? auth.user.id : ''
 
   switch (eventType) {
     case 'search_run_upsert': {
@@ -125,7 +132,10 @@ export async function handleAnalyticsTrack(request, response) {
 
       await upsertAnalyticsSearchRun({
         searchId,
+        deviceId,
         sessionId,
+        accountId,
+        platform,
         productQuery,
         details: truncateText(body?.details, 500),
         enteredAiRefinement: Boolean(body?.enteredAiRefinement),
@@ -139,7 +149,10 @@ export async function handleAnalyticsTrack(request, response) {
     case 'search_event':
       await recordAnalyticsSearchEvent({
         searchId,
+        deviceId,
         sessionId,
+        accountId,
+        platform,
         eventType: truncateText(body?.name, 80) || 'unknown',
         eventData: sanitizeAnalyticsEventData(body?.eventData),
       })
@@ -156,7 +169,10 @@ export async function handleAnalyticsTrack(request, response) {
 
       await recordAnalyticsResultImpressions({
         searchId,
+        deviceId,
         sessionId,
+        accountId,
+        platform,
         resultSet,
         items,
       })
@@ -165,7 +181,10 @@ export async function handleAnalyticsTrack(request, response) {
     case 'result_click':
       await recordAnalyticsResultClick({
         searchId,
+        deviceId,
         sessionId,
+        accountId,
+        platform,
         resultSet,
         resultKey: truncateText(body?.resultKey, 200),
         position: Number.isFinite(Number(body?.position)) ? Number(body.position) : 0,

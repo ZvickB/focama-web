@@ -2,7 +2,10 @@ create extension if not exists pgcrypto;
 
 create table if not exists public.analytics_search_runs (
   search_id uuid primary key default gen_random_uuid(),
+  device_id text,
   session_id text not null,
+  account_id uuid references auth.users (id) on delete set null,
+  platform text not null default 'web',
   product_query text not null,
   details text not null default '',
   entered_ai_refinement boolean not null default false,
@@ -16,13 +19,23 @@ create table if not exists public.analytics_search_runs (
 create index if not exists analytics_search_runs_session_id_created_at_idx
   on public.analytics_search_runs (session_id, created_at desc);
 
+create index if not exists analytics_search_runs_device_id_created_at_idx
+  on public.analytics_search_runs (device_id, created_at desc);
+
+create index if not exists analytics_search_runs_account_id_created_at_idx
+  on public.analytics_search_runs (account_id, created_at desc)
+  where account_id is not null;
+
 create index if not exists analytics_search_runs_created_at_idx
   on public.analytics_search_runs (created_at desc);
 
 create table if not exists public.analytics_search_events (
   id bigint generated always as identity primary key,
   search_id uuid not null references public.analytics_search_runs (search_id) on delete cascade,
+  device_id text,
   session_id text not null,
+  account_id uuid references auth.users (id) on delete set null,
+  platform text not null default 'web',
   event_type text not null,
   event_data jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc', now())
@@ -37,7 +50,10 @@ create index if not exists analytics_search_events_event_type_created_at_idx
 create table if not exists public.analytics_result_impressions (
   id bigint generated always as identity primary key,
   search_id uuid not null references public.analytics_search_runs (search_id) on delete cascade,
+  device_id text,
   session_id text not null,
+  account_id uuid references auth.users (id) on delete set null,
+  platform text not null default 'web',
   result_set text not null default 'final',
   result_key text not null,
   position integer not null,
@@ -56,7 +72,10 @@ create index if not exists analytics_result_impressions_result_key_created_at_id
 create table if not exists public.analytics_result_clicks (
   id bigint generated always as identity primary key,
   search_id uuid not null references public.analytics_search_runs (search_id) on delete cascade,
+  device_id text,
   session_id text not null,
+  account_id uuid references auth.users (id) on delete set null,
+  platform text not null default 'web',
   result_set text not null default 'final',
   result_key text not null,
   position integer not null,

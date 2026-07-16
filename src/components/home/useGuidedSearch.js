@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 
 import {
   createAnalyticsSearchId,
+  getOrCreateAnalyticsDeviceId,
   getOrCreateAnalyticsSessionId,
 } from '@/lib/analytics.js'
 import { enrichFinalResultsForDisplay } from '@/components/home/resultPresentation.js'
@@ -12,6 +13,7 @@ import {
   buildResultAnalyticsItems,
   trackResultClickAnalytics,
   trackResultImpressionsAnalytics,
+  trackActivityEvent,
   trackSearchAnalyticsEvent,
   trackSearchRunAnalytics,
 } from '@/components/home/searchAnalytics.js'
@@ -62,6 +64,7 @@ import {
 } from '@/lib/searchDiagnostics.js'
 import { MAX_PRODUCT_QUERY_LENGTH, validateSearchInput } from '../../../shared/search-input.js'
 import { RANKING_PREFERENCES, normalizeRankingPreference } from '../../../shared/ranking-preference.js'
+import { ACTIVITY_EVENT_NAMES } from '../../../shared/activity-events.js'
 
 export { AMAZON_MARKETPLACE_AUTO }
 export { RESULT_CARD_COUNT, RESULT_CARD_SLOTS }
@@ -80,7 +83,7 @@ export function useGuidedSearch() {
     resolvedAmazonDomain,
     setSelectedAmazonDomain,
   } = useAmazonStore()
-  const { rankingPreference } = useAuth()
+  const { rankingPreference, session } = useAuth()
   const [rankingPreferenceOverride, setRankingPreferenceOverride] = useState(null)
   const [submittedAmazonDomain, setSubmittedAmazonDomain] = useState('')
   const [selectedProductState, setSelectedProductState] = useState(null)
@@ -131,6 +134,7 @@ export function useGuidedSearch() {
   const finalizeAbortControllerRef = useRef(null)
   const refineAbortControllerRef = useRef(null)
   const analyticsSearchIdRef = useRef('')
+  const analyticsDeviceIdRef = useRef('')
   const analyticsSessionIdRef = useRef('')
   const retryAdviceRequestIdRef = useRef(0)
   const hasTrackedRefinementViewRef = useRef(false)
@@ -145,6 +149,8 @@ export function useGuidedSearch() {
 
   function getAnalyticsIds(explicitIds = {}) {
     return {
+      accessToken: session?.access_token || '',
+      deviceId: explicitIds.deviceId || analyticsDeviceIdRef.current || getOrCreateAnalyticsDeviceId(),
       searchId: explicitIds.searchId || analyticsSearchIdRef.current,
       sessionId: explicitIds.sessionId || analyticsSessionIdRef.current,
     }
@@ -152,6 +158,10 @@ export function useGuidedSearch() {
 
   function trackSearchEvent(name, eventData = {}, explicitIds = {}) {
     trackSearchAnalyticsEvent(name, eventData, getAnalyticsIds(explicitIds))
+  }
+
+  function trackActivity(name, eventData = {}, explicitIds = {}) {
+    trackActivityEvent(name, eventData, getAnalyticsIds(explicitIds))
   }
 
   function trackSearchRun(eventData = {}, explicitIds = {}) {
@@ -221,6 +231,11 @@ export function useGuidedSearch() {
     setFailureDiagnostics(nextDiagnostics)
 
     const { searchId, query, amazonDomain, errorType, errorMessage, searchStatus } = nextDiagnostics
+    trackActivity(ACTIVITY_EVENT_NAMES.ERROR_REPORTED, {
+      errorType,
+      source: 'search_flow',
+      status: searchStatus,
+    }, { searchId, sessionId: analyticsSessionIdRef.current })
     recordDiagnostic('frontend_error', {
       amazonDomain,
       errorMessage,
@@ -778,6 +793,11 @@ export function useGuidedSearch() {
       usedIntentMatchRerank: Boolean(payload.selection?.usedIntentMatchRerank),
       flowPath: payload.selection?.flowPath || '',
     })
+    trackActivity(ACTIVITY_EVENT_NAMES.RECOMMENDATIONS_SHOWN, {
+      resultCount: finalizedResults.length,
+      resultSet,
+      retryRound: payload.retryCount ?? variables.retryCount ?? 0,
+    })
 
     trackResultImpressions({
       resultSet,
@@ -1022,6 +1042,7 @@ export function useGuidedSearch() {
       setIsEnrichmentSettled(snapshot.results.some((item) => Boolean(item?.fit_reason || item?.fitReason)))
     }
 
+    analyticsDeviceIdRef.current = getOrCreateAnalyticsDeviceId()
     analyticsSearchIdRef.current = createAnalyticsSearchId()
     analyticsSessionIdRef.current = getOrCreateAnalyticsSessionId()
     setAnalyticsSearchId(analyticsSearchIdRef.current)
@@ -1155,6 +1176,7 @@ export function useGuidedSearch() {
         ? analyticsSessionIdRef.current
         : getOrCreateAnalyticsSessionId()
 
+    analyticsDeviceIdRef.current = getOrCreateAnalyticsDeviceId()
     analyticsSearchIdRef.current = analyticsSearchId
     analyticsSessionIdRef.current = analyticsSessionId
     setAnalyticsSearchId(analyticsSearchId)
@@ -1189,6 +1211,10 @@ export function useGuidedSearch() {
     trackSearchEvent(searchEventName, {
       query: normalizedQuery,
       amazonDomain: nextAmazonDomain,
+    }, { searchId: analyticsSearchId, sessionId: analyticsSessionId })
+    trackActivity(ACTIVITY_EVENT_NAMES.SEARCH_STARTED, {
+      marketplace: nextAmazonDomain,
+      source: searchEventName,
     }, { searchId: analyticsSearchId, sessionId: analyticsSessionId })
 
     cancelDiscoveryRequest()
@@ -1639,6 +1665,9 @@ export function useGuidedSearch() {
       trackSearchEvent('ai_followup_submitted', {
         noteLength: normalizedFollowUpNotes.length,
       })
+      trackActivity(ACTIVITY_EVENT_NAMES.QUESTIONS_COMPLETED, {
+        providedFollowUp: Boolean(normalizedFollowUpNotes),
+      })
     }
 
     if (normalizedFollowUpNotes) {
@@ -1821,6 +1850,9 @@ export function useGuidedSearch() {
       feedbackLength: normalizedFeedback.length,
       resultCount: results.length,
     })
+    trackActivity(ACTIVITY_EVENT_NAMES.IMPROVE_PICKS_STARTED, {
+      resultCount: results.length,
+    })
 
     retryAdviceMutation.mutate({
       query: submittedQuery,
@@ -1951,6 +1983,10 @@ export function useGuidedSearch() {
       clickTarget: 'card',
       retailerUrl: item.link || '',
     })
+    trackActivity(ACTIVITY_EVENT_NAMES.PRODUCT_OPENED, {
+      position,
+      resultSet,
+    })
 
     if (resultSet === 'preview') {
       void hydratePreviewProductDetails(item)
@@ -1967,6 +2003,10 @@ export function useGuidedSearch() {
       isBestPick: position === 0 || item.badgeLabel === 'Best match',
       clickTarget: 'retailer',
       retailerUrl: item.link || '',
+    })
+    trackActivity(ACTIVITY_EVENT_NAMES.RETAILER_CLICKED, {
+      position,
+      resultSet,
     })
   }
 
