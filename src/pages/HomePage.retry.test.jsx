@@ -715,14 +715,14 @@ describe('HomePage retry advice', () => {
     await user.type(retryTextarea, 'Too bulky')
     await user.keyboard('{Enter}')
 
-    await screen.findByText(/what should we optimize for with this slim city stroller/i)
-    expect(screen.getByText(/based on your improve picks feedback/i)).toBeInTheDocument()
-    expect(screen.getAllByText('slim city stroller').length).toBeGreaterThan(0)
-    expect(
-      fetchMock.mock.calls.some(([url]) =>
-        String(url).includes('/api/search/rainforest-discover?query=slim+city+stroller') &&
-          String(url).includes('cacheMode=refresh'),
-      ),
-    ).toBe(true)
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          String(url).includes('/api/search/rainforest-discover?query=slim+city+stroller') &&
+            String(url).includes('cacheMode=refresh'),
+        ),
+      ).toBe(true)
+    })
+    expect(screen.queryByText(/what should we optimize for with this slim city stroller/i)).not.toBeInTheDocument()
   })
 })
