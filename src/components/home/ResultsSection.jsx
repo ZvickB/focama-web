@@ -7,6 +7,7 @@ import {
   Copy,
   LayoutGrid,
   LayoutList,
+  Plus,
   RotateCcw,
   ShieldQuestion,
   Sparkles,
@@ -44,10 +45,156 @@ const FILTER_VPN_CHOICES = [
 ]
 const MotionDiv = motion.div
 const PREFERENCE_HINT_DISMISSED_KEY = 'focamai:ranking-preference-hint-dismissed'
+const INLINE_IMPROVE_PICKS = import.meta.env.VITE_INLINE_IMPROVE_PICKS !== 'false'
 
 function readPreferenceHintDismissed() {
   if (typeof window === 'undefined') return false
   return window.localStorage.getItem(PREFERENCE_HINT_DISMISSED_KEY) === 'true'
+}
+
+function ImprovePicksEndcap({
+  improvePicksSuggestions,
+  isGeneratingRetryAdvice,
+  isRetryReady,
+  isRetrying,
+  onRetryAdviceRequest,
+  onRetryFeedbackChange,
+  retryFeedback,
+  showRetryView,
+  setShowRetryView,
+  standalone = false,
+}) {
+  const canRequestRetryAdvice = Boolean(retryFeedback.trim())
+  const isBusy = isGeneratingRetryAdvice || isRetrying
+  const collapsedTitle = standalone ? 'Improve these picks' : 'Not quite right?'
+
+  function handleSubmit() {
+    onRetryAdviceRequest({ rejectionFeedback: retryFeedback.trim() })
+  }
+
+  function handleSuggestionSelect(suggestion) {
+    const feedback = String(suggestion?.feedback || '').trim()
+    if (feedback) onRetryFeedbackChange(feedback)
+  }
+
+  return (
+    <section
+      data-testid="improve-picks-endcap"
+      className={standalone
+        ? 'rounded-[28px] border border-[#e7dac8] bg-white/94 p-5 shadow-[0_24px_64px_-50px_rgba(120,87,63,0.22)]'
+        : 'pt-1'}
+    >
+      <button
+        type="button"
+        aria-expanded={showRetryView}
+        aria-label="Improve picks"
+        disabled={isBusy}
+        className={standalone
+          ? 'group flex w-full items-center gap-3 text-left disabled:cursor-default'
+          : 'group inline-flex items-center gap-2 rounded-lg py-1 text-left text-sm text-slate-600 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-default'}
+        onClick={() => setShowRetryView((isVisible) => !isVisible)}
+      >
+        {standalone ? (
+          <>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#e5dacb] bg-[#fbf7f1] text-primary">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-xl font-medium text-slate-900">{collapsedTitle}</span>
+              <span className="mt-1 block text-sm leading-6 text-slate-600">
+                Tell us what should change and Focamai will update the search direction.
+              </span>
+            </span>
+          </>
+        ) : (
+          <span>
+            <span className="font-medium text-slate-900">Not quite right?</span>{' '}
+            <span className="font-medium group-hover:underline group-hover:underline-offset-4">Tell me what to change.</span>
+          </span>
+        )}
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
+            showRetryView ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+
+      {showRetryView ? (
+        <div className={standalone ? 'mt-4 rounded-[22px] bg-[#fbf7f1] p-4 sm:p-5' : 'mt-5 border-t border-[#e7dac8] pt-5'}>
+          {isBusy ? (
+            <div role="status" className="text-sm leading-6 text-slate-600">
+              <p className="font-medium text-slate-900">Updating your picks…</p>
+              <p className="mt-1">Preparing a sharper search based on what should change.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <p className="text-base font-medium text-slate-900">How can I improve these recommendations?</p>
+              </div>
+              {improvePicksSuggestions.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    {improvePicksSuggestions.map((suggestion) => {
+                      const feedback = String(suggestion?.feedback || '').trim()
+                      const label = String(suggestion?.label || '').trim()
+                      const isSelected = feedback && feedback === retryFeedback.trim()
+                      if (!label || !feedback) return null
+
+                      return (
+                        <button
+                          key={`${label}:${feedback}`}
+                          type="button"
+                          aria-pressed={isSelected}
+                          className={`rounded-full border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${
+                            isSelected
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-[#e5dacb] bg-white text-slate-700 hover:border-primary/45 hover:text-primary'
+                          }`}
+                          onClick={() => handleSuggestionSelect(suggestion)}
+                        >
+                          {label}
+                          <Plus className="ml-1.5 inline h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
+              <div className="space-y-2">
+                <p className="text-sm text-slate-600">Or describe what you&apos;d like changed</p>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <Textarea
+                    id="results-retry-feedback"
+                    aria-label="What should we change?"
+                    value={retryFeedback}
+                    onChange={(event) => onRetryFeedbackChange(event.target.value)}
+                    onKeyDown={(event) =>
+                      handleRetryFeedbackKeyDown(event, {
+                        canSubmit: isRetryReady && canRequestRetryAdvice,
+                        onSubmit: handleSubmit,
+                      })
+                    }
+                    disabled={!isRetryReady}
+                    className="min-h-24 flex-1 resize-none rounded-[18px] border-[#e5dacb] bg-white px-4 py-3 text-base leading-7 placeholder:text-slate-400"
+                    placeholder="e.g., needs to be waterproof and under $100"
+                  />
+                  <Button
+                    type="button"
+                    disabled={!isRetryReady || !canRequestRetryAdvice}
+                    className="h-11 shrink-0 rounded-[18px] bg-primary px-5 text-sm text-primary-foreground shadow-[0_16px_36px_-26px_rgba(15,97,117,0.34)] hover:bg-primary/90"
+                    onClick={handleSubmit}
+                  >
+                    Update my picks
+                  </Button>
+                </div>
+                <p className="text-xs leading-5 text-slate-500">Tip: Be as specific as you can for the best results.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
+    </section>
+  )
 }
 
 export function ResultsSection({
@@ -117,7 +264,6 @@ export function ResultsSection({
   const activeResultSet = hasFinalResults ? 'final' : 'preview'
   const shouldShowResultsIntro = !hasDisplayedResults || hasFinalResults
   const orderedPreviousResults = previousResults
-  const canRequestRetryAdvice = Boolean(retryFeedback.trim())
   const recoverySuggestedQuery = String(candidateRecovery?.suggestedQuery || '').trim()
   const candidateRecoveryKey = `${submittedQuery}:${recoverySuggestedQuery}`
   const shouldShowCandidateRecovery =
@@ -155,18 +301,6 @@ export function ResultsSection({
 
     if (topVisibleRow) {
       selectActiveResult(topVisibleRow.index)
-    }
-  }
-
-  function handleRetryAdviceSubmit() {
-    onRetryAdviceRequest({ rejectionFeedback: retryFeedback.trim() })
-  }
-
-  function handleImprovePicksSuggestionSelect(suggestion) {
-    const feedback = String(suggestion?.feedback || '').trim()
-
-    if (feedback) {
-      onRetryFeedbackChange(feedback)
     }
   }
 
@@ -366,7 +500,7 @@ export function ResultsSection({
           </div>
 
           <div>
-            <div className="mobile-landscape-results-grid mx-auto grid max-w-6xl grid-cols-1 gap-3 sm:gap-5 xl:grid-cols-3">
+            <div className="mobile-landscape-results-grid mx-auto grid max-w-6xl grid-cols-1 gap-3 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
               {RESULT_CARD_SLOTS.map((index) => (
                 <div key={index}>
                   <ResultSkeleton />
@@ -422,7 +556,7 @@ export function ResultsSection({
               className={`mx-auto transition-all duration-300 ${
                 cardView === 'new'
                   ? 'max-w-6xl'
-                  : 'mobile-landscape-results-grid grid max-w-6xl grid-cols-1 gap-3 sm:gap-5 xl:grid-cols-3'
+                  : 'mobile-landscape-results-grid grid max-w-6xl grid-cols-1 gap-3 sm:gap-5 md:grid-cols-2 xl:grid-cols-3'
               } ${isFinalizing && !hasFinalResults ? 'scale-[0.995] opacity-80' : 'opacity-100'}`}
             >
               {cardView === 'new' ? (
@@ -481,40 +615,70 @@ export function ResultsSection({
                         />
                       </MotionDiv>
                     ))}
+                    {hasFinalResults && INLINE_IMPROVE_PICKS && !shouldShowCandidateRecovery ? (
+                      <ImprovePicksEndcap
+                        improvePicksSuggestions={improvePicksSuggestions}
+                        isGeneratingRetryAdvice={isGeneratingRetryAdvice}
+                        isRetryReady={isRetryReady}
+                        isRetrying={isRetrying}
+                        onRetryAdviceRequest={onRetryAdviceRequest}
+                        onRetryFeedbackChange={onRetryFeedbackChange}
+                        retryFeedback={retryFeedback}
+                        setShowRetryView={setShowRetryView}
+                        showRetryView={showRetryView}
+                      />
+                    ) : null}
                   </div>
                 </div>
               ) : (
-                orderedVisibleResults.map((visibleItem, index) => (
-                  <MotionDiv
-                    key={visibleItem.id}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{
-                      duration: 0.9,
-                      delay: (RESULT_CARD_FADE_DELAYS_MS[index] ?? index * 900) / 1000,
-                      ease: [0.22, 1, 0.36, 1],
-                    }}
-                  >
-                    <ProductCard
-                      {...visibleItem}
-                      rating={visibleItem.rating || 0}
-                      reviewCount={visibleItem.reviewCount || 0}
-                      onSelect={() =>
-                        onSelectProduct(visibleItem, {
-                          position: index,
-                          resultSet: activeResultSet,
-                        })
-                      }
-                      onRetailerClick={() =>
-                        onRetailerClick(visibleItem, {
-                          position: index,
-                          resultSet: activeResultSet,
-                        })
-                      }
-                      retailerLabel={getItemRetailerLabel(visibleItem)}
-                    />
-                  </MotionDiv>
-                ))
+                <>
+                  {orderedVisibleResults.map((visibleItem, index) => (
+                    <MotionDiv
+                      key={visibleItem.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        duration: 0.9,
+                        delay: (RESULT_CARD_FADE_DELAYS_MS[index] ?? index * 900) / 1000,
+                        ease: [0.22, 1, 0.36, 1],
+                      }}
+                    >
+                      <ProductCard
+                        {...visibleItem}
+                        rating={visibleItem.rating || 0}
+                        reviewCount={visibleItem.reviewCount || 0}
+                        onSelect={() =>
+                          onSelectProduct(visibleItem, {
+                            position: index,
+                            resultSet: activeResultSet,
+                          })
+                        }
+                        onRetailerClick={() =>
+                          onRetailerClick(visibleItem, {
+                            position: index,
+                            resultSet: activeResultSet,
+                          })
+                        }
+                        retailerLabel={getItemRetailerLabel(visibleItem)}
+                      />
+                    </MotionDiv>
+                  ))}
+                  {hasFinalResults && INLINE_IMPROVE_PICKS && !shouldShowCandidateRecovery ? (
+                    <div className="col-span-full">
+                      <ImprovePicksEndcap
+                        improvePicksSuggestions={improvePicksSuggestions}
+                        isGeneratingRetryAdvice={isGeneratingRetryAdvice}
+                        isRetryReady={isRetryReady}
+                        isRetrying={isRetrying}
+                        onRetryAdviceRequest={onRetryAdviceRequest}
+                        onRetryFeedbackChange={onRetryFeedbackChange}
+                        retryFeedback={retryFeedback}
+                        setShowRetryView={setShowRetryView}
+                        showRetryView={showRetryView}
+                      />
+                    </div>
+                  ) : null}
+                </>
               )}
             </div>
           </div>
@@ -546,100 +710,20 @@ export function ResultsSection({
               </div>
             </div>
           ) : null}
-        <div className="rounded-[28px] border border-[#e7dac8] bg-white/94 p-5 shadow-[0_24px_64px_-50px_rgba(120,87,63,0.22)]">
-          <button
-            type="button"
-            aria-expanded={showRetryView}
-            aria-label="Improve picks"
-            disabled={isGeneratingRetryAdvice || isRetrying}
-            className="flex w-full items-center gap-3 text-left disabled:cursor-default"
-            onClick={() => setShowRetryView((isVisible) => !isVisible)}
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#e5dacb] bg-[#fbf7f1] text-primary">
-              <Sparkles className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-xl font-medium text-slate-900">Improve these picks</span>
-              <span className="mt-1 block text-sm leading-6 text-slate-600">
-                Tell us what should change and Focamai will update the search direction.
-              </span>
-            </span>
-            <ChevronDown
-              className={`h-5 w-5 shrink-0 text-primary transition-transform duration-200 ${
-                showRetryView ? 'rotate-180' : ''
-              }`}
-            />
-          </button>
-
-          {showRetryView ? (
-            <div className="mt-5">
-              {isGeneratingRetryAdvice || isRetrying ? (
-                <div role="status" className="rounded-[22px] border border-[#e5dacb] bg-[#fbf7f1] px-5 py-4">
-                  <p className="font-medium text-slate-900">Updating your picks…</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Preparing a sharper search based on what should change.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {improvePicksSuggestions.length > 0 ? (
-                    <div className="space-y-2">
-                      <p className="text-sm font-semibold text-slate-600">A few ways to adjust the direction</p>
-                      <div className="flex flex-wrap gap-2">
-                        {improvePicksSuggestions.map((suggestion) => {
-                          const feedback = String(suggestion?.feedback || '').trim()
-                          const label = String(suggestion?.label || '').trim()
-                          const isSelected = feedback && feedback === retryFeedback.trim()
-
-                          if (!label || !feedback) return null
-
-                          return (
-                            <button
-                              key={`${label}:${feedback}`}
-                              type="button"
-                              aria-pressed={isSelected}
-                              className={`rounded-full border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${
-                                isSelected
-                                  ? 'border-primary bg-primary text-primary-foreground'
-                                  : 'border-[#e5dacb] bg-white text-slate-700 hover:border-primary/45 hover:text-primary'
-                              }`}
-                              onClick={() => handleImprovePicksSuggestionSelect(suggestion)}
-                            >
-                              {label}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
-                  <Textarea
-                    id="results-retry-feedback"
-                    aria-label="What should we change?"
-                    value={retryFeedback}
-                    onChange={(event) => onRetryFeedbackChange(event.target.value)}
-                    onKeyDown={(event) =>
-                      handleRetryFeedbackKeyDown(event, {
-                        canSubmit: isRetryReady && canRequestRetryAdvice,
-                        onSubmit: handleRetryAdviceSubmit,
-                      })
-                    }
-                    disabled={!isRetryReady}
-                    className="min-h-32 resize-none rounded-[22px] border-[#e5dacb] bg-[#fbf7f1] px-5 py-4 text-base leading-7 placeholder:text-slate-400"
-                    placeholder="Example: Make it lighter and under $100, but keep one-hand folding."
-                  />
-                  <Button
-                    type="button"
-                    disabled={!isRetryReady || !canRequestRetryAdvice}
-                    className="h-12 w-full rounded-[22px] bg-primary px-6 text-sm text-primary-foreground shadow-[0_16px_36px_-26px_rgba(15,97,117,0.34)] hover:bg-primary/90 sm:w-auto"
-                    onClick={handleRetryAdviceSubmit}
-                  >
-                    Update my picks
-                  </Button>
-                </div>
-              )}
-            </div>
-          ) : null}
-        </div>
+        {!INLINE_IMPROVE_PICKS || !hasDisplayedResults || shouldShowCandidateRecovery ? (
+          <ImprovePicksEndcap
+            standalone
+            improvePicksSuggestions={improvePicksSuggestions}
+            isGeneratingRetryAdvice={isGeneratingRetryAdvice}
+            isRetryReady={isRetryReady}
+            isRetrying={isRetrying}
+            onRetryAdviceRequest={onRetryAdviceRequest}
+            onRetryFeedbackChange={onRetryFeedbackChange}
+            retryFeedback={retryFeedback}
+            setShowRetryView={setShowRetryView}
+            showRetryView={showRetryView}
+          />
+        ) : null}
         </>
       ) : null}
 
@@ -654,7 +738,7 @@ export function ResultsSection({
             </div>
             <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-180" />
           </summary>
-          <div className="mobile-landscape-results-grid mt-4 grid max-w-6xl grid-cols-1 gap-3 sm:gap-5 xl:grid-cols-3">
+          <div className="mobile-landscape-results-grid mt-4 grid max-w-6xl grid-cols-1 gap-3 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
             {orderedPreviousResults.map((item, index) => (
               <div key={`previous-${item.id}`}>
                 <ProductCard

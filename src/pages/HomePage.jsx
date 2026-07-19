@@ -4,7 +4,6 @@ import Seo from '@/components/Seo.jsx'
 import { HomeShell } from '@/components/home/HomeShell.jsx'
 import { getBackendUrl, probeDirectBackend } from '@/lib/backendUrl.js'
 import { preconnectToUrl, scheduleIdleTask } from '@/lib/resourceHints.js'
-import { readFlowSnapshot } from '@/lib/search/searchFlowSnapshot.js'
 
 function loadHomeExperience() {
   return import('@/components/home/HomeExperience.jsx').then((module) => ({
@@ -23,8 +22,7 @@ function HomePage() {
   const historySearchFollowUp = String(historySearch?.followUp || '').trim()
   const [initialSearchQuery, setInitialSearchQuery] = useState(historySearchQuery)
   const [initialSearchFollowUp, setInitialSearchFollowUp] = useState(historySearchFollowUp)
-  const [hasRestorableFlowSnapshot] = useState(() => Boolean(readFlowSnapshot()))
-  const hasStartedSearch = Boolean(initialSearchQuery) || hasRestorableFlowSnapshot
+  const hasStartedSearch = Boolean(initialSearchQuery)
 
   useEffect(() => {
     preconnectToUrl(getBackendUrl())
