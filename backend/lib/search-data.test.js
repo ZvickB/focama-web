@@ -8,6 +8,7 @@ import {
   normalizeResult,
   resetEnvCache,
   validateSearchInput,
+  validateSuggestedSearchQuery,
 } from './search-data.js'
 
 describe('search-data helpers', () => {
@@ -177,6 +178,14 @@ describe('search-data helpers', () => {
       error: '',
       normalizedQuery: 'desk lamp',
       normalizedDetails: 'for a small office',
+    })
+  })
+
+  it('rejects tag-like model suggestions while allowing a normal shopping phrase', () => {
+    expect(validateSuggestedSearchQuery('</antml parameter>')).toMatchObject({ isValid: false })
+    expect(validateSuggestedSearchQuery('narrow rectangular glass vase')).toMatchObject({
+      isValid: true,
+      normalizedQuery: 'narrow rectangular glass vase',
     })
   })
 })

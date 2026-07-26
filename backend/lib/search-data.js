@@ -4,6 +4,7 @@ export {
   MAX_DETAILS_LENGTH,
   MAX_PRODUCT_QUERY_LENGTH,
   validateSearchInput,
+  validateSuggestedSearchQuery,
 } from '../../shared/search-input.js'
 
 export const SERPAPI_ENDPOINT = 'https://serpapi.com/search.json'

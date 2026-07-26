@@ -16,7 +16,7 @@ import {
   truncateText,
 } from '../text-sanitizers.js'
 import { lacksKnownPositivePrice } from '../result-filter.js'
-import { getEnv, validateSearchInput } from '../search-data.js'
+import { getEnv, validateSearchInput, validateSuggestedSearchQuery } from '../search-data.js'
 import { writeSearchSnapshot } from '../search-pipeline.js'
 import {
   readProductDetailsCacheEntries,
@@ -605,7 +605,7 @@ export async function handleFinalizeSelection(request, response) {
 
     const suggestedQuery = String(haikuResult.suggestedQuery || '').trim()
     const { isValid: hasValidSuggestedQuery, normalizedQuery: normalizedSuggestedQuery } =
-      suggestedQuery ? validateSearchInput(suggestedQuery, '') : { isValid: false, normalizedQuery: '' }
+      suggestedQuery ? validateSuggestedSearchQuery(suggestedQuery) : { isValid: false, normalizedQuery: '' }
     const needsBetterSearch =
       retryCount === 0 &&
       haikuResults.length < 4 &&

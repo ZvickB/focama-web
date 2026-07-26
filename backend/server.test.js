@@ -2468,6 +2468,38 @@ describe('server handlers', () => {
     }))
   })
 
+  it('does not expose a malformed Haiku suggestion as a partial shortlist recovery', async () => {
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
+      model: 'claude-haiku-4-5-20251001',
+      lockedIds: ['three', 'one', 'four'],
+      suggestedQuery: '</antml parameter>',
+      usage: null,
+    })
+
+    const response = createResponseRecorder()
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry(
+        'stroller',
+        ['one', 'two', 'three', 'four', 'five', 'six'].map((id) => createFinalizeCandidate(id)),
+      ),
+    )
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(JSON.stringify(createFinalizeDiscoveryBody()), { 'x-forwarded-for': '203.0.113.42' }),
+      response,
+    )
+
+    const payload = JSON.parse(response.body)
+
+    expect(response.statusCode).toBe(200)
+    expect(payload.results).toHaveLength(6)
+    expect(payload.selection).toEqual(expect.objectContaining({
+      strategy: 'haiku_lock_topped_up',
+      candidateRecovery: null,
+    }))
+  })
+
   it('tops up a partial valid Haiku shortlist to six items', async () => {
     mockFinalizeEnv()
     haikuLockWinnersAndBadges.mockResolvedValue({

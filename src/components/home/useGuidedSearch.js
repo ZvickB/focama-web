@@ -61,7 +61,11 @@ import {
   reportSearchDiagnosticEvent,
   runSearchFailureDiagnostics,
 } from '@/lib/searchDiagnostics.js'
-import { MAX_PRODUCT_QUERY_LENGTH, validateSearchInput } from '../../../shared/search-input.js'
+import {
+  MAX_PRODUCT_QUERY_LENGTH,
+  validateSearchInput,
+  validateSuggestedSearchQuery,
+} from '../../../shared/search-input.js'
 import { RANKING_PREFERENCES, normalizeRankingPreference } from '../../../shared/ranking-preference.js'
 import { ACTIVITY_EVENT_NAMES } from '../../../shared/activity-events.js'
 
@@ -1904,7 +1908,7 @@ export function useGuidedSearch() {
   }
 
   function handleCandidateRecoverySearch(suggestedQuery) {
-    const { isValid, normalizedQuery } = validateSearchInput(String(suggestedQuery || '').trim(), '')
+    const { isValid, normalizedQuery } = validateSuggestedSearchQuery(String(suggestedQuery || '').trim())
 
     if (!isValid || !normalizedQuery) return false
 

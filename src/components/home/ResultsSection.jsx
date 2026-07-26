@@ -34,6 +34,7 @@ import {
   isActiveRankingPreference,
   normalizeRankingPreference,
 } from '../../../shared/ranking-preference.js'
+import { validateSuggestedSearchQuery } from '../../../shared/search-input.js'
 
 const RESULT_CARD_FADE_DELAYS_MS = [0, 260, 620, 1040, 1520, 2140]
 const FILTER_VPN_CHOICES = [
@@ -264,7 +265,8 @@ export function ResultsSection({
   const activeResultSet = hasFinalResults ? 'final' : 'preview'
   const shouldShowResultsIntro = !hasDisplayedResults || hasFinalResults
   const orderedPreviousResults = previousResults
-  const recoverySuggestedQuery = String(candidateRecovery?.suggestedQuery || '').trim()
+  const recoverySuggestion = validateSuggestedSearchQuery(String(candidateRecovery?.suggestedQuery || '').trim())
+  const recoverySuggestedQuery = recoverySuggestion.isValid ? recoverySuggestion.normalizedQuery : ''
   const candidateRecoveryKey = `${submittedQuery}:${recoverySuggestedQuery}`
   const shouldShowCandidateRecovery =
     hasFinalResults && recoverySuggestedQuery && dismissedCandidateRecoveryKey !== candidateRecoveryKey

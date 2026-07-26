@@ -80,3 +80,25 @@ export function validateSearchInput(productQuery, details = '') {
     normalizedDetails,
   }
 }
+
+// Model-generated suggestions are displayed directly in the recovery UI and
+// used to start a new discovery request. Keep their accepted shape narrower
+// than a shopper's free-form query so malformed tool output cannot surface as
+// customer-facing copy.
+export function validateSuggestedSearchQuery(value) {
+  const result = validateSearchInput(value, '')
+
+  if (!result.isValid) {
+    return result
+  }
+
+  if (/[<>\[\]{}]|&(?:#\d+|#x[0-9a-f]+|[a-z]+);/i.test(result.normalizedQuery)) {
+    return {
+      ...result,
+      isValid: false,
+      error: 'Try a real product topic, like "lego", "desk lamp", or "travel stroller".',
+    }
+  }
+
+  return result
+}
