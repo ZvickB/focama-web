@@ -24,6 +24,7 @@ import {
   normalizeProductIdentity,
   PRICE_STALE_MS,
 } from '../price-comparison/deep-dive-serpapi.js'
+import { findSimilarShoppingAlternatives } from '../price-comparison/similar-alternatives.js'
 import {
   incrementDeepDiveUsage,
   readDeepDiveCacheEntry,
@@ -42,6 +43,10 @@ function clean(value) {
 
 function isEnabled() {
   return String(getEnv('DEEP_DIVE_ENABLED') || '').trim().toLowerCase() === 'true'
+}
+
+function areSimilarOptionsEnabled() {
+  return String(getEnv('SIMILAR_OPTIONS_ENABLED') || '').trim().toLowerCase() === 'true'
 }
 
 function buildHash(value) {
@@ -86,7 +91,7 @@ function limitedPayload({ candidateId, reason, message, cache = {} }) {
   }
 }
 
-function readyPayload({ candidateId, product, offers, checkedStoreCount, cache, ambiguous }) {
+function readyPayload({ candidateId, product, offers, similarAlternatives = [], checkedStoreCount, cache, ambiguous }) {
   return {
     status: 'ready',
     candidateId,
@@ -94,6 +99,7 @@ function readyPayload({ candidateId, product, offers, checkedStoreCount, cache, 
     cache,
     product,
     offers,
+    similarAlternatives,
     checkedStoreCount,
     ambiguous: ambiguous || false,
     limitedData: null,
@@ -395,6 +401,13 @@ export async function handleDeepDive(request, response) {
       candidateId,
       product: buildDeepDiveProductPayload(productResults, candidate),
       offers: offerResult.offers,
+      similarAlternatives: areSimilarOptionsEnabled() && offerResult.offers.length === 0
+        ? findSimilarShoppingAlternatives({
+            candidate,
+            shoppingResults: productGroup.value.payload?.shopping_results,
+            currency: market === 'CA' ? 'CAD' : 'USD',
+          })
+        : [],
       checkedStoreCount: Array.isArray(productResults.stores) ? productResults.stores.length : 0,
       cache,
       ambiguous: Boolean(productGroup.value.ambiguous),

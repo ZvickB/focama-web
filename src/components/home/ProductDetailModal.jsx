@@ -785,13 +785,29 @@ export function ProductDetailModal({
                 ) : null}
 
                 {deepDive?.status === 'ready' && ddOffers.length === 0 && !deepDiveLoading && !canOfferUsFallback ? (
-                  <div className="rounded-2xl border border-[#d9e6e8] bg-[#f6fbfa] px-4 py-3 text-sm leading-6 text-slate-700">
-                    <p className="font-semibold text-slate-900">No lower price found</p>
-                    <p className="mt-1">
+                  <div className="space-y-3">
+                    <div className="rounded-2xl border border-[#d9e6e8] bg-[#f6fbfa] px-4 py-3 text-sm leading-6 text-slate-700">
+                      <p className="font-semibold text-slate-900">No lower price found</p>
+                      <p className="mt-1">
                       {Number(deepDive.checkedStoreCount) > 0
                         ? `Focamai checked ${deepDive.checkedStoreCount} store ${deepDive.checkedStoreCount === 1 ? 'offer' : 'offers'} and could not verify a lower price than the ${retailerLabel || 'Amazon'} price you're seeing.`
                         : `Focamai could not verify a lower price at other stores than the ${retailerLabel || 'Amazon'} price you're seeing.`}
-                    </p>
+                      </p>
+                    </div>
+                    {Array.isArray(deepDive.similarAlternatives) && deepDive.similarAlternatives.length > 0 ? (
+                      <div className="rounded-2xl border border-[#eee5da] bg-white px-4 py-3">
+                        <p className="text-sm font-semibold text-slate-900">Similar options</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">Comparable products with a verified difference. Prices may be higher.</p>
+                        <div className="mt-3 space-y-2">
+                          {deepDive.similarAlternatives.map((option, index) => (
+                            <div key={`${option.url}-${index}`} className="flex items-start justify-between gap-3 rounded-xl bg-[#fbf7f1] p-3">
+                              <div className="min-w-0"><p className="line-clamp-2 text-sm font-medium text-slate-800">{option.title}</p><p className="mt-1 text-xs text-slate-600">{option.difference}</p></div>
+                              <div className="shrink-0 text-right"><p className="text-sm font-semibold text-primary">{formatDeepDiveMoney(option.price, option.currency)}</p><a href={option.url} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800">Google Shopping <ArrowUpRight className="h-3 w-3" /></a></div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
 

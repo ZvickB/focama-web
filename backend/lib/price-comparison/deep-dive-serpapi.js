@@ -49,7 +49,8 @@ function inferCurrency(value, market) {
 
 function normalizeProductIdentity(candidate) {
   const sourceTitle = clean(candidate?.source_title || candidate?.sourceTitle || candidate?.title)
-  const attributes = {}
+  const existingIdentifier = candidate?.match_identifier || candidate?.matchIdentifier || {}
+  const attributes = { ...(existingIdentifier?.attributes || {}) }
   const title = sourceTitle
   const capacity = title.match(/\b\d+(?:\.\d+)?\s*(?:tb|gb|qt|quart|oz|ml|l)\b/i)?.[0] || ''
   const color = title.match(/\b(?:black|white|blue|red|green|silver|graphite|gray|grey|pink|purple)\b/i)?.[0] || ''
@@ -58,7 +59,7 @@ function normalizeProductIdentity(candidate) {
   const inferredBrand = titleWords[1] && /[-\d]/.test(titleWords[1])
     ? titleWords[0]
     : titleWords.slice(0, 2).join(' ')
-  const brand = clean(candidate?.brand) || inferredBrand
+  const brand = clean(existingIdentifier?.brand || candidate?.brand) || inferredBrand
 
   if (capacity) attributes.capacity = capacity
   if (color) attributes.color = color
@@ -68,10 +69,10 @@ function normalizeProductIdentity(candidate) {
     display_title: clean(candidate?.display_title || candidate?.displayTitle || sourceTitle),
     match_identifier: {
       brand,
-      model_number: clean(candidate?.model_number || candidate?.modelNumber || model),
-      product_type: '',
+      model_number: clean(existingIdentifier?.model_number || existingIdentifier?.modelNumber || candidate?.model_number || candidate?.modelNumber || model),
+      product_type: clean(existingIdentifier?.product_type || existingIdentifier?.productType),
       attributes,
-      comparison_search_query: [
+      comparison_search_query: clean(existingIdentifier?.comparison_search_query) || [
         brand,
         model,
         sourceTitle,
