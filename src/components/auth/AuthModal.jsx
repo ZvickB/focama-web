@@ -4,9 +4,6 @@ import { Eye, EyeOff, LoaderCircle, LockKeyhole, X } from 'lucide-react'
 import { Button } from '@/components/ui/button.jsx'
 import { useAuth } from '@/contexts/useAuth.js'
 
-// Keep the OAuth path ready while Apple Developer configuration is pending.
-const APPLE_SIGN_IN_VISIBLE = false
-
 function getAuthErrorMessage(error) {
   if (!error) return ''
   return error.message || 'Something went wrong. Please try again.'
@@ -368,19 +365,17 @@ export function AuthModal({ contextualLine = '', onClose, open }) {
               >
                 Continue with Google
               </button>
-              {APPLE_SIGN_IN_VISIBLE ? (
-                <button
-                  type="button"
-                  onClick={() => handleOAuthSignIn({
-                    providerLabel: 'Apple',
-                    signInWithProvider: signInWithApple,
-                  })}
-                  disabled={isBusy}
-                  className="inline-flex h-12 w-full items-center justify-center rounded-2xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:pointer-events-none disabled:opacity-50"
-                >
-                  Continue with Apple
-                </button>
-              ) : null}
+              <button
+                type="button"
+                onClick={() => handleOAuthSignIn({
+                  providerLabel: 'Apple',
+                  signInWithProvider: signInWithApple,
+                })}
+                disabled={isBusy}
+                className="inline-flex h-12 w-full items-center justify-center rounded-2xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:pointer-events-none disabled:opacity-50"
+              >
+                Continue with Apple
+              </button>
             </div>
           </>
         ) : null}

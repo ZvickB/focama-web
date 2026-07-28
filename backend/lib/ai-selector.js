@@ -483,7 +483,7 @@ function buildNanoLockAndBadgesPrompt({
     '4. If fewer than the requested number of eligible candidates exist, fill the remaining slots with the closest acceptable alternatives. Prefer alternatives that violate the fewest or least important user-context requirements and still clearly match the original product query.',
     '5. Match the Product query exactly before optimizing quality. Do not reward a high rating if the item is the wrong product type, accessory-only, bundle mismatch, refill/part, or irrelevant variant.',
     '6. If the query names a brand/model, treat it as a strong preference and fill matching eligible slots first. Only use other brands/models when matching candidates are weak, duplicated, unavailable, or clearly worse for the user context.',
-    '7. Avoid near-duplicate results. Do not pick multiple sizes/colors/sellers of the same product unless that variety is genuinely useful. Use duplicateFamilyKey, title similarity, source, and attributes to spot duplicates.',
+    '7. Choose genuinely different products. Never count a colorway, finish, seller, or cosmetic variant of the same model as another recommendation. Different models, generations, capacities, widths, feature tiers, or use cases are valid alternatives. Use duplicateFamilyKey, title similarity, source, and attributes to spot duplicates.',
     '8. Build the best set, not just the top individual scores. Add diversity across use case, price tier, or style only after eligibility, relevance, and quality are satisfied.',
     rankingStrategy.summary,
     allowOptionalAlternatives

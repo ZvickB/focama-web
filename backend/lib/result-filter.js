@@ -1,5 +1,6 @@
 import { buildQuery, normalizeResult } from './search-data.js'
 import { moderateProductList } from './content-moderation.js'
+import { areSameProductFamily } from './product-identity.js'
 
 export const DEFAULT_FILTER_CONFIG = {
   finalResultLimit: 6,
@@ -374,6 +375,10 @@ function isClosePriceMatch(leftPrice, rightPrice) {
 }
 
 function isLikelySameFamilyVariant(leftItem, rightItem) {
+  if (areSameProductFamily(leftItem, rightItem)) {
+    return true
+  }
+
   const leftFamilyKey = buildDuplicateFamilyKey(leftItem.title)
   const rightFamilyKey = buildDuplicateFamilyKey(rightItem.title)
 

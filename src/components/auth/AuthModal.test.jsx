@@ -66,14 +66,15 @@ describe('AuthModal password recovery', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('starts Google OAuth while Apple remains unavailable in the UI', async () => {
+  it('starts Google and Apple OAuth from the sign-in screen', async () => {
     const user = userEvent.setup()
 
     render(<AuthModal open onClose={vi.fn()} />)
 
     await user.click(screen.getByRole('button', { name: /continue with google/i }))
     expect(auth.signInWithGoogle).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('button', { name: /continue with apple/i })).not.toBeInTheDocument()
-    expect(auth.signInWithApple).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: /continue with apple/i }))
+    expect(auth.signInWithApple).toHaveBeenCalledTimes(1)
   })
 })

@@ -53,6 +53,7 @@ import {
   runDeepDiveEligibilityAsync,
   mergeProductDetailsIntoCandidatePool,
 } from './enrichment-handler.js'
+import { selectDistinctCandidates } from '../product-identity.js'
 
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 
@@ -589,19 +590,18 @@ export async function handleFinalizeSelection(request, response) {
         rankingPreference,
       })
       : { ids: fitFrontierIds, policy: 'balanced' }
-    const haikuResults = composition.ids
+    const haikuCandidates = composition.ids
       .map((id) => {
         const normalizedId = String(id)
-        const candidate = candidateById.get(normalizedId)
-        return candidate ? toFinalizeFastCard(candidate) : null
+        return candidateById.get(normalizedId) || null
       })
       .filter(Boolean)
 
-    const fallbackResults = buildFinalizeFallbackResults(nextCandidatePool)
-    const targetResultCount = fallbackResults.length
-    const fallbackTopUpResults = fallbackResults.filter(
-      (item) => !haikuResults.some((haikuItem) => String(haikuItem.id) === String(item.id)),
+    const targetResultCount = Math.min(
+      LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
+      nextCandidatePool.candidates.length,
     )
+    const haikuResults = haikuCandidates.map((candidate) => toFinalizeFastCard(candidate))
 
     const suggestedQuery = String(haikuResult.suggestedQuery || '').trim()
     const { isValid: hasValidSuggestedQuery, normalizedQuery: normalizedSuggestedQuery } =
@@ -612,32 +612,46 @@ export async function handleFinalizeSelection(request, response) {
       hasValidSuggestedQuery &&
       normalizedSuggestedQuery.toLowerCase() !== sanitizedDiscoveryContext.normalizedQuery.toLowerCase()
 
-    let results = fallbackResults
+    let selectedCandidates = selectDistinctCandidates({
+      fallbackCandidates: nextCandidatePool.candidates,
+      limit: targetResultCount,
+    })
     let selectionStrategy = 'rules_fallback'
     let flowPath = 'nano_lock_fallback'
     let miniEnrichmentStatus = 'skipped'
 
     if (needsBetterSearch) {
-      results = haikuResults
+      selectedCandidates = selectDistinctCandidates({
+        preferredCandidates: haikuCandidates,
+        limit: targetResultCount,
+      })
       selectionStrategy = 'haiku_lock_partial_recovery'
       flowPath = 'haiku_lock_partial_recovery'
       miniEnrichmentStatus = 'running_async'
     } else if (haikuResults.length > 0) {
+      selectedCandidates = selectDistinctCandidates({
+        preferredCandidates: haikuCandidates,
+        fallbackCandidates: nextCandidatePool.candidates,
+        limit: targetResultCount,
+      })
+      const haikuCandidateIds = new Set(haikuCandidates.map((candidate) => String(candidate.id)))
+      const didTopUp = selectedCandidates.some((candidate) => !haikuCandidateIds.has(String(candidate.id)))
       if (haikuResults.length >= targetResultCount) {
-        results = haikuResults.slice(0, targetResultCount)
-        selectionStrategy = usesPreferencePolicy ? `haiku_fit_frontier_${composition.policy}` : 'haiku_lock'
-        flowPath = usesPreferencePolicy ? 'haiku_fit_frontier_policy' : 'haiku_lock'
+        selectionStrategy = usesPreferencePolicy
+          ? `haiku_fit_frontier_${composition.policy}${didTopUp ? '_topped_up' : ''}`
+          : didTopUp ? 'haiku_lock_topped_up' : 'haiku_lock'
+        flowPath = usesPreferencePolicy
+          ? didTopUp ? 'haiku_fit_frontier_policy_topped_up' : 'haiku_fit_frontier_policy'
+          : didTopUp ? 'haiku_lock_topped_up' : 'haiku_lock'
       } else {
-        results = [
-          ...haikuResults,
-          ...fallbackTopUpResults.slice(0, Math.max(0, targetResultCount - haikuResults.length)),
-        ]
         selectionStrategy = usesPreferencePolicy ? `haiku_fit_frontier_${composition.policy}_topped_up` : 'haiku_lock_topped_up'
         flowPath = usesPreferencePolicy ? 'haiku_fit_frontier_policy_topped_up' : 'haiku_lock_topped_up'
       }
 
       miniEnrichmentStatus = 'running_async'
     }
+
+    const results = selectedCandidates.map((candidate) => toFinalizeFastCard(candidate))
 
     const selectedCandidateIds = results.map((item) => item.id)
     const usedHaikuSelection = haikuResults.length > 0
