@@ -201,7 +201,18 @@ function getExplicitIdentifierRequirement(productQuery, candidates) {
     // into a hidden hard constraint.
     if (brandTokens.length === 0 || (brandTokens.length === 1 && brandTokens[0].length < 3)) continue
     const brandKey = brandTokens.join(' ')
-    if (containsTokenSequence(queryText, brandTokens)) structuredBrands.set(brandKey, brandTokens)
+    const remainingQueryTokens = queryTokens.filter((token) => !brandTokens.includes(token))
+    const itemTitle = normalizedText(item?.title || '')
+    const hasProductContext = remainingQueryTokens.length === 0 ||
+      remainingQueryTokens.some((token) => containsTokenSequence(itemTitle, [token]))
+
+    // The brand must occur in an actual result for the rest of the query too.
+    // This prevents a stray Apple Watch result from making "apple pie pan" an
+    // Apple-brand-only search, while still accepting "Apple Watch" or
+    // "Rolex watch" as explicit identifiers.
+    if (containsTokenSequence(queryText, brandTokens) && hasProductContext) {
+      structuredBrands.set(brandKey, brandTokens)
+    }
   }
 
   const brands = [...structuredBrands.values()]

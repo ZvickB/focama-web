@@ -155,6 +155,48 @@ describe('result filter', () => {
     expect(artifacts.candidatePool.candidates.map((candidate) => candidate.id)).toEqual(['on', 'brooks'])
   })
 
+  it.each([
+    ['Rolex watch', [['rolex', 'Rolex Datejust Watch', 'Rolex'], ['homage', 'Pagani Design Homage Watch', 'Pagani'], ['book', 'Rolex Watch History Book', 'Rolex']], ['rolex']],
+    ['Rolex Submariner watch', [['submariner', 'Rolex Submariner Watch', 'Rolex'], ['datejust', 'Rolex Datejust Watch', 'Rolex'], ['seiko', 'Seiko Automatic Watch', 'Seiko']], ['submariner']],
+    ['Sony WH-1000XM5 headphones', [['xm5', 'Sony WH-1000XM5 Wireless Headphones', 'Sony'], ['xm4', 'Sony WH-1000XM4 Headphones', 'Sony'], ['bose', 'Bose QuietComfort Headphones', 'Bose']], ['xm5']],
+    ['Canon EOS R50 camera', [['r50', 'Canon EOS R50 Mirrorless Camera', 'Canon'], ['r10', 'Canon EOS R10 Camera', 'Canon'], ['nikon', 'Nikon Z50 Camera', 'Nikon']], ['r50']],
+    ['Nike running shoes', [['nike', 'Nike Pegasus Running Shoes', 'Nike'], ['adidas', 'Adidas Supernova Running Shoes', 'Adidas']], ['nike']],
+    ['Dyson vacuum', [['dyson', 'Dyson V15 Vacuum Cleaner', 'Dyson'], ['shark', 'Shark Navigator Vacuum Cleaner', 'Shark']], ['dyson']],
+    ['KitchenAid mixer', [['kitchenaid', 'KitchenAid Stand Mixer', 'KitchenAid'], ['cuisinart', 'Cuisinart Stand Mixer', 'Cuisinart']], ['kitchenaid']],
+    ['Lego Star Wars set', [['lego-star', 'LEGO Star Wars X-Wing Set', 'LEGO'], ['lego-harry', 'LEGO Harry Potter Castle Set', 'LEGO'], ['mega-star', 'MEGA Starship Set', 'MEGA']], ['lego-star']],
+    ['Apple Watch', [['apple-watch', 'Apple Watch Series 10', 'Apple'], ['garmin', 'Garmin Venu Watch', 'Garmin']], ['apple-watch']],
+    ['Samsung Galaxy S24 phone', [['s24', 'Samsung Galaxy S24 Phone', 'Samsung'], ['s23', 'Samsung Galaxy S23 Phone', 'Samsung'], ['pixel', 'Google Pixel Phone', 'Google']], ['s24']],
+    ['watch', [['seiko', 'Seiko 5 Watch', 'Seiko'], ['citizen', 'Citizen Eco-Drive Watch', 'Citizen']], ['seiko', 'citizen']],
+    ['running shoes', [['brooks', 'Brooks Ghost Running Shoes', 'Brooks'], ['asics', 'ASICS Gel Running Shoes', 'ASICS']], ['brooks', 'asics']],
+    ['on running shoes', [['on', 'On Cloudrunner Running Shoes', 'On'], ['brooks', 'Brooks Ghost Running Shoes', 'Brooks']], ['on', 'brooks']],
+    ['apple pie pan', [['pan', 'Apple Pie Pan', 'Nordic Ware'], ['watch', 'Apple Watch Series 10', 'Apple']], ['pan', 'watch']],
+    ['gap filler', [['filler', '3M Gap Filler Compound', '3M'], ['jacket', 'Gap Denim Jacket', 'Gap']], ['filler', 'jacket']],
+    ['Rolex book', [['book', 'Rolex Watch History Book', 'Rolex'], ['watch', 'Rolex Datejust Watch', 'Rolex']], ['book', 'watch']],
+    ['guide to Rolex watches', [['guide', 'Guide to Rolex Watches Book', 'Rolex'], ['watch', 'Rolex Datejust Watch', 'Rolex']], ['guide']],
+    ['on sale watches', [['on', 'On Sale Watch', 'On'], ['seiko', 'Seiko Sale Watch', 'Seiko']], ['on', 'seiko']],
+    ['Amazon Kindle Paperwhite', [['paperwhite', 'Amazon Kindle Paperwhite', 'Amazon'], ['fire', 'Amazon Fire Tablet', 'Amazon'], ['kobo', 'Kobo Clara eReader', 'Kobo']], ['paperwhite']],
+    ['coffee maker', [['breville', 'Breville Coffee Maker', 'Breville'], ['keurig', 'Keurig Coffee Maker', 'Keurig']], ['breville', 'keurig']],
+  ])('smoke-checks identifier filtering for %s', (productQuery, rows, expectedIds) => {
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: rows.map(([product_id, title, brand], index) => createShoppingResult({
+          product_id,
+          title,
+          brand,
+          source: 'Amazon',
+          position: index + 1,
+        })),
+      },
+      {
+        productQuery,
+        diversifyBySource: false,
+        reasonFallback: 'Smoke test',
+      },
+    )
+
+    expect(artifacts.candidatePool.candidates.map((candidate) => candidate.id).sort()).toEqual(expectedIds.sort())
+  })
+
   it('removes duplicate and near-duplicate items', () => {
     const results = getFilteredNormalizedResults(
       {
