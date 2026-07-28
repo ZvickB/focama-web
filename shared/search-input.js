@@ -92,7 +92,7 @@ export function validateSuggestedSearchQuery(value) {
     return result
   }
 
-  if (/[<>\[\]{}]|&(?:#\d+|#x[0-9a-f]+|[a-z]+);/i.test(result.normalizedQuery)) {
+  if (/[<>[\]{}]|&(?:#\d+|#x[0-9a-f]+|[a-z]+);/i.test(result.normalizedQuery)) {
     return {
       ...result,
       isValid: false,

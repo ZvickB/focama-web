@@ -290,6 +290,38 @@ export function FlowStageSummary({
   )
 }
 
+export function CompletedSearchBrief({ followUpNotes, onNewSearch, query }) {
+  const preferences = String(followUpNotes || '').trim() || 'No extra preferences added.'
+
+  return (
+    <div className="w-full rounded-2xl border border-[#e6dacb] bg-white/92 px-4 py-3 shadow-[0_14px_36px_-30px_rgba(120,87,63,0.22)] backdrop-blur sm:px-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#eef7f6] text-primary">
+            <CheckCircle2 className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Your search</p>
+            <p className="truncate text-sm font-semibold leading-6 text-slate-800 sm:text-[15px]">{query}</p>
+          </div>
+        </div>
+        <span aria-hidden="true" className="hidden h-9 w-px shrink-0 bg-[#eee4d8] sm:block" />
+        <p className="min-w-0 flex-1 line-clamp-2 text-sm font-medium leading-6 text-slate-600">
+          {preferences}
+        </p>
+        <button
+          type="button"
+          className="inline-flex h-10 shrink-0 items-center justify-center gap-2 self-start rounded-full px-3 text-sm font-medium text-slate-500 transition-colors hover:bg-stone-100/80 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 sm:self-auto"
+          onClick={onNewSearch}
+        >
+          <PencilLine className="h-4 w-4" />
+          New search
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function FlowProgress({ hasDiscoveryResults, hasFinalResults, hasStartedSearch }) {
   const steps = [
     { key: 'search', label: 'Search', active: !hasStartedSearch, done: hasStartedSearch },

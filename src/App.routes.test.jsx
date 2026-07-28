@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import process from 'node:process'
 import { describe, expect, it } from 'vitest'
 
 describe('account deletion route deployment', () => {

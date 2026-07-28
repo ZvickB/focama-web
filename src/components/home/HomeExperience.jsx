@@ -17,6 +17,7 @@ import {
 } from '@/components/home/home-helpers.js'
 import {
   CharCounter,
+  CompletedSearchBrief,
   FlowProgress,
   FlowStageSummary,
   ProductDetailModalFallback,
@@ -281,11 +282,12 @@ function OpenLayout(props) {
     <>
       <main className="px-3 pt-4 pb-6 sm:px-6 sm:pt-5 sm:pb-8 lg:px-6 xl:px-8">
       <div className="mx-auto flex max-w-7xl flex-col items-center gap-8">
-        <section
-          className={`relative w-full max-w-4xl overflow-hidden rounded-[36px] text-center transition-all duration-300 ${
-            hasStartedSearch ? 'px-0 py-0' : 'px-2 py-3 sm:px-4 sm:py-5'
-          }`}
-        >
+        {!hasFinalResults ? (
+          <section
+            className={`relative w-full max-w-4xl overflow-hidden rounded-[36px] text-center transition-all duration-300 ${
+              hasStartedSearch ? 'px-0 py-0' : 'px-2 py-3 sm:px-4 sm:py-5'
+            }`}
+          >
           {!hasStartedSearch ? (
             <div
               aria-hidden="true"
@@ -431,9 +433,18 @@ function OpenLayout(props) {
             </div>
           </div>
           </div>
-        </section>
+          </section>
+        ) : null}
 
-        {shouldShowRefinementPanel ? (
+        {hasFinalResults ? (
+          <section className="w-full max-w-[1100px]">
+            <CompletedSearchBrief
+              followUpNotes={refinementSummary}
+              onNewSearch={actions.resetToNewSearch}
+              query={submittedQuery || query.productQuery}
+            />
+          </section>
+        ) : shouldShowRefinementPanel ? (
           <section
             ref={refinementRef}
             className="w-full max-w-4xl scroll-mt-28 rounded-[28px] border border-[#e4d5c2] bg-white/96 p-4 text-left shadow-[0_24px_64px_-50px_rgba(15,23,42,0.24)] transition-all duration-300 sm:p-5"
@@ -544,14 +555,6 @@ function OpenLayout(props) {
                 </div>
               </div>
             </div>
-          </section>
-        ) : hasFinalResults ? (
-          <section className="w-full max-w-4xl">
-            <FlowStageSummary label="Refine">
-              <span className="line-clamp-2 break-words">
-                {refinementSummary || 'No extra notes added.'}
-              </span>
-            </FlowStageSummary>
           </section>
         ) : null}
 

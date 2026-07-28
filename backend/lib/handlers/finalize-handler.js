@@ -253,12 +253,6 @@ function resolveFinalizeCandidatePool(cachedEntry) {
   }
 }
 
-function buildFinalizeFallbackResults(candidatePool) {
-  return candidatePool.candidates
-    .slice(0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit)
-    .map((candidate) => toFinalizeFastCard(candidate))
-}
-
 function buildFinalizeFastResponseContract({
   query = '',
   discoveryToken = '',
