@@ -14,6 +14,7 @@ function createRow(overrides = {}) {
     baseline_price: 100,
     created_at: '2026-06-25T00:00:00.000Z',
     id: 'watch-1',
+    image_url: 'https://images.example.com/product.jpg',
     last_checked_at: null,
     last_notified_at: null,
     last_notified_price: null,
@@ -286,6 +287,7 @@ describe('price watch dry-run job', () => {
       manageUrl: 'https://focamai.com/watches',
       newPrice: 90,
       oldPrice: 100,
+      imageUrl: 'https://images.example.com/product.jpg',
       productUrl: 'https://www.amazon.com/dp/B001?tag=focamai-20',
       to: 'user-1@example.com',
     }))

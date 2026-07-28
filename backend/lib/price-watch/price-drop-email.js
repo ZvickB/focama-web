@@ -25,6 +25,30 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;')
 }
 
+function normalizeHttpsUrl(value) {
+  const url = normalizeText(value)
+
+  try {
+    return new URL(url).protocol === 'https:' ? url : ''
+  } catch {
+    return ''
+  }
+}
+
+export function getPriceDropSummary(oldPrice, newPrice) {
+  const previous = normalizePositiveNumber(oldPrice)
+  const current = normalizePositiveNumber(newPrice)
+
+  if (!previous || !current || current >= previous) {
+    return { amount: 0, percentage: 0 }
+  }
+
+  return {
+    amount: Math.round((previous - current) * 100) / 100,
+    percentage: Math.round(((previous - current) / previous) * 100),
+  }
+}
+
 export function getPriceWatchEmailConfig(env = process.env) {
   const fromEmail =
     normalizeText(env.PRICE_WATCH_FROM_EMAIL || getEnv('PRICE_WATCH_FROM_EMAIL')) ||
@@ -55,34 +79,44 @@ export function renderPriceDropEmail({
   manageUrl = DEFAULT_MANAGE_URL,
   newPrice,
   oldPrice,
+  imageUrl = '',
   productTitle = 'Watched product',
   productUrl = '',
 } = {}) {
   const title = escapeHtml(productTitle || 'Watched product')
   const oldPriceText = escapeHtml(formatPriceWatchMoney(oldPrice, currency))
   const newPriceText = escapeHtml(formatPriceWatchMoney(newPrice, currency))
+  const image = normalizeHttpsUrl(imageUrl)
+  const savings = getPriceDropSummary(oldPrice, newPrice)
+  const savingsText = savings.amount && savings.percentage
+    ? `Save ${escapeHtml(formatPriceWatchMoney(savings.amount, currency))} (${savings.percentage}%)`
+    : ''
   const safeProductUrl = escapeHtml(productUrl)
   const safeManageUrl = escapeHtml(manageUrl || DEFAULT_MANAGE_URL)
 
   return `<!doctype html>
 <html>
-  <body style="margin:0;background:#f8f5ef;color:#172033;font-family:Arial,sans-serif;">
-    <div style="max-width:560px;margin:0 auto;padding:28px 18px;">
-      <div style="background:#ffffff;border:1px solid #eadfce;border-radius:18px;padding:24px;">
-        <p style="margin:0 0 10px;color:#0f6175;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;">Price Watch</p>
-        <h1 style="margin:0;color:#111827;font-size:24px;line-height:1.25;">A watched price dropped</h1>
-        <p style="margin:16px 0 0;color:#475569;font-size:15px;line-height:1.6;">${title}</p>
-        <div style="margin:22px 0;padding:16px;border-radius:14px;background:#eef7f6;">
-          <p style="margin:0;color:#64748b;font-size:13px;">Previous baseline</p>
-          <p style="margin:4px 0 12px;color:#334155;font-size:18px;font-weight:700;">${oldPriceText}</p>
-          <p style="margin:0;color:#64748b;font-size:13px;">Current price</p>
-          <p style="margin:4px 0 0;color:#0f6175;font-size:28px;font-weight:800;">${newPriceText}</p>
+  <body style="margin:0;background:#f8f5ef;color:#172033;font-family:Arial,Helvetica,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;padding:36px 18px;">
+      <div style="background:#ffffff;border:1px solid #eadfce;border-radius:18px;padding:28px 24px;">
+        <p style="margin:0 0 10px;color:#0f6175;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;">Price watch</p>
+        <h1 style="margin:0;color:#172033;font-size:26px;line-height:1.25;letter-spacing:-0.02em;">Price dropped!</h1>
+        <p style="margin:8px 0 22px;color:#64748b;font-size:15px;line-height:1.55;">The price of an item you’re watching just went down.</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;margin:0 0 22px;">
+          <tr>
+            ${image ? `<td width="88" valign="top" style="padding:0 16px 0 0;"><img src="${escapeHtml(image)}" alt="${title}" width="88" height="88" style="display:block;width:88px;height:88px;border:1px solid #eadfce;border-radius:12px;object-fit:contain;background:#fbf8f3;" /></td>` : ''}
+            <td valign="middle"><p style="margin:0;color:#334155;font-size:16px;line-height:1.45;font-weight:600;">${title}</p></td>
+          </tr>
+        </table>
+        <div style="margin:0 0 24px;padding:18px 20px;border:1px solid #dbecea;border-radius:14px;background:#f3f9f8;">
+          <p style="margin:0 0 3px;color:#55717a;font-size:13px;font-weight:600;">Now</p>
+          <p style="margin:0;color:#0f6175;font-size:38px;line-height:1.05;font-weight:800;letter-spacing:-0.035em;">${newPriceText}</p>
+          <p style="margin:12px 0 0;color:#64748b;font-size:14px;line-height:1.45;">Previously <span style="text-decoration:line-through;">${oldPriceText}</span></p>
+          ${savingsText ? `<p style="margin:7px 0 0;color:#0f6175;font-size:14px;font-weight:700;">↓ ${savings.percentage}% &nbsp;·&nbsp; ${savingsText}</p>` : ''}
         </div>
-        ${safeProductUrl ? `<a href="${safeProductUrl}" style="display:inline-block;background:#e59b26;color:#1f2937;text-decoration:none;border-radius:14px;padding:13px 18px;font-size:15px;font-weight:700;">View on Amazon</a>` : ''}
-        <p style="margin:22px 0 0;color:#64748b;font-size:13px;line-height:1.6;">Focamai reset this watch baseline to ${newPriceText}, so you will only hear again after a new qualifying drop.</p>
-        <p style="margin:16px 0 0;color:#64748b;font-size:13px;line-height:1.6;">
-          Manage or pause this alert at <a href="${safeManageUrl}" style="color:#0f6175;">${safeManageUrl}</a>.
-        </p>
+        ${safeProductUrl ? `<a href="${safeProductUrl}" style="display:inline-block;background:#e59b26;color:#172033;text-decoration:none;border-radius:12px;padding:13px 18px;font-size:15px;font-weight:700;">View on Amazon</a>` : ''}
+        <p style="margin:24px 0 0;color:#64748b;font-size:13px;line-height:1.6;">We’ll let you know if the price drops again.</p>
+        <p style="margin:8px 0 0;color:#64748b;font-size:13px;line-height:1.6;">Manage your <a href="${safeManageUrl}" style="color:#0f6175;text-decoration:underline;">price alerts anytime</a>.</p>
       </div>
     </div>
   </body>
@@ -111,6 +145,7 @@ export function createResendPriceDropSender({
     manageUrl,
     newPrice,
     oldPrice,
+    imageUrl,
     productTitle,
     productUrl,
     to,
@@ -128,6 +163,7 @@ export function createResendPriceDropSender({
         manageUrl,
         newPrice,
         oldPrice,
+        imageUrl,
         productTitle,
         productUrl,
       }),
