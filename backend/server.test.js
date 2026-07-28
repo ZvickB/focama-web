@@ -2433,25 +2433,28 @@ describe('server handlers', () => {
     )
   })
 
-  it('keeps a partial first shortlist when Haiku supplies a better search suggestion', async () => {
+  it('keeps a partial exact-brand shortlist instead of padding it when Haiku supplies a better search suggestion', async () => {
     mockFinalizeEnv()
     haikuLockWinnersAndBadges.mockResolvedValue({
       model: 'claude-haiku-4-5-20251001',
       lockedIds: ['three', 'one', 'four'],
-      suggestedQuery: 'lightweight carry-on stroller under $200',
+      suggestedQuery: 'Rolex automatic watch with box and papers',
       usage: null,
     })
 
     const response = createResponseRecorder()
     readStoredSearchCacheEntry.mockResolvedValueOnce(
       createDiscoveryCacheEntry(
-        'stroller',
-        ['one', 'two', 'three', 'four', 'five', 'six'].map((id) => createFinalizeCandidate(id)),
+        'Rolex watch',
+        ['one', 'three', 'four'].map((id) => createFinalizeCandidate(id, {
+          title: `Rolex watch ${id}`,
+          brandName: 'Rolex',
+        })),
       ),
     )
 
     await handleFinalizeSelection(
-      createFinalizeRequest(JSON.stringify(createFinalizeDiscoveryBody()), { 'x-forwarded-for': '203.0.113.42' }),
+      createFinalizeRequest(JSON.stringify(createFinalizeDiscoveryBody({ query: 'Rolex watch' })), { 'x-forwarded-for': '203.0.113.42' }),
       response,
     )
 
@@ -2463,7 +2466,7 @@ describe('server handlers', () => {
       strategy: 'haiku_lock_partial_recovery',
       candidateRecovery: {
         goodCandidateCount: 3,
-        suggestedQuery: 'lightweight carry-on stroller under $200',
+        suggestedQuery: 'Rolex automatic watch with box and papers',
       },
     }))
   })

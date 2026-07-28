@@ -63,11 +63,10 @@ flowchart TD
 
 | Rule | One line |
 |---|---|
-| Candidate pool is server-owned | Browser sends token · finalize reconstructs from snapshot |
+| Candidate pool is server-owned | Browser sends token · finalize reconstructs from snapshot; clear named brands/models are hard-filtered before AI selection |
 | Shortlist stays at 6 | Preview can be broader · guided output is always 6 |
 | Finalize is thin | Haiku locks in the blocking path using product fit before quality confidence, value, variety, and Amazon position · product detail stays async |
 | Preview ≠ focused picks | `Just show me results` is not the guided shortlist |
 | Enrichment explains, not reranks | Async work adds hero/alternative fit reasons and caveats · winners don't change |
 | Amazon-first UX, flexible internals | Current UI may name Amazon when Amazon is the active source · backend/provider logic and normalized product data stay flexible |
 | Amazon discovery provider order | Rainforest API is the active Amazon discovery provider; Oxylabs is archived and not an active fallback |
-

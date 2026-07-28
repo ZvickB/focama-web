@@ -29,6 +29,14 @@ const STOP_WORDS = new Set([
   'at',
   'from',
 ])
+// These describe the product, not a named make or model. Keeping them out of
+// identifier detection means a normal search such as "watch" stays broad.
+const GENERIC_PRODUCT_TOKENS = new Set([
+  'accessory', 'bag', 'bags', 'book', 'books', 'camera', 'case', 'cases', 'cover', 'covers',
+  'dress', 'guitar', 'headphone', 'headphones', 'laptop', 'phone', 'phones', 'shoe', 'shoes',
+  'stroller', 'strollers', 'tablet', 'tablets', 'watch', 'watches',
+])
+const REFERENCE_CONTENT_PATTERN = /\b(book|books|calendar|guide|history|magazine|manual|poster|print)\b/i
 const DUPLICATE_FAMILY_STOP_WORDS = new Set([
   ...STOP_WORDS,
   'edition',
@@ -170,6 +178,81 @@ export function lacksKnownPositivePrice(item) {
 
 function uniqueTokens(value) {
   return [...new Set(tokenize(value))]
+}
+
+function normalizedText(value) {
+  return typeof value === 'string' ? value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() : ''
+}
+
+function containsTokenSequence(text, tokens) {
+  if (!text || tokens.length === 0) return false
+  return ` ${text} `.includes(` ${tokens.join(' ')} `)
+}
+
+function getExplicitIdentifierRequirement(productQuery, candidates) {
+  const queryTokens = uniqueTokens(productQuery)
+  const queryText = normalizedText(productQuery)
+  const structuredBrands = new Map()
+
+  for (const item of candidates) {
+    const brandTokens = uniqueTokens(item?.brand || '')
+    // Short single-word brands (notably "On") are often ordinary language.
+    // Requiring at least three characters here avoids turning ambiguous wording
+    // into a hidden hard constraint.
+    if (brandTokens.length === 0 || (brandTokens.length === 1 && brandTokens[0].length < 3)) continue
+    const brandKey = brandTokens.join(' ')
+    if (containsTokenSequence(queryText, brandTokens)) structuredBrands.set(brandKey, brandTokens)
+  }
+
+  const brands = [...structuredBrands.values()]
+  const brandTokens = new Set(brands.flat())
+  const modelTokensWithDigits = queryTokens.filter((token) => (
+    !brandTokens.has(token) &&
+    !GENERIC_PRODUCT_TOKENS.has(token) &&
+    // Alphanumeric strings with a digit are explicit model-like identifiers
+    // (for example WH1000XM5 or Q30), unlike a plain size such as "42".
+    /[a-z]/.test(token) && /\d/.test(token)
+  ))
+  // A named model can be a word ("Rolex Submariner"), not only an SKU-like
+  // token. Treat one as explicit only when the provider's structured brand
+  // evidence also shows that word in a matching-brand listing.
+  const modelTokensFromBrandEvidence = brands.length > 0
+    ? queryTokens.filter((token) => (
+      !brandTokens.has(token) &&
+      !GENERIC_PRODUCT_TOKENS.has(token) &&
+      token.length >= 3 &&
+      candidates.some((item) => {
+        const itemText = normalizedText(`${item?.title || ''} ${item?.brand || ''}`)
+        return brands.some((brand) => containsTokenSequence(itemText, brand)) &&
+          containsTokenSequence(itemText, [token])
+      })
+    ))
+    : []
+  const modelTokens = [...new Set([...modelTokensWithDigits, ...modelTokensFromBrandEvidence])]
+
+  return {
+    brands,
+    modelTokens,
+    hasRequirement: brands.length > 0 || modelTokens.length > 0,
+  }
+}
+
+function passesExplicitIdentifierRequirement(item, requirement, productQuery) {
+  if (!requirement.hasRequirement) return true
+
+  const titleAndBrand = normalizedText(`${item.title || ''} ${item.brand || ''}`)
+  const hasRequiredBrand = requirement.brands.every((brandTokens) =>
+    containsTokenSequence(titleAndBrand, brandTokens),
+  )
+  const hasRequiredModel = requirement.modelTokens.every((token) =>
+    containsTokenSequence(titleAndBrand, [token]),
+  )
+
+  if (!hasRequiredBrand || !hasRequiredModel) return false
+
+  // A branded product search should not turn into a bibliography just because
+  // a title repeats the requested make/model (for example, a Rolex history).
+  return REFERENCE_CONTENT_PATTERN.test(productQuery) || !REFERENCE_CONTENT_PATTERN.test(item.title || '')
 }
 
 function normalizedTitleKey(title) {
@@ -525,14 +608,20 @@ export function getFilteredSearchArtifacts(
 
   const dedupedCandidates = [...dedupedByProductId.values()]
     .filter((item) => !lacksKnownPositivePrice(item))
+  const explicitIdentifierRequirement = getExplicitIdentifierRequirement(productQuery, dedupedCandidates)
+  const identifierEligibleCandidates = dedupedCandidates.filter((item) =>
+    passesExplicitIdentifierRequirement(item, explicitIdentifierRequirement, productQuery),
+  )
   const hardFilteredCandidates = skipHardFilter
-    ? dedupedCandidates
-    : dedupedCandidates.filter((item) => passHardFilters(item, queryTokens))
+    ? identifierEligibleCandidates
+    : identifierEligibleCandidates.filter((item) => passHardFilters(item, queryTokens))
   const useHardFilterFallback = !skipHardFilter
     && hardFilterFallbackThreshold > 0
     && hardFilteredCandidates.length < hardFilterFallbackThreshold
   const candidates = useHardFilterFallback
-    ? dedupedCandidates.slice(0, Math.max(hardFilterFallbackPoolSize, candidatePoolSize))
+    // Never bypass an explicit named brand/model requirement during the broad
+    // Serp-style fallback. A short exact pool must reach finalize as short.
+    ? identifierEligibleCandidates.slice(0, Math.max(hardFilterFallbackPoolSize, candidatePoolSize))
     : hardFilteredCandidates
 
   const scoredEntries = candidates

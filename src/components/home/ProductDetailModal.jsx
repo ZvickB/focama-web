@@ -262,6 +262,36 @@ function PriceSourceNote({ product }) {
   )
 }
 
+function SimilarOptions({ options }) {
+  if (!Array.isArray(options) || options.length === 0) return null
+
+  return (
+    <div className="rounded-2xl border border-[#eee5da] bg-white px-4 py-3">
+      <p className="text-sm font-semibold text-slate-900">Other options to consider</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">
+        These aren&apos;t the exact item. We&apos;ve noted the main difference so you can compare confidently.
+      </p>
+      <div className="mt-3 space-y-2">
+        {options.map((option, index) => (
+          <div key={`${option.url}-${index}`} className="flex items-start justify-between gap-3 rounded-xl bg-[#fbf7f1] p-3">
+            <div className="min-w-0">
+              <p className="line-clamp-2 text-sm font-medium text-slate-800">{option.title}</p>
+              {option.difference ? <p className="mt-1 text-xs text-slate-600">{option.difference}</p> : null}
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-sm font-semibold text-primary">{formatDeepDiveMoney(option.price, option.currency)}</p>
+              <a href={option.url} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800">
+                View on Google Shopping
+                <ArrowUpRight className="h-3 w-3" />
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function RetailerDecisionBar({ displayPrice, item, onClose, onRetailerClick, retailerLabel }) {
   return (
     <div className="border-t border-[#eadfd2] bg-white/94 px-4 py-3 sm:px-6 lg:px-8">
@@ -348,12 +378,14 @@ export function ProductDetailModal({
   const previouslyFocusedElementRef = useRef(null)
 
   const ddOffers = Array.isArray(deepDive?.offers) ? deepDive.offers : []
+  const ddSimilarAlternatives = Array.isArray(deepDive?.similarAlternatives) ? deepDive.similarAlternatives : []
   const ddLimitedMessage = deepDive?.limitedData?.message || ''
   const ddIsGated = deepDive?.status === 'gated'
+  const ddIsSimilarOnly = deepDive?.status === 'similar_only'
   const ddIsAmbiguous = Boolean(deepDive?.ambiguous)
   const ddHasLoaded = Boolean(deepDive || deepDiveError)
   const isCanadianMarket = /amazon\.ca/i.test(amazonDomain)
-  const canOfferUsFallback = isCanadianMarket && ddHasLoaded && !ddIsGated && !ddLimitedMessage && !deepDiveLoading && ddOffers.length === 0 && !showingUsFallback
+  const canOfferUsFallback = isCanadianMarket && deepDive?.status === 'ready' && !deepDiveLoading && ddOffers.length === 0 && !showingUsFallback
   const deepDiveEligibility = item?.deepDiveEligibility || null
   const canShowDeepDiveButton =
     showRecommendationAnalysis &&
@@ -716,6 +748,18 @@ export function ProductDetailModal({
                   </div>
                 ) : null}
 
+                {ddIsSimilarOnly ? (
+                  <div className="space-y-3">
+                    <div className="rounded-2xl border border-[#d9e6e8] bg-[#f6fbfa] px-4 py-3 text-sm leading-6 text-slate-700">
+                      <p className="font-semibold text-slate-900">Couldn&apos;t find a direct match for this exact item</p>
+                      <p className="mt-1">
+                        Here are a few similar options to consider. They aren&apos;t the same product, so we&apos;ve called out the main difference for each one.
+                      </p>
+                    </div>
+                    <SimilarOptions options={ddSimilarAlternatives} />
+                  </div>
+                ) : null}
+
                 {ddIsAmbiguous && ddHasLoaded && !ddIsGated ? (
                   <p className="text-xs leading-5 text-amber-700">
                     Google Shopping returned multiple similar products. The offers below may cover a different color, size, or edition of this product — not just the exact one you picked.
@@ -794,26 +838,22 @@ export function ProductDetailModal({
                         : `Focamai could not verify a lower price at other stores than the ${retailerLabel || 'Amazon'} price you're seeing.`}
                       </p>
                     </div>
-                    {Array.isArray(deepDive.similarAlternatives) && deepDive.similarAlternatives.length > 0 ? (
-                      <div className="rounded-2xl border border-[#eee5da] bg-white px-4 py-3">
-                        <p className="text-sm font-semibold text-slate-900">Similar options</p>
-                        <p className="mt-1 text-xs leading-5 text-slate-500">Comparable products with a verified difference. Prices may be higher.</p>
-                        <div className="mt-3 space-y-2">
-                          {deepDive.similarAlternatives.map((option, index) => (
-                            <div key={`${option.url}-${index}`} className="flex items-start justify-between gap-3 rounded-xl bg-[#fbf7f1] p-3">
-                              <div className="min-w-0"><p className="line-clamp-2 text-sm font-medium text-slate-800">{option.title}</p><p className="mt-1 text-xs text-slate-600">{option.difference}</p></div>
-                              <div className="shrink-0 text-right"><p className="text-sm font-semibold text-primary">{formatDeepDiveMoney(option.price, option.currency)}</p><a href={option.url} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800">Google Shopping <ArrowUpRight className="h-3 w-3" /></a></div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
                   </div>
+                ) : null}
+
+                {deepDive?.status === 'ready' && ddOffers.length === 0 && ddSimilarAlternatives.length > 0 ? (
+                  <SimilarOptions options={ddSimilarAlternatives} />
                 ) : null}
 
                 {ddHasLoaded && !ddIsGated && !ddLimitedMessage ? (
                   <div className="border-t border-[#edf3f3] pt-3">
-                    <PriceSourceNote product={deepDive?.product} />
+                    {ddIsSimilarOnly ? (
+                      <p className="text-xs leading-5 text-slate-400">
+                        Option prices are from Google Shopping. Check the store page before buying.
+                      </p>
+                    ) : (
+                      <PriceSourceNote product={deepDive?.product} />
+                    )}
                   </div>
                 ) : null}
               </>

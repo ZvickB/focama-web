@@ -106,6 +106,21 @@ function readyPayload({ candidateId, product, offers, similarAlternatives = [], 
   }
 }
 
+function similarOnlyPayload({ candidateId, similarAlternatives, cache }) {
+  return {
+    status: 'similar_only',
+    candidateId,
+    generatedAt: new Date().toISOString(),
+    cache,
+    product: null,
+    offers: [],
+    similarAlternatives,
+    checkedStoreCount: 0,
+    ambiguous: false,
+    limitedData: null,
+  }
+}
+
 async function getCachedOrFetchProductGroup({ apiKey, cacheKey, candidate, market }) {
   const cached = await readDeepDiveCacheEntry(cacheKey)
   if (cached?.payload?.selectedOffer) {
@@ -356,6 +371,30 @@ export async function handleDeepDive(request, response) {
     }
 
     if (!productGroup.value.selectedOffer) {
+      const similarAlternatives = areSimilarOptionsEnabled()
+        ? findSimilarShoppingAlternatives({
+            candidate,
+            shoppingResults: productGroup.value.payload?.shopping_results,
+            currency: market === 'CA' ? 'CAD' : 'USD',
+          })
+        : []
+
+      if (similarAlternatives.length > 0) {
+        await incrementDeepDiveUsage(auth.user.id)
+        const payload = similarOnlyPayload({ candidateId, similarAlternatives, cache })
+        logSearchFlowEvent('deep_dive_completed', {
+          candidateId,
+          market,
+          status: payload.status,
+          similarAlternativeCount: similarAlternatives.length,
+          totalMs: roundTimingDuration(nowMs() - startedAt),
+        })
+        sendJson(response, 200, payload, {
+          serverTiming: [{ name: 'total', duration: nowMs() - startedAt }],
+        })
+        return
+      }
+
       sendJson(response, 200, limitedPayload({
         candidateId,
         reason: 'no_exact_product',

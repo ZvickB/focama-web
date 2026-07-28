@@ -83,6 +83,78 @@ describe('result filter', () => {
     ])
   })
 
+  it('enforces an explicit brand before the AI candidate pool and excludes reference books', () => {
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: [
+          createShoppingResult({ product_id: 'rolex-datejust', title: 'Rolex Datejust 36 Automatic Watch', brand: 'Rolex', source: 'Amazon' }),
+          createShoppingResult({ position: 2, product_id: 'rolex-submariner', title: 'Rolex Submariner Date Oystersteel Watch', brand: 'Rolex', source: 'Amazon' }),
+          createShoppingResult({ position: 3, product_id: 'rolex-explorer', title: 'Rolex Explorer 40 Black Dial Watch', brand: 'Rolex', source: 'Amazon' }),
+          createShoppingResult({ position: 4, product_id: 'pagani', title: 'Pagani Design PD-1662 Homage Watch', brand: 'Pagani Design', source: 'Amazon' }),
+          createShoppingResult({ position: 5, product_id: 'olevs', title: 'OLEVS Luxury Automatic Watch', brand: 'OLEVS', source: 'Amazon' }),
+          createShoppingResult({ position: 6, product_id: 'rolex-book', title: 'Rolex Watches: A Complete History Book', brand: 'Rolex', source: 'Amazon' }),
+        ],
+      },
+      {
+        productQuery: 'Rolex watch',
+        diversifyBySource: false,
+        reasonFallback: 'Returned by the Rainforest API search route',
+      },
+    )
+
+    expect(artifacts.candidatePool.candidates.map((candidate) => candidate.id)).toEqual([
+      'rolex-datejust',
+      'rolex-submariner',
+      'rolex-explorer',
+    ])
+  })
+
+  it('enforces a clearly named model but leaves generic watch searches multi-brand', () => {
+    const payload = {
+      shopping_results: [
+        createShoppingResult({ product_id: 'submariner', title: 'Rolex Submariner Date Watch', brand: 'Rolex', source: 'Amazon' }),
+        createShoppingResult({ position: 2, product_id: 'datejust', title: 'Rolex Datejust 36 Watch', brand: 'Rolex', source: 'Amazon' }),
+        createShoppingResult({ position: 3, product_id: 'seiko', title: 'Seiko 5 Sports Automatic Watch', brand: 'Seiko', source: 'Amazon' }),
+      ],
+    }
+
+    const namedModel = getFilteredSearchArtifacts(payload, {
+      productQuery: 'Rolex Submariner watch',
+      diversifyBySource: false,
+      reasonFallback: 'Returned by the Rainforest API search route',
+    })
+    const generic = getFilteredSearchArtifacts(payload, {
+      productQuery: 'watch',
+      diversifyBySource: false,
+      reasonFallback: 'Returned by the Rainforest API search route',
+    })
+
+    expect(namedModel.candidatePool.candidates.map((candidate) => candidate.id)).toEqual(['submariner'])
+    expect(generic.candidatePool.candidates.map((candidate) => candidate.id)).toEqual([
+      'submariner',
+      'datejust',
+      'seiko',
+    ])
+  })
+
+  it('does not turn an ambiguous short brand-like word into a hard requirement', () => {
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: [
+          createShoppingResult({ product_id: 'on', title: 'On Cloudrunner Running Shoes', brand: 'On', source: 'Amazon' }),
+          createShoppingResult({ position: 2, product_id: 'brooks', title: 'Brooks Ghost Running Shoes', brand: 'Brooks', source: 'Amazon' }),
+        ],
+      },
+      {
+        productQuery: 'on running shoes',
+        diversifyBySource: false,
+        reasonFallback: 'Returned by the Rainforest API search route',
+      },
+    )
+
+    expect(artifacts.candidatePool.candidates.map((candidate) => candidate.id)).toEqual(['on', 'brooks'])
+  })
+
   it('removes duplicate and near-duplicate items', () => {
     const results = getFilteredNormalizedResults(
       {
