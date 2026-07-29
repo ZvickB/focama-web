@@ -134,8 +134,8 @@ function buildCopyAllText(entries) {
   }).join('')
 }
 
-async function fetchAnalyticsDashboard({ days }) {
-  const response = await fetchBackend(`/api/analytics/dashboard?days=${days}`)
+async function fetchAnalyticsDashboard({ audience, days }) {
+  const response = await fetchBackend(`/api/analytics/dashboard?days=${days}&audience=${audience}`)
 
   const payload = await response.json().catch(() => ({}))
 
@@ -720,12 +720,13 @@ function AnalyticsPage() {
   const [activityLayout, setActivityLayout] = useState(readActivityLayout)
   const [isCustomizingActivity, setIsCustomizingActivity] = useState(false)
   const [days, setDays] = useState(14)
+  const [audience, setAudience] = useState('all')
   const [diagnosticFilter, setDiagnosticFilter] = useState('')
   const hasHydrated = typeof window !== 'undefined'
 
   const dashboardQuery = useQuery({
-    queryKey: ['analytics-dashboard', days],
-    queryFn: () => fetchAnalyticsDashboard({ days }),
+    queryKey: ['analytics-dashboard', audience, days],
+    queryFn: () => fetchAnalyticsDashboard({ audience, days }),
     enabled: hasHydrated,
     retry: false,
   })
@@ -840,6 +841,38 @@ function AnalyticsPage() {
             >
               Mobile
             </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2" aria-label="Analytics audience">
+            <span className="mr-1 text-sm font-medium text-slate-700">Audience</span>
+            <button
+              type="button"
+              onClick={() => setAudience('all')}
+              className={`rounded-full px-4 py-2 text-sm transition ${
+                audience === 'all'
+                  ? 'bg-slate-900 text-white'
+                  : 'border border-stone-200 bg-white text-slate-600 hover:border-stone-300 hover:text-slate-900'
+              }`}
+            >
+              All traffic
+            </button>
+            <button
+              type="button"
+              onClick={() => setAudience('external')}
+              disabled={dashboard?.internalAnalyticsConfigured === false}
+              className={`rounded-full px-4 py-2 text-sm transition ${
+                audience === 'external'
+                  ? 'bg-slate-900 text-white'
+                  : 'border border-stone-200 bg-white text-slate-600 hover:border-stone-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50'
+              }`}
+            >
+              External only
+            </button>
+            {dashboard?.internalAnalyticsConfigured === false ? (
+              <p className="text-xs text-slate-500">Set <code>INTERNAL_ANALYTICS_EMAILS</code> on the backend to enable this filter.</p>
+            ) : audience === 'external' ? (
+              <p className="text-xs text-slate-500">Excludes searches made while signed in to an internal account.</p>
+            ) : null}
           </div>
 
           {activeTab === 'activity' ? (
@@ -1078,6 +1111,42 @@ function AnalyticsPage() {
                   </div>
                 </CollapsibleSection>
               )}
+
+              {diagnostics?.available ? (
+                <CollapsibleSection
+                  title="Shortlist brand variety"
+                  description="Finalize diagnostics only: no brand names or shopper data are stored here. This tracks whether generic shortlists stayed varied when provider brand metadata was missing."
+                  defaultOpen={true}
+                >
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <MetricCard
+                      label="Generic Finalizes"
+                      value={formatNumber(diagnostics.brandVariety?.genericFinalizations)}
+                      hint={`${formatNumber(diagnostics.brandVariety?.recordedFinalizations)} finalizes with brand diagnostics recorded`}
+                    />
+                    <MetricCard
+                      label="3+ Same Brand"
+                      value={formatNumber(diagnostics.brandVariety?.threeOrMoreSameBrand)}
+                      hint="Generic shortlists where the variety cap had to relax"
+                    />
+                    <MetricCard
+                      label="Cap Deferrals"
+                      value={formatNumber(diagnostics.brandVariety?.capOverflowed)}
+                      hint="Finalizes where a third same-brand pick was deferred before any thin-pool fallback"
+                    />
+                    <MetricCard
+                      label="Highest Brand Count"
+                      value={formatNumber(diagnostics.brandVariety?.maxBrandCount)}
+                      hint="Largest number of resolved same-brand picks in one recorded shortlist"
+                    />
+                  </div>
+                  <div className="mt-5 grid gap-4 md:grid-cols-3">
+                    <MetricCard label="Provider Labels" value={formatNumber(diagnostics.brandVariety?.providerBrandPicks)} hint="Displayed picks with Rainforest brand metadata" />
+                    <MetricCard label="Haiku Labels" value={formatNumber(diagnostics.brandVariety?.haikuBrandPicks)} hint="Displayed picks whose blank provider brand was filled by Haiku" />
+                    <MetricCard label="Missing Labels" value={formatNumber(diagnostics.brandVariety?.missingBrandPicks)} hint="Displayed picks that could not be assigned a brand" />
+                  </div>
+                </CollapsibleSection>
+              ) : null}
 
               <CollapsibleSection title="Daily funnel" description="Quick trend line: are people reaching final results, and are those searches ending in outbound intent?">
                 <SimpleTable

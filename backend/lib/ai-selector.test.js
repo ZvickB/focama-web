@@ -60,12 +60,12 @@ function createCandidatePool(candidateCount = 4) {
   }
 }
 
-function mockHaikuResponse(picks, usage = { input_tokens: 12, output_tokens: 4 }) {
+function mockHaikuResponse(picks, usage = { input_tokens: 12, output_tokens: 4 }, specificBrand = false) {
   anthropicMocks.create.mockResolvedValue({
     content: [{
       type: 'tool_use',
       name: 'submit_shortlist',
-      input: { picks },
+      input: { picks, specific_brand: specificBrand },
     }],
     usage,
   })
@@ -102,7 +102,7 @@ describe('ai selector', () => {
   })
 
   it('maps Haiku candidate indices back to ids and caps picks to the requested count', async () => {
-    mockHaikuResponse([{ index: 3 }, { index: 1 }, { index: 2 }])
+    mockHaikuResponse([{ index: 3, brand: 'Orbit' }, { index: 1, brand: 'Orbit' }, { index: 2, brand: 'CityGo' }])
 
     const result = await haikuLockWinnersAndBadges({
       apiKey: 'claude-key',
@@ -112,6 +112,8 @@ describe('ai selector', () => {
 
     expect(anthropicMocks.create).toHaveBeenCalledTimes(1)
     expect(result.lockedIds).toEqual(['prod-3', 'prod-1'])
+    expect(result.specificBrand).toBe(false)
+    expect(result.brandById).toEqual({ 'prod-3': 'Orbit', 'prod-1': 'Orbit' })
     expect(result.usage).toEqual({
       inputTokens: 12,
       outputTokens: 4,
@@ -126,11 +128,27 @@ describe('ai selector', () => {
       }),
     ])
     expect(request.tools[0].input_schema.properties.picks.items.properties.index.enum).toEqual([1, 2, 3])
+    expect(request.tools[0].input_schema.required).toContain('specific_brand')
+    expect(request.tools[0].input_schema.properties.picks.items.required).toContain('brand')
     expect(request.messages[0].content).toContain('"index":1')
     expect(request.messages[0].content).not.toContain('"id":"prod-1"')
     expect(request.messages[0].content).toContain(
       'Within the eligible set, final order priority: (1) inferred shopper intent and exact product fit, (2) quality confidence including rating, review count, trustScore, and recognized category brand, (3) price/value, (4) useful shortlist variety, (5) amazonPosition.',
     )
+    expect(request.messages[0].content).toContain('Set specific_brand to true only in that case.')
+    expect(request.messages[0].content).toContain('return its maker in brand')
+  })
+
+  it('keeps Haiku’s explicit-brand decision in the parsed shortlist result', async () => {
+    mockHaikuResponse([{ index: 1 }, { index: 2 }], undefined, true)
+
+    const result = await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 2,
+      candidatePool: createCandidatePool(2),
+    })
+
+    expect(result.specificBrand).toBe(true)
   })
 
   it('applies the price ranking strategy in both ranking prompt sections', async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { areSameProductFamily, selectDistinctCandidates } from './product-identity.js'
+import { areSameProductFamily, hasExplicitBrandRequest, selectDistinctCandidates, summarizeBrandVariety } from './product-identity.js'
 
 const candidate = (id, brandName, title) => ({ id, brandName, title })
 
@@ -31,5 +31,57 @@ describe('product identity smoke cases', () => {
       fallbackCandidates: [q20iBlack, q20iPink, q30White, jbl, shokz],
       limit: 4,
     }).map((item) => item.id)).toEqual(['q20i-black', 'q30-white', 'jbl', 'shokz'])
+  })
+
+  it('caps a brand only when the caller requests brand variety', () => {
+    const q20 = candidate('q20', 'Soundcore', 'Soundcore Q20 Headphones')
+    const q30 = candidate('q30', 'Soundcore', 'Soundcore Q30 Headphones')
+    const q45 = candidate('q45', 'Soundcore', 'Soundcore Q45 Headphones')
+    const bose = candidate('bose', 'Bose', 'Bose QuietComfort Headphones')
+
+    expect(selectDistinctCandidates({
+      preferredCandidates: [q20, q30, q45],
+      fallbackCandidates: [bose],
+      limit: 4,
+      maxPerBrand: 2,
+    }).map((item) => item.id)).toEqual(['q20', 'q30', 'bose', 'q45'])
+  })
+
+  it('caps Haiku-provided brands when the provider brand field is blank', () => {
+    const anker1 = { id: 'anker-1', brandName: '', haikuBrand: 'Anker', title: 'Anker Nano Charger 45W' }
+    const anker2 = { id: 'anker-2', brandName: '', haikuBrand: 'Anker', title: 'Anker 45W USB C Charger' }
+    const anker3 = { id: 'anker-3', brandName: '', haikuBrand: 'Anker', title: 'Anker Prime Charger 65W' }
+    const ugreen = { id: 'ugreen', brandName: '', haikuBrand: 'UGREEN', title: 'UGREEN Nexode USB C Charger' }
+
+    expect(selectDistinctCandidates({
+      preferredCandidates: [anker1, anker2, anker3, ugreen],
+      limit: 4,
+      maxPerBrand: 2,
+    }).map((item) => item.id)).toEqual(['anker-1', 'anker-2', 'ugreen', 'anker-3'])
+  })
+
+  it('reports brand sources and a generic-search cap relaxation without recording a brand name', () => {
+    expect(summarizeBrandVariety([
+      { brandName: 'Anker' },
+      { haikuBrand: 'Anker' },
+      { haikuBrand: 'Anker' },
+      {},
+    ])).toEqual({
+      brandCapApplied: true,
+      brandCapRelaxed: true,
+      brandSourceCounts: { provider: 1, haiku: 2, missing: 1 },
+      maxBrandCount: 3,
+    })
+  })
+
+  it('recognizes a named brand only when the candidate also matches the product context', () => {
+    expect(hasExplicitBrandRequest('Nike running shoes', [
+      candidate('nike', 'Nike', 'Nike Pegasus running shoes'),
+      candidate('asics', 'ASICS', 'ASICS Gel running shoes'),
+    ])).toBe(true)
+
+    expect(hasExplicitBrandRequest('apple pie pan', [
+      candidate('apple-watch', 'Apple', 'Apple Watch Series 10'),
+    ])).toBe(false)
   })
 })

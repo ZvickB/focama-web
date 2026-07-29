@@ -150,6 +150,107 @@ describe('HomePage retry advice', () => {
     20000,
   )
 
+  it('keeps retry feedback and follow-up notes for the automatic retry finalize', async () => {
+    const user = userEvent.setup()
+    const retryFinalizeBodies = []
+    const fetchMock = vi.fn((input, init = {}) => {
+      const url = String(input)
+
+      if (url.includes('/api/search/rainforest-discover')) {
+        const isRetry = url.includes('premium+headphones')
+        return Promise.resolve({
+          ok: true,
+          text: async () => JSON.stringify({
+            discoveryToken: isRetry ? 'retry-token' : 'initial-token',
+            candidatePool: {
+              query: isRetry ? 'premium headphones' : 'headphones',
+              details: '',
+              candidates: [
+                {
+                  id: isRetry ? 'premium-pick' : 'initial-pick',
+                  title: isRetry ? 'Premium Headphones' : 'Everyday Headphones',
+                  source: 'Amazon',
+                  price: isRetry ? '$299.99' : '$49.99',
+                  rating: 4.5,
+                  reviewCount: 120,
+                  image: 'https://example.com/item.jpg',
+                  link: 'https://example.com/item',
+                },
+              ],
+            },
+            previewResults: [createMockResult({
+              id: isRetry ? 'premium-pick' : 'initial-pick',
+              title: isRetry ? 'Premium Headphones' : 'Everyday Headphones',
+            })],
+          }),
+        })
+      }
+
+      if (url.includes('/api/search/refine')) {
+        return Promise.resolve({
+          ok: true,
+          text: async () => JSON.stringify({
+            prompt: 'What should we optimize for?',
+            helperText: 'Pick anything that matters.',
+            followUpPlaceholder: 'Anything else?',
+          }),
+        })
+      }
+
+      if (url.includes('/api/search/retry-advice')) {
+        return Promise.resolve({
+          ok: true,
+          text: async () => JSON.stringify({
+            recommendation: 'new_search',
+            suggestedQuery: 'premium headphones',
+            rationale: 'This looks for higher-end options.',
+          }),
+        })
+      }
+
+      if (url.includes('/api/search/finalize')) {
+        const body = JSON.parse(init.body)
+        if (body.query === 'premium headphones') {
+          retryFinalizeBodies.push(body)
+        }
+        return Promise.resolve({
+          ok: true,
+          text: async () => JSON.stringify({
+            retryCount: body.retryCount,
+            results: [createMockResult({
+              id: body.query === 'premium headphones' ? 'premium-pick' : 'initial-pick',
+              title: body.query === 'premium headphones' ? 'Premium Headphones' : 'Everyday Headphones',
+            })],
+            selection: { mode: 'ai' },
+          }),
+        })
+      }
+
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+    renderHomePage()
+
+    await user.type(screen.getByLabelText(/product topic/i), 'headphones')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+    await screen.findByText(/what should we optimize for/i)
+    await user.type(screen.getByLabelText(/tell us more/i), 'Comfort matters most')
+    await user.click(screen.getByRole('button', { name: /show focused picks/i }))
+    await findVisibleResultTitle('Everyday Headphones')
+    await user.click(screen.getByRole('button', { name: /improve picks/i }))
+    await user.type(document.getElementById('results-retry-feedback'), 'I want more premium picks')
+    await user.click(screen.getByRole('button', { name: /update my picks/i }))
+
+    await waitFor(() => {
+      expect(retryFinalizeBodies).toEqual([expect.objectContaining({
+        followUpNotes: 'Comfort matters most',
+        rejectionFeedback: 'I want more premium picks',
+        retryCount: 1,
+      })])
+    })
+  })
+
   it('ignores stale retry advice after reset clears the retry state', async () => {
     let resolveRetryAdvice
     const retryAdvicePromise = new Promise((resolve) => {

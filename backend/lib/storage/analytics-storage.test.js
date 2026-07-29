@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildActivityDashboard } from './analytics-storage.js'
+import { buildActivityDashboard, filterAnalyticsDashboardRows } from './analytics-storage.js'
 
 describe('Activity dashboard data', () => {
   it('summarizes operational widget data without changing the analytics reports', () => {
@@ -46,5 +46,33 @@ describe('Activity dashboard data', () => {
     expect(activity.possibleConfusion.improvePicksToday).toBe(1)
     expect(activity.recentJourneys[0]).toMatchObject({ query: 'travel stroller', status: 'Recommendations shown' })
     expect(activity.errors).toMatchObject({ count: 1 })
+  })
+})
+
+describe('analytics dashboard audience filtering', () => {
+  it('removes only searches linked to configured internal accounts', () => {
+    const filtered = filterAnalyticsDashboardRows({
+      audience: 'external',
+      clicks: [{ search_id: 'internal-search' }, { search_id: 'visitor-search' }],
+      events: [{ search_id: 'internal-search' }, { search_id: 'visitor-search' }],
+      feedback: [{ search_id: 'internal-search' }, { search_id: 'visitor-search' }],
+      impressions: [{ search_id: 'internal-search' }, { search_id: 'visitor-search' }],
+      internalAccountIds: new Set(['internal-account']),
+      runs: [
+        { account_id: 'internal-account', search_id: 'internal-search' },
+        { account_id: null, search_id: 'visitor-search' },
+      ],
+      searchDiagnostics: {
+        recentFailures: [{ searchId: 'internal-search' }, { searchId: 'visitor-search' }],
+        summary: { failures: 2 },
+      },
+    })
+
+    expect(filtered.runs.map((run) => run.search_id)).toEqual(['visitor-search'])
+    expect(filtered.clicks.map((click) => click.search_id)).toEqual(['visitor-search'])
+    expect(filtered.events.map((event) => event.search_id)).toEqual(['visitor-search'])
+    expect(filtered.feedback.map((entry) => entry.search_id)).toEqual(['visitor-search'])
+    expect(filtered.impressions.map((entry) => entry.search_id)).toEqual(['visitor-search'])
+    expect(filtered.searchDiagnostics.recentFailures.map((entry) => entry.searchId)).toEqual(['visitor-search'])
   })
 })

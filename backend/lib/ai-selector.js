@@ -441,12 +441,21 @@ function buildNanoLockAndBadgesPrompt({
 }) {
   const desiredCount = Math.min(finalResultLimit, candidatePool.candidates.length)
   const preference = normalizeRankingPreference(rankingPreference)
+  const brandDecisionLines = [
+    'Brand decision:',
+    'Before selecting picks, decide whether the shopper clearly asks for, names, or strongly prioritizes a particular brand or model in the product query or user context.',
+    'Set specific_brand to true only in that case. Otherwise set specific_brand to false.',
+    'When specific_brand is false, choose a varied shortlist and avoid more than two products from the same brand when credible, fitting alternatives are available. Fit and explicit requirements still come first.',
+    'For every pick, return its maker in brand. Use the candidate brandName when it is present; otherwise identify the maker from the title. Return an empty brand only when the title genuinely does not identify one.',
+  ]
 
   if (preference === RANKING_PREFERENCES.LOWEST_PRICE) {
     return [
       'Lowest prices selected.',
       '',
       'Return all candidates that match the search and stated requirements. Exclude only clear mismatches, accessories, duplicates, or products that violate a requirement.',
+      '',
+      ...brandDecisionLines,
       '',
       'Reference matching candidates only by the provided index numbers. Mark every returned candidate with role "core" and confidence "high".',
       '',
@@ -485,6 +494,8 @@ function buildNanoLockAndBadgesPrompt({
     '6. If the query names a brand/model, treat it as a strong preference and fill matching eligible slots first. Only use other brands/models when matching candidates are weak, duplicated, unavailable, or clearly worse for the user context.',
     '7. Choose genuinely different products. Never count a colorway, finish, seller, or cosmetic variant of the same model as another recommendation. Different models, generations, capacities, widths, feature tiers, or use cases are valid alternatives. Use duplicateFamilyKey, title similarity, source, and attributes to spot duplicates.',
     '8. Build the best set, not just the top individual scores. Add diversity across use case, price tier, or style only after eligibility, relevance, and quality are satisfied.',
+    '',
+    ...brandDecisionLines,
     rankingStrategy.summary,
     allowOptionalAlternatives
       ? `Return exactly 6 strongest core picks first with role "core" and confidence "high". You may then add up to ${Math.max(0, desiredCount - 6)} alternatives with role "alternative" only when they are genuinely credible, fitting substitutes; every alternative must also have confidence "high". Do not pad alternatives with weaker, wrong-type, or merely cheap products.`
@@ -515,16 +526,18 @@ function buildHaikuShortlistTool(candidateCount) {
             type: 'object',
             properties: {
               index: { type: 'integer', enum: validIndices },
+              brand: { type: 'string', maxLength: 80 },
               role: { type: 'string', enum: ['core', 'alternative'] },
               confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
             },
-            required: ['index', 'role', 'confidence'],
+            required: ['index', 'brand', 'role', 'confidence'],
             additionalProperties: false,
           },
         },
         suggested_query: { type: 'string', maxLength: 200 },
+        specific_brand: { type: 'boolean' },
       },
-      required: ['picks', 'suggested_query'],
+      required: ['picks', 'suggested_query', 'specific_brand'],
       additionalProperties: false,
     },
   }
@@ -668,10 +681,12 @@ export async function haikuLockWinnersAndBadges(
   )
   const picks = Array.isArray(toolUseBlock?.input?.picks) ? toolUseBlock.input.picks : []
   const suggestedQuery = String(toolUseBlock?.input?.suggested_query || '').trim().slice(0, 200)
+  const specificBrand = toolUseBlock?.input?.specific_brand === true
   const seen = new Set()
   const lockedIds = []
   const coreIds = []
   const alternativeIds = []
+  const brandById = {}
   const rejectedIndices = []
 
   console.log('[haiku-lock] tool picks count:', picks.length, 'desired:', desiredCount)
@@ -687,6 +702,7 @@ export async function haikuLockWinnersAndBadges(
       continue
     }
     const id = String(candidates[index - 1].id)
+    const brand = String(pick?.brand || '').replace(/\s+/g, ' ').trim().slice(0, 80)
     if (pick?.role === 'alternative') {
       if (pick?.confidence !== 'high') {
         rejectedIndices.push({ index, reason: 'alternative_not_high_confidence' })
@@ -698,6 +714,7 @@ export async function haikuLockWinnersAndBadges(
       lockedIds.push(id)
       coreIds.push(id)
     }
+    if (brand) brandById[id] = brand
     seen.add(index)
     if (preference !== RANKING_PREFERENCES.LOWEST_PRICE && lockedIds.length >= desiredCount) break
   }
@@ -712,7 +729,9 @@ export async function haikuLockWinnersAndBadges(
     lockedIds,
     coreIds,
     alternativeIds,
+    brandById,
     suggestedQuery,
+    specificBrand,
     usage: {
       inputTokens: message.usage?.input_tokens ?? 0,
       outputTokens: message.usage?.output_tokens ?? 0,

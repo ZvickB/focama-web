@@ -15,7 +15,7 @@ function PrivacyPage() {
       <PageShell
         eyebrow="Privacy Policy"
         title="How Focamai handles your information."
-        description="This policy applies to the Focamai website and mobile app. It reflects the features currently implemented as of July 6, 2026."
+        description="This policy applies to the Focamai website and mobile app. It reflects the features currently implemented as of July 29, 2026."
       >
         <section className="space-y-3">
           <h2 className={sectionHeadingClassName}>Information Focamai handles</h2>
@@ -113,6 +113,10 @@ function PrivacyPage() {
             Signed-out search history is limited to the 50 most recent entries.
           </p>
           <p>
+            Signed-in mobile analytics may use a verified Supabase account ID to distinguish internal
+            testing from general usage. The analytics records do not store the account email.
+          </p>
+          <p>
             Focamai does not currently run a third-party advertising network or add its own
             advertising cookies. Vercel Analytics and Speed Insights process website usage and
             performance events. If you follow a product link, Amazon may use cookies or similar
@@ -163,7 +167,8 @@ function PrivacyPage() {
             operational search logs, analytics, diagnostics, caches, hashed rate-limit records,
             hosting logs, feedback, and third-party provider records are not deleted by this control
             when they cannot be reliably linked to the account. They are not used to recreate the
-            account after deletion.
+            account after deletion. Analytics recorded while signed in have their account link
+            cleared when the Supabase account is deleted.
           </p>
         </section>
 

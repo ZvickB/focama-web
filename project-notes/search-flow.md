@@ -64,7 +64,7 @@ flowchart TD
 | Rule | One line |
 |---|---|
 | Candidate pool is server-owned | Browser sends token · finalize reconstructs from snapshot; clear named brands/models are hard-filtered before AI selection |
-| Shortlist stays at 6 | Preview can be broader · guided output is always 6 |
+| Shortlist stays at 6 | Preview can be broader · guided output is always 6; a false Haiku specific-brand decision favors no more than two models per brand where credible alternatives exist, while explicit named-brand queries override it |
 | Finalize is thin | Haiku locks in the blocking path using product fit before quality confidence, value, variety, and Amazon position · product detail stays async |
 | Preview ≠ focused picks | `Just show me results` is not the guided shortlist |
 | Enrichment explains, not reranks | Async work adds hero/alternative fit reasons and caveats · winners don't change |

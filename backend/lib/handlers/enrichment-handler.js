@@ -383,7 +383,12 @@ export async function handleEnrichmentPoll(request, response) {
   const enrichment = cachedEntry?.selection?.enrichment
   const deepDiveEligibility = cachedEntry?.selection?.deepDiveEligibility || null
 
-  if (!enrichment?.entries?.length) {
+  const enrichmentEntries = Array.isArray(enrichment?.entries) ? enrichment.entries : []
+  const improvePicksSuggestions = Array.isArray(enrichment?.improvePicksSuggestions)
+    ? enrichment.improvePicksSuggestions
+    : []
+
+  if (enrichmentEntries.length === 0 && improvePicksSuggestions.length === 0) {
     sendJson(response, 200, { ready: false })
     return
   }
@@ -391,8 +396,8 @@ export async function handleEnrichmentPoll(request, response) {
   sendJson(response, 200, {
     ready: true,
     deepDiveEligibility,
-    entries: enrichment.entries,
-    improvePicksSuggestions: enrichment.improvePicksSuggestions || [],
+    entries: enrichmentEntries,
+    improvePicksSuggestions,
     model: enrichment.model || '',
   })
 }

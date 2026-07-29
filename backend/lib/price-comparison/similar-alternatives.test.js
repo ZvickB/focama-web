@@ -16,6 +16,14 @@ function shoppingResult(title, extractedPrice = 119.99) {
   }
 }
 
+function currentGoogleShoppingResult(title, extractedPrice = 119.99) {
+  return {
+    extracted_price: extractedPrice,
+    product_link: `https://www.google.com/search?ibp=oshop&prds=pid%3A123&q=${encodeURIComponent(title)}`,
+    title,
+  }
+}
+
 describe('findSimilarShoppingAlternatives', () => {
   it('returns a broader same-product alternative with a plain-language difference', () => {
     const alternatives = findSimilarShoppingAlternatives({
@@ -39,6 +47,16 @@ describe('findSimilarShoppingAlternatives', () => {
     })
 
     expect(alternatives[0]).toMatchObject({ difference: '36 mm instead of 40 mm' })
+  })
+
+  it('accepts the current Google Shopping search-product URL shape', () => {
+    const alternatives = findSimilarShoppingAlternatives({
+      candidate,
+      shoppingResults: [currentGoogleShoppingResult("Anne Klein Women's Gold-Tone Watch")],
+    })
+
+    expect(alternatives).toHaveLength(1)
+    expect(alternatives[0].url).toContain('ibp=oshop')
   })
 
   it('rejects accessories, repair tools, and books even when they share the product term', () => {

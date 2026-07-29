@@ -187,6 +187,46 @@ function latestEventForSearch(events, searchId) {
   return events.find((event) => event.search_id === searchId) || null
 }
 
+function readBrandVarietySummary(events) {
+  const summary = {
+    capRelaxed: 0,
+    capOverflowed: 0,
+    genericFinalizations: 0,
+    maxBrandCount: 0,
+    providerBrandPicks: 0,
+    haikuBrandPicks: 0,
+    missingBrandPicks: 0,
+    recordedFinalizations: 0,
+    threeOrMoreSameBrand: 0,
+  }
+
+  for (const event of events) {
+    if (event.stage !== 'backend_response_sent' || event.status !== 'success') continue
+    const metadata = event.metadata && typeof event.metadata === 'object' && !Array.isArray(event.metadata)
+      ? event.metadata
+      : null
+    if (!metadata || typeof metadata.brandCapApplied !== 'boolean') continue
+
+    summary.recordedFinalizations += 1
+    if (metadata.brandCapApplied) summary.genericFinalizations += 1
+    if (metadata.brandCapRelaxed === true) {
+      summary.capRelaxed += 1
+      summary.threeOrMoreSameBrand += 1
+    }
+    if (Number(metadata.brandCapOverflowCount) > 0) summary.capOverflowed += 1
+    summary.maxBrandCount = Math.max(summary.maxBrandCount, Number(metadata.maxBrandCount) || 0)
+
+    const sources = metadata.brandSourceCounts && typeof metadata.brandSourceCounts === 'object'
+      ? metadata.brandSourceCounts
+      : {}
+    summary.providerBrandPicks += Number(sources.provider) || 0
+    summary.haikuBrandPicks += Number(sources.haiku) || 0
+    summary.missingBrandPicks += Number(sources.missing) || 0
+  }
+
+  return summary
+}
+
 export async function readSearchDiagnosticsDashboardData({ sinceDays = 14 } = {}) {
   if (!isSupabaseConfigured()) {
     return {
@@ -207,7 +247,7 @@ export async function readSearchDiagnosticsDashboardData({ sinceDays = 14 } = {}
       ),
       readSupabaseRowsSince(
         SEARCH_EVENTS_TABLE,
-        'search_id, stage, status, platform, query_text, amazon_domain, provider, duration_ms, provider_status_code, result_count_before_internal_filters, result_count_after_internal_filters, final_status, error_type, error_message, reported_filter_type, retry_count, backend_reachable, connectivity_ok, cached_or_fallback_used, created_at',
+        'search_id, stage, status, platform, query_text, amazon_domain, provider, duration_ms, provider_status_code, result_count_before_internal_filters, result_count_after_internal_filters, final_status, error_type, error_message, reported_filter_type, retry_count, backend_reachable, connectivity_ok, cached_or_fallback_used, metadata, created_at',
         sinceIso,
       ),
     ])
@@ -247,6 +287,7 @@ export async function readSearchDiagnosticsDashboardData({ sinceDays = 14 } = {}
         neverReachedBackend: attempts.filter((attempt) => !backendReceivedIds.has(attempt.search_id)).length,
         backendReachableFailures: failedAttempts.filter((attempt) => attempt.backend_reachable === true).length,
       },
+      brandVariety: readBrandVarietySummary(events),
       byFilterType: countBy(failedAttempts, 'reported_filter_type'),
       byPlatform: countBy(failedAttempts, 'platform'),
       byMarketplace: countBy(failedAttempts, 'amazon_domain'),

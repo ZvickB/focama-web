@@ -240,7 +240,14 @@ export async function handleMobileAnalyticsTrack(request, response) {
     return
   }
 
-  const base = { accountId: '', deviceId: '', platform: 'mobile', searchId, sessionId }
+  const auth = await verifySupabaseBearerToken(request.headers || {})
+  const base = {
+    accountId: auth.ok ? auth.user.id : '',
+    deviceId: '',
+    platform: 'mobile',
+    searchId,
+    sessionId,
+  }
 
   if (event === 'search_started') {
     const productQuery = truncateText(payload.query, 200)
@@ -342,7 +349,8 @@ export async function handleAnalyticsDashboard(request, response) {
     min: 1,
     max: ANALYTICS_DASHBOARD_MAX_DAYS,
   })
-  const dashboard = await readAnalyticsDashboardData({ sinceDays: days })
+  const audience = requestUrl.searchParams.get('audience') === 'external' ? 'external' : 'all'
+  const dashboard = await readAnalyticsDashboardData({ audience, sinceDays: days })
 
   if (!dashboard.available) {
     sendJson(response, 500, { error: 'Unable to read analytics dashboard data right now.' })

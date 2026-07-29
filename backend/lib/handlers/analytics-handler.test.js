@@ -16,7 +16,7 @@ const storageMocks = vi.hoisted(() => ({
 vi.mock('../auth.js', () => authMocks)
 vi.mock('../search-storage.js', () => storageMocks)
 
-import { handleAnalyticsTrack } from './analytics-handler.js'
+import { handleAnalyticsTrack, handleMobileAnalyticsTrack } from './analytics-handler.js'
 
 function createResponseRecorder() {
   return {
@@ -73,6 +73,29 @@ describe('analytics tracking identity', () => {
       accountId: 'account-123',
       deviceId: 'device-123',
       platform: 'web',
+      searchId: 'search-123',
+      sessionId: 'session-123',
+    }))
+    expect(authMocks.verifySupabaseBearerToken).toHaveBeenCalledWith({ authorization: 'Bearer verified-token' })
+  })
+
+  it('uses the verified account for a signed-in mobile analytics event', async () => {
+    const response = createResponseRecorder()
+
+    await handleMobileAnalyticsTrack(
+      createJsonRequest(JSON.stringify({
+        event: 'search_started',
+        payload: { query: 'travel stroller' },
+        searchId: 'search-123',
+        sessionId: 'session-123',
+      }), { authorization: 'Bearer verified-token' }),
+      response,
+    )
+
+    expect(response.statusCode).toBe(202)
+    expect(storageMocks.upsertAnalyticsSearchRun).toHaveBeenCalledWith(expect.objectContaining({
+      accountId: 'account-123',
+      platform: 'mobile',
       searchId: 'search-123',
       sessionId: 'session-123',
     }))

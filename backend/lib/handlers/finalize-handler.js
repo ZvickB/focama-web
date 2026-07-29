@@ -53,7 +53,7 @@ import {
   runDeepDiveEligibilityAsync,
   mergeProductDetailsIntoCandidatePool,
 } from './enrichment-handler.js'
-import { selectDistinctCandidates } from '../product-identity.js'
+import { hasExplicitBrandRequest, selectDistinctCandidates, summarizeBrandVariety } from '../product-identity.js'
 
 const FINALIZE_REQUEST_MODE_DEFAULT = 'guided_finalize'
 
@@ -587,7 +587,11 @@ export async function handleFinalizeSelection(request, response) {
     const haikuCandidates = composition.ids
       .map((id) => {
         const normalizedId = String(id)
-        return candidateById.get(normalizedId) || null
+        const candidate = candidateById.get(normalizedId)
+        if (!candidate) return null
+
+        const haikuBrand = String(haikuResult.brandById?.[normalizedId] || '').trim()
+        return haikuBrand ? { ...candidate, haikuBrand } : candidate
       })
       .filter(Boolean)
 
@@ -595,6 +599,15 @@ export async function handleFinalizeSelection(request, response) {
       LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
       nextCandidatePool.candidates.length,
     )
+    const specificBrand = haikuResult.specificBrand || hasExplicitBrandRequest(
+      nextCandidatePool.query,
+      [...nextCandidatePool.candidates, ...haikuCandidates],
+    )
+    const maxPerBrand = specificBrand ? undefined : 2
+    let brandCapOverflowCount = 0
+    const onBrandOverflow = () => {
+      brandCapOverflowCount += 1
+    }
     const haikuResults = haikuCandidates.map((candidate) => toFinalizeFastCard(candidate))
 
     const suggestedQuery = String(haikuResult.suggestedQuery || '').trim()
@@ -618,6 +631,8 @@ export async function handleFinalizeSelection(request, response) {
       selectedCandidates = selectDistinctCandidates({
         preferredCandidates: haikuCandidates,
         limit: targetResultCount,
+        maxPerBrand,
+        onBrandOverflow,
       })
       selectionStrategy = 'haiku_lock_partial_recovery'
       flowPath = 'haiku_lock_partial_recovery'
@@ -627,6 +642,8 @@ export async function handleFinalizeSelection(request, response) {
         preferredCandidates: haikuCandidates,
         fallbackCandidates: nextCandidatePool.candidates,
         limit: targetResultCount,
+        maxPerBrand,
+        onBrandOverflow,
       })
       const haikuCandidateIds = new Set(haikuCandidates.map((candidate) => String(candidate.id)))
       const didTopUp = selectedCandidates.some((candidate) => !haikuCandidateIds.has(String(candidate.id)))
@@ -646,6 +663,10 @@ export async function handleFinalizeSelection(request, response) {
     }
 
     const results = selectedCandidates.map((candidate) => toFinalizeFastCard(candidate))
+    const brandVariety = {
+      ...summarizeBrandVariety(selectedCandidates, { specificBrand }),
+      brandCapOverflowCount,
+    }
 
     const selectedCandidateIds = results.map((item) => item.id)
     const usedHaikuSelection = haikuResults.length > 0
@@ -689,6 +710,7 @@ export async function handleFinalizeSelection(request, response) {
         model: usedHaikuSelection ? haikuResult.model : null,
         selectedCandidateIds: finalizeFast.selectedCandidateIds,
         rankingPreference,
+        brandVariety,
         finalizedAt: new Date().toISOString(),
       },
       source: 'guided_finalize_selection',
@@ -702,6 +724,7 @@ export async function handleFinalizeSelection(request, response) {
       candidateCount: nextCandidatePool.candidates.length,
       finalCount: results.length,
       retryCount,
+      metadata: brandVariety,
       requestMode,
       cacheMs: roundTimingDuration(cacheLookupDuration),
       haikuMs: roundTimingDuration(haikuDuration),
@@ -748,6 +771,7 @@ export async function handleFinalizeSelection(request, response) {
         strategy: selectionStrategy,
         model: usedHaikuSelection ? haikuResult.model : null,
         modelPath: hasContextSignals ? 'context_added' : 'baseline',
+        specificBrand,
         rankingPreference,
         candidateRecovery: needsBetterSearch
           ? {
@@ -789,6 +813,7 @@ export async function handleFinalizeSelection(request, response) {
       finalStatus: 'success',
       resultCountAfterInternalFilters: results.length,
       retryCount,
+      metadata: brandVariety,
     })
 
     // Fire off product details and mini enrichment async; do not block the response.

@@ -13,8 +13,86 @@ import {
 } from './supabase-client.js'
 import { normalizeFeedbackValue } from './feedback-storage.js'
 import { readSearchDiagnosticsDashboardData } from './search-diagnostics-storage.js'
+import { getEnv } from '../search-data.js'
 
 const ANALYTICS_FOREIGN_KEY_RETRY_DELAYS_MS = [50, 150]
+
+function readInternalAnalyticsEmails() {
+  return new Set(
+    String(getEnv('INTERNAL_ANALYTICS_EMAILS') || '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  )
+}
+
+async function readInternalAnalyticsAccountIds() {
+  const internalEmails = readInternalAnalyticsEmails()
+
+  if (internalEmails.size === 0) return new Set()
+
+  const supabase = getSupabaseAdminClient()
+
+  if (!supabase?.auth?.admin?.listUsers) return new Set()
+
+  const accountIds = new Set()
+  let page = 1
+
+  while (true) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
+
+    if (error) throw error
+
+    const users = Array.isArray(data?.users) ? data.users : []
+    for (const user of users) {
+      if (internalEmails.has(String(user?.email || '').trim().toLowerCase()) && user?.id) {
+        accountIds.add(user.id)
+      }
+    }
+
+    if (users.length < 1000) return accountIds
+    page += 1
+  }
+}
+
+export function filterAnalyticsDashboardRows({
+  audience = 'all',
+  clicks = [],
+  events = [],
+  feedback = [],
+  impressions = [],
+  internalAccountIds = new Set(),
+  runs = [],
+  searchDiagnostics,
+}) {
+  if (audience !== 'external' || internalAccountIds.size === 0) {
+    return { clicks, events, feedback, impressions, runs, searchDiagnostics }
+  }
+
+  const visibleRuns = runs.filter((run) => !internalAccountIds.has(run.account_id))
+  const visibleSearchIds = new Set(visibleRuns.map((run) => run.search_id))
+  const belongsToVisibleSearch = (entry) => visibleSearchIds.has(entry.search_id || entry.searchId)
+  const recentFailures = Array.isArray(searchDiagnostics?.recentFailures)
+    ? searchDiagnostics.recentFailures.filter(belongsToVisibleSearch)
+    : []
+
+  return {
+    clicks: clicks.filter(belongsToVisibleSearch),
+    events: events.filter(belongsToVisibleSearch),
+    feedback: feedback.filter(belongsToVisibleSearch),
+    impressions: impressions.filter(belongsToVisibleSearch),
+    runs: visibleRuns,
+    searchDiagnostics: searchDiagnostics
+      ? {
+          ...searchDiagnostics,
+          recentFailures,
+          summary: searchDiagnostics.summary
+            ? { ...searchDiagnostics.summary, failures: recentFailures.length }
+            : searchDiagnostics.summary,
+        }
+      : searchDiagnostics,
+  }
+}
 
 function wait(delayMs) {
   return new Promise((resolve) => setTimeout(resolve, delayMs))
@@ -387,7 +465,7 @@ export function buildMobileDashboard({ clicks, events, impressions, runs }) {
   }
 }
 
-export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit = 12 } = {}) {
+export async function readAnalyticsDashboardData({ audience = 'all', sinceDays = 14, topQueryLimit = 12 } = {}) {
   if (!isSupabaseConfigured()) {
     return {
       available: false,
@@ -401,7 +479,7 @@ export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit
   const sinceIso = new Date(now - lookbackDays * 24 * 60 * 60 * 1000).toISOString()
 
   try {
-    const [runsResult, eventsResult, impressionsResult, clicksResult, feedbackResult] = await Promise.all([
+    const [runsResult, eventsResult, impressionsResult, clicksResult, feedbackResult, internalAccountIds] = await Promise.all([
       readSupabaseRowsSince(
         ANALYTICS_SEARCH_RUNS_TABLE,
         'search_id, device_id, session_id, account_id, platform, product_query, entered_ai_refinement, used_show_products_now, completed_finalize, retry_round, best_result_key, created_at',
@@ -427,13 +505,23 @@ export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit
         'search_id, found_what_you_wanted, enjoyed_experience, was_simple, results_seen, finalized, stage_reached, created_at',
         sinceIso,
       ),
+      readInternalAnalyticsAccountIds(),
     ])
 
-    const runs = runsResult.rows
-    const events = eventsResult.rows
-    const impressions = impressionsResult.rows
-    const clicks = clicksResult.rows
-    const feedback = feedbackResult.rows
+    const filtered = filterAnalyticsDashboardRows({
+      audience,
+      clicks: clicksResult.rows,
+      events: eventsResult.rows,
+      feedback: feedbackResult.rows,
+      impressions: impressionsResult.rows,
+      internalAccountIds,
+      runs: runsResult.rows,
+    })
+    const runs = filtered.runs
+    const events = filtered.events
+    const impressions = filtered.impressions
+    const clicks = filtered.clicks
+    const feedback = filtered.feedback
 
     const retailerClicks = clicks.filter((entry) => entry.click_target === 'retailer')
     const cardClicks = clicks.filter((entry) => entry.click_target === 'card')
@@ -665,6 +753,13 @@ export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit
       searchDiagnostics = { available: false, reason: 'read_failed' }
     }
 
+    searchDiagnostics = filterAnalyticsDashboardRows({
+      audience,
+      internalAccountIds,
+      runs: runsResult.rows,
+      searchDiagnostics,
+    }).searchDiagnostics
+
     return {
       activity: buildActivityDashboard({
         clicks,
@@ -674,7 +769,9 @@ export async function readAnalyticsDashboardData({ sinceDays = 14, topQueryLimit
       }),
       mobile: buildMobileDashboard({ clicks, events, impressions, runs }),
       available: true,
+      audience,
       generatedAt: new Date().toISOString(),
+      internalAnalyticsConfigured: readInternalAnalyticsEmails().size > 0,
       lookbackDays,
       summary: {
         searches: runs.length,

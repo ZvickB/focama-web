@@ -4,6 +4,19 @@ const GENERIC = new Set(['with', 'for', 'the', 'and', 'new', 'wireless', 'portab
 function clean(value) { return String(value || '').trim() }
 function normalized(value) { return clean(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() }
 function money(value) { const match = clean(value).replace(/,/g, '').match(/[0-9]+(?:\.[0-9]+)?/); return match ? Number(match[0]) : null }
+
+function isGoogleShoppingProductUrl(value) {
+  try {
+    const url = new URL(clean(value))
+    const isGoogle = /(^|\.)google\.[a-z.]+$/i.test(url.hostname)
+    const isLegacyProductPage = /\/shopping\/product\//i.test(url.pathname)
+    const isCurrentProductSearch = url.pathname === '/search' && url.searchParams.get('ibp') === 'oshop' && url.searchParams.has('prds')
+    return isGoogle && (isLegacyProductPage || isCurrentProductSearch)
+  } catch {
+    return false
+  }
+}
+
 function capacity(value) { return normalized(value).match(/\b\d+(?:\.\d+)?\s*(?:tb|gb|qt|oz|ml|l)\b/)?.[0]?.replace(/\s+/g, '') || '' }
 function size(value) { return normalized(value).match(/\b\d+(?:\.\d+)?\s*(?:mm|inch|in)\b/)?.[0]?.replace(/\s+/g, '') || '' }
 function displaySize(value) { return value.replace('inch', ' in').replace(/(\d)mm$/, '$1 mm') }
@@ -42,7 +55,7 @@ export function findSimilarShoppingAlternatives({ candidate, shoppingResults, cu
   return (Array.isArray(shoppingResults) ? shoppingResults : []).flatMap((result) => {
     const title = clean(result?.title); const url = clean(result?.product_link || result?.link)
     const price = money(result?.extracted_price ?? result?.price)
-    if (!title || !url || !/google\.[^/]+\/shopping\/product/i.test(url) || !price || ACCESSORY_OR_CONDITION.test(title)) return []
+    if (!title || !isGoogleShoppingProductUrl(url) || !price || ACCESSORY_OR_CONDITION.test(title)) return []
     if (normalized(title) === normalized(name) || sharedCoreTerms(name, title) < 1 || seen.has(normalized(title))) return []
     seen.add(normalized(title))
     const delta = sourcePrice === null ? null : Math.round((price - sourcePrice) * 100) / 100

@@ -970,7 +970,10 @@ export function useGuidedSearch() {
       })
 
       if (safeSuggestedQuery) {
-        handleTryRetrySuggestion(safeSuggestedQuery)
+        handleTryRetrySuggestion(safeSuggestedQuery, {
+          followUpNotes: snapshot.followUpNotes,
+          rejectionFeedback: snapshot.rejectionFeedback,
+        })
       }
     },
     onError: (error, variables) => {
@@ -1145,6 +1148,7 @@ export function useGuidedSearch() {
       autoFinalizeAfterDiscovery = false,
       reuseAnalytics = false,
       cacheMode = 'default',
+      retryFinalizeContext = null,
       retrySearchQueryValue = '',
       searchEventName = 'search_started',
     } = {},
@@ -1314,12 +1318,14 @@ export function useGuidedSearch() {
             amazonDomain: responseAmazonDomain,
             discoveryToken: payload.discoveryToken,
             originalCandidatePool: payload.candidatePool,
-            followUpNotes: '',
-            rejectionFeedback: '',
-            retryCount: 0,
+            followUpNotes: retryFinalizeContext?.followUpNotes || '',
+            rejectionFeedback: retryFinalizeContext?.rejectionFeedback || '',
+            retryCount: retryFinalizeContext ? 1 : 0,
             excludedCandidateIds: [],
             previousResults: [],
-            requestMode: FINALIZE_REQUEST_MODE_EMPTY_NOTES,
+            requestMode: retryFinalizeContext
+              ? FINALIZE_REQUEST_MODE_REFINED
+              : FINALIZE_REQUEST_MODE_EMPTY_NOTES,
             rankingPreference: effectiveRankingPreference,
           })
         }
@@ -1880,7 +1886,7 @@ export function useGuidedSearch() {
     })
   }
 
-  function handleTryRetrySuggestion(query) {
+  function handleTryRetrySuggestion(query, retryContext = {}) {
     const nextQuery = String(query || '').trim()
 
     if (!nextQuery) {
@@ -1901,6 +1907,11 @@ export function useGuidedSearch() {
     startGuidedSearch(normalizedQuery, {
       autoFinalizeAfterDiscovery: AUTO_FINALIZE_RETRY_SEARCH,
       cacheMode: 'refresh',
+      preserveFollowUpNotes: Boolean(retryContext.followUpNotes),
+      retryFinalizeContext: {
+        followUpNotes: String(retryContext.followUpNotes || '').trim(),
+        rejectionFeedback: String(retryContext.rejectionFeedback || '').trim(),
+      },
       retrySearchQueryValue: normalizedQuery,
       searchEventName: 'retry_advice_search_started',
     })
