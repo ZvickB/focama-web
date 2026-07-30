@@ -25,8 +25,14 @@ const describeSmoke = SMOKE ? describe : describe.skip
 // ─── helpers ────────────────────────────────────────────────────────
 
 async function get(path) {
+  const startedAt = performance.now()
   const res = await fetch(`${BASE}${path}`)
-  return { status: res.status, headers: res.headers, body: await res.json().catch(() => null) }
+  return {
+    status: res.status,
+    headers: res.headers,
+    body: await res.json().catch(() => null),
+    durationMs: Math.round(performance.now() - startedAt),
+  }
 }
 
 async function post(path, body) {
@@ -135,6 +141,77 @@ describeSmoke('Core endpoints', () => {
 
 const SMOKE_E2E = process.env.SMOKE_E2E === '1'
 const describeE2E = SMOKE && SMOKE_E2E ? describe : describe.skip
+
+// ─── 5. Cache latency benchmark (opt-in; makes one paid Rainforest request) ─
+
+const SMOKE_CACHE_BENCH = process.env.SMOKE_CACHE_BENCH === '1'
+const describeCacheBenchmark = SMOKE && SMOKE_CACHE_BENCH ? describe : describe.skip
+const CACHE_BENCH_QUERY = process.env.SMOKE_CACHE_QUERY || 'ergonomic wireless mouse'
+
+function parseServerTiming(headers) {
+  return String(headers.get('server-timing') || '')
+    .split(',')
+    .reduce((timings, part) => {
+      const match = part.trim().match(/^([^;]+);dur=([\d.]+)$/)
+      if (match) timings[match[1]] = Number(match[2])
+      return timings
+    }, {})
+}
+
+async function waitForDiscoveryCache(path) {
+  let lastResponse = null
+
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    lastResponse = await get(path)
+    if (lastResponse.status === 200 && lastResponse.body?.source === 'cache') {
+      return lastResponse
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300))
+  }
+
+  return lastResponse
+}
+
+describeCacheBenchmark('Guided discovery cache latency', () => {
+  it('reports a forced Rainforest search and the resulting cache hit', async () => {
+    const query = encodeURIComponent(CACHE_BENCH_QUERY)
+    const fresh = await get(`/api/search/rainforest-discover?query=${query}&cacheMode=refresh`)
+
+    expect(fresh.status).toBe(200)
+    expect(fresh.body?.source).toBe('rainforest_discovery')
+
+    const cached = await waitForDiscoveryCache(`/api/search/rainforest-discover?query=${query}`)
+    expect(cached.status).toBe(200)
+    expect(cached.body?.source).toBe('cache')
+
+    const freshTiming = parseServerTiming(fresh.headers)
+    const cachedTiming = parseServerTiming(cached.headers)
+    console.table([
+      {
+        request: 'forced Rainforest query',
+        clientMs: fresh.durationMs,
+        serverTotalMs: freshTiming.total ?? null,
+        rateLimitMs: freshTiming['rate-limit'] ?? null,
+        cacheMs: freshTiming.cache ?? null,
+        moderationMs: freshTiming.moderation ?? null,
+        sessionMs: freshTiming.session ?? null,
+        providerMs: freshTiming.provider ?? null,
+        source: fresh.body?.source,
+      },
+      {
+        request: 'resulting cache hit',
+        clientMs: cached.durationMs,
+        serverTotalMs: cachedTiming.total ?? null,
+        rateLimitMs: cachedTiming['rate-limit'] ?? null,
+        cacheMs: cachedTiming.cache ?? null,
+        moderationMs: cachedTiming.moderation ?? null,
+        sessionMs: cachedTiming.session ?? null,
+        providerMs: cachedTiming.provider ?? null,
+        source: cached.body?.source,
+      },
+    ])
+  }, 60_000)
+})
 
 describeE2E('E2E discovery flow', () => {
   let discoveryToken = null

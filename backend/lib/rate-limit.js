@@ -4,6 +4,7 @@ import { getEnv } from './search-data.js'
 
 const RATE_LIMIT_STORE = new Map()
 const RATE_LIMIT_EVENTS_TABLE = 'rate_limit_events'
+const RATE_LIMIT_RPC = 'consume_rate_limit_token'
 const SUPABASE_RATE_LIMIT_WARNING_INTERVAL_MS = 60_000
 
 let supabaseRateLimitClient = null
@@ -168,10 +169,48 @@ async function takeSupabaseRateLimitToken(ipAddress, { limit, windowMs } = DEFAU
     throw new Error('Supabase is not configured for rate limiting.')
   }
 
+  const rateKey = createRateLimitKey(ipAddress)
+  const requestId = randomUUID()
+
+  if (typeof supabase.rpc === 'function') {
+    const { data, error } = await supabase.rpc(RATE_LIMIT_RPC, {
+      p_limit: limit,
+      p_rate_key: rateKey,
+      p_request_id: requestId,
+      p_window_ms: windowMs,
+    })
+
+    if (!error) {
+      const result = Array.isArray(data) ? data[0] : data
+      const eventCount = Number(result?.event_count)
+      const remaining = Number(result?.remaining)
+      const resetAt = new Date(result?.reset_at || '').getTime()
+
+      if (!Number.isFinite(eventCount) || !Number.isFinite(remaining)) {
+        throw new Error('Supabase rate-limit function returned an invalid result.')
+      }
+
+      return {
+        allowed: Boolean(result?.allowed),
+        remaining: Math.max(remaining, 0),
+        resetAt: Number.isFinite(resetAt) ? resetAt : Date.now() + windowMs,
+      }
+    }
+
+    const errorMessage = String(error?.message || '')
+    const missingRpc = error?.code === 'PGRST202' || /could not find the function/i.test(errorMessage)
+
+    if (!missingRpc) {
+      throw error
+    }
+  }
+
+  // Compatibility path for deployments where the database migration has not
+  // landed yet. Keep the existing shared limiter rather than weakening to a
+  // per-process limit during a rolling deployment.
   const now = Date.now()
   const createdAt = new Date(now).toISOString()
   const windowStart = new Date(now - windowMs).toISOString()
-  const rateKey = createRateLimitKey(ipAddress)
 
   const { error: deleteError } = await supabase
     .from(RATE_LIMIT_EVENTS_TABLE)
@@ -186,7 +225,7 @@ async function takeSupabaseRateLimitToken(ipAddress, { limit, windowMs } = DEFAU
   const { error: insertError } = await supabase.from(RATE_LIMIT_EVENTS_TABLE).insert({
     created_at: createdAt,
     rate_key: rateKey,
-    request_id: randomUUID(),
+    request_id: requestId,
   })
 
   if (insertError) {

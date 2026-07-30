@@ -271,7 +271,9 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   const countryCode = getCountryCode(request.headers || {})
   const amazonDomain = resolveAmazonDomain({ requestUrl, countryCode })
   const rainforestScope = getAmazonMarketplaceScope(CACHE_SCOPE_RAINFOREST, amazonDomain)
+  const rateLimitStartedAt = nowMs()
   const rateLimit = await takeRateLimitToken(clientIpAddress, DEFAULT_RATE_LIMIT_CONFIG)
+  const rateLimitDuration = nowMs() - rateLimitStartedAt
 
   if (!rateLimit.allowed) {
     logSearchFlowEvent('rainforest_discovery_rate_limited', {
@@ -371,24 +373,41 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       }
     }
 
+    const sessionSnapshotStartedAt = nowMs()
     const tokenizedDiscovery = await ensureDiscoverySnapshotToken({
       normalizedQuery,
       normalizedDetails,
       cachedEntry,
       source: cachedEntry?.source || 'guided_discovery',
     })
-    await recordSearchCacheEvent({
-      cacheKey: discoveryCacheKey,
-      cacheStatus: 'hit',
-      candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
-        ? cachedEntry.candidatePool.candidates.length
-        : normalizedCachedResults.length,
-      details: normalizedDetails,
-      productQuery: normalizedQuery,
-      resultCount: normalizedCachedResults.length,
-      selectionMode: cachedEntry.selection?.mode || 'discovery_cache',
-      source: cachedEntry.source || 'cache',
-    })
+    const sessionSnapshotDuration = nowMs() - sessionSnapshotStartedAt
+    const moderationDuration = Number.isFinite(resolvedOpenAiQueryModeration?.durationMs)
+      ? resolvedOpenAiQueryModeration.durationMs
+      : 0
+
+    // Cache-history data is operational telemetry only. Keep it best-effort and
+    // off the response path; the discovery snapshot above is the required write
+    // that makes this token usable by finalize on any Render instance.
+    runInBackground(
+      recordSearchCacheEvent({
+        cacheKey: discoveryCacheKey,
+        cacheStatus: 'hit',
+        candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
+          ? cachedEntry.candidatePool.candidates.length
+          : normalizedCachedResults.length,
+        details: normalizedDetails,
+        productQuery: normalizedQuery,
+        resultCount: normalizedCachedResults.length,
+        selectionMode: cachedEntry.selection?.mode || 'discovery_cache',
+        source: cachedEntry.source || 'cache',
+      }),
+      {
+        label: 'record_guided_discovery_cache_hit',
+        query: normalizedQuery,
+        route: '/api/search/rainforest-discover',
+        searchId: supportSearchId,
+      },
+    )
 
     logSearchFlowEvent('rainforest_discovery_cache_hit', {
       route: '/api/search/rainforest-discover',
@@ -398,7 +417,10 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
         ? cachedEntry.candidatePool.candidates.length
         : normalizedCachedResults.length,
       previewCount: normalizedCachedResults.length,
+      rateLimitMs: roundTimingDuration(rateLimitDuration),
       cacheMs: roundTimingDuration(cacheLookupDuration),
+      moderationMs: roundTimingDuration(moderationDuration),
+      sessionSnapshotMs: roundTimingDuration(sessionSnapshotDuration),
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
 
@@ -411,7 +433,10 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       cachedAt: tokenizedDiscovery.cachedEntry.cachedAt,
     }, {
       serverTiming: [
+        { name: 'rate-limit', duration: rateLimitDuration },
         { name: 'cache', duration: cacheLookupDuration },
+        { name: 'moderation', duration: moderationDuration },
+        { name: 'session', duration: sessionSnapshotDuration },
         { name: 'total', duration: nowMs() - requestStartedAt },
       ],
     })

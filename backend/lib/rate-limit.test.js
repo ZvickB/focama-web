@@ -145,32 +145,19 @@ describe('rate-limit helpers', () => {
     process.env.SUPABASE_SECRET_KEY = 'test-secret'
     resetEnvCache()
 
-    const deleteChain = {
-      eq: vi.fn(() => ({
-        lt: vi.fn().mockResolvedValue({ error: null }),
-      })),
-    }
-    const insertMock = vi.fn().mockResolvedValue({ error: null })
-    const countLimitMock = vi.fn().mockResolvedValue({
-      count: 2,
-      data: [{ created_at: new Date(Date.now() - 500).toISOString() }],
+    const fromMock = vi.fn()
+    const rpcMock = vi.fn().mockResolvedValue({
+      data: [{
+        allowed: true,
+        event_count: 2,
+        remaining: 0,
+        reset_at: new Date(Date.now() + 9_500).toISOString(),
+      }],
       error: null,
-    })
-    const countOrderMock = vi.fn(() => ({ limit: countLimitMock }))
-    const countGteMock = vi.fn(() => ({ order: countOrderMock }))
-    const countEqMock = vi.fn(() => ({ gte: countGteMock }))
-    const selectMock = vi.fn(() => ({ eq: countEqMock }))
-    const fromMock = vi.fn((table) => {
-      expect(table).toBe('rate_limit_events')
-      return {
-        delete: vi.fn(() => deleteChain),
-        insert: insertMock,
-        select: selectMock,
-      }
     })
 
     vi.doMock('@supabase/supabase-js', () => ({
-      createClient: vi.fn(() => ({ from: fromMock })),
+      createClient: vi.fn(() => ({ from: fromMock, rpc: rpcMock })),
     }))
 
     const { takeRateLimitToken: takeSupabaseRateLimitToken } = await loadRateLimitModule()
@@ -187,15 +174,16 @@ describe('rate-limit helpers', () => {
       }),
     )
 
-    expect(insertMock).toHaveBeenCalledWith(
+    expect(rpcMock).toHaveBeenCalledWith(
+      'consume_rate_limit_token',
       expect.objectContaining({
-        rate_key: expect.stringMatching(/^[a-f0-9]{64}$/),
-        request_id: expect.stringMatching(
+        p_rate_key: expect.stringMatching(/^[a-f0-9]{64}$/),
+        p_request_id: expect.stringMatching(
           /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
         ),
       }),
     )
-    expect(selectMock).toHaveBeenCalledWith('created_at', { count: 'exact' })
+    expect(fromMock).not.toHaveBeenCalled()
   })
 
   it('falls back to the process-local limiter when Supabase is unavailable', async () => {
