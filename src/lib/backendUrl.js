@@ -1,10 +1,18 @@
-const CONFIGURED_BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
+// Production normally receives this through Vercel. Keep the deployed Render
+// origin as a fallback so a missing build-time variable does not silently
+// disable the direct route and its same-origin retry.
+const CONFIGURED_BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://focama-web.onrender.com'
 const DIRECT_BACKEND_URL = CONFIGURED_BACKEND_URL
 const PROXY_BACKEND_URL = ''
 const PROXY_PREFERENCE_KEY = 'focamai_backend_route'
 
 function isRetryableNetworkError(error) {
   return error instanceof TypeError && error.name !== 'AbortError'
+}
+
+function canRetryRequest(options) {
+  const method = String(options?.method || 'GET').toUpperCase()
+  return method === 'GET' || method === 'HEAD'
 }
 
 export function createBackendTransport({
@@ -45,17 +53,33 @@ export function createBackendTransport({
     }
   }
 
+  async function retryReadRequest(url, options, error) {
+    if (!proxyFallbackEnabled || !canRetryRequest(options) || !isRetryableNetworkError(error)) {
+      throw error
+    }
+
+    return runFetch(url, options)
+  }
+
   async function fetchPath(path, options) {
+    const requestUrl = `${getUrl()}${path}`
+
     try {
-      return await runFetch(`${getUrl()}${path}`, options)
+      return await runFetch(requestUrl, options)
     } catch (error) {
       if (!canUseProxyFallback() || preferProxyForSession || !isRetryableNetworkError(error)) {
-        throw error
+        return retryReadRequest(requestUrl, options, error)
       }
 
-      const response = await runFetch(`${PROXY_BACKEND_URL}${path}`, options)
-      setProxyPreference(true)
-      return response
+      const proxyUrl = `${PROXY_BACKEND_URL}${path}`
+
+      try {
+        const response = await runFetch(proxyUrl, options)
+        setProxyPreference(true)
+        return response
+      } catch (proxyError) {
+        return retryReadRequest(proxyUrl, options, proxyError)
+      }
     }
   }
 

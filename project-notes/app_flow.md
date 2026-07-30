@@ -171,7 +171,7 @@
 ## Query-quality suggestion behavior
 - After discovery returns, the frontend polls `/api/search/query-quality` for the active `discoveryToken`, query, and marketplace.
 - The first discovery response and refinement flow remain uninterrupted while the review runs.
-- If the stored review says to suggest a better query, the homepage shows a small inline prompt near the refine/results region:
+- If the stored review says to suggest a better query, the homepage shows the prompt inside the active refine panel, then carries it into the results viewport above the shortlist after finalize, so the results auto-scroll cannot leave the suggested search above the fold:
   - `We searched for "[original query]".`
   - `Try "[suggested query]" instead?`
   - `Try suggested search`
@@ -209,9 +209,9 @@
 - Successful finalize diagnostics also record brand-variety aggregates only: whether a generic-search cap applied or relaxed, deferred same-brand picks, highest resolved-brand count, and provider/Haiku/missing label counts. They do not store product brand names.
 - `search_history` is internal telemetry, not user-facing history.
 - Account-backed saved-search history uses `saved_searches`, not the existing internal `search_history` table.
-- Rate limiting is a 10-second rolling window with a limit of 15 requests per client IP. In production it uses a shared Supabase `rate_limit_events` event log keyed by a hashed IP value; every event also has a generated non-null UUID `request_id`. It falls back to the process-local memory limiter when Supabase is unavailable.
+- Rate limiting is a 10-second rolling window with a limit of 15 requests per client IP. In production its atomic Supabase RPC (`consume_rate_limit_token`, migration `20260729103000_add_atomic_rate_limit_rpc.sql`) records/checks the hashed-IP `rate_limit_events` bucket in one round trip. Until that migration is applied, the backend deliberately keeps the prior shared three-query implementation; it falls back to the process-local memory limiter only when Supabase is unavailable.
 - Funnel analytics requests are delivered in browser queue order so the parent `analytics_search_runs` upsert reaches storage before its child events, impressions, and clicks. Child inserts also briefly retry Postgres foreign-key error `23503` to tolerate network/request scheduling races without weakening the foreign key.
-- Guided routes expose `Server-Timing`.
+- Guided routes expose `Server-Timing`; discovery cache hits break out rate-limit, cache lookup, moderation, and token-session persistence so production latency can be diagnosed without guessing.
 - Discovery query-quality review is now a background pass plus frontend polling. It can mark the token-scoped snapshot as pending, skipped, ready, or failed under `selection.queryQuality`, while preserving any existing `selection.enrichment`.
 - Query-quality suggestion analytics track shown, accepted, and rejected events with bounded metadata such as query lengths, classification, and confidence.
 - The homepage timing panel appears in development or when `?timing=1` is present.

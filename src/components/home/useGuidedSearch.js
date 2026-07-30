@@ -74,7 +74,7 @@ export { RESULT_CARD_COUNT, RESULT_CARD_SLOTS }
 export { detectHardConstraint, resolveAmazonDomainForRequest }
 export { resolveSelectedProductForDisplay }
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://focama-web.onrender.com'
 // Set VITE_AUTO_FINALIZE_RETRY_SEARCH=false to restore the web retry follow-up step.
 const AUTO_FINALIZE_RETRY_SEARCH = import.meta.env.VITE_AUTO_FINALIZE_RETRY_SEARCH !== 'false'
 

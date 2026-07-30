@@ -53,6 +53,42 @@ describe('backend transport', () => {
     expect(storage.setItem).toHaveBeenCalledWith('focamai_backend_route', 'proxy')
   })
 
+  it('retries a read request once when both direct and proxy routes have a transient failure', async () => {
+    const response = { ok: true }
+    const fetchImpl = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(response)
+    const transport = createBackendTransport({
+      directBackendUrl: 'https://backend.example',
+      fetchImpl,
+      proxyFallbackEnabled: true,
+    })
+
+    await expect(transport.fetchPath('/api/search/rainforest-discover')).resolves.toBe(response)
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      'https://backend.example/api/search/rainforest-discover',
+      '/api/search/rainforest-discover',
+      '/api/search/rainforest-discover',
+    ])
+  })
+
+  it('does not retry a failed write request', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    const transport = createBackendTransport({
+      directBackendUrl: 'https://backend.example',
+      fetchImpl,
+      proxyFallbackEnabled: true,
+    })
+
+    await expect(transport.fetchPath('/api/search/finalize', { method: 'POST' })).rejects.toThrow('Failed to fetch')
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
   it('starts with a remembered proxy and clears it after a successful direct ping', async () => {
     const response = { ok: true }
     const storage = createStorage('proxy')

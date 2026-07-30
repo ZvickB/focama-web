@@ -19,7 +19,7 @@ Focamai helps a user describe the product they want, answer one short follow-up 
 - Backend: Node/Express on Render.
 - Frontend deploy: Vercel.
 - Backend deploy: Render, starting from `backend/express-server.js`.
-- The frontend calls the Render backend directly through `VITE_BACKEND_URL`, then retries browser-level network failures through same-origin Vercel rewrites and remembers the healthy route.
+- The frontend calls the Render backend directly through `VITE_BACKEND_URL` (falling back to the active Render origin if that build-time variable is missing), then retries browser-level network failures through same-origin Vercel rewrites and remembers the healthy route.
 - `api/geo.js` intentionally stays on Vercel so the UI can use Vercel geolocation headers.
 - KAILA has been removed from this repo and Render service; Focamai no longer mounts `/kaila`.
 

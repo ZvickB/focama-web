@@ -93,7 +93,7 @@
 ## Deployment reality
 - Frontend is on Vercel.
 - Backend is on Render and starts from `backend/express-server.js`.
-- The frontend tries the Render backend through `VITE_BACKEND_URL` first, then retries browser-level network failures through same-origin Vercel rewrites and remembers proxy mode. `/api/geo` remains Vercel-local.
+- The frontend tries the Render backend through `VITE_BACKEND_URL` first (or the active Render fallback when a Vercel build omits that variable), then retries browser-level network failures through same-origin Vercel rewrites and remembers proxy mode. `/api/geo` remains Vercel-local.
 - KAILA has been removed from this repo and is no longer mounted on the Focamai Render service.
 - `api/geo.js` intentionally stays on Vercel so the UI can read Vercel geolocation headers through a relative `/api/geo` request.
 
@@ -102,3 +102,7 @@
 - For current behavior questions, read `project-notes/app_flow.md`.
 - For backend/search behavior, read `project-notes/search-flow.md`.
 - For remaining work, read `project-notes/handoff.md`.
+# 2026-07-29 — Cache-hit latency follow-up
+
+- A paid smoke benchmark confirmed genuine discovery cache hits are much faster than Rainforest queries (production: roughly 1.0s cache hit vs 8.6s forced Rainforest). The new opt-in benchmark is in `backend/smoke.test.js` (`SMOKE=1 SMOKE_CACHE_BENCH=1`).
+- Cache lookup was only ~13ms; the shared Supabase rate limiter was the dominant observed cache-hit cost (~1.08s in a later local measurement), followed by the required token-scoped session snapshot. `backend/lib/rate-limit.js` now prefers a one-call RPC, with legacy shared-query fallback until `supabase/migrations/20260729103000_add_atomic_rate_limit_rpc.sql` is applied. Apply that migration before deploying the backend code so production gets the improvement rather than the compatibility path.

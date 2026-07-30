@@ -465,6 +465,13 @@ function OpenLayout(props) {
                 submittedQuery={submittedQuery}
               />
 
+              <QuerySuggestionPrompt
+                isApplying={querySuggestion.isApplying}
+                onKeepResults={querySuggestion.reject}
+                onTrySuggestedSearch={querySuggestion.trySuggestedSearch}
+                suggestion={querySuggestion.suggestion}
+              />
+
               <RefinementChips
                 disabled={status.isFinalizing}
                 followUpNotes={query.followUpNotes}
@@ -559,12 +566,6 @@ function OpenLayout(props) {
         ) : null}
 
         <section className="w-full max-w-[1100px] space-y-4">
-          <QuerySuggestionPrompt
-            isApplying={querySuggestion.isApplying}
-            onKeepResults={querySuggestion.reject}
-            onTrySuggestedSearch={querySuggestion.trySuggestedSearch}
-            suggestion={querySuggestion.suggestion}
-          />
           {hasFinalResults && !hasOpenedModal ? (
             <p role="status" aria-live="polite" className="text-center text-sm text-slate-400">
               ✦&nbsp; Open any result to see why it fits you and what to watch out for.
@@ -583,8 +584,16 @@ function OpenLayout(props) {
           ) : shouldLoadResultsSection ? (
             <div
               ref={resultsViewportRef}
-              className="scroll-mt-28"
+              className="scroll-mt-28 space-y-4"
             >
+              {hasFinalResults ? (
+                <QuerySuggestionPrompt
+                  isApplying={querySuggestion.isApplying}
+                  onKeepResults={querySuggestion.reject}
+                  onTrySuggestedSearch={querySuggestion.trySuggestedSearch}
+                  suggestion={querySuggestion.suggestion}
+                />
+              ) : null}
               <Suspense
                 fallback={(
                   <ResultsSectionFallback
