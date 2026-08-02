@@ -1727,6 +1727,58 @@ describe('server handlers', () => {
     ])
   })
 
+  it('excludes non-new candidate conditions before Haiku, including lowest-price selection', async () => {
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
+      model: 'claude-haiku-4-5-20251001',
+      lockedIds: ['new'],
+      usage: null,
+    })
+    readStoredSearchCacheEntry.mockResolvedValue(createDiscoveryCacheEntry('Nintendo Switch OLED', [
+      createFinalizeCandidate('new', { title: 'Nintendo Switch OLED Model White Joy-Con' }),
+      createFinalizeCandidate('renewed', { title: 'Nintendo Switch OLED Model White Joy-Con Renewed', numericPrice: 267.99 }),
+      createFinalizeCandidate('open-box', { title: 'Open-Box Nintendo Switch OLED Model', numericPrice: 249.99 }),
+    ]))
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(JSON.stringify(createFinalizeDiscoveryBody({
+        query: 'Nintendo Switch OLED',
+        rankingPreference: 'lowest_price',
+      }))),
+      createResponseRecorder(),
+    )
+
+    expect(haikuLockWinnersAndBadges).toHaveBeenCalledWith(expect.objectContaining({
+      candidatePool: expect.objectContaining({
+        candidates: [expect.objectContaining({ id: 'new' })],
+      }),
+    }))
+  })
+
+  it('keeps non-new candidate conditions when the shopper explicitly requests them', async () => {
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
+      model: 'claude-haiku-4-5-20251001',
+      lockedIds: ['renewed'],
+      usage: null,
+    })
+    readStoredSearchCacheEntry.mockResolvedValue(createDiscoveryCacheEntry('Nintendo Switch OLED renewed', [
+      createFinalizeCandidate('new', { title: 'Nintendo Switch OLED Model White Joy-Con' }),
+      createFinalizeCandidate('renewed', { title: 'Nintendo Switch OLED Model White Joy-Con Renewed' }),
+    ]))
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(JSON.stringify(createFinalizeDiscoveryBody({ query: 'Nintendo Switch OLED renewed' }))),
+      createResponseRecorder(),
+    )
+
+    expect(haikuLockWinnersAndBadges).toHaveBeenCalledWith(expect.objectContaining({
+      candidatePool: expect.objectContaining({
+        candidates: expect.arrayContaining([expect.objectContaining({ id: 'renewed' })]),
+      }),
+    }))
+  })
+
   it('caps finalize note length before calling OpenAI', async () => {
     mockFinalizeEnv()
     haikuLockWinnersAndBadges.mockResolvedValue({
@@ -3029,6 +3081,9 @@ describe('server handlers', () => {
         }),
       )
     })
+    expect(miniEnrichSelectedCandidates).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'gpt-5.6-luna' }),
+    )
   })
 
   it('does not write stale mini enrichment onto a newer discovery token for the same query', async () => {

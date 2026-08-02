@@ -189,6 +189,92 @@ function containsTokenSequence(text, tokens) {
   return ` ${text} `.includes(` ${tokens.join(' ')} `)
 }
 
+function compactText(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+function editDistance(left, right) {
+  if (left === right) return 0
+  if (!left || !right) return Math.max(left.length, right.length)
+
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index)
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    let diagonal = previous[0]
+    previous[0] = leftIndex
+
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const saved = previous[rightIndex]
+      previous[rightIndex] = Math.min(
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] + 1,
+        diagonal + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1),
+      )
+      diagonal = saved
+    }
+  }
+
+  return previous[right.length]
+}
+
+function isOneCharacterNearMatch(left, right) {
+  return left.length >= 5 && right.length >= 5 && editDistance(left, right) === 1
+}
+
+function getHighConfidenceSearchCorrection(productQuery, candidates, explicitIdentifierRequirement) {
+  // A correction is deliberately advisory. Unlike an exact, structured brand
+  // match, it never changes the candidate pool or acts as a hard constraint.
+  if (explicitIdentifierRequirement.hasRequirement) return null
+
+  const queryTokens = uniqueTokens(productQuery)
+  const correctionsByBrand = new Map()
+
+  for (const item of candidates) {
+    const brand = String(item?.brand || '').trim()
+    const compactBrand = compactText(brand)
+    if (compactBrand.length < 5) continue
+
+    const matchedBrandToken = queryTokens.find((token) =>
+      isOneCharacterNearMatch(compactText(token), compactBrand),
+    )
+    if (!matchedBrandToken) continue
+
+    const remainingTokens = queryTokens.filter((token) => token !== matchedBrandToken)
+    if (remainingTokens.length === 0) continue
+
+    const titleTokens = uniqueTokens(item?.title || '')
+    const correctedProductTokens = new Map()
+
+    for (const token of remainingTokens) {
+      const titleMatch = titleTokens.find((titleToken) =>
+        titleToken === token || isOneCharacterNearMatch(token, titleToken),
+      )
+      if (titleMatch) correctedProductTokens.set(token, titleMatch)
+    }
+
+    // Brand similarity alone is not enough. The candidate must also prove the
+    // requested product context; this is what keeps "apple sauce" from being
+    // treated as an Apple-electronics correction.
+    if (correctedProductTokens.size === 0) continue
+
+    const suggestedQuery = queryTokens
+      .map((token) => {
+        if (token === matchedBrandToken) return brand
+        return correctedProductTokens.get(token) || token
+      })
+      .join(' ')
+
+    const brandKey = compactBrand
+    correctionsByBrand.set(brandKey, {
+      originalQuery: productQuery,
+      suggestedQuery,
+      source: 'brand_correction',
+    })
+  }
+
+  return correctionsByBrand.size === 1 ? [...correctionsByBrand.values()][0] : null
+}
+
 function getExplicitIdentifierRequirement(productQuery, candidates) {
   const queryTokens = uniqueTokens(productQuery)
   const queryText = normalizedText(productQuery)
@@ -620,6 +706,11 @@ export function getFilteredSearchArtifacts(
   const dedupedCandidates = [...dedupedByProductId.values()]
     .filter((item) => !lacksKnownPositivePrice(item))
   const explicitIdentifierRequirement = getExplicitIdentifierRequirement(productQuery, dedupedCandidates)
+  const searchCorrection = getHighConfidenceSearchCorrection(
+    productQuery,
+    dedupedCandidates,
+    explicitIdentifierRequirement,
+  )
   const identifierEligibleCandidates = dedupedCandidates.filter((item) =>
     passesExplicitIdentifierRequirement(item, explicitIdentifierRequirement, productQuery),
   )
@@ -667,6 +758,7 @@ export function getFilteredSearchArtifacts(
       combinedSearchText: buildQuery(productQuery, details),
       searchState,
       similarQueries: getSimilarQueries(payload),
+      searchCorrection,
       candidates: aiCandidates,
     },
     results: aiCandidates.slice(0, finalResultLimit).map((candidate, index) => ({

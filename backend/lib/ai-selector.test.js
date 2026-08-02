@@ -367,6 +367,9 @@ describe('ai selector', () => {
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
     const prompt = requestBody.input[1].content
 
+    expect(requestBody.model).toBe('gpt-5.6-luna')
+    expect(prompt).toContain('smart, calm shopping editor')
+    expect(prompt).toContain('Do not turn plausible inferences into facts.')
     expect(prompt).toContain('"feature_bullets":["One-hand fold","Compact carry strap"]')
     expect(prompt).toContain('"product_description":"A compact stroller built for airport travel."')
     expect(result.enriched).toEqual([
@@ -488,7 +491,7 @@ describe('ai selector', () => {
 
     expect(fetchMock).not.toHaveBeenCalled()
     expect(result).toEqual({
-      model: 'gpt-5-mini',
+      model: 'gpt-5.6-luna',
       enriched: [],
       enrichedIds: [],
       improvePicksSuggestions: [],

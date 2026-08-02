@@ -155,6 +155,67 @@ describe('result filter', () => {
     expect(artifacts.candidatePool.candidates.map((candidate) => candidate.id)).toEqual(['on', 'brooks'])
   })
 
+  it('offers a close brand spelling as an optional correction without filtering the candidate pool', () => {
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: [
+          createShoppingResult({ product_id: 'hellmanns-real', title: "Hellmann's Real Mayonnaise", brand: "Hellmann's", source: 'Amazon' }),
+          createShoppingResult({ position: 2, product_id: 'hellmanns-light', title: "Hellmann's Light Mayonnaise", brand: "Hellmann's", source: 'Amazon' }),
+          createShoppingResult({ position: 3, product_id: 'dukes', title: "Duke's Real Mayonnaise", brand: "Duke's", source: 'Amazon' }),
+        ],
+      },
+      {
+        productQuery: 'hellmans mayonnaise',
+        diversifyBySource: false,
+        skipHardFilter: true,
+        minimumScore: -1,
+        reasonFallback: 'Returned by the Rainforest API search route',
+      },
+    )
+
+    expect(artifacts.candidatePool.searchCorrection).toEqual({
+      originalQuery: 'hellmans mayonnaise',
+      suggestedQuery: "Hellmann's mayonnaise",
+      source: 'brand_correction',
+    })
+    expect(artifacts.candidatePool.candidates.map((candidate) => candidate.id)).toContain('dukes')
+  })
+
+  it('does not offer an Apple-brand correction for apple sauce', () => {
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: [
+          createShoppingResult({ product_id: 'apple-watch', title: 'Apple Watch Series 10', brand: 'Apple', source: 'Amazon' }),
+          createShoppingResult({ position: 2, product_id: 'applesauce', title: 'Organic Apple Sauce Cups', brand: 'Happy Family', source: 'Amazon' }),
+        ],
+      },
+      {
+        productQuery: 'apple sauce',
+        diversifyBySource: false,
+        reasonFallback: 'Returned by the Rainforest API search route',
+      },
+    )
+
+    expect(artifacts.candidatePool.searchCorrection).toBeNull()
+  })
+
+  it('corrects both the brand and product typo when one candidate proves both', () => {
+    const artifacts = getFilteredSearchArtifacts(
+      {
+        shopping_results: [
+          createShoppingResult({ product_id: 'hellmanns-real', title: "Hellmann's Real Mayonnaise", brand: "Hellmann's", source: 'Amazon' }),
+        ],
+      },
+      {
+        productQuery: 'hellmans mayonaise',
+        diversifyBySource: false,
+        reasonFallback: 'Returned by the Rainforest API search route',
+      },
+    )
+
+    expect(artifacts.candidatePool.searchCorrection?.suggestedQuery).toBe("Hellmann's mayonnaise")
+  })
+
   it.each([
     ['Rolex watch', [['rolex', 'Rolex Datejust Watch', 'Rolex'], ['homage', 'Pagani Design Homage Watch', 'Pagani'], ['book', 'Rolex Watch History Book', 'Rolex']], ['rolex']],
     ['Rolex Submariner watch', [['submariner', 'Rolex Submariner Watch', 'Rolex'], ['datejust', 'Rolex Datejust Watch', 'Rolex'], ['seiko', 'Seiko Automatic Watch', 'Seiko']], ['submariner']],

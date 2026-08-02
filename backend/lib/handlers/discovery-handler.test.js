@@ -216,4 +216,28 @@ describe('discovery handler query moderation ordering', () => {
     expect(mocks.fetchRainforestArtifacts).not.toHaveBeenCalled()
     expect(response.statusCode).toBe(200)
   })
+
+  it('does not start an AI query-quality review when cached discovery has a brand correction', async () => {
+    mocks.beginOpenAiQueryModeration.mockReturnValue({
+      promise: Promise.resolve({ outcome: 'allow', categories: [], durationMs: 1 }),
+      synchronous: false,
+    })
+    const cached = createCachedSnapshot()
+    cached.cachedEntry.candidatePool.searchCorrection = {
+      originalQuery: 'hellmans mayonaise',
+      suggestedQuery: "Hellmann's mayonnaise",
+      source: 'brand_correction',
+    }
+    mocks.readCachedSearchSnapshot.mockResolvedValue(cached)
+    const response = createResponseRecorder()
+
+    await handleRainforestDiscoverySearch(
+      new URL('http://localhost/api/search/rainforest-discover?query=hellmans%20mayonaise'),
+      response,
+      { headers: { 'x-forwarded-for': '203.0.113.30' } },
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(mocks.startQueryQualityReview).not.toHaveBeenCalled()
+  })
 })

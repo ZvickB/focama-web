@@ -453,14 +453,16 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       cachedOrFallbackUsed: true,
     })
 
-    startQueryQualityReview({
-      normalizedQuery,
-      amazonDomain,
-      candidatePool: tokenizedDiscovery.cachedEntry.candidatePool,
-      previewResults: normalizedCachedResults,
-      discoveryToken: tokenizedDiscovery.discoveryToken,
-      discoveryScope: getDiscoverySessionScope(tokenizedDiscovery.discoveryToken),
-    })
+    if (!tokenizedDiscovery.cachedEntry.candidatePool?.searchCorrection?.suggestedQuery) {
+      startQueryQualityReview({
+        normalizedQuery,
+        amazonDomain,
+        candidatePool: tokenizedDiscovery.cachedEntry.candidatePool,
+        previewResults: normalizedCachedResults,
+        discoveryToken: tokenizedDiscovery.discoveryToken,
+        discoveryScope: getDiscoverySessionScope(tokenizedDiscovery.discoveryToken),
+      })
+    }
     return
   }
 
@@ -697,17 +699,19 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       cachedOrFallbackUsed: Boolean(fallbackFrom),
     })
 
-    startQueryQualityReview({
-      normalizedQuery,
-      amazonDomain,
-      candidatePool: {
-        ...artifacts.candidatePool,
+    if (!artifacts.candidatePool?.searchCorrection?.suggestedQuery) {
+      startQueryQualityReview({
+        normalizedQuery,
         amazonDomain,
-      },
-      previewResults: artifacts.results,
-      discoveryToken,
-      discoveryScope: discoverySessionScope,
-    })
+        candidatePool: {
+          ...artifacts.candidatePool,
+          amazonDomain,
+        },
+        previewResults: artifacts.results,
+        discoveryToken,
+        discoveryScope: discoverySessionScope,
+      })
+    }
   } catch (error) {
     logSearchFlowEvent('rainforest_discovery_failed', {
       route: '/api/search/rainforest-discover',

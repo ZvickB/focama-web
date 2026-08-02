@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { sanitizeFinalizeCandidate } from './finalize-candidate.js'
+import {
+  allowsNonNewCondition,
+  filterNonNewConditionCandidates,
+  sanitizeFinalizeCandidate,
+} from './finalize-candidate.js'
 
 describe('sanitizeFinalizeCandidate', () => {
   it('rejects a candidate without the server-required identity fields', () => {
@@ -33,5 +37,41 @@ describe('sanitizeFinalizeCandidate', () => {
       }),
       isValid: true,
     }))
+  })
+})
+
+describe('filterNonNewConditionCandidates', () => {
+  const candidates = [
+    { id: 'new', title: 'Nintendo Switch OLED Model White Joy-Con' },
+    { id: 'renewed', title: 'Nintendo Switch OLED Model White Joy-Con Renewed' },
+    { id: 'open-box', title: 'Open-Box Nintendo Switch OLED Model' },
+  ]
+
+  it('keeps only new-condition candidates by default', () => {
+    expect(filterNonNewConditionCandidates({
+      candidates,
+      productQuery: 'Nintendo Switch OLED',
+    })).toEqual({
+      allowsNonNew: false,
+      candidates: [candidates[0]],
+      excludedCount: 2,
+    })
+  })
+
+  it('allows non-new listings only when the shopper explicitly requests them', () => {
+    expect(allowsNonNewCondition('refurbished Nintendo Switch OLED')).toBe(true)
+    expect(filterNonNewConditionCandidates({
+      candidates,
+      productQuery: 'Nintendo Switch OLED',
+      userContext: 'Open-box or renewed is fine if it is a good value.',
+    })).toEqual({
+      allowsNonNew: true,
+      candidates,
+      excludedCount: 0,
+    })
+  })
+
+  it('does not treat a negative condition mention as opt-in', () => {
+    expect(allowsNonNewCondition('Nintendo Switch OLED', 'No renewed or used items. New only.')).toBe(false)
   })
 })

@@ -28,7 +28,10 @@ import {
   resolveDiscoveryContext,
 } from './discovery-handler.js'
 import { resolveFinalizeRequestContext } from './finalize-context.js'
-import { sanitizeFinalizeCandidate } from './finalize-candidate.js'
+import {
+  filterNonNewConditionCandidates,
+  sanitizeFinalizeCandidate,
+} from './finalize-candidate.js'
 import { composePreferenceShortlist } from '../ranking-preference-policy.js'
 import {
   FINALIZE_BODY_LIMIT_BYTES,
@@ -472,6 +475,11 @@ export async function handleFinalizeSelection(request, response) {
     exclusionSet.size > 0
       ? candidatePool.candidates.filter((candidate) => !exclusionSet.has(String(candidate.id)))
       : candidatePool.candidates
+  const conditionEligibleCandidates = filterNonNewConditionCandidates({
+    candidates: candidatesAfterExclusions,
+    productQuery: sanitizedDiscoveryContext.normalizedQuery,
+    userContext: refinedDetails,
+  }).candidates
   const hasPrimeRequirement = hasPrimeDeliveryRequirement(
     sanitizedDiscoveryContext.normalizedQuery,
     followUpNotes,
@@ -479,11 +487,11 @@ export async function handleFinalizeSelection(request, response) {
     priorities.join(' '),
   )
   const primeEligibleCandidates = hasPrimeRequirement
-    ? candidatesAfterExclusions.filter((candidate) => candidate.isPrime)
+    ? conditionEligibleCandidates.filter((candidate) => candidate.isPrime)
     : []
   const eligibleCandidates = primeEligibleCandidates.length > 0
     ? primeEligibleCandidates
-    : candidatesAfterExclusions
+    : conditionEligibleCandidates
 
   const nextCandidatePool = {
     ...candidatePool,
@@ -818,7 +826,7 @@ export async function handleFinalizeSelection(request, response) {
 
     // Fire off product details and mini enrichment async; do not block the response.
     if (usedHaikuSelection) {
-      const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_FINALIZE_MODEL
+      const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || DEFAULT_FINALIZE_MODEL
       const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
 
       runInBackground((async () => {

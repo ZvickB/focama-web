@@ -1,5 +1,55 @@
 import { sanitizeStringList, truncateText } from '../text-sanitizers.js'
 
+const NON_NEW_CONDITION_PATTERN = /\b(?:renewed|refurbished|refurb|remanufactured|open[ -]?box|pre[ -]?owned|used|second[ -]?hand|restored)\b/i
+const NEW_ONLY_PATTERN = /\b(?:brand[- ]?new|new(?:\s+(?:items?|products?|condition))?\s+only)\b/i
+const NON_NEW_CONDITION_NEGATION_PATTERN = new RegExp(
+  String.raw`(?:\b(?:no|not|without|avoid|exclude)\b[^.!?]{0,40}\b(?:renewed|refurbished|refurb|remanufactured|open[ -]?box|pre[ -]?owned|used|second[ -]?hand|restored)\b|\b(?:renewed|refurbished|refurb|remanufactured|open[ -]?box|pre[ -]?owned|used|second[ -]?hand|restored)\b[^.!?]{0,30}\b(?:not|disallowed|unacceptable)\b)`,
+  'i',
+)
+
+function normalizeConditionText(...values) {
+  return values
+    .filter((value) => typeof value === 'string')
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function allowsNonNewCondition(productQuery = '', userContext = '') {
+  const text = normalizeConditionText(productQuery, userContext)
+
+  return Boolean(
+    text &&
+    NON_NEW_CONDITION_PATTERN.test(text) &&
+    !NEW_ONLY_PATTERN.test(text) &&
+    !NON_NEW_CONDITION_NEGATION_PATTERN.test(text),
+  )
+}
+
+export function hasNonNewCondition(candidate = {}) {
+  return NON_NEW_CONDITION_PATTERN.test(normalizeConditionText(
+    candidate.title,
+    candidate.description,
+    candidate.tag,
+    Array.isArray(candidate.extensions) ? candidate.extensions.join(' ') : '',
+    Array.isArray(candidate.reasons) ? candidate.reasons.join(' ') : '',
+  ))
+}
+
+export function filterNonNewConditionCandidates({ candidates = [], productQuery = '', userContext = '' } = {}) {
+  const allowsNonNew = allowsNonNewCondition(productQuery, userContext)
+  const source = Array.isArray(candidates) ? candidates : []
+  const filteredCandidates = allowsNonNew
+    ? source
+    : source.filter((candidate) => !hasNonNewCondition(candidate))
+
+  return {
+    allowsNonNew,
+    candidates: filteredCandidates,
+    excludedCount: source.length - filteredCandidates.length,
+  }
+}
+
 export function sanitizeFinalizeCandidate(candidate, index) {
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     return {

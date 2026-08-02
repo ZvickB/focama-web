@@ -220,10 +220,14 @@ export function QuerySuggestionPrompt({
     >
       <div className="min-w-0 space-y-1 text-left">
         <p className="text-sm font-medium text-slate-600">
-          We searched for &quot;{suggestion.originalQuery || suggestion.query}&quot;.
+          {suggestion.source === 'brand_correction'
+            ? 'We found a close brand match in the results.'
+            : <>We searched for &quot;{suggestion.originalQuery || suggestion.query}&quot;.</>}
         </p>
         <p className="break-words text-base font-semibold text-[#155f70]">
-          Try &quot;{suggestion.suggestedQuery}&quot; instead?
+          {suggestion.source === 'brand_correction'
+            ? <>Looking for &quot;{suggestion.suggestedQuery}&quot;?</>
+            : <>Try &quot;{suggestion.suggestedQuery}&quot; instead?</>}
         </p>
       </div>
       <div className="mt-3 flex flex-col gap-2 sm:mt-0 sm:flex-row sm:items-center">
@@ -233,7 +237,7 @@ export function QuerySuggestionPrompt({
           className="h-11 w-full rounded-2xl bg-primary px-4 text-sm text-primary-foreground shadow-[0_14px_32px_-24px_rgba(15,97,117,0.32)] hover:bg-primary/90 sm:w-auto"
           onClick={onTrySuggestedSearch}
         >
-          {isApplying ? 'Starting...' : 'Try suggested search'}
+          {isApplying ? 'Starting...' : suggestion.source === 'brand_correction' ? 'Try corrected search' : 'Try suggested search'}
         </Button>
         <button
           type="button"

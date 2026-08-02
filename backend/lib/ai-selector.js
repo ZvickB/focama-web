@@ -9,7 +9,7 @@ export const DEFAULT_OPENAI_MODEL = 'gpt-5-mini'
 export const DEFAULT_NANO_MODEL = 'gpt-5.4-nano'
 export const DEFAULT_HAIKU_MODEL = 'claude-haiku-4-5-20251001'
 export const DEFAULT_REFINEMENT_MODEL = DEFAULT_OPENAI_MODEL
-export const DEFAULT_FINALIZE_MODEL = DEFAULT_OPENAI_MODEL
+export const DEFAULT_FINALIZE_MODEL = 'gpt-5.6-luna'
 const DESCRIPTION_BOILERPLATE_TOKENS = new Set([
   'at',
   'buy',
@@ -454,6 +454,7 @@ function buildNanoLockAndBadgesPrompt({
       'Lowest prices selected.',
       '',
       'Return all candidates that match the search and stated requirements. Exclude only clear mismatches, accessories, duplicates, or products that violate a requirement.',
+      'Treat product condition as a requirement: select new products only. Do not select renewed, refurbished, used, open-box, pre-owned, restored, or remanufactured items unless the Product query or User context explicitly requests that condition.',
       '',
       ...brandDecisionLines,
       '',
@@ -494,6 +495,7 @@ function buildNanoLockAndBadgesPrompt({
     '6. If the query names a brand/model, treat it as a strong preference and fill matching eligible slots first. Only use other brands/models when matching candidates are weak, duplicated, unavailable, or clearly worse for the user context.',
     '7. Choose genuinely different products. Never count a colorway, finish, seller, or cosmetic variant of the same model as another recommendation. Different models, generations, capacities, widths, feature tiers, or use cases are valid alternatives. Use duplicateFamilyKey, title similarity, source, and attributes to spot duplicates.',
     '8. Build the best set, not just the top individual scores. Add diversity across use case, price tier, or style only after eligibility, relevance, and quality are satisfied.',
+    '9. Treat product condition as eligibility. Select new products only; do not select renewed, refurbished, used, open-box, pre-owned, restored, or remanufactured items unless the Product query or User context explicitly requests that condition.',
     '',
     ...brandDecisionLines,
     rankingStrategy.summary,
@@ -552,7 +554,7 @@ function buildMiniEnrichmentPrompt({
   const preferenceGuidance = buildMiniPreferenceGuidance(rankingPreference)
 
   return [
-    'Write a short explanation for each of these selected products. Write like a trusted assistant, not a salesperson.',
+    'Write a short explanation for each of these selected products. Write like a smart, calm shopping editor: decisive, concise, pleasant to read, and never salesy.',
     'The shortlist is already decided. Do not change the order or swap any product.',
     'The selected products are ordered from best overall fit to weakest acceptable fit.',
     'Write the first product as the confident hero recommendation: explain why it is the strongest match for the shopper\'s actual need while still keeping the caveat honest.',
@@ -561,7 +563,8 @@ function buildMiniEnrichmentPrompt({
     '1. fit_reason: One or two sentences explaining why it was picked for this specific need. Lead with what the product actually does for the use case — not with a quote of the user\'s preference. Do not open with "Because you mentioned…" or "Given that you said…". If user context shaped the pick, weave it in naturally, but the sentence should read like a recommendation, not a justification. Avoid superlatives, hype phrases, and generic positives.',
     '2. caveat: One honest drawback or caveat — practical (e.g. exceeds budget, heavier than alternatives) or contextual (e.g. better if X matters more than Y). If the product conflicts with something the user stated (e.g. a different material, higher price), flag it here, not in fit_reason. Do not skip this even if the pick is strong.',
     'Use feature bullets and any richer product description when they are provided. Prefer concrete product attributes over generic praise.',
-    'If richer product detail is missing, fall back to the basic title/price/rating context and do not invent attributes.',
+    'Every material capability, compatibility, performance, size, durability, or comparative claim must be directly supported by the supplied product fields. Do not turn plausible inferences into facts.',
+    'If richer product detail is missing, fall back to the basic title/price/rating context. Mention an unlisted detail only when that uncertainty changes the buying decision; do not invent attributes.',
     'Also write exactly 3 distinct improvement suggestions for a shopper who may later reject these picks.',
     'Infer plausible tradeoffs or missing priorities from the search and selected products, but do not claim to know why the shopper is unhappy.',
     'Each suggestion needs a short chip label plus a fuller first-person feedback sentence the shopper could send to improve the next search.',
@@ -744,7 +747,7 @@ export async function miniEnrichSelectedCandidates(
     lockedIds,
     candidatePool,
     apiKey,
-    model = DEFAULT_OPENAI_MODEL,
+    model = DEFAULT_FINALIZE_MODEL,
     rankingPreference = RANKING_PREFERENCES.BALANCED,
   },
   fetchImpl = fetch,

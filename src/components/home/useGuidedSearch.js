@@ -1285,12 +1285,23 @@ export function useGuidedSearch() {
         setSubmittedAmazonDomain(responseAmazonDomain)
         setCandidatePool(payload.candidatePool || null)
         setPreviewResults(payload.previewResults || [])
-        startQueryQualityPolling({
-          token: payload.discoveryToken,
-          query: normalizedQuery,
-          searchId: nextSearchId,
-          amazonDomain: responseAmazonDomain,
-        })
+        const searchCorrection = payload.candidatePool?.searchCorrection
+        if (searchCorrection?.suggestedQuery) {
+          setQuerySuggestion({
+            ...searchCorrection,
+            token: payload.discoveryToken,
+            query: normalizedQuery,
+            amazonDomain: responseAmazonDomain,
+            searchId: nextSearchId,
+          })
+        } else {
+          startQueryQualityPolling({
+            token: payload.discoveryToken,
+            query: normalizedQuery,
+            searchId: nextSearchId,
+            amazonDomain: responseAmazonDomain,
+          })
+        }
         setRequestTiming((current) => ({
           ...current,
           discover: payload.timing || null,
