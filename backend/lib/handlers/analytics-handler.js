@@ -32,6 +32,7 @@ const MOBILE_ANALYTICS_EVENTS = new Set([
   'candidate_recovery_accepted',
   'candidate_recovery_kept_partial_picks',
   'candidate_recovery_shown',
+  'enrichment_diagnostic',
   'refinement_completed',
   'refinement_presented',
   'results_shown',
@@ -314,6 +315,16 @@ export async function handleMobileAnalyticsTrack(request, response) {
                 goodCandidateCount: Math.max(0, Math.min(Number(payload.goodCandidateCount) || 0, 3)),
                 suggestedQueryLength: Math.max(0, Math.min(Number(payload.suggestedQueryLength) || 0, 200)),
               }
+            : event === 'enrichment_diagnostic'
+              ? {
+                  elapsedMs: Math.max(0, Math.min(Number(payload.elapsedMs) || 0, 65000)),
+                  entryCount: Math.max(0, Math.min(Number(payload.entryCount) || 0, LIVE_RESULT_FILTER_CONFIG.finalResultLimit)),
+                  outcome: ['suggestions_ready', 'ready_without_suggestions', 'timed_out', 'poll_errors'].includes(payload.outcome)
+                    ? payload.outcome
+                    : 'unknown',
+                  pollCount: Math.max(0, Math.min(Number(payload.pollCount) || 0, 50)),
+                  suggestionCount: Math.max(0, Math.min(Number(payload.suggestionCount) || 0, 3)),
+                }
           : {},
     eventType: `mobile.${event}`,
   })
