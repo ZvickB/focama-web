@@ -11,7 +11,7 @@ import {
 
 // variant='header' — smaller, subtler trigger; used in the site header
 // variant='default' — standard full-size pill (fallback)
-export function AmazonStorePill({ variant = 'default' }) {
+export function AmazonStorePill({ align = 'responsive', variant = 'default' }) {
   const {
     detectedCountryCode,
     resolvedAmazonDomain,
@@ -136,6 +136,8 @@ export function AmazonStorePill({ variant = 'default' }) {
 
   const chevronClass =
     variant === 'header' ? 'h-3 w-3 text-slate-300 transition-transform duration-150' : 'h-3.5 w-3.5 text-slate-400 transition-transform duration-150'
+  const popoverAlignmentClass =
+    align === 'end' ? 'right-0' : 'left-0 lg:left-auto lg:right-0'
 
   return (
     <div ref={containerRef} className="relative inline-block">
@@ -159,7 +161,7 @@ export function AmazonStorePill({ variant = 'default' }) {
           role="listbox"
           aria-label="Amazon store options"
           onKeyDown={handlePopoverKeyDown}
-          className="absolute right-0 top-full z-50 mt-1.5 w-64 max-w-[calc(100vw-2rem)] rounded-[20px] border border-stone-200 bg-white py-1.5 shadow-[0_8px_32px_-8px_rgba(15,23,42,0.18)]"
+          className={`absolute top-full z-50 mt-1.5 w-64 max-w-[calc(100vw-2rem)] rounded-[20px] border border-stone-200 bg-white py-1.5 shadow-[0_8px_32px_-8px_rgba(15,23,42,0.18)] ${popoverAlignmentClass}`}
         >
           <div className="relative">
           <div

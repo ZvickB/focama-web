@@ -647,7 +647,7 @@ function SiteLayout() {
           </div>
         </div>
         <div
-          className={`overflow-hidden border-t border-[var(--site-shell-border)] bg-[var(--site-mobile-menu-bg)] transition-all duration-300 ease-out sm:hidden ${
+          className={`${isMobileMenuOpen ? 'overflow-visible' : 'overflow-hidden'} border-t border-[var(--site-shell-border)] bg-[var(--site-mobile-menu-bg)] transition-all duration-300 ease-out sm:hidden ${
             isMobileMenuOpen ? 'max-h-[28rem] opacity-100' : 'max-h-0 opacity-0'
           }`}
         >
@@ -723,7 +723,7 @@ function SiteLayout() {
             {isHomePage ? (
               <div className="flex items-center justify-between gap-3 rounded-[22px] border border-white/70 bg-white/72 px-3 py-2.5 text-xs text-slate-500 shadow-[0_14px_34px_-28px_rgba(15,23,42,0.22)]">
                 <span className="font-medium uppercase tracking-[0.12em] text-slate-400">Amazon store</span>
-                <AmazonStorePill variant="header" />
+                <AmazonStorePill align="end" variant="header" />
               </div>
             ) : null}
           </div>
