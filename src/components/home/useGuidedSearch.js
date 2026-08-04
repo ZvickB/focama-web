@@ -1661,7 +1661,7 @@ export function useGuidedSearch() {
     }
   }
 
-  async function handleFinalizeRefinement() {
+  async function handleFinalizeRefinement(followUpNotesOverride) {
     if (!candidatePool || !submittedQuery) {
       return
     }
@@ -1675,12 +1675,19 @@ export function useGuidedSearch() {
       return
     }
 
-    const normalizedFollowUpNotes = followUpNotes.trim()
+    const effectiveFollowUpNotes = typeof followUpNotesOverride === 'string'
+      ? followUpNotesOverride
+      : followUpNotes
+    const normalizedFollowUpNotes = effectiveFollowUpNotes.trim()
+
+    if (effectiveFollowUpNotes !== followUpNotes) {
+      setFollowUpNotes(effectiveFollowUpNotes)
+    }
 
     if (analyticsSearchIdRef.current && analyticsSessionIdRef.current) {
       trackSearchRun({
         productQuery: submittedQuery,
-        details: followUpNotes,
+        details: effectiveFollowUpNotes,
         enteredAiRefinement: Boolean(normalizedFollowUpNotes),
         usedShowProductsNow: showPreviewResults,
         completedFinalize: false,
@@ -1738,7 +1745,7 @@ export function useGuidedSearch() {
         amazonDomain: finalizeAmazonDomain,
         discoveryToken: finalizeDiscoveryToken,
         originalCandidatePool: finalizeCandidatePool,
-        followUpNotes,
+        followUpNotes: effectiveFollowUpNotes,
         rejectionFeedback: '',
         retryCount: 0,
         excludedCandidateIds: [],
@@ -2135,6 +2142,7 @@ export function useGuidedSearch() {
     },
     status: {
       errorMessage,
+      hasCompletedFinalize: finalizeMutation.isSuccess,
       hasStartedSearch,
       isDiscovering,
       isEnrichmentReady,

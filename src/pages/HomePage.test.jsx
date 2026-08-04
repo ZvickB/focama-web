@@ -134,9 +134,9 @@ describe('HomePage', () => {
       await screen.findByText(/what should we optimize for with this stroller/i),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /show focused picks/i })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /skip the question and show results/i })[0]).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /skip and show results/i })[0]).toBeInTheDocument()
     expect(
-      await screen.findByText(/your shortlist is taking shape\./i),
+      await screen.findByText(/finding your best options/i),
     ).toBeInTheDocument()
   })
 
@@ -258,7 +258,7 @@ describe('HomePage', () => {
     )
   })
 
-  it('shows refinement chips and applies them to the notes box', async () => {
+  it('keeps a selected question answer separate from optional notes', async () => {
     const user = userEvent.setup()
     const fetchMock = vi
       .fn()
@@ -281,19 +281,34 @@ describe('HomePage', () => {
         headers: { get: () => '' },
         text: async () =>
           JSON.stringify({
-            prompt: 'What should we optimize for with this stroller?',
+            prompt: 'What matters most for this stroller?',
             alternatePrompt: 'Where will you use this stroller most often?',
-            helperText: 'Pick anything that matters.',
+            helperText: '',
             followUpPlaceholder: 'Anything else?',
-            refinementSuggestions: [
-              { label: 'Easy folding' },
+            answerOptions: [
+              { label: 'Easy folding', prompt: 'Easy folding matters most to me.' },
               {
                 label: 'Travel fit',
                 prompt: 'I need this to fit airplane travel and fold quickly.',
               },
-              { label: 'Good value' },
+              { label: 'Comfort', prompt: 'Comfort matters most to me.' },
+              { label: 'No preference', prompt: 'I do not have a preference here.' },
+            ],
+            alternateAnswerOptions: [
+              { label: 'Air travel', prompt: 'I will mostly use it for air travel.' },
+              { label: 'City sidewalks', prompt: 'I will mostly use it on city sidewalks.' },
+              { label: 'Mixed use', prompt: 'I will use it in several settings.' },
+              { label: 'Not sure', prompt: 'I am not sure where I will use it most.' },
             ],
           }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => '' },
+        text: async () => JSON.stringify({
+          results: [createMockResult()],
+          selection: { mode: 'ai' },
+        }),
       })
 
     vi.stubGlobal('fetch', fetchMock)
@@ -302,34 +317,43 @@ describe('HomePage', () => {
 
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
-    await screen.findByText(/what should we optimize for with this stroller/i)
+    await screen.findByText(/what matters most for this stroller/i)
 
-    const refinementTextarea = screen.getByLabelText(/tell us more/i)
+    const refinementTextarea = screen.getByLabelText(/anything else/i)
     expect(screen.getByRole('button', { name: 'Easy folding' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Fits my space' })).not.toBeInTheDocument()
 
     await user.type(refinementTextarea, 'under $200')
     await user.click(screen.getByRole('button', { name: 'Easy folding' }))
-    expect(refinementTextarea).toHaveValue('under $200, Easy folding')
+    expect(refinementTextarea).toHaveValue('under $200')
+    expect(screen.getByRole('button', { name: 'Easy folding' })).toHaveAttribute('aria-pressed', 'true')
 
     await user.click(screen.getByRole('button', { name: 'Travel fit' }))
-    expect(refinementTextarea).toHaveValue('I need this to fit airplane travel and fold quickly.')
+    expect(refinementTextarea).toHaveValue('under $200')
+    expect(screen.getByRole('button', { name: 'Travel fit' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Easy folding' })).toHaveAttribute('aria-pressed', 'false')
 
     await user.click(screen.getByRole('button', { name: 'Get a different question' }))
     expect(screen.getByRole('status', { name: /finding a different question/i })).toBeInTheDocument()
-    expect(screen.getByText('Pick anything that matters.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Easy folding' })).toBeInTheDocument()
 
     expect(
       await screen.findByText(/where will you use this stroller most often/i, {}, { timeout: 1500 }),
     ).toBeInTheDocument()
-    expect(screen.queryByText(/what should we optimize for with this stroller/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Travel fit' })).toBeInTheDocument()
-    expect(refinementTextarea).toHaveValue('I need this to fit airplane travel and fold quickly.')
+    expect(screen.queryByText(/what matters most for this stroller/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Air travel' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Travel fit' })).not.toBeInTheDocument()
+    expect(refinementTextarea).toHaveValue('under $200')
 
     await user.type(refinementTextarea, ' Mostly on city sidewalks.')
-    expect(refinementTextarea).toHaveValue(
-      'I need this to fit airplane travel and fold quickly. Mostly on city sidewalks.',
+    expect(refinementTextarea).toHaveValue('under $200 Mostly on city sidewalks.')
+
+    await user.click(screen.getByRole('button', { name: 'City sidewalks' }))
+    await user.click(screen.getByRole('button', { name: /show focused picks/i }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body).followUpNotes).toBe(
+      'I will mostly use it on city sidewalks. under $200 Mostly on city sidewalks.',
     )
   })
 
@@ -398,7 +422,7 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /start search/i }))
 
     // Wait for refinement area to confirm search has started
-    await screen.findByLabelText(/tell us more/i)
+    await screen.findByLabelText(/anything else/i)
 
     // Switch marketplace via the header store pill (two pills exist — desktop + mobile — pick the first)
     await user.click(screen.getAllByRole('button', { name: /change amazon region/i })[0])
@@ -430,7 +454,7 @@ describe('HomePage', () => {
       )
     })
 
-    await user.click(screen.getAllByRole('button', { name: /skip the question and show results/i })[0])
+    await user.click(screen.getAllByRole('button', { name: /skip and show results/i })[0])
 
     expect(await findVisibleResultTitle('Canada stroller result')).toBeInTheDocument()
     expect(screen.queryByText('Stale stroller result')).not.toBeInTheDocument()
@@ -509,7 +533,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/anything else/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
 
     expect(String(fetchMock.mock.calls[0][0])).toContain('/api/search/rainforest-discover?query=stroller&amazonDomain=amazon.ca')
@@ -846,7 +870,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/anything else/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
 
     expect(
@@ -929,7 +953,7 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
 
-    const refinementTextarea = screen.getByLabelText(/tell us more/i)
+    const refinementTextarea = screen.getByLabelText(/anything else/i)
     await user.type(refinementTextarea, 'comfort matters most')
     await user.keyboard('{Enter}')
 
@@ -983,7 +1007,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.click(screen.getAllByRole('button', { name: /skip the question and show results/i })[0])
+    await user.click(screen.getAllByRole('button', { name: /skip and show results/i })[0])
 
     expect(await findVisibleResultTitle('Travel stroller')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /show focused picks/i })).toBeInTheDocument()
@@ -1036,7 +1060,7 @@ describe('HomePage', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.click(screen.getAllByRole('button', { name: /skip the question and show results/i })[0])
+    await user.click(screen.getAllByRole('button', { name: /skip and show results/i })[0])
     expect(await findVisibleResultTitle('Travel stroller')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /new search/i }))

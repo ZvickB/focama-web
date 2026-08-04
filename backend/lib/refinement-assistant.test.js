@@ -41,6 +41,11 @@ describe('refinement assistant', () => {
             { label: 'Easy travel', prompt: 'I need something that is simple to carry while traveling' },
             { label: 'Comfort first', prompt: 'Comfort matters most for longer use' },
           ],
+          alternate_refinement_suggestions: [
+            { label: 'At home', prompt: 'I will mostly use these at home.' },
+            { label: 'At work', prompt: 'I will mostly use these at work.' },
+            { label: 'While traveling', prompt: 'I will mostly use these while traveling.' },
+          ],
         }),
       }),
     })
@@ -103,6 +108,11 @@ describe('refinement assistant', () => {
               { label: 'Compact size', prompt: 'I need something compact and easy to store' },
               { label: 'Long lasting', prompt: 'Durability matters more than extra features' },
             ],
+            alternate_refinement_suggestions: [
+              { label: 'Every day', prompt: 'I expect to use it every day.' },
+              { label: 'A few times weekly', prompt: 'I expect to use it a few times each week.' },
+              { label: 'Occasionally', prompt: 'I expect to use it occasionally.' },
+            ],
           }),
         },
       ],
@@ -159,6 +169,11 @@ describe('refinement assistant', () => {
             { label: 'Long battery', prompt: 'Battery life is important — I want it to last a full day' },
             { label: 'Comfort fit', prompt: 'Comfort is a priority for me, especially for extended use' },
           ],
+          alternate_refinement_suggestions: [
+            { label: 'Bulky fit', prompt: 'I want to avoid a bulky fit.' },
+            { label: 'Short battery', prompt: 'I want to avoid short battery life.' },
+            { label: 'Weak isolation', prompt: 'I want to avoid weak noise isolation.' },
+          ],
         }),
       }),
     })
@@ -171,11 +186,17 @@ describe('refinement assistant', () => {
       fetchMock,
     )
 
-    expect(result).toEqual({
+    expect(result).toEqual(expect.objectContaining({
       prompt: 'What matters most here: portability, comfort, or battery life?',
       alternatePrompt: 'Is there anything you want to avoid?',
-      helperText: 'Or write whatever is important to you. Feel free to write in natural language.',
-      followUpPlaceholder: 'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
+      helperText: '',
+      followUpPlaceholder: 'Budget, size, must-haves, or anything you want to avoid...',
+      answerOptions: [
+        { label: 'Travel use', prompt: 'I need something that works well for travel and is easy to carry' },
+        { label: 'Long battery', prompt: 'Battery life is important — I want it to last a full day' },
+        { label: 'Comfort fit', prompt: 'Comfort is a priority for me, especially for extended use' },
+        { label: 'No preference', prompt: 'I do not have a preference here.' },
+      ],
       refinementSuggestions: [
         { label: 'Travel use', prompt: 'I need something that works well for travel and is easy to carry' },
         { label: 'Long battery', prompt: 'Battery life is important — I want it to last a full day' },
@@ -201,7 +222,7 @@ describe('refinement assistant', () => {
         generatedAt: expect.any(String),
       },
       queryFramingMode: 'question_fast',
-    })
+    }))
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.any(String),
@@ -220,6 +241,7 @@ describe('refinement assistant', () => {
       'prompt',
       'alternate_prompt',
       'refinement_suggestions',
+      'alternate_refinement_suggestions',
     ])
     expect(parsedBody.text.format.schema.properties).not.toHaveProperty('tradeoff_axes')
   })
@@ -244,6 +266,11 @@ describe('refinement assistant', () => {
             { label: 'Easy cleaning', prompt: 'I want something that is easy to clean after use' },
             { label: 'Under $200', prompt: 'My budget is under $200' },
           ],
+          alternate_refinement_suggestions: [
+            { label: 'Too loud', prompt: 'I want to avoid a grinder that is too loud.' },
+            { label: 'Too large', prompt: 'I want to avoid a grinder that takes too much space.' },
+            { label: 'Hard to clean', prompt: 'I want to avoid a grinder that is hard to clean.' },
+          ],
         }),
       }),
     })
@@ -258,8 +285,8 @@ describe('refinement assistant', () => {
 
     expect(result.prompt.length).toBeLessThanOrEqual(140)
     expect(result.alternatePrompt.length).toBeLessThanOrEqual(140)
-    expect(result.helperText).toBe('Or write whatever is important to you. Feel free to write in natural language.')
-    expect(result.followUpPlaceholder).toBe('Example: I want something lightweight for daily travel, under $200, and easy to clean.')
+    expect(result.helperText).toBe('')
+    expect(result.followUpPlaceholder).toBe('Budget, size, must-haves, or anything you want to avoid...')
     expect(result.refinementSuggestions).toEqual([
       { label: 'Daily use', prompt: 'I plan to use this every day so durability matters' },
       { label: 'Easy cleaning', prompt: 'I want something that is easy to clean after use' },
@@ -271,5 +298,42 @@ describe('refinement assistant', () => {
         query: 'coffee grinder',
       }),
     )
+  })
+
+  it('keeps fallback questions matched to fallback answers when model options are incomplete', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          prompt: 'A question whose answers are missing?',
+          alternate_prompt: 'Another question whose answers are missing?',
+          refinement_suggestions: [{ label: 'Only one', prompt: 'Only one answer.' }],
+          alternate_refinement_suggestions: [],
+        }),
+      }),
+    })
+
+    const result = await generateRefinementPrompt(
+      {
+        productQuery: 'desk lamp',
+        apiKey: 'test-key',
+      },
+      fetchMock,
+    )
+
+    expect(result.prompt).toBe('What matters most when choosing your desk lamp?')
+    expect(result.answerOptions.map((option) => option.label)).toEqual([
+      'Best value',
+      'Easiest to use',
+      'Best fit',
+      'No preference',
+    ])
+    expect(result.alternatePrompt).toBe('What would make a desk lamp a poor fit?')
+    expect(result.alternateAnswerOptions.map((option) => option.label)).toEqual([
+      'Too expensive',
+      'Too complicated',
+      'Wrong size',
+      'Not sure',
+    ])
   })
 })

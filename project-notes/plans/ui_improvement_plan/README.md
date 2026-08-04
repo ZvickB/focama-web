@@ -56,15 +56,15 @@ Why this helps:
 ## Priority 3: Refine step polish
 Status: implemented in the third `new_web_ui` slice.
 
-Mobile's refine copy is clearer: "What should Focamai keep in mind?"
+The current local refinement direction keeps this as one deliberate second stop after the product-only homepage.
 
 Implemented web direction:
 - Make the follow-up area feel like the intelligent middle step.
 - Show the AI follow-up question clearly.
-- Show up to 3 short refinement chips, using backend suggestions when available and fallback chips when not.
-- Let the user replace the primary question once through `Ask a different question`; the alternate is generated in the original response and appears after a short breathing-dot transition without removing the chips or clearing notes.
-- Match mobile chip behavior: label-only chips append to notes, richer prompt chips fill the notes box, and selected chips get a subtle selected state.
-- Keep the notes box natural-language first.
+- Show four short, mutually exclusive answers that directly answer the displayed question; reserve the fourth for `No preference` or `Not sure`.
+- Let the user replace the primary question once through `Get a different question`; the alternate and its matching answers are generated in the original response and appear after a short breathing-dot transition without clearing notes.
+- Keep answer selection single-choice and visually selected, but never insert it into or overwrite the notes box.
+- Keep `Anything else? Optional` natural-language first, then combine the selected answer with those notes only when finalizing.
 - Make "Show focused picks" the primary action.
 - Keep preview/show-products-now as a quieter escape hatch.
 

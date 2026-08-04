@@ -23,12 +23,13 @@
   - the follow-up question starts in parallel
   - the large search stage collapses into a compact progress line and search summary
   - the refine step becomes the active panel
-  - the refine panel shows a clear "What should Focamai keep in mind?" heading, the primary AI follow-up question, and up to 3 refinement chips
-  - `Ask a different question` is available once when AI returns an alternate; it replaces only the primary question after a 900 ms breathing-dot transition while keeping the refinement chips and notes box available
+  - the refine panel shows a compact `One quick question` heading, the primary AI follow-up question, and four single-select answers that directly answer it; the fourth answer is neutral (`No preference` or `Not sure`)
+  - `Get a different question` is available once when AI returns an alternate; after a 900 ms breathing-dot transition it swaps both the question and its matching answer set while preserving anything typed under `Anything else? Optional`
   - result skeletons appear below when needed
   - the page scrolls toward the active refine/results region
-- Refinement chips use backend suggestions when available and fall back to `Good value`, `Easy to use`, and `Fits my space`; label-only chips append to the notes box, prompt-backed chips fill the notes box with richer text, and selected chips get a subtle selected state.
-- `Show products now` reveals the preview set. Preview rows stay factual and do not show fallback recommendation copy when no user-facing detail exists.
+- Refinement answers are separate from the optional notes box: selecting an answer never inserts or replaces freeform text. On finalize, the selected answer sentence and optional notes are combined into the existing `followUpNotes` context. If AI output is incomplete, the server replaces both the question and answers with a matched fallback pair rather than showing unrelated choices.
+- `Skip and show results` reveals the preview set. Preview rows stay factual and do not show fallback recommendation copy when no user-facing detail exists.
+- While discovery continues during refinement, the results area says `Finding your best options…` and explains that products are being gathered in the background; it does not show an empty-shortlist failure before finalize completes.
 - `Show focused picks` runs guided finalize and normally narrows to 6. During the tester rollout, a first finalize with fewer than four AI-identified strong fits and a valid distinct suggested query returns only those credible picks instead of padding the shortlist. Model suggestions must be normal shopping phrases: tag-like, bracketed, or encoded fragments are rejected server-side, which returns the normal complete shortlist; web also rejects them before display or reuse. Web and mobile place a recovery card directly after the picks with the read-only suggested search; `Find better matches` starts fresh discovery with the existing follow-up notes, while `Keep these picks` dismisses the card. During the wait, the results area shows staged progress copy for reading the search, applying notes, narrowing to six picks, and getting the shortlist ready. When follow-up notes add hard eligibility constraints such as kosher/Jewish-use, dietary/allergy, safety/material, or compatibility/exclusion needs, the frontend first does one refreshed Rainforest discovery pass with the original query plus notes, then finalizes from that refreshed token.
 - Cosmetic variants of the same identified product model are removed deterministically before Haiku and again after its ordered shortlist. Haiku returns a strict binary specific-brand decision and a brand label for every selected pick. When the decision is false, final composition deterministically favors at most two distinct models from one resolved brand where credible alternatives exist, then relaxes that preference rather than leave a slot empty. Rainforest's structured `brandName` wins; Haiku's label fills the gap only for selected products whose provider brand is blank. A clearly named brand in a matching query deterministically overrides a mistaken false decision. Different models, generations, capacities, widths, and major feature tiers remain eligible.
 - Focused shortlists are new-condition only by default. Renewed, refurbished, remanufactured, open-box, pre-owned, used, second-hand, and restored listings are removed before Haiku and every ranking-preference composition, including `lowest_price`. They remain eligible only when the shopper explicitly asks for a non-new condition in the query or supplied context; a lower-price preference alone never opts into them.
@@ -64,8 +65,8 @@
   - query-quality review is checked by the frontend through polling; if a high-confidence suggestion is ready, the homepage shows an optional small prompt without replacing the original results
   - there is still no query-quality SSE or suggested-query prewarm path
 - `GET /api/search/refine`
-  - returns one primary short follow-up question, one distinct alternate question, refinement chips, and helper copy in the same response
-  - uses OpenAI mini first for the generated question and refinement chip suggestions
+  - returns one primary short follow-up question and one distinct alternate, each with four matching direct answers in the same response
+  - uses OpenAI mini first for the generated question-and-answer pairs
   - falls back to Haiku if OpenAI fails or is not configured
 - `POST /api/search/finalize`
   - accepts lightweight context

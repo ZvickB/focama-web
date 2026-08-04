@@ -47,6 +47,7 @@ describe('query framing', () => {
     expect(result).toEqual({
       prompt: 'What matters most: budget, size, or comfort?',
       alternatePrompt: 'Where and how often will you use it?',
+      alternateRefinementSuggestions: [],
       refinementSuggestions: [
         { label: 'Lower price', prompt: 'I want the lowest reasonable price' },
         { label: 'Small size', prompt: 'I need something compact' },
@@ -122,11 +123,12 @@ describe('query framing', () => {
       'prompt',
       'alternate_prompt',
       'refinement_suggestions',
+      'alternate_refinement_suggestions',
     ])
-    expect(parsedBody.text.format.schema.properties.refinement_suggestions).toEqual({
+    expect(parsedBody.text.format.schema.properties.refinement_suggestions).toEqual(expect.objectContaining({
       type: 'array',
-      minItems: 3,
-      maxItems: 3,
+      minItems: 4,
+      maxItems: 4,
       items: {
         type: 'object',
         properties: {
@@ -136,10 +138,12 @@ describe('query framing', () => {
         required: ['label', 'prompt'],
         additionalProperties: false,
       },
-    })
+    }))
     expect(parsedBody.text.format.schema.properties).not.toHaveProperty('category_hint')
     expect(parsedBody.input[1].content).toContain('two short follow-up questions')
-    expect(parsedBody.input[1].content).toContain('exactly 3 short refinement chip labels')
+    expect(parsedBody.input[1].content).toContain('exactly 4 mutually exclusive answer options')
+    expect(parsedBody.input[1].content).toContain('directly and grammatically answer')
+    expect(parsedBody.input[1].content).toContain('multiple-choice, not yes/no')
     expect(parsedBody.input[1].content).toContain('30 characters or fewer')
   })
 

@@ -149,10 +149,20 @@ export function createFallbackRefinementPrompt(productQuery) {
   return {
     prompt: `What should we optimize for with this ${productQuery}?`,
     alternatePrompt: 'Is there a budget, size, or must-have feature you do not want to compromise on?',
-    helperText:
-      'Use this step for natural-language details like budget, size, comfort, style, or where you plan to use it.',
-    followUpPlaceholder:
-      'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
+    answerOptions: [
+      { label: 'Best value', prompt: 'I want the best balance of price and fit.' },
+      { label: 'Easiest to use', prompt: 'Ease of use matters most to me.' },
+      { label: 'Best fit', prompt: 'Fit for my needs matters most to me.' },
+      { label: 'No preference', prompt: 'I do not have a preference here.' },
+    ],
+    alternateAnswerOptions: [
+      { label: 'Strict budget', prompt: 'I have a strict budget.' },
+      { label: 'Size or fit', prompt: 'Size or fit is important to me.' },
+      { label: 'Must-have feature', prompt: 'I have a feature I do not want to compromise on.' },
+      { label: 'Nothing specific', prompt: 'I do not have another hard requirement.' },
+    ],
+    helperText: '',
+    followUpPlaceholder: 'Budget, size, must-haves, or anything you want to avoid...',
   }
 }
 export function createExpiredSessionMessage() {

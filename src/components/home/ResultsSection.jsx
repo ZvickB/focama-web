@@ -203,6 +203,7 @@ export function ResultsSection({
   displayedResults,
   diagnostics,
   errorMessage,
+  hasCompletedFinalize = false,
   hasFinalResults,
   hasStartedSearch,
   improvePicksSuggestions = [],
@@ -513,18 +514,22 @@ export function ResultsSection({
         </div>
       ) : null}
 
-      {!hasFinalResults && !showPreviewResults && hasStartedSearch && !errorMessage && !isLoading ? (
+      {!hasCompletedFinalize &&
+      !hasFinalResults &&
+      !showPreviewResults &&
+      hasStartedSearch &&
+      !errorMessage &&
+      !isLoading ? (
         <div className="rounded-2xl border border-dashed border-[#e6d8c5] bg-white/82 px-6 py-12 text-center shadow-[0_14px_38px_-32px_rgba(120,87,63,0.18)] sm:px-8">
           <div className="mx-auto max-w-xl space-y-3">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
               <Sparkles className="h-4 w-4 text-primary" />
             </div>
             <p className="text-lg font-medium text-slate-900">
-              Your shortlist is taking shape.
+              Finding your best options…
             </p>
             <p className="text-sm leading-6 text-slate-600 sm:text-base">
-              Add a little context for a more focused set of picks, or skip ahead to see products
-              now.
+              We’re gathering products in the background while you tell us what matters.
             </p>
           </div>
         </div>
@@ -779,7 +784,9 @@ export function ResultsSection({
         </div>
       ) : null}
 
-      {!hasStartedSearch && !errorMessage ? null : !isLoading && displayedResults.length === 0 && !errorMessage ? (
+      {!hasStartedSearch && !errorMessage
+        ? null
+        : hasCompletedFinalize && !isLoading && displayedResults.length === 0 && !errorMessage ? (
         <div className="rounded-2xl border border-dashed border-[#e6d8c5] bg-white/82 px-6 py-12 text-center shadow-[0_14px_38px_-32px_rgba(120,87,63,0.18)] sm:px-8">
           <div className="mx-auto max-w-xl space-y-3">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">

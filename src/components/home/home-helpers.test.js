@@ -74,7 +74,7 @@ describe('buildRefinementCopy', () => {
     })
 
     expect(result.titleQuestion).toBe('')
-    expect(result.titleEyebrow).toBe('You can add more detail right away')
+    expect(result.titleEyebrow).toBe('Preparing your question')
   })
 })
 
@@ -119,10 +119,10 @@ describe('normalizeRefinementChips', () => {
     ).toEqual([{ label: 'Price', prompt: 'under $200' }])
   })
 
-  it('caps at 3 chips', () => {
+  it('caps at 4 answers', () => {
     expect(
       normalizeRefinementChips({ refinementSuggestions: ['a', 'b', 'c', 'd'] }),
-    ).toHaveLength(3)
+    ).toHaveLength(4)
   })
 
   it('returns empty array for missing input', () => {

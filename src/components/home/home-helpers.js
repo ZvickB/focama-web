@@ -1,7 +1,5 @@
 import { MAX_DETAILS_LENGTH } from '../../../shared/search-input.js'
 
-const MAX_REFINEMENT_CHIPS = 3
-
 export function applyPlainBackgroundMode() {
   if (typeof document === 'undefined') {
     return
@@ -89,13 +87,11 @@ export function buildRefinementCopy({ isGeneratingPrompt, prompt, submittedQuery
     prompt?.prompt || `What should we optimize for with this ${submittedQuery}?`
 
   return {
-      helper:
-        prompt?.helperText ||
-        'Or write whatever is important to you. Feel free to write in natural language.',
+    helper: isGeneratingPrompt ? 'Finding the most useful thing to ask…' : prompt?.helperText || '',
     placeholder:
       prompt?.followUpPlaceholder ||
       'Example: I want something lightweight for daily travel, under $200, and easy to clean.',
-    titleEyebrow: isGeneratingPrompt ? 'You can add more detail right away' : 'Focamai asks:',
+    titleEyebrow: isGeneratingPrompt ? 'Preparing your question' : 'Focamai asks:',
     titleQuestion: isGeneratingPrompt ? '' : suggestedQuestion,
   }
 }
@@ -120,6 +116,7 @@ export function addChipToNotes(currentNotes, chipLabel) {
 
 export function normalizeRefinementChips(refinementPrompt) {
   const suggestedRefinements =
+    refinementPrompt?.answerOptions ||
     refinementPrompt?.refinementSuggestions ||
     refinementPrompt?.refinement_suggestions ||
     refinementPrompt?.suggestedRefinements ||
@@ -144,5 +141,5 @@ export function normalizeRefinementChips(refinementPrompt) {
       return null
     })
     .filter((chip) => chip?.label)
-    .slice(0, MAX_REFINEMENT_CHIPS)
+    .slice(0, 4)
 }
