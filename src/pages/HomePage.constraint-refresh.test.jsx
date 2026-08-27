@@ -104,7 +104,7 @@ describe('HomePage constraint-bearing finalize refresh', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'white chocolate chips')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this white chocolate chips/i)
-    await user.type(screen.getByLabelText(/tell us more/i), 'kosher pareve')
+    await user.type(screen.getByLabelText(/anything else/i), 'kosher pareve')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
 
     expect(await findVisibleResultTitle('Kosher pareve white chips')).toBeInTheDocument()
@@ -172,7 +172,7 @@ describe('HomePage constraint-bearing finalize refresh', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'white chocolate chips')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this white chocolate chips/i)
-    await user.type(screen.getByLabelText(/tell us more/i), 'something cute and affordable')
+    await user.type(screen.getByLabelText(/anything else/i), 'something cute and affordable')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
 
     expect(await findVisibleResultTitle('General white chocolate chips')).toBeInTheDocument()

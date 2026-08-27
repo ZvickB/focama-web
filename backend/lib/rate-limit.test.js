@@ -3,6 +3,7 @@ import { resetEnvCache } from './search-data.js'
 
 const ENV_KEYS = [
   'RATE_LIMIT_HASH_SALT',
+  'RATE_LIMIT_STORAGE_TIMEOUT_MS',
   'RATE_LIMIT_STORAGE',
   'SUPABASE_SECRET_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
@@ -92,6 +93,24 @@ describe('rate-limit helpers', () => {
         remaining: 0,
       }),
     )
+  })
+
+  it('uses local-primary limiting even when Supabase is configured', async () => {
+    process.env.RATE_LIMIT_STORAGE = 'auto'
+    process.env.SUPABASE_URL = 'https://example.supabase.co'
+    process.env.SUPABASE_SECRET_KEY = 'test-secret'
+    resetEnvCache()
+    const createClient = vi.fn()
+
+    vi.doMock('@supabase/supabase-js', () => ({ createClient }))
+    const { takeRateLimitToken } = await loadRateLimitModule()
+
+    await expect(takeRateLimitToken('203.0.113.56')).resolves.toEqual(expect.objectContaining({
+      allowed: true,
+      fallbackReason: 'configured_memory',
+      storage: 'memory',
+    }))
+    expect(createClient).not.toHaveBeenCalled()
   })
 
   it('allows the same key again after the rate-limit window resets', async () => {
@@ -233,5 +252,35 @@ describe('rate-limit helpers', () => {
     )
 
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Supabase limiter unavailable'))
+  })
+
+  it('bounds a stalled Supabase limiter and reports the memory fallback reason', async () => {
+    vi.useFakeTimers()
+    process.env.RATE_LIMIT_STORAGE = 'supabase'
+    process.env.RATE_LIMIT_STORAGE_TIMEOUT_MS = '50'
+    process.env.SUPABASE_URL = 'https://example.supabase.co'
+    process.env.SUPABASE_SECRET_KEY = 'test-secret'
+    resetEnvCache()
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    vi.doMock('@supabase/supabase-js', () => ({
+      createClient: vi.fn(() => ({
+        rpc: vi.fn(() => new Promise(() => {})),
+      })),
+    }))
+
+    const { takeRateLimitToken: takeTimedRateLimitToken } = await loadRateLimitModule()
+    const pending = takeTimedRateLimitToken('203.0.113.60', {
+      limit: 1,
+      windowMs: 60_000,
+    })
+
+    await vi.advanceTimersByTimeAsync(51)
+
+    await expect(pending).resolves.toEqual(expect.objectContaining({
+      allowed: true,
+      fallbackReason: 'timeout',
+      storage: 'memory',
+    }))
   })
 })

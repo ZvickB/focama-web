@@ -75,6 +75,7 @@ function OpenLayout(props) {
   const { actions, diagnostics, query, querySuggestion, results, retry, status } = guided
   const displayedResults = results.displayed
   const errorMessage = status.errorMessage
+  const guidedUnavailableMessage = status.guidedUnavailableMessage
   const hasFinalResults = results.hasFinalResults
   const hasStartedSearch = status.hasStartedSearch
   const isLoading = status.isLoading
@@ -104,7 +105,11 @@ function OpenLayout(props) {
     : ''
   const showPreviewResults = results.showPreview
   const submittedQuery = query.submittedQuery
-  const shouldShowRefinementPanel = hasStartedSearch && !hasFinalResults && !retry.autoFinalizing
+  const shouldShowRefinementPanel =
+    hasStartedSearch &&
+    !hasFinalResults &&
+    !retry.autoFinalizing &&
+    !guidedUnavailableMessage
 
   useEffect(() => {
     const revealTimer = window.setTimeout(() => {
@@ -262,7 +267,10 @@ function OpenLayout(props) {
   const hasDiscoveryResults = Boolean(results.candidatePool)
   const showLoadingResults = isLoading && displayedResults.length === 0
   const shouldLoadResultsSection =
-    hasStartedSearch || displayedResults.length > 0 || Boolean(errorMessage)
+    hasStartedSearch ||
+    displayedResults.length > 0 ||
+    Boolean(errorMessage) ||
+    Boolean(guidedUnavailableMessage)
   const canSubmitTopQuery = !isLoading && !hasStartedSearch
 
   function handleSearchSubmit(event) {
@@ -631,6 +639,7 @@ function OpenLayout(props) {
                 <ResultsSection
                   displayedResults={displayedResults}
                   diagnostics={diagnostics}
+                  guidedUnavailableMessage={guidedUnavailableMessage}
                   errorMessage={errorMessage}
                   hasCompletedFinalize={status.hasCompletedFinalize}
                   hasFinalResults={hasFinalResults}
@@ -651,6 +660,7 @@ function OpenLayout(props) {
                   onRetryFeedbackChange={retry.setFeedback}
                   onRedoBalanced={actions.redoCurrentSearchBalanced}
                   onFailureRetry={actions.retryFailedSearch}
+                  onGuidedAvailabilityRetry={actions.retryGuidedAvailability}
                   previousResults={results.previous}
                   rankingPreference={results.rankingPreference}
                   selectionState={results.selectionState}

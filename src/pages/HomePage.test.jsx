@@ -1069,4 +1069,47 @@ describe('HomePage', () => {
 expect(screen.queryByText('Travel stroller')).not.toBeInTheDocument()
     expect(screen.queryByText('Enter a product topic to get started.')).not.toBeInTheDocument()
   })
+
+  it('shows preview products and disables refinement when discovery session storage is unavailable', async () => {
+    const user = userEvent.setup()
+    const previewResult = createMockResult({ title: 'Degraded preview stroller' })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => '' },
+        text: async () => JSON.stringify({
+          discoveryToken: '',
+          guidedAvailable: false,
+          degradedReason: 'session_storage_unavailable',
+          degradedMessage: 'We found products, but focused picks are temporarily unavailable.',
+          candidatePool: {
+            query: 'stroller',
+            details: '',
+            candidates: [previewResult],
+          },
+          previewResults: [previewResult],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => '' },
+        text: async () => JSON.stringify({
+          prompt: 'What should we optimize for with this stroller?',
+          helperText: 'Pick anything that matters.',
+          followUpPlaceholder: 'Anything else?',
+        }),
+      })
+
+    vi.stubGlobal('fetch', fetchMock)
+    renderHomePage()
+
+    await user.type(screen.getByLabelText(/product topic/i), 'stroller')
+    await user.click(screen.getByRole('button', { name: /start search/i }))
+
+    expect(await findVisibleResultTitle('Degraded preview stroller')).toBeInTheDocument()
+    expect(screen.getByText('Focused picks are temporarily unavailable.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /try focused picks again/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^show focused picks$/i })).not.toBeInTheDocument()
+  })
 })

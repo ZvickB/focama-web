@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
+import { getEnv } from './lib/search-data.js'
 
 const SMOKE = process.env.SMOKE === '1'
 const BASE = process.env.SMOKE_URL || 'http://localhost:8787'
@@ -68,7 +69,7 @@ describeSmoke('External services', () => {
   it('OpenAI API key is valid', async () => {
     // Lightweight models list call — costs nothing
     const res = await fetch('https://api.openai.com/v1/models', {
-      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      headers: { Authorization: `Bearer ${getEnv('OPENAI_API_KEY')}` },
     })
     expect(res.status, 'OpenAI API key rejected — check OPENAI_API_KEY').toBe(200)
   }, 10_000)
@@ -78,7 +79,7 @@ describeSmoke('External services', () => {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'x-api-key': process.env.CLAUDE_API_KEY,
+        'x-api-key': getEnv('CLAUDE_API_KEY'),
         'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },
@@ -96,8 +97,8 @@ describeSmoke('External services', () => {
   }, 15_000)
 
   it('Supabase is reachable (when configured)', async () => {
-    const url = process.env.SUPABASE_URL
-    const key = process.env.SUPABASE_SECRET_KEY
+    const url = getEnv('SUPABASE_URL')
+    const key = getEnv('SUPABASE_SECRET_KEY') || getEnv('SUPABASE_SERVICE_ROLE_KEY')
     if (!url || !key) {
       console.log('  ⏭ Supabase not configured — skipping')
       return
@@ -186,6 +187,13 @@ describeCacheBenchmark('Guided discovery cache latency', () => {
 
     const freshTiming = parseServerTiming(fresh.headers)
     const cachedTiming = parseServerTiming(cached.headers)
+
+    // This is deliberately a relative assertion. Absolute request times depend on
+    // the running environment, but a valid full discovery-cache hit must avoid the
+    // Rainforest round trip and be meaningfully faster than the request that filled it.
+    expect(cached.durationMs, 'cache hit should be at least 40% faster than the forced provider search')
+      .toBeLessThanOrEqual(fresh.durationMs * 0.6)
+
     console.table([
       {
         request: 'forced Rainforest query',
@@ -215,31 +223,30 @@ describeCacheBenchmark('Guided discovery cache latency', () => {
 
 describeE2E('E2E discovery flow', () => {
   let discoveryToken = null
+  const query = process.env.SMOKE_E2E_QUERY || 'ergonomic wireless mouse'
 
   it('discover returns results for a simple query', async () => {
-    const { status, body } = await get(
-      '/api/search/rainforest-discover?q=wireless+mouse&source=rainforest'
-    )
+    const { status, body } = await get(`/api/search/rainforest-discover?query=${encodeURIComponent(query)}`)
     expect(status).toBe(200)
-    expect(body.preview?.length).toBeGreaterThan(0)
+    expect(body.previewResults?.length).toBeGreaterThan(0)
     expect(body.discoveryToken).toBeTruthy()
+    expect(body.sessionStatus).toBe('pending')
     discoveryToken = body.discoveryToken
   }, 30_000)
 
   it('refine generates a follow-up question', async () => {
     expect(discoveryToken, 'No discoveryToken from discover step').toBeTruthy()
-    const { status, body } = await get(
-      `/api/search/refine?token=${discoveryToken}`
-    )
+    const { status, body } = await get(`/api/search/refine?query=${encodeURIComponent(query)}`)
     expect(status).toBe(200)
-    expect(body.question || body.refinement_question).toBeTruthy()
+    expect(body.prompt || body.question || body.refinement_question).toBeTruthy()
   }, 20_000)
 
   it('finalize returns 6 picks', async () => {
     expect(discoveryToken, 'No discoveryToken from discover step').toBeTruthy()
     const { status, body } = await post('/api/search/finalize', {
+      query,
       discoveryToken,
-      followUpNote: 'for office work',
+      followUpNotes: 'for office work',
     })
     expect(status).toBe(200)
     expect(body.results?.length).toBe(6)

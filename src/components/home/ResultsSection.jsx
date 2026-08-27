@@ -203,6 +203,7 @@ export function ResultsSection({
   displayedResults,
   diagnostics,
   errorMessage,
+  guidedUnavailableMessage = '',
   hasCompletedFinalize = false,
   hasFinalResults,
   hasStartedSearch,
@@ -216,6 +217,7 @@ export function ResultsSection({
   onRetailerClick,
   onSelectProduct,
   onFailureRetry = () => {},
+  onGuidedAvailabilityRetry = () => {},
   onFindBetterMatches = () => {},
   onKeepCandidateRecovery = () => {},
   onRetryAdviceRequest,
@@ -485,6 +487,27 @@ export function ResultsSection({
               </div>
             </div>
           </details>
+        </div>
+      ) : null}
+
+      {guidedUnavailableMessage ? (
+        <div
+          role="status"
+          className="flex flex-col gap-3 rounded-3xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="space-y-1">
+            <p className="font-medium">Focused picks are temporarily unavailable.</p>
+            <p className="leading-6 text-amber-900/85">{guidedUnavailableMessage}</p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 shrink-0 rounded-full border-amber-300 bg-white text-amber-950 hover:bg-amber-100"
+            onClick={onGuidedAvailabilityRetry}
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Try focused picks again
+          </Button>
         </div>
       ) : null}
 
