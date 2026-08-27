@@ -13,6 +13,8 @@
 - Discovery cache, internal operational `search_history`, local saved-search history, analytics, and product-details cache are the main active storage paths.
 
 ## Real remaining work
+- Investigate Rainforest reliability separately from Supabase: after one successful forced request at 6.08s, two subsequent forced browser-smoke requests returned `502 Rainforest API request failed` in 6.8s and 1.83s. Capture Render/provider status details and determine whether this is transient, quota/rate limiting, or a provider regression before treating provider-vs-cache UX benchmarking as complete.
+- After deploying the discovery storage changes, monitor `rainforest_paid_call_guard_blocked`, background `discovery_storage_degraded`, recent-token 409s, and browser timing. Confirm the 4-per-client/10-second and 4-concurrent Rainforest defaults are appropriate for real tester traffic. Redis/Render Key Value is not part of the chosen implementation.
 - Verify the live golden path in the browser and confirm cards arrive quickly while modal AI copy hydrates later.
 - Live-check the new `Ask a different question` refine interaction across several categories: confirm the alternate explores a genuinely different decision factor, measure whether generating it materially changes refine latency, and verify the 900 ms breathing transition feels intentional rather than slow.
 - Run the Sightengine sensitive-image analyzer in controlled shadow mode against a much broader real Amazon set, especially headless mannequins, cropped/partial bodies, packaging photos, and small background people. Review every proposed `show`, keep dangerous false reveals at zero, and measure provider latency/operation use before deciding whether any reveal feature is viable. Shadow mode is live on Render as of 2026-07-08 and results reviewed so far look fine. The old TensorFlow.js person/face/pose stack remains only as an offline comparison harness, not a Render fallback.
@@ -49,7 +51,7 @@
 - The current shortlist-detail helper is Rainforest-backed through `fetchAmazonProductDetailsByAsin`.
 - Keep the SerpApi route inactive unless there is a deliberate reason to reactivate multi-retailer discovery.
 - Keep automatic hybrid price-intel surfacing inactive. The current approved shape is explicit user-triggered Compare prices only: no shortlist badges, no automatic background price checks, no review content, no Serper, no Google Light, and no Google Custom Search unless live review proves the SerpApi Shopping -> Immersive path cannot locate product groups reliably.
-- Create the `rate_limit_events` table in Supabase before public traffic so Render instances share the same rate-limit bucket; the app falls back to process-local limiting if the table is unavailable.
+- Keep `rate_limit_events` plus both atomic-rate-limit migrations deployed together. The production function repair was applied manually on 2026-08-27 and the corrective migration is in the branch; make sure normal migration history/deployment also records `20260827225123_repair_atomic_rate_limit_timestamp.sql` so a fresh environment cannot restore the broken `current_time` implementation. The app falls back to process-local limiting if the shared limiter is unavailable.
 - Add the real `SENTRY_DSN` and confirm events arrive in production once the Render environment is updated.
 - Keep Sentry as a useful backend exception channel, but do not rely on it as the only search-failure visibility path; search support-code diagnostics now write to Supabase separately when configured.
 

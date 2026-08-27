@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   beginOpenAiQueryModeration: vi.fn(),
+  acquireRainforestSearchSlot: vi.fn(),
+  isSupabaseConfigured: vi.fn(),
   fetchRainforestArtifacts: vi.fn(),
   getEnv: vi.fn(),
   getValidatedSearchRequest: vi.fn(),
@@ -34,6 +36,10 @@ vi.mock('../search-pipeline.js', () => ({
   writeSearchSnapshot: mocks.writeSearchSnapshot,
 }))
 
+vi.mock('../storage/supabase-client.js', () => ({
+  isSupabaseConfigured: mocks.isSupabaseConfigured,
+}))
+
 vi.mock('../search-storage.js', () => ({
   recordSearchDiagnosticEvent: vi.fn().mockResolvedValue(undefined),
 }))
@@ -45,6 +51,10 @@ vi.mock('../search-data.js', () => ({
 
 vi.mock('../rainforest-pipeline.js', () => ({
   fetchRainforestArtifacts: mocks.fetchRainforestArtifacts,
+}))
+
+vi.mock('../provider-guard.js', () => ({
+  acquireRainforestSearchSlot: mocks.acquireRainforestSearchSlot,
 }))
 
 vi.mock('../server-helpers.js', () => ({
@@ -114,6 +124,10 @@ function createCachedSnapshot() {
   }
 }
 
+function readResponseJson(response) {
+  return JSON.parse(response.body || '{}')
+}
+
 async function flushAsyncWork() {
   await new Promise((resolve) => setTimeout(resolve, 0))
 }
@@ -131,11 +145,13 @@ describe('discovery handler query moderation ordering', () => {
       normalizedQuery: 'coded brand',
     })
     mocks.moderateQuery.mockReturnValue({ outcome: 'allow' })
+    mocks.isSupabaseConfigured.mockReturnValue(false)
     mocks.readCachedSearchSnapshot.mockResolvedValue({
       cachedEntry: null,
       normalizedCachedResults: [],
     })
     mocks.recordSearchCacheEvent.mockResolvedValue(undefined)
+    mocks.acquireRainforestSearchSlot.mockReturnValue({ allowed: true, release: vi.fn() })
     mocks.takeRateLimitToken.mockResolvedValue({ allowed: true })
     mocks.writeSearchSnapshot.mockResolvedValue({
       cachedAt: '2026-07-03T12:00:00.000Z',
@@ -239,5 +255,112 @@ describe('discovery handler query moderation ordering', () => {
 
     expect(response.statusCode).toBe(200)
     expect(mocks.startQueryQualityReview).not.toHaveBeenCalled()
+  })
+
+  it('returns cached preview products immediately while shared session persistence continues', async () => {
+    mocks.beginOpenAiQueryModeration.mockReturnValue({
+      promise: Promise.resolve({ outcome: 'allow', categories: [], durationMs: 1 }),
+      synchronous: false,
+    })
+    mocks.isSupabaseConfigured.mockReturnValue(true)
+    mocks.readCachedSearchSnapshot.mockResolvedValue(createCachedSnapshot())
+    mocks.writeSearchSnapshot.mockResolvedValue({
+      cachedAt: '2026-07-03T12:00:00.000Z',
+      expiresAt: '2026-07-03T18:00:00.000Z',
+      storage: 'local',
+    })
+    const response = createResponseRecorder()
+
+    await handleRainforestDiscoverySearch(
+      new URL('http://localhost/api/search/rainforest-discover?query=office%20chair'),
+      response,
+      { headers: { 'x-forwarded-for': '203.0.113.30' } },
+    )
+
+    const payload = readResponseJson(response)
+    expect(response.statusCode).toBe(200)
+    expect(payload).toEqual(expect.objectContaining({
+      discoveryToken: expect.stringMatching(/^[a-z0-9]+\.[0-9a-f-]+$/),
+      guidedAvailable: true,
+      sessionStatus: 'pending',
+    }))
+    expect(payload.previewResults).toHaveLength(6)
+    expect(mocks.fetchRainforestArtifacts).not.toHaveBeenCalled()
+    expect(mocks.startQueryQualityReview).not.toHaveBeenCalled()
+  })
+
+  it('does not wait for a stalled session write before returning cached previews', async () => {
+    mocks.getEnv.mockImplementation((name) => ({
+      DISCOVERY_SESSION_WRITE_TIMEOUT_MS: '50',
+      OPENAI_API_KEY: 'openai-key',
+      RAINFOREST_API_KEY: 'rainforest-key',
+    })[name] || '')
+    mocks.beginOpenAiQueryModeration.mockReturnValue({
+      promise: Promise.resolve({ outcome: 'allow', categories: [], durationMs: 1 }),
+      synchronous: false,
+    })
+    mocks.isSupabaseConfigured.mockReturnValue(true)
+    mocks.readCachedSearchSnapshot.mockResolvedValue(createCachedSnapshot())
+    mocks.writeSearchSnapshot.mockReturnValue(new Promise(() => {}))
+    const response = createResponseRecorder()
+
+    await handleRainforestDiscoverySearch(
+      new URL('http://localhost/api/search/rainforest-discover?query=office%20chair'),
+      response,
+      { headers: { 'x-forwarded-for': '203.0.113.30' } },
+    )
+
+    const payload = readResponseJson(response)
+    expect(payload.guidedAvailable).toBe(true)
+    expect(payload.sessionStatus).toBe('pending')
+    expect(payload.discoveryToken).toBeTruthy()
+    expect(payload.previewResults).toHaveLength(6)
+    expect(response.headers['Server-Timing']).toContain('session;dur=0')
+  })
+
+  it('treats a slow cache read as a miss and continues to the provider', async () => {
+    vi.useFakeTimers()
+    mocks.getEnv.mockImplementation((name) => ({
+      DISCOVERY_CACHE_READ_TIMEOUT_MS: '50',
+      OPENAI_API_KEY: 'openai-key',
+      RAINFOREST_API_KEY: 'rainforest-key',
+    })[name] || '')
+    mocks.beginOpenAiQueryModeration.mockReturnValue({
+      promise: Promise.resolve({ outcome: 'allow', categories: [], durationMs: 1 }),
+      synchronous: false,
+    })
+    mocks.readCachedSearchSnapshot.mockReturnValue(new Promise(() => {}))
+    const candidates = Array.from({ length: 6 }, (_, index) => ({
+      id: `provider-${index + 1}`,
+      title: `Provider result ${index + 1}`,
+    }))
+    mocks.fetchRainforestArtifacts.mockResolvedValue({
+      artifacts: {
+        candidatePool: { candidates },
+        results: candidates,
+      },
+      error: null,
+      diagnostics: {
+        rawResultCount: 6,
+        candidateCountAfterInternalFilters: 6,
+        resultCountAfterInternalFilters: 6,
+      },
+    })
+    const response = createResponseRecorder()
+
+    const handling = handleRainforestDiscoverySearch(
+      new URL('http://localhost/api/search/rainforest-discover?query=office%20chair'),
+      response,
+      { headers: { 'x-forwarded-for': '203.0.113.30' } },
+    )
+    await vi.advanceTimersByTimeAsync(51)
+    await handling
+
+    const payload = readResponseJson(response)
+    expect(response.statusCode).toBe(200)
+    expect(payload.guidedAvailable).toBe(true)
+    expect(payload.previewResults).toHaveLength(6)
+    expect(mocks.fetchRainforestArtifacts).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
   })
 })

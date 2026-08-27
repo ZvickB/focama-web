@@ -11,13 +11,17 @@
     "cache:search": "node backend/scripts/save-serpapi-cache.js",
     "cache:full-response": "node backend/scripts/save-serpapi-full-response.js",
     "experiment:sensitive-images": "node experiments/sensitive-image-classification/evaluate-images.js",
+    "test:smoke:haiku-luna": "node --env-file=.env backend/scripts/smoke-haiku-luna.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:smoke": "SMOKE=1 vitest run backend/smoke.test.js",
-    "test:smoke:e2e": "SMOKE=1 SMOKE_E2E=1 vitest run backend/smoke.test.js"
+    "test:smoke:e2e": "SMOKE=1 SMOKE_E2E=1 vitest run backend/smoke.test.js",
+    "test:smoke:cache": "SMOKE=1 SMOKE_CACHE_BENCH=1 vitest run backend/smoke.test.js",
+    "test:smoke:cache-ui": "vitest run src/pages/HomePage.cache-latency.smoke.test.jsx",
+    "test:smoke:cache-ui:live": "node backend/scripts/smoke-cache-ui-live.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",

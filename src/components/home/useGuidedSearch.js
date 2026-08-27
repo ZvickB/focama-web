@@ -117,6 +117,7 @@ export function useGuidedSearch() {
   const [hasStartedSearch, setHasStartedSearch] = useState(false)
   const [submittedQuery, setSubmittedQuery] = useState('')
   const [discoveryToken, setDiscoveryToken] = useState('')
+  const [guidedUnavailableMessage, setGuidedUnavailableMessage] = useState('')
   const [candidatePool, setCandidatePool] = useState(null)
   const [previewResults, setPreviewResults] = useState([])
   const [results, setResults] = useState([])
@@ -407,6 +408,7 @@ export function useGuidedSearch() {
     cancelFinalizeRequest()
     finalizeMutation.reset()
     setDiscoveryToken('')
+    setGuidedUnavailableMessage('')
     setCandidatePool(null)
     setResults([])
     setPreviousResults([])
@@ -1088,6 +1090,7 @@ export function useGuidedSearch() {
     setErrorMessage('')
     setFailureDiagnostics(null)
     setDiscoveryToken('')
+    setGuidedUnavailableMessage('')
     setCandidatePool(null)
     setPreviewResults([])
     setResults([])
@@ -1237,6 +1240,64 @@ export function useGuidedSearch() {
           return
         }
 
+        if (
+          payload.guidedAvailable === false &&
+          Array.isArray(payload.previewResults) &&
+          payload.previewResults.length > 0
+        ) {
+          const responseAmazonDomain = payload.amazonDomain || nextAmazonDomain
+          const degradedMessage = String(
+            payload.degradedMessage ||
+            'Focused picks are temporarily unavailable, but you can browse these results.',
+          )
+
+          recordSearchDebugEvent('discovery', 'degraded', {
+            activeSearchId: nextSearchId,
+            amazonDomain: responseAmazonDomain,
+            candidateCount: Array.isArray(payload.candidatePool?.candidates)
+              ? payload.candidatePool.candidates.length
+              : 0,
+            degradedReason: payload.degradedReason || 'session_storage_unavailable',
+            previewCount: payload.previewResults.length,
+            query: normalizedQuery,
+          })
+          recordDiagnostic('frontend_response_received', {
+            amazonDomain: responseAmazonDomain,
+            cachedOrFallbackUsed: payload.source === 'cache' || Boolean(payload.fallbackFrom),
+            durationMs: payload.timing?.client?.totalMs,
+            finalStatus: 'success',
+            query: normalizedQuery,
+            resultCountAfterInternalFilters: payload.previewResults.length,
+            status: 'degraded',
+          }, { searchId: analyticsSearchId, sessionId: analyticsSessionId })
+
+          setDiscoveryToken('')
+          setGuidedUnavailableMessage(degradedMessage)
+          setSubmittedAmazonDomain(responseAmazonDomain)
+          setCandidatePool(payload.candidatePool || null)
+          setPreviewResults(payload.previewResults)
+          setShowPreviewResults(true)
+          setRequestTiming((current) => ({
+            ...current,
+            discover: payload.timing || null,
+          }))
+          stopQueryQualityPolling({ clearSuggestion: true })
+
+          if (!hasTrackedPreviewImpressionsRef.current) {
+            hasTrackedPreviewImpressionsRef.current = true
+            trackResultImpressions({
+              resultSet: 'preview',
+              items: buildResultAnalyticsItems(payload.previewResults),
+            })
+          }
+          trackSearchEvent('discovery_degraded', {
+            degradedReason: payload.degradedReason || 'session_storage_unavailable',
+            previewCount: payload.previewResults.length,
+            source: payload.source || 'live',
+          }, { searchId: analyticsSearchId, sessionId: analyticsSessionId })
+          return
+        }
+
         if (!payload.discoveryToken) {
           recordSearchDebugEvent('discovery', 'missing-token', {
             activeSearchId: nextSearchId,
@@ -1262,6 +1323,7 @@ export function useGuidedSearch() {
         }
 
         const responseAmazonDomain = payload.amazonDomain || nextAmazonDomain
+        setGuidedUnavailableMessage('')
         recordDiagnostic('frontend_response_received', {
           amazonDomain: responseAmazonDomain,
           cachedOrFallbackUsed: payload.source === 'cache' || Boolean(payload.fallbackFrom),
@@ -1538,6 +1600,21 @@ export function useGuidedSearch() {
     })
   }
 
+  function retryGuidedAvailability() {
+    const normalizedQuery = submittedQuery.trim()
+
+    if (!normalizedQuery) {
+      resetToNewSearch()
+      return
+    }
+
+    startGuidedSearch(normalizedQuery, {
+      preserveFollowUpNotes: true,
+      reuseAnalytics: true,
+      searchEventName: 'degraded_search_retry_started',
+    })
+  }
+
   async function refreshDiscoveryForHardConstraints({
     amazonDomain,
     constraintMatch,
@@ -1661,7 +1738,7 @@ export function useGuidedSearch() {
     }
   }
 
-  async function handleFinalizeRefinement() {
+  async function handleFinalizeRefinement(followUpNotesOverride) {
     if (!candidatePool || !submittedQuery) {
       return
     }
@@ -1675,12 +1752,19 @@ export function useGuidedSearch() {
       return
     }
 
-    const normalizedFollowUpNotes = followUpNotes.trim()
+    const effectiveFollowUpNotes = typeof followUpNotesOverride === 'string'
+      ? followUpNotesOverride
+      : followUpNotes
+    const normalizedFollowUpNotes = effectiveFollowUpNotes.trim()
+
+    if (effectiveFollowUpNotes !== followUpNotes) {
+      setFollowUpNotes(effectiveFollowUpNotes)
+    }
 
     if (analyticsSearchIdRef.current && analyticsSessionIdRef.current) {
       trackSearchRun({
         productQuery: submittedQuery,
-        details: followUpNotes,
+        details: effectiveFollowUpNotes,
         enteredAiRefinement: Boolean(normalizedFollowUpNotes),
         usedShowProductsNow: showPreviewResults,
         completedFinalize: false,
@@ -1738,7 +1822,7 @@ export function useGuidedSearch() {
         amazonDomain: finalizeAmazonDomain,
         discoveryToken: finalizeDiscoveryToken,
         originalCandidatePool: finalizeCandidatePool,
-        followUpNotes,
+        followUpNotes: effectiveFollowUpNotes,
         rejectionFeedback: '',
         retryCount: 0,
         excludedCandidateIds: [],
@@ -2071,6 +2155,7 @@ export function useGuidedSearch() {
       keepPartialPicks: handleKeepCandidateRecovery,
       redoCurrentSearchBalanced,
       resetToNewSearch,
+      retryGuidedAvailability,
       retryFailedSearch,
       selectProduct: handleSelectProduct,
       showProductsNow: handleShowProductsNow,
@@ -2135,6 +2220,8 @@ export function useGuidedSearch() {
     },
     status: {
       errorMessage,
+      guidedUnavailableMessage,
+      hasCompletedFinalize: finalizeMutation.isSuccess,
       hasStartedSearch,
       isDiscovering,
       isEnrichmentReady,

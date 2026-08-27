@@ -2,6 +2,8 @@
 
 Quick-reference diagram. For full step-by-step detail and guardrails, see `search-flow.html`.
 
+Production note (2026-08-27): the atomic Supabase rate-limit RPC is repaired by `20260827225123_repair_atomic_rate_limit_timestamp.sql`. The former `current_time` variable collided with PostgreSQL `CURRENT_TIME`, produced time-only values, and caused SQLSTATE `22007`; the production repair now returns a full `timestamptz`. Bounded fallback remains required because measured Supabase rate-limit and session stages can still add roughly two seconds to a cache hit.
+
 ```mermaid
 flowchart TD
     A[User submits query] --> B & C
@@ -64,6 +66,7 @@ flowchart TD
 | Rule | One line |
 |---|---|
 | Candidate pool is server-owned | Browser sends token · finalize reconstructs from snapshot; clear named brands/models are hard-filtered before AI selection |
+| Session trust stays server-owned | Preview does not await persistence; recent-token finalize briefly polls if needed and never trusts the browser candidate pool |
 | Shortlist stays at 6 | Preview can be broader · guided output is always 6; a false Haiku specific-brand decision favors no more than two models per brand where credible alternatives exist, while explicit named-brand queries override it |
 | Finalize is thin | Haiku locks in the blocking path using product fit before quality confidence, value, variety, and Amazon position · product detail stays async |
 | Preview ≠ focused picks | `Just show me results` is not the guided shortlist |

@@ -3,20 +3,12 @@ import { CheckCircle2, PencilLine, Sparkles } from 'lucide-react'
 import { ResultSkeleton } from '@/components/home/ResultSkeleton.jsx'
 import { FinalizeLoadingState } from '@/components/home/FinalizeLoadingState.jsx'
 import {
-  addChipToNotes,
   buildRefinementCopy,
-  clampFollowUpNotes,
   formatTimingValue,
   normalizeRefinementChips,
 } from '@/components/home/home-helpers.js'
 import { RESULT_CARD_SLOTS } from '@/components/home/useGuidedSearch.js'
 import { Button } from '@/components/ui/button.jsx'
-
-const DEFAULT_REFINEMENT_CHIPS = [
-  { label: 'Good value' },
-  { label: 'Easy to use' },
-  { label: 'Fits my space' },
-]
 
 export function CharCounter({ current, max }) {
   if (current === 0) return null
@@ -44,16 +36,13 @@ export function RefinementCopy({
 
   return (
     <div className="space-y-4 text-center sm:text-left">
-      <div className="space-y-2">
+      <div>
         <h2
           className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl"
           style={{ fontFamily: '"Manrope", sans-serif' }}
         >
-          What should Focamai keep in mind?
+          One quick question
         </h2>
-        <p className="mx-auto max-w-2xl text-sm font-medium leading-6 text-slate-500 sm:mx-0 sm:text-[15px]">
-          Add any preferences, must-haves, or deal breakers.
-        </p>
       </div>
       <div className="rounded-2xl border border-[#e6d8c5] bg-white/90 p-4 shadow-[0_14px_36px_-30px_rgba(120,87,63,0.28)]">
         <div className="flex items-center justify-center gap-2 text-sm font-semibold text-[#80573f] sm:justify-start">
@@ -83,12 +72,11 @@ export function RefinementCopy({
             {displayedCopy.titleQuestion}
           </p>
         ) : null}
-        <p className="mt-2 text-sm font-medium leading-6 text-slate-600 transition-opacity duration-300">
-          {displayedCopy.helper}
-          {isGeneratingPrompt ? (
-            <span className="ml-0.5 inline-block h-4 w-px translate-y-0.5 animate-pulse bg-slate-400 align-middle motion-reduce:animate-none" />
-          ) : null}
-        </p>
+        {displayedCopy.helper ? (
+          <p className="mt-2 text-sm font-medium leading-6 text-slate-600 transition-opacity duration-300">
+            {displayedCopy.helper}
+          </p>
+        ) : null}
         {canAskDifferentQuestion ? (
           <button
             type="button"
@@ -105,34 +93,33 @@ export function RefinementCopy({
 
 export function RefinementChips({
   disabled,
-  followUpNotes,
-  onFollowUpNotesChange,
+  isLoading = false,
+  onSelectAnswer,
   refinementPrompt,
+  selectedAnswer = '',
 }) {
   const normalizedChips = normalizeRefinementChips(refinementPrompt)
-  const visibleChips = normalizedChips.length ? normalizedChips : DEFAULT_REFINEMENT_CHIPS
 
   function handleChipClick(chip) {
     if (disabled) {
       return
     }
 
-    if (chip.prompt) {
-      onFollowUpNotesChange(clampFollowUpNotes(chip.prompt))
-      return
-    }
-
-    onFollowUpNotesChange(addChipToNotes(followUpNotes, chip.label))
+    onSelectAnswer(selectedAnswer === chip.prompt ? '' : chip.prompt)
   }
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm font-semibold text-slate-500">A few starting points</p>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {visibleChips.map((chip) => {
-          const selected = String(followUpNotes ?? '')
-            .toLowerCase()
-            .includes(chip.label.toLowerCase())
+    <div className="grid gap-2 sm:grid-cols-2">
+      {normalizedChips.length === 0 && isLoading
+        ? [0, 1, 2, 3].map((index) => (
+          <div
+            key={index}
+            aria-hidden="true"
+            className="h-12 animate-pulse rounded-full border border-[#e5dacb] bg-[#f8f4ee] motion-reduce:animate-none"
+          />
+        ))
+        : normalizedChips.map((chip) => {
+          const selected = selectedAnswer === chip.prompt
 
           return (
             <button
@@ -151,7 +138,6 @@ export function RefinementChips({
             </button>
           )
         })}
-      </div>
     </div>
   )
 }

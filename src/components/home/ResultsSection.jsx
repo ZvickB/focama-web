@@ -203,6 +203,8 @@ export function ResultsSection({
   displayedResults,
   diagnostics,
   errorMessage,
+  guidedUnavailableMessage = '',
+  hasCompletedFinalize = false,
   hasFinalResults,
   hasStartedSearch,
   improvePicksSuggestions = [],
@@ -215,6 +217,7 @@ export function ResultsSection({
   onRetailerClick,
   onSelectProduct,
   onFailureRetry = () => {},
+  onGuidedAvailabilityRetry = () => {},
   onFindBetterMatches = () => {},
   onKeepCandidateRecovery = () => {},
   onRetryAdviceRequest,
@@ -487,6 +490,27 @@ export function ResultsSection({
         </div>
       ) : null}
 
+      {guidedUnavailableMessage ? (
+        <div
+          role="status"
+          className="flex flex-col gap-3 rounded-3xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="space-y-1">
+            <p className="font-medium">Focused picks are temporarily unavailable.</p>
+            <p className="leading-6 text-amber-900/85">{guidedUnavailableMessage}</p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 shrink-0 rounded-full border-amber-300 bg-white text-amber-950 hover:bg-amber-100"
+            onClick={onGuidedAvailabilityRetry}
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Try focused picks again
+          </Button>
+        </div>
+      ) : null}
+
       {isLoading && displayedResults.length === 0 ? (
         <div className="space-y-4">
           <div
@@ -513,18 +537,22 @@ export function ResultsSection({
         </div>
       ) : null}
 
-      {!hasFinalResults && !showPreviewResults && hasStartedSearch && !errorMessage && !isLoading ? (
+      {!hasCompletedFinalize &&
+      !hasFinalResults &&
+      !showPreviewResults &&
+      hasStartedSearch &&
+      !errorMessage &&
+      !isLoading ? (
         <div className="rounded-2xl border border-dashed border-[#e6d8c5] bg-white/82 px-6 py-12 text-center shadow-[0_14px_38px_-32px_rgba(120,87,63,0.18)] sm:px-8">
           <div className="mx-auto max-w-xl space-y-3">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
               <Sparkles className="h-4 w-4 text-primary" />
             </div>
             <p className="text-lg font-medium text-slate-900">
-              Your shortlist is taking shape.
+              Finding your best options…
             </p>
             <p className="text-sm leading-6 text-slate-600 sm:text-base">
-              Add a little context for a more focused set of picks, or skip ahead to see products
-              now.
+              We’re gathering products in the background while you tell us what matters.
             </p>
           </div>
         </div>
@@ -779,7 +807,9 @@ export function ResultsSection({
         </div>
       ) : null}
 
-      {!hasStartedSearch && !errorMessage ? null : !isLoading && displayedResults.length === 0 && !errorMessage ? (
+      {!hasStartedSearch && !errorMessage
+        ? null
+        : hasCompletedFinalize && !isLoading && displayedResults.length === 0 && !errorMessage ? (
         <div className="rounded-2xl border border-dashed border-[#e6d8c5] bg-white/82 px-6 py-12 text-center shadow-[0_14px_38px_-32px_rgba(120,87,63,0.18)] sm:px-8">
           <div className="mx-auto max-w-xl space-y-3">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">

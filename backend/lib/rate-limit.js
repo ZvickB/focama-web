@@ -1,11 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { getEnv } from './search-data.js'
+import { isOperationTimeoutError, runWithTimeout } from './operation-timeout.js'
 
 const RATE_LIMIT_STORE = new Map()
 const RATE_LIMIT_EVENTS_TABLE = 'rate_limit_events'
 const RATE_LIMIT_RPC = 'consume_rate_limit_token'
 const SUPABASE_RATE_LIMIT_WARNING_INTERVAL_MS = 60_000
+const DEFAULT_RATE_LIMIT_STORAGE_TIMEOUT_MS = 500
 
 let supabaseRateLimitClient = null
 let lastSupabaseRateLimitWarningAt = 0
@@ -68,17 +70,7 @@ function getSupabaseRateLimitClient() {
 
 function shouldUseSupabaseRateLimit() {
   const storageMode = getRateLimitStorageMode()
-
-  if (storageMode === 'memory') {
-    return false
-  }
-
-  if (storageMode === 'supabase') {
-    return true
-  }
-
-  const { serverKey, url } = getSupabaseConfig()
-  return Boolean(url && serverKey)
+  return storageMode === 'supabase'
 }
 
 function createRateLimitKey(ipAddress) {
@@ -100,6 +92,16 @@ function warnSupabaseRateLimitFallback(error) {
   lastSupabaseRateLimitWarningAt = now
   const message = error instanceof Error ? error.message : 'Unknown Supabase rate-limit error'
   console.warn(`[rate-limit] Supabase limiter unavailable; using process-local fallback: ${message}`)
+}
+
+function getRateLimitStorageTimeoutMs() {
+  const configured = Number(getEnv('RATE_LIMIT_STORAGE_TIMEOUT_MS'))
+
+  if (!Number.isFinite(configured)) {
+    return DEFAULT_RATE_LIMIT_STORAGE_TIMEOUT_MS
+  }
+
+  return Math.min(5_000, Math.max(50, Math.round(configured)))
 }
 
 export function getCountryCode(headers = {}) {
@@ -260,13 +262,29 @@ async function takeSupabaseRateLimitToken(ipAddress, { limit, windowMs } = DEFAU
 export async function takeRateLimitToken(ipAddress, config = DEFAULT_RATE_LIMIT_CONFIG) {
   if (shouldUseSupabaseRateLimit()) {
     try {
-      return await takeSupabaseRateLimitToken(ipAddress, config)
+      const result = await runWithTimeout(
+        () => takeSupabaseRateLimitToken(ipAddress, config),
+        {
+          label: 'Supabase rate limiter',
+          timeoutMs: getRateLimitStorageTimeoutMs(),
+        },
+      )
+      return { ...result, storage: 'supabase' }
     } catch (error) {
       warnSupabaseRateLimitFallback(error)
+      return {
+        ...takeMemoryRateLimitToken(ipAddress, config),
+        storage: 'memory',
+        fallbackReason: isOperationTimeoutError(error) ? 'timeout' : 'error',
+      }
     }
   }
 
-  return takeMemoryRateLimitToken(ipAddress, config)
+  return {
+    ...takeMemoryRateLimitToken(ipAddress, config),
+    storage: 'memory',
+    fallbackReason: getRateLimitStorageMode() === 'memory' ? 'configured_memory' : 'local_primary',
+  }
 }
 
 export function resetRateLimitStore() {

@@ -150,6 +150,10 @@ export async function writeStoredSearchCacheEntry({
   }
   const ttlMs = getCacheEntryTtlMs(entry)
 
+  // Make a newly issued discovery token usable immediately on this process.
+  // Durable Supabase persistence may continue after the preview response.
+  memorySet(cacheKey, entry, ttlMs)
+
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdminClient()
@@ -172,8 +176,6 @@ export async function writeStoredSearchCacheEntry({
         throw error
       }
 
-      memorySet(cacheKey, entry, ttlMs)
-
       return {
         ...entry,
         storage: 'supabase',
@@ -190,8 +192,6 @@ export async function writeStoredSearchCacheEntry({
         expiresAt: entry.expiresAt,
         scope,
       })
-
-      memorySet(cacheKey, entry, ttlMs)
 
       return {
         ...entry,
@@ -211,8 +211,6 @@ export async function writeStoredSearchCacheEntry({
     expiresAt: entry.expiresAt,
     scope,
   })
-
-  memorySet(cacheKey, entry, ttlMs)
 
   return {
     ...entry,

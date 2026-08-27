@@ -45,7 +45,7 @@
 - Holds quick structured answers, optional written comments, optional follow-up email, and basic session/search context.
 
 ### `rate_limit_events`
-- Stores short-lived hashed client keys for shared backend rate limiting.
+- Stores short-lived hashed client keys only when the optional `RATE_LIMIT_STORAGE=supabase` shared limiter is explicitly enabled. Normal production search limiting is now process-local.
 - Lets multiple Render instances count against the same 10-second request window.
 - Does not store raw IP addresses.
 
@@ -106,7 +106,11 @@ SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SECRET_KEY=your-supabase-secret-key
 SEARCH_CACHE_TTL_MINUTES=1440
 RATE_LIMIT_STORAGE=auto
+RATE_LIMIT_STORAGE_TIMEOUT_MS=500
 RATE_LIMIT_HASH_SALT=your-stable-random-salt
+DISCOVERY_CACHE_READ_TIMEOUT_MS=750
+DISCOVERY_SESSION_WRITE_TIMEOUT_MS=2000
+SENSITIVE_IMAGE_VERDICT_TIMEOUT_MS=500
 SENSITIVE_IMAGE_SHADOW_ENABLED=true
 SENSITIVE_IMAGE_REVEAL_ENABLED=true
 RESEND_API_KEY=your-resend-key
@@ -121,6 +125,7 @@ Notes:
 - Legacy `SUPABASE_SERVICE_ROLE_KEY` is still accepted.
 - Do not expose either server-side key to the browser.
 - `RATE_LIMIT_STORAGE=auto` uses Supabase when configured and memory otherwise; set `memory` only for local/debug fallback.
+- Storage deadlines bound cache reads, sensitive-image verdicts, background session resource use, and recent-token readiness. Cache-read timeouts become provider misses; sensitive-image verdict timeouts remain hidden; discovery previews do not await token-session persistence.
 - `RATE_LIMIT_HASH_SALT` is optional but recommended so rate-limit keys remain stable without relying on the Supabase secret as the hash salt.
 - `SENSITIVE_IMAGE_SHADOW_ENABLED=true` banks successful Sightengine decisions and checks the persistent cache before making a billed provider call.
 - `SENSITIVE_IMAGE_REVEAL_ENABLED=true` is approved for the current tester-only production rollout. Set it back to `false` immediately if a dangerous false reveal appears.

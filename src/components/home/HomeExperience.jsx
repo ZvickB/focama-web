@@ -63,6 +63,10 @@ function OpenLayout(props) {
     phase: 'primary',
     promptKey: '',
   })
+  const [selectedRefinementAnswer, setSelectedRefinementAnswer] = useState({
+    questionKey: '',
+    value: '',
+  })
   const alternateQuestionTimerRef = useRef(null)
   const {
     guided,
@@ -71,6 +75,7 @@ function OpenLayout(props) {
   const { actions, diagnostics, query, querySuggestion, results, retry, status } = guided
   const displayedResults = results.displayed
   const errorMessage = status.errorMessage
+  const guidedUnavailableMessage = status.guidedUnavailableMessage
   const hasFinalResults = results.hasFinalResults
   const hasStartedSearch = status.hasStartedSearch
   const isLoading = status.isLoading
@@ -79,6 +84,8 @@ function OpenLayout(props) {
     query.submittedQuery,
     prompt?.prompt || '',
     prompt?.alternatePrompt || '',
+    prompt?.answerOptions || [],
+    prompt?.alternateAnswerOptions || [],
   ])
   const alternateQuestionPhase = alternateQuestionState.promptKey === promptKey
     ? alternateQuestionState.phase
@@ -86,11 +93,23 @@ function OpenLayout(props) {
   const isShowingAlternateQuestion = alternateQuestionPhase === 'alternate'
   const isSwitchingQuestion = alternateQuestionPhase === 'switching'
   const displayedPrompt = isShowingAlternateQuestion && prompt?.alternatePrompt
-    ? { ...prompt, prompt: prompt.alternatePrompt }
+    ? {
+        ...prompt,
+        prompt: prompt.alternatePrompt,
+        answerOptions: prompt.alternateAnswerOptions || [],
+      }
     : prompt
+  const activeQuestionKey = `${promptKey}:${isShowingAlternateQuestion ? 'alternate' : 'primary'}`
+  const activeRefinementAnswer = selectedRefinementAnswer.questionKey === activeQuestionKey
+    ? selectedRefinementAnswer.value
+    : ''
   const showPreviewResults = results.showPreview
   const submittedQuery = query.submittedQuery
-  const shouldShowRefinementPanel = hasStartedSearch && !hasFinalResults && !retry.autoFinalizing
+  const shouldShowRefinementPanel =
+    hasStartedSearch &&
+    !hasFinalResults &&
+    !retry.autoFinalizing &&
+    !guidedUnavailableMessage
 
   useEffect(() => {
     const revealTimer = window.setTimeout(() => {
@@ -248,7 +267,10 @@ function OpenLayout(props) {
   const hasDiscoveryResults = Boolean(results.candidatePool)
   const showLoadingResults = isLoading && displayedResults.length === 0
   const shouldLoadResultsSection =
-    hasStartedSearch || displayedResults.length > 0 || Boolean(errorMessage)
+    hasStartedSearch ||
+    displayedResults.length > 0 ||
+    Boolean(errorMessage) ||
+    Boolean(guidedUnavailableMessage)
   const canSubmitTopQuery = !isLoading && !hasStartedSearch
 
   function handleSearchSubmit(event) {
@@ -265,6 +287,20 @@ function OpenLayout(props) {
       setAlternateQuestionState({ phase: 'alternate', promptKey })
       alternateQuestionTimerRef.current = null
     }, ALTERNATE_QUESTION_REVEAL_DELAY_MS)
+  }
+
+  function handleSelectRefinementAnswer(value) {
+    setSelectedRefinementAnswer({ questionKey: activeQuestionKey, value })
+  }
+
+  function buildCombinedRefinementNotes() {
+    return clampFollowUpNotes(
+      [activeRefinementAnswer, query.followUpNotes.trim()].filter(Boolean).join(' '),
+    )
+  }
+
+  function handleFinalizeRefinement() {
+    actions.finalizeRefinement(buildCombinedRefinementNotes())
   }
 
   const { setProgress } = useSearchProgress()
@@ -473,13 +509,17 @@ function OpenLayout(props) {
               />
 
               <RefinementChips
-                disabled={status.isFinalizing}
-                followUpNotes={query.followUpNotes}
-                onFollowUpNotesChange={query.setFollowUpNotes}
-                refinementPrompt={prompt}
+                disabled={status.isFinalizing || status.isGeneratingPrompt || isSwitchingQuestion}
+                isLoading={status.isGeneratingPrompt || isSwitchingQuestion}
+                onSelectAnswer={handleSelectRefinementAnswer}
+                refinementPrompt={displayedPrompt}
+                selectedAnswer={activeRefinementAnswer}
               />
 
               <div className="space-y-2">
+                <Label htmlFor="open-follow-up-notes" className="px-1 text-sm font-semibold text-slate-700">
+                  Anything else? <span className="font-normal text-slate-400">Optional</span>
+                </Label>
                 <div
                   className={`rounded-[30px] border bg-white p-1 transition-all duration-300 ${
                     status.isGeneratingPrompt
@@ -487,9 +527,6 @@ function OpenLayout(props) {
                       : 'border-[#e5dacb] shadow-[0_14px_38px_-32px_rgba(120,87,63,0.18)]'
                   }`}
                 >
-                  <Label htmlFor="open-follow-up-notes" className="sr-only">
-                    Tell us more
-                  </Label>
                   <Textarea
                     id="open-follow-up-notes"
                     value={query.followUpNotes}
@@ -498,7 +535,7 @@ function OpenLayout(props) {
                     onKeyDown={(event) =>
                       handleRefinementTextareaKeyDown(event, {
                         canSubmit: hasDiscoveryResults && !status.isFinalizing,
-                        onSubmit: actions.finalizeRefinement,
+                        onSubmit: handleFinalizeRefinement,
                       })
                     }
                     className="min-h-36 resize-none rounded-[28px] border-0 bg-transparent px-5 py-4 text-base leading-7 shadow-none placeholder:text-slate-400 focus-visible:ring-0"
@@ -518,7 +555,7 @@ function OpenLayout(props) {
                         <span className="absolute inset-0 rounded-full bg-primary/20 animate-soft-pulse" />
                         <span className="relative h-2.5 w-2.5 rounded-full bg-primary/65" />
                       </span>
-                      You can start typing while we put together an example suggestion, or just write your own.
+                      You can add anything else while we prepare your question.
                     </div>
                     <div className="relative overflow-hidden rounded-full bg-stone-200/80">
                       <div className="h-2.5 w-full" />
@@ -529,25 +566,22 @@ function OpenLayout(props) {
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="order-2 flex flex-col items-start gap-1 sm:order-1">
+                <div className="order-2 sm:order-1">
                   <button
                     type="button"
                     disabled={!hasDiscoveryResults || status.isFinalizing}
                     className="rounded-full border border-[#e5dacb] bg-white/90 px-4 py-2 text-left text-sm font-medium text-slate-500 shadow-[0_12px_30px_-24px_rgba(120,87,63,0.35)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#d7c7b3] hover:bg-white hover:text-slate-700 hover:shadow-[0_16px_36px_-24px_rgba(120,87,63,0.44)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:pointer-events-none disabled:opacity-40 disabled:hover:translate-y-0"
                     onClick={actions.showProductsNow}
                   >
-                    Skip the question and show results {'->'}
+                    Skip and show results {'->'}
                   </button>
-                  <p className="text-left text-xs text-slate-400">
-                    Great for simple searches that don't need more detail. Uses your original search only.
-                  </p>
                 </div>
-                <div className="order-1 flex flex-col gap-1 sm:order-2 sm:items-end">
+                <div className="order-1 sm:order-2">
                   <Button
                     type="button"
                     disabled={!hasDiscoveryResults || status.isFinalizing}
                     className="h-14 w-full rounded-[22px] bg-primary px-6 text-[15px] font-medium text-primary-foreground shadow-[0_18px_42px_-28px_rgba(15,97,117,0.36)] hover:bg-primary/90 sm:w-auto sm:min-w-[220px]"
-                    onClick={actions.finalizeRefinement}
+                    onClick={handleFinalizeRefinement}
                   >
                     {status.isFinalizing ? 'Narrowing your picks...' : 'Show focused picks'}
                     {status.isFinalizing ? (
@@ -556,9 +590,6 @@ function OpenLayout(props) {
                       <Sparkles className="ml-2 h-4 w-4" />
                     )}
                   </Button>
-                  <p className="px-1 text-xs text-slate-400">
-                    Best results - takes about 4 more seconds
-                  </p>
                 </div>
               </div>
             </div>
@@ -608,7 +639,9 @@ function OpenLayout(props) {
                 <ResultsSection
                   displayedResults={displayedResults}
                   diagnostics={diagnostics}
+                  guidedUnavailableMessage={guidedUnavailableMessage}
                   errorMessage={errorMessage}
+                  hasCompletedFinalize={status.hasCompletedFinalize}
                   hasFinalResults={hasFinalResults}
                   hasStartedSearch={hasStartedSearch}
                   isFinalizing={status.isFinalizing}
@@ -627,6 +660,7 @@ function OpenLayout(props) {
                   onRetryFeedbackChange={retry.setFeedback}
                   onRedoBalanced={actions.redoCurrentSearchBalanced}
                   onFailureRetry={actions.retryFailedSearch}
+                  onGuidedAvailabilityRetry={actions.retryGuidedAvailability}
                   previousResults={results.previous}
                   rankingPreference={results.rankingPreference}
                   selectionState={results.selectionState}

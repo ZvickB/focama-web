@@ -11,6 +11,7 @@ import {
 import { recordSearchDiagnosticEvent } from '../search-storage.js'
 import { buildCacheKey, getEnv } from '../search-data.js'
 import { fetchRainforestArtifacts } from '../rainforest-pipeline.js'
+import { acquireRainforestSearchSlot } from '../provider-guard.js'
 import {
   CACHE_SCOPE_LIVE_SEARCH,
   CACHE_SCOPE_RAINFOREST,
@@ -34,6 +35,83 @@ import {
   MODERATION_OUTCOMES,
 } from '../content-moderation.js'
 import { applyCachedSensitiveImageVerdictsToGroups } from '../sensitive-image-reveal.js'
+import { isSupabaseConfigured } from '../storage/supabase-client.js'
+import { isOperationTimeoutError, runWithTimeout } from '../operation-timeout.js'
+
+const DEFAULT_DISCOVERY_CACHE_READ_TIMEOUT_MS = 750
+const DEFAULT_DISCOVERY_SESSION_BACKGROUND_TIMEOUT_MS = 5_000
+
+function getStorageTimeoutMs(name, defaultValue) {
+  const configured = Number(getEnv(name))
+
+  if (!Number.isFinite(configured)) {
+    return defaultValue
+  }
+
+  return Math.min(10_000, Math.max(50, Math.round(configured)))
+}
+
+function getStorageFailureOutcome(error) {
+  return isOperationTimeoutError(error) ? 'timeout' : 'error'
+}
+
+function logDiscoveryStorageEvent(eventName, {
+  amazonDomain,
+  durationMs,
+  error,
+  operation,
+  outcome,
+  route = '/api/search/rainforest-discover',
+  searchId,
+} = {}) {
+  logSearchFlowEvent(eventName, {
+    route,
+    searchId,
+    amazonDomain,
+    operation,
+    outcome,
+    durationMs: roundTimingDuration(durationMs),
+    errorType: error?.name || undefined,
+    error: error instanceof Error ? error.message : undefined,
+  })
+}
+
+async function persistDiscoverySessionInBackground(operation, context = {}) {
+  const startedAt = nowMs()
+
+  try {
+    const value = await runWithTimeout(operation, {
+      label: 'Background discovery session snapshot write',
+      timeoutMs: getStorageTimeoutMs(
+        'DISCOVERY_SESSION_BACKGROUND_TIMEOUT_MS',
+        DEFAULT_DISCOVERY_SESSION_BACKGROUND_TIMEOUT_MS,
+      ),
+    })
+    const durationMs = nowMs() - startedAt
+    if (isSupabaseConfigured() && value?.storage === 'local') {
+      logDiscoveryStorageEvent('discovery_storage_degraded', {
+        ...context,
+        durationMs,
+        operation: 'session_write',
+        outcome: 'local_fallback',
+      })
+      return { durationMs, ok: false, outcome: 'local_fallback', value }
+    }
+
+    return { durationMs, ok: true, outcome: 'ok', value }
+  } catch (error) {
+    const durationMs = nowMs() - startedAt
+    const outcome = getStorageFailureOutcome(error)
+    logDiscoveryStorageEvent('discovery_storage_degraded', {
+      ...context,
+      durationMs,
+      error,
+      operation: 'session_write',
+      outcome,
+    })
+    return { durationMs, error, ok: false, outcome, value: null }
+  }
+}
 
 function logOpenAiQueryModeration({ moderation, normalizedQuery, route, synchronous }) {
   if (moderation.outcome === MODERATION_OUTCOMES.BLOCK) {
@@ -165,16 +243,16 @@ function isThinDiscoveryCacheHit(cachedEntry, normalizedCachedResults = []) {
 }
 
 function createDiscoveryToken() {
-  return randomUUID()
+  return `${Date.now().toString(36)}.${randomUUID()}`
 }
 
 async function ensureDiscoverySnapshotToken({
   normalizedQuery,
   normalizedDetails = '',
   cachedEntry,
+  discoveryToken = createDiscoveryToken(),
   source = 'guided_discovery',
 }) {
-  const discoveryToken = createDiscoveryToken()
   const selectionWithoutEnrichment =
     cachedEntry?.selection && typeof cachedEntry.selection === 'object' && !Array.isArray(cachedEntry.selection)
       ? { ...cachedEntry.selection, enrichment: null }
@@ -201,6 +279,7 @@ async function ensureDiscoverySnapshotToken({
       expiresAt: updatedEntry?.expiresAt || cachedEntry?.expiresAt,
     },
     discoveryToken,
+    storage: updatedEntry?.storage,
   }
 }
 
@@ -274,6 +353,16 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   const rateLimitStartedAt = nowMs()
   const rateLimit = await takeRateLimitToken(clientIpAddress, DEFAULT_RATE_LIMIT_CONFIG)
   const rateLimitDuration = nowMs() - rateLimitStartedAt
+
+  if (rateLimit.fallbackReason === 'timeout' || rateLimit.fallbackReason === 'error') {
+    logDiscoveryStorageEvent('discovery_storage_fallback', {
+      amazonDomain,
+      durationMs: rateLimitDuration,
+      operation: 'rate_limit',
+      outcome: rateLimit.fallbackReason,
+      searchId: supportSearchId,
+    })
+  }
 
   if (!rateLimit.allowed) {
     logSearchFlowEvent('rainforest_discovery_rate_limited', {
@@ -354,11 +443,38 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   const normalizedDetails = ''
   const discoveryCacheKey = buildCacheKey(normalizedQuery, normalizedDetails, rainforestScope)
   const cacheLookupStartedAt = nowMs()
-  const { cachedEntry, normalizedCachedResults } = await readCachedSearchSnapshot({
-    productQuery: normalizedQuery,
-    details: normalizedDetails,
-    scope: rainforestScope,
-  })
+  let cachedEntry = null
+  let normalizedCachedResults = []
+  let cacheLookupOutcome = 'ok'
+
+  try {
+    const cachedSnapshot = await runWithTimeout(
+      () => readCachedSearchSnapshot({
+        productQuery: normalizedQuery,
+        details: normalizedDetails,
+        scope: rainforestScope,
+      }),
+      {
+        label: 'Discovery cache read',
+        timeoutMs: getStorageTimeoutMs(
+          'DISCOVERY_CACHE_READ_TIMEOUT_MS',
+          DEFAULT_DISCOVERY_CACHE_READ_TIMEOUT_MS,
+        ),
+      },
+    )
+    cachedEntry = cachedSnapshot.cachedEntry
+    normalizedCachedResults = cachedSnapshot.normalizedCachedResults
+  } catch (error) {
+    cacheLookupOutcome = getStorageFailureOutcome(error)
+    logDiscoveryStorageEvent('discovery_storage_fallback', {
+      amazonDomain,
+      durationMs: nowMs() - cacheLookupStartedAt,
+      error,
+      operation: 'cache_read',
+      outcome: cacheLookupOutcome,
+      searchId: supportSearchId,
+    })
+  }
   const cacheLookupDuration = nowMs() - cacheLookupStartedAt
   const refreshCache = shouldRefreshDiscoveryCache(requestUrl)
   const thinCacheHit = isThinDiscoveryCacheHit(cachedEntry, normalizedCachedResults)
@@ -373,23 +489,58 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       }
     }
 
-    const sessionSnapshotStartedAt = nowMs()
-    const tokenizedDiscovery = await ensureDiscoverySnapshotToken({
+    const discoveryToken = createDiscoveryToken()
+    const discoverySessionScope = getDiscoverySessionScope(discoveryToken)
+    const sessionPersistence = ensureDiscoverySnapshotToken({
+      discoveryToken,
       normalizedQuery,
       normalizedDetails,
       cachedEntry,
       source: cachedEntry?.source || 'guided_discovery',
     })
-    const sessionSnapshotDuration = nowMs() - sessionSnapshotStartedAt
+    runInBackground(
+      async () => {
+        await persistDiscoverySessionInBackground(sessionPersistence, {
+          amazonDomain,
+          searchId: supportSearchId,
+        })
+      },
+      {
+        amazonDomain,
+        label: 'persist_cached_discovery_session',
+        query: normalizedQuery,
+        route: '/api/search/rainforest-discover',
+        searchId: supportSearchId,
+      },
+    )
+    if (!cachedEntry.candidatePool?.searchCorrection?.suggestedQuery) {
+      runInBackground(
+        async () => {
+          await sessionPersistence
+          startQueryQualityReview({
+            normalizedQuery,
+            amazonDomain,
+            candidatePool: cachedEntry.candidatePool,
+            previewResults: normalizedCachedResults,
+            discoveryToken,
+            discoveryScope: discoverySessionScope,
+          })
+        },
+        {
+          amazonDomain,
+          label: 'start_cached_query_quality_after_session',
+          query: normalizedQuery,
+          route: '/api/search/rainforest-discover',
+          searchId: supportSearchId,
+        },
+      )
+    }
     const moderationDuration = Number.isFinite(resolvedOpenAiQueryModeration?.durationMs)
       ? resolvedOpenAiQueryModeration.durationMs
       : 0
 
-    // Cache-history data is operational telemetry only. Keep it best-effort and
-    // off the response path; the discovery snapshot above is the required write
-    // that makes this token usable by finalize on any Render instance.
     runInBackground(
-      recordSearchCacheEvent({
+      () => recordSearchCacheEvent({
         cacheKey: discoveryCacheKey,
         cacheStatus: 'hit',
         candidateCount: Array.isArray(cachedEntry.candidatePool?.candidates)
@@ -419,24 +570,27 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       previewCount: normalizedCachedResults.length,
       rateLimitMs: roundTimingDuration(rateLimitDuration),
       cacheMs: roundTimingDuration(cacheLookupDuration),
+      cacheOutcome: cacheLookupOutcome,
       moderationMs: roundTimingDuration(moderationDuration),
-      sessionSnapshotMs: roundTimingDuration(sessionSnapshotDuration),
+      sessionOutcome: 'pending',
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
 
     sendJson(response, 200, {
-      discoveryToken: tokenizedDiscovery.discoveryToken,
+      discoveryToken,
+      guidedAvailable: true,
+      sessionStatus: 'pending',
       amazonDomain,
-      candidatePool: tokenizedDiscovery.cachedEntry.candidatePool,
+      candidatePool: cachedEntry.candidatePool,
       previewResults: normalizedCachedResults,
       source: 'cache',
-      cachedAt: tokenizedDiscovery.cachedEntry.cachedAt,
+      cachedAt: cachedEntry.cachedAt,
     }, {
       serverTiming: [
         { name: 'rate-limit', duration: rateLimitDuration },
         { name: 'cache', duration: cacheLookupDuration },
         { name: 'moderation', duration: moderationDuration },
-        { name: 'session', duration: sessionSnapshotDuration },
+        { name: 'session', duration: 0 },
         { name: 'total', duration: nowMs() - requestStartedAt },
       ],
     })
@@ -451,18 +605,8 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       resultCountBeforeInternalFilters: normalizedCachedResults.length,
       resultCountAfterInternalFilters: normalizedCachedResults.length,
       cachedOrFallbackUsed: true,
+      metadata: { sessionStatus: 'pending' },
     })
-
-    if (!tokenizedDiscovery.cachedEntry.candidatePool?.searchCorrection?.suggestedQuery) {
-      startQueryQualityReview({
-        normalizedQuery,
-        amazonDomain,
-        candidatePool: tokenizedDiscovery.cachedEntry.candidatePool,
-        previewResults: normalizedCachedResults,
-        discoveryToken: tokenizedDiscovery.discoveryToken,
-        discoveryScope: getDiscoverySessionScope(tokenizedDiscovery.discoveryToken),
-      })
-    }
     return
   }
 
@@ -483,6 +627,22 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
   try {
     const discoveryToken = createDiscoveryToken()
     const discoverySessionScope = getDiscoverySessionScope(discoveryToken)
+    const providerSlot = acquireRainforestSearchSlot(clientIpAddress)
+
+    if (!providerSlot.allowed) {
+      logSearchFlowEvent('rainforest_paid_call_guard_blocked', {
+        route: '/api/search/rainforest-discover',
+        searchId: supportSearchId,
+        query: normalizedQuery,
+        amazonDomain,
+        reason: providerSlot.reason,
+      })
+      sendJson(response, 429, {
+        error: `Search capacity is busy. ${RATE_LIMIT_WAIT_MESSAGE}`,
+      })
+      return
+    }
+
     const providerStartedAt = nowMs()
     recordDiscoveryDiagnosticEvent(diagnosticContext, {
       stage: 'rainforest_request_started',
@@ -498,7 +658,9 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       rainforestApiKey,
       countryCode,
       amazonDomain,
-    }).then((value) => ({ value }), (error) => ({ error }))
+    })
+      .then((value) => ({ value }), (error) => ({ error }))
+      .finally(() => providerSlot.release())
 
     if (!openAiQueryModeration.synchronous) {
       const moderation = await awaitOpenAiQueryModeration()
@@ -564,12 +726,30 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       return
     }
     const providerDuration = nowMs() - providerStartedAt
-    const [revealedCandidates, revealedResults] = await applyCachedSensitiveImageVerdictsToGroups([
-      artifacts.candidatePool?.candidates,
-      artifacts.results,
-    ])
+    let imageVerdictOperation = { durationMs: 0, outcome: 'skipped' }
+    const [revealedCandidates, revealedResults] = await applyCachedSensitiveImageVerdictsToGroups(
+      [artifacts.candidatePool?.candidates, artifacts.results],
+      {
+        onStorageOutcome: (outcome) => {
+          imageVerdictOperation = outcome
+        },
+      },
+    )
     artifacts.candidatePool = { ...artifacts.candidatePool, candidates: revealedCandidates }
     artifacts.results = revealedResults
+
+    if (imageVerdictOperation.outcome === 'timeout' || imageVerdictOperation.outcome === 'error') {
+      logDiscoveryStorageEvent('discovery_storage_fallback', {
+        amazonDomain,
+        durationMs: imageVerdictOperation.durationMs,
+        error: imageVerdictOperation.error,
+        operation: 'sensitive_image_verdict_read',
+        outcome: imageVerdictOperation.outcome,
+        searchId: supportSearchId,
+      })
+    }
+    const imageVerdictDuration = imageVerdictOperation.durationMs
+    const imageVerdictOutcome = imageVerdictOperation.outcome
     recordDiscoveryDiagnosticEvent(diagnosticContext, {
       stage: 'rainforest_success',
       status: 'success',
@@ -602,8 +782,62 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       },
     })
 
+    const sessionCandidatePool = {
+      ...artifacts.candidatePool,
+      amazonDomain,
+    }
+    const sessionPersistence = writeSearchSnapshot({
+      productQuery: normalizedQuery,
+      details: normalizedDetails,
+      candidatePool: sessionCandidatePool,
+      discoveryToken,
+      results: artifacts.results,
+      selection: buildDiscoveryPreviewSelection(artifacts.results),
+      source: `${discoverySource}_session`,
+      scope: discoverySessionScope,
+    })
     runInBackground(
-      writeSearchSnapshot({
+      async () => {
+        await persistDiscoverySessionInBackground(sessionPersistence, {
+          amazonDomain,
+          searchId: supportSearchId,
+        })
+      },
+      {
+        amazonDomain,
+        label: 'persist_provider_discovery_session',
+        query: normalizedQuery,
+        route: '/api/search/rainforest-discover',
+        searchId: supportSearchId,
+      },
+    )
+    if (!artifacts.candidatePool?.searchCorrection?.suggestedQuery) {
+      runInBackground(
+        async () => {
+          await sessionPersistence
+          startQueryQualityReview({
+            normalizedQuery,
+            amazonDomain,
+            candidatePool: sessionCandidatePool,
+            previewResults: artifacts.results,
+            discoveryToken,
+            discoveryScope: discoverySessionScope,
+          })
+        },
+        {
+          amazonDomain,
+          label: 'start_provider_query_quality_after_session',
+          query: normalizedQuery,
+          route: '/api/search/rainforest-discover',
+          searchId: supportSearchId,
+        },
+      )
+    }
+
+    // Shared cache and history are useful for later requests, but neither is
+    // required to show this request's preview.
+    runInBackground(
+      () => writeSearchSnapshot({
         productQuery: normalizedQuery,
         details: normalizedDetails,
         candidatePool: {
@@ -626,32 +860,25 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       },
     )
 
-    await writeSearchSnapshot({
-      productQuery: normalizedQuery,
-      details: normalizedDetails,
-      candidatePool: {
-        ...artifacts.candidatePool,
-        amazonDomain,
+    runInBackground(
+      () => recordSearchCacheEvent({
+        cacheKey: discoveryCacheKey,
+        cacheStatus: providerCacheStatus,
+        candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
+          ? artifacts.candidatePool.candidates.length
+          : 0,
+        details: normalizedDetails,
+        productQuery: normalizedQuery,
+        resultCount: artifacts.results.length,
+        selectionMode: 'discovery_preview',
+        source: discoverySource,
+      }),
+      {
+        label: 'record_guided_discovery_cache_event',
+        route: '/api/search/rainforest-discover',
+        searchId: supportSearchId,
       },
-      discoveryToken,
-      results: artifacts.results,
-      selection: buildDiscoveryPreviewSelection(artifacts.results),
-      source: `${discoverySource}_session`,
-      scope: discoverySessionScope,
-    })
-
-    await recordSearchCacheEvent({
-      cacheKey: discoveryCacheKey,
-      cacheStatus: providerCacheStatus,
-      candidateCount: Array.isArray(artifacts.candidatePool?.candidates)
-        ? artifacts.candidatePool.candidates.length
-        : 0,
-      details: normalizedDetails,
-      productQuery: normalizedQuery,
-      resultCount: artifacts.results.length,
-      selectionMode: 'discovery_preview',
-      source: discoverySource,
-    })
+    )
 
     logSearchFlowEvent('rainforest_discovery_completed', {
       route: '/api/search/rainforest-discover',
@@ -663,26 +890,32 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
         : 0,
       previewCount: artifacts.results.length,
       cacheMs: roundTimingDuration(cacheLookupDuration),
+      cacheOutcome: cacheLookupOutcome,
       fallbackFrom,
+      imageVerdictMs: roundTimingDuration(imageVerdictDuration),
+      imageVerdictOutcome,
       providerMs: roundTimingDuration(providerDuration),
+      sessionOutcome: 'pending',
       source: discoverySource,
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),
     })
 
     sendJson(response, 200, {
       discoveryToken,
+      guidedAvailable: true,
+      sessionStatus: 'pending',
       amazonDomain,
-      candidatePool: {
-        ...artifacts.candidatePool,
-        amazonDomain,
-      },
+      candidatePool: sessionCandidatePool,
       previewResults: artifacts.results,
       source: discoverySource,
       fallbackFrom,
     }, {
       serverTiming: [
+        { name: 'rate-limit', duration: rateLimitDuration },
         { name: 'cache', duration: cacheLookupDuration },
         { name: 'provider', duration: providerDuration },
+        { name: 'image-verdicts', duration: imageVerdictDuration },
+        { name: 'session', duration: 0 },
         { name: 'total', duration: nowMs() - requestStartedAt },
       ],
     })
@@ -697,21 +930,8 @@ export async function handleRainforestDiscoverySearch(requestUrl, response, requ
       resultCountBeforeInternalFilters: diagnostics?.rawResultCount,
       resultCountAfterInternalFilters: artifacts.results.length,
       cachedOrFallbackUsed: Boolean(fallbackFrom),
+      metadata: { sessionStatus: 'pending' },
     })
-
-    if (!artifacts.candidatePool?.searchCorrection?.suggestedQuery) {
-      startQueryQualityReview({
-        normalizedQuery,
-        amazonDomain,
-        candidatePool: {
-          ...artifacts.candidatePool,
-          amazonDomain,
-        },
-        previewResults: artifacts.results,
-        discoveryToken,
-        discoveryScope: discoverySessionScope,
-      })
-    }
   } catch (error) {
     logSearchFlowEvent('rainforest_discovery_failed', {
       route: '/api/search/rainforest-discover',

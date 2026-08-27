@@ -160,6 +160,37 @@ describe('FinalizeLoadingState', () => {
 })
 
 describe('ResultsSection retry advice', () => {
+  it('shows a calm background-search message while refinement is still active', () => {
+    render(
+      <ResultsSection
+        displayedResults={[]}
+        errorMessage=""
+        hasFinalResults={false}
+        hasStartedSearch
+        isFinalizing={false}
+        isLoading={false}
+        isRetryReady
+        isRetrying={false}
+        isGeneratingRetryAdvice={false}
+        onRetailerClick={vi.fn()}
+        onSelectProduct={vi.fn()}
+        onRetryAdviceRequest={vi.fn()}
+        onRetryFeedbackChange={vi.fn()}
+        previousResults={[]}
+        retryFeedback=""
+        showFinalResultBadges={false}
+        showPreviewResults={false}
+        submittedQuery="office chair"
+      />,
+    )
+
+    expect(screen.getByText('Finding your best options…')).toBeInTheDocument()
+    expect(
+      screen.getByText('We’re gathering products in the background while you tell us what matters.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/couldn't build a strong shortlist yet/i)).not.toBeInTheDocument()
+  })
+
   it('shows the improved search and the active retry stage while replacement picks load', () => {
     render(
       <ResultsSectionFallback

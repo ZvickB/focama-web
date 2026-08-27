@@ -1008,11 +1008,23 @@ describe('server handlers', () => {
 
   it('returns live discovery before the background query-quality review resolves', async () => {
     const reviewDeferred = createDeferred()
+    let persistedSession = null
 
     getEnv.mockImplementation((name) => ({
       OPENAI_API_KEY: 'openai-key',
       RAINFOREST_API_KEY: 'rf-key',
     })[name] || '')
+    readStoredSearchCacheEntry.mockImplementation(async () => persistedSession)
+    writeStoredSearchCacheEntry.mockImplementation(async (entry) => {
+      if (entry.discoveryToken) {
+        persistedSession = {
+          ...entry,
+          cachedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        }
+      }
+      return { ...entry, storage: 'local' }
+    })
     generateQueryQualityReview.mockReturnValue(reviewDeferred.promise)
     getFilteredSearchArtifacts.mockReturnValue({
       candidatePool: {

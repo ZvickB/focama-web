@@ -98,7 +98,7 @@ describe('HomePage modal enrichment', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/anything else/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
 
     await findVisibleResultTitle('Travel stroller')
@@ -214,7 +214,7 @@ describe('HomePage modal enrichment', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/anything else/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Travel stroller')
 
@@ -365,7 +365,7 @@ describe('HomePage modal enrichment', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/anything else/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Travel stroller')
 
@@ -513,7 +513,7 @@ describe('HomePage modal enrichment', () => {
     await user.type(screen.getByLabelText(/product topic/i), 'stroller')
     await user.click(screen.getByRole('button', { name: /start search/i }))
     await screen.findByText(/what should we optimize for with this stroller/i)
-    await user.type(screen.getByLabelText(/tell us more/i), 'comfort matters most')
+    await user.type(screen.getByLabelText(/anything else/i), 'comfort matters most')
     await user.click(screen.getByRole('button', { name: /show focused picks/i }))
     await findVisibleResultTitle('Travel stroller')
 

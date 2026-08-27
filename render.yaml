@@ -43,6 +43,20 @@ services:
         sync: false
       - key: RAINFOREST_API_KEY
         sync: false
+      - key: RATE_LIMIT_STORAGE
+        value: memory
+      - key: DISCOVERY_CACHE_READ_TIMEOUT_MS
+        value: 750
+      - key: DISCOVERY_SESSION_BACKGROUND_TIMEOUT_MS
+        value: 5000
+      - key: DISCOVERY_SESSION_READY_TIMEOUT_MS
+        value: 2500
+      - key: RAINFOREST_SEARCH_RATE_LIMIT
+        value: 4
+      - key: RAINFOREST_SEARCH_RATE_WINDOW_MS
+        value: 10000
+      - key: RAINFOREST_SEARCH_MAX_CONCURRENCY
+        value: 4
       - key: RESEND_API_KEY
         sync: false
       - key: PRICE_WATCH_EMAILS_ENABLED

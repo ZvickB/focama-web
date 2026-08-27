@@ -5,7 +5,7 @@ import { DEFAULT_HAIKU_MODEL, DEFAULT_REFINEMENT_MODEL, OPENAI_RESPONSES_ENDPOIN
 
 const MAX_PROMPT_LENGTH = 140
 const MAX_REFINEMENT_SUGGESTION_LENGTH = 30
-const MAX_REFINEMENT_SUGGESTIONS = 3
+const MAX_REFINEMENT_SUGGESTIONS = 4
 
 function clampText(value, maxLength) {
   const normalizedValue = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
@@ -111,15 +111,37 @@ function buildQuestionFastSchema() {
       prompt: {
         type: 'string',
         maxLength: MAX_PROMPT_LENGTH,
+        description:
+          'A short multiple-choice question that can be answered directly by any refinement_suggestions label.',
       },
       alternate_prompt: {
         type: 'string',
         maxLength: MAX_PROMPT_LENGTH,
+        description:
+          'A short multiple-choice question that can be answered directly by any alternate_refinement_suggestions label.',
       },
       refinement_suggestions: {
         type: 'array',
         minItems: MAX_REFINEMENT_SUGGESTIONS,
         maxItems: MAX_REFINEMENT_SUGGESTIONS,
+        description:
+          'Four direct answers to prompt: three concrete mutually exclusive choices and one neutral choice.',
+        items: {
+          type: 'object',
+          properties: {
+            label: { type: 'string', minLength: 1, maxLength: MAX_REFINEMENT_SUGGESTION_LENGTH },
+            prompt: { type: 'string', minLength: 1 },
+          },
+          required: ['label', 'prompt'],
+          additionalProperties: false,
+        },
+      },
+      alternate_refinement_suggestions: {
+        type: 'array',
+        minItems: MAX_REFINEMENT_SUGGESTIONS,
+        maxItems: MAX_REFINEMENT_SUGGESTIONS,
+        description:
+          'Four direct answers to alternate_prompt: three concrete mutually exclusive choices and one neutral choice.',
         items: {
           type: 'object',
           properties: {
@@ -131,7 +153,12 @@ function buildQuestionFastSchema() {
         },
       },
     },
-    required: ['prompt', 'alternate_prompt', 'refinement_suggestions'],
+    required: [
+      'prompt',
+      'alternate_prompt',
+      'refinement_suggestions',
+      'alternate_refinement_suggestions',
+    ],
     additionalProperties: false,
   }
 }
@@ -139,19 +166,25 @@ function buildQuestionFastSchema() {
 
 function buildQuestionFastInput(productQuery) {
   return [
-    'Write two short follow-up questions and exactly 3 short refinement chip labels for a shopping search before any product results exist.',
+    'Write two short follow-up questions for a shopping search before any product results exist.',
     'Stay query-only. Do not assume specific products, brands, or merchants.',
     `Keep the question at or under ${MAX_PROMPT_LENGTH} characters.`,
     'Return the strongest question as prompt and a useful alternative as alternate_prompt.',
-    'Each field must contain only one question, and the two questions must explore different decision factors.',
-    `Each refinement chip label must be 1-3 words and ${MAX_REFINEMENT_SUGGESTION_LENGTH} characters or fewer.`,
-    'The chip labels should be tappable preferences, constraints, use cases, or deal breakers the shopper might choose.',
-    'For each chip, also write a short natural-language prompt (1-2 sentences) that expands what that chip means in the context of this specific search, written as if the shopper is saying it.',
+    'Each question must ask about one decision factor, and the two questions must explore different factors.',
+    'Write the answer choices first in your reasoning, then write a question that those exact choices answer.',
+    `For each question, write exactly ${MAX_REFINEMENT_SUGGESTIONS} mutually exclusive answer options that directly and grammatically answer that exact question.`,
+    'The question must be multiple-choice, not yes/no. It should name or clearly frame the same concepts used in its first three answer labels.',
+    'If the question asks about usage frequency, every concrete answer must be a frequency. If it asks about budget, every concrete answer must be a budget range. Apply this same-category rule to every question.',
+    `Each answer label must be 1-4 words and ${MAX_REFINEMENT_SUGGESTION_LENGTH} characters or fewer.`,
+    'Use refinement_suggestions for prompt and alternate_refinement_suggestions for alternate_prompt.',
+    'The first three options should be useful concrete answers. The fourth must be a neutral answer such as "No preference" or "Not sure".',
+    'For each answer, prompt must be one short natural-language sentence written as if the shopper is answering the question.',
     'Use natural shopping language.',
     'Do not use brands, merchants, hype, generic quality claims, or broad labels like "Quality", "Best option", "Top rated", or "Good product".',
-    'Do not repeat either follow-up question as chip labels.',
     'Do not add helper text, examples, a placeholder, category notes, or reasoning fields.',
     'Focus on the detail most likely to change ranking, such as use case, must-have, budget, size, comfort, or what to avoid.',
+    'Good pairing: question "How often will you use it?" with labels "Daily", "A few times weekly", "Occasionally", and "Not sure".',
+    'Bad pairing: question "Do you need lumbar support?" with labels "Lower price", "More mobility", "Deep adjustability", and "No preference".',
     `Product request: ${productQuery}`,
   ].join('\n')
 }
@@ -161,7 +194,7 @@ function buildQuestionFastAnthropicInput(productQuery) {
     buildQuestionFastInput(productQuery),
     '',
     'Return valid JSON only with this exact shape:',
-    '{"prompt":"...","alternate_prompt":"...","refinement_suggestions":[{"label":"...","prompt":"..."},{"label":"...","prompt":"..."},{"label":"...","prompt":"..."}]}',
+    '{"prompt":"...","alternate_prompt":"...","refinement_suggestions":[{"label":"...","prompt":"..."},{"label":"...","prompt":"..."},{"label":"...","prompt":"..."},{"label":"No preference","prompt":"..."}],"alternate_refinement_suggestions":[{"label":"...","prompt":"..."},{"label":"...","prompt":"..."},{"label":"...","prompt":"..."},{"label":"No preference","prompt":"..."}]}',
   ].join('\n')
 }
 
@@ -369,6 +402,9 @@ export async function generateQuestionFast(
     prompt: clampText(parsed.prompt, MAX_PROMPT_LENGTH),
     alternatePrompt: clampText(parsed.alternate_prompt, MAX_PROMPT_LENGTH),
     refinementSuggestions: normalizeRefinementSuggestions(parsed.refinement_suggestions),
+    alternateRefinementSuggestions: normalizeRefinementSuggestions(
+      parsed.alternate_refinement_suggestions,
+    ),
     usage,
     generatedAt: new Date().toISOString(),
   }
@@ -390,6 +426,9 @@ export async function generateQuestionFastHaiku(
     prompt: clampText(parsed.prompt, MAX_PROMPT_LENGTH),
     alternatePrompt: clampText(parsed.alternate_prompt, MAX_PROMPT_LENGTH),
     refinementSuggestions: normalizeRefinementSuggestions(parsed.refinement_suggestions),
+    alternateRefinementSuggestions: normalizeRefinementSuggestions(
+      parsed.alternate_refinement_suggestions,
+    ),
     usage,
     model,
     provider: 'anthropic',
