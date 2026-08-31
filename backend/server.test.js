@@ -1898,6 +1898,76 @@ describe('server handlers', () => {
     )
   })
 
+  it('includes awaited snapshot persistence in finalize timing', async () => {
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
+      model: 'claude-haiku-4-5-20251001',
+      lockedIds: ['one'],
+      usage: null,
+    })
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+    const persistence = createDeferred()
+    writeStoredSearchCacheEntry.mockReturnValueOnce(persistence.promise)
+    const response = createResponseRecorder()
+
+    const finalizePromise = handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify(createFinalizeDiscoveryBody()),
+        { 'x-forwarded-for': '203.0.113.37' },
+      ),
+      response,
+    )
+
+    await flushAsyncWork()
+    expect(response.statusCode).toBe(0)
+
+    persistence.resolve({ storage: 'supabase' })
+    await finalizePromise
+
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['Server-Timing']).toMatch(/persistence;dur=[\d.]+/)
+    const payload = JSON.parse(response.body)
+    expect(payload.debug.stageLatencyMs).toEqual(
+      expect.objectContaining({
+        persistence: expect.any(Number),
+        total: expect.any(Number),
+      }),
+    )
+    expect(payload.debug.stageLatencyMs.total)
+      .toBeGreaterThanOrEqual(payload.debug.stageLatencyMs.persistence)
+  })
+
+  it('keeps the existing finalize failure response when snapshot persistence fails', async () => {
+    mockFinalizeEnv()
+    haikuLockWinnersAndBadges.mockResolvedValue({
+      model: 'claude-haiku-4-5-20251001',
+      lockedIds: ['one'],
+      usage: null,
+    })
+    readStoredSearchCacheEntry.mockResolvedValueOnce(
+      createDiscoveryCacheEntry('stroller', [createFinalizeCandidate('one')]),
+    )
+    writeStoredSearchCacheEntry.mockRejectedValueOnce(new Error('snapshot persistence unavailable'))
+    const response = createResponseRecorder()
+
+    await handleFinalizeSelection(
+      createFinalizeRequest(
+        JSON.stringify(createFinalizeDiscoveryBody()),
+        { 'x-forwarded-for': '203.0.113.38' },
+      ),
+      response,
+    )
+
+    expect(response.statusCode).toBe(500)
+    expect(JSON.parse(response.body)).toEqual(
+      expect.objectContaining({
+        error: 'Unable to finalize the product selection.',
+      }),
+    )
+  })
+
   it('returns cards before Rainforest details resolve, then enriches with product details in the polling cache', async () => {
     mockFinalizeEnv({
       RAINFOREST_API_KEY: 'rf-key',

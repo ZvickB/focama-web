@@ -4,6 +4,8 @@ Quick-reference diagram. For full step-by-step detail and guardrails, see `searc
 
 Production note (2026-08-27): the atomic Supabase rate-limit RPC is repaired by `20260827225123_repair_atomic_rate_limit_timestamp.sql`. The former `current_time` variable collided with PostgreSQL `CURRENT_TIME`, produced time-only values, and caused SQLSTATE `22007`; the production repair now returns a full `timestamptz`. Bounded fallback remains required because measured Supabase rate-limit and session stages can still add roughly two seconds to a cache hit.
 
+Finalize timing note (2026-08-31): the awaited token-scoped finalized-snapshot write is reported separately as `persistence` and included in the true `total` stage. The write remains blocking while production timing is collected; initial configured-Supabase measurements were usually about 0.2-0.3 seconds with one 1.69-second tail, so no trust/durability behavior has been changed yet.
+
 ```mermaid
 flowchart TD
     A[User submits query] --> B & C

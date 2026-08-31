@@ -699,31 +699,47 @@ export async function handleFinalizeSelection(request, response) {
       model: usedHaikuSelection ? haikuResult.model : '',
       strategy: selectionStrategy,
     })
-    const totalDuration = nowMs() - requestStartedAt
+    const persistenceStartedAt = nowMs()
+    let persistenceDuration = 0
 
-    await writeSearchSnapshot({
-      productQuery: sanitizedDiscoveryContext.normalizedQuery,
-      details: '',
-      candidatePool: nextCandidatePool,
-      discoveryToken: sanitizedDiscoveryContext.discoveryToken,
-      results,
-      selection: {
-        ...(resolvedDiscoveryContext.cachedEntry?.selection &&
-        typeof resolvedDiscoveryContext.cachedEntry.selection === 'object' &&
-        !Array.isArray(resolvedDiscoveryContext.cachedEntry.selection)
-          ? resolvedDiscoveryContext.cachedEntry.selection
-          : {}),
-        mode: usedHaikuSelection ? 'ai' : 'rules_fallback',
-        strategy: selectionStrategy,
-        model: usedHaikuSelection ? haikuResult.model : null,
-        selectedCandidateIds: finalizeFast.selectedCandidateIds,
-        rankingPreference,
-        brandVariety,
-        finalizedAt: new Date().toISOString(),
-      },
-      source: 'guided_finalize_selection',
-      scope: resolvedDiscoveryContext.discoveryScope,
-    })
+    try {
+      await writeSearchSnapshot({
+        productQuery: sanitizedDiscoveryContext.normalizedQuery,
+        details: '',
+        candidatePool: nextCandidatePool,
+        discoveryToken: sanitizedDiscoveryContext.discoveryToken,
+        results,
+        selection: {
+          ...(resolvedDiscoveryContext.cachedEntry?.selection &&
+          typeof resolvedDiscoveryContext.cachedEntry.selection === 'object' &&
+          !Array.isArray(resolvedDiscoveryContext.cachedEntry.selection)
+            ? resolvedDiscoveryContext.cachedEntry.selection
+            : {}),
+          mode: usedHaikuSelection ? 'ai' : 'rules_fallback',
+          strategy: selectionStrategy,
+          model: usedHaikuSelection ? haikuResult.model : null,
+          selectedCandidateIds: finalizeFast.selectedCandidateIds,
+          rankingPreference,
+          brandVariety,
+          finalizedAt: new Date().toISOString(),
+        },
+        source: 'guided_finalize_selection',
+        scope: resolvedDiscoveryContext.discoveryScope,
+      })
+      persistenceDuration = nowMs() - persistenceStartedAt
+    } catch (error) {
+      persistenceDuration = nowMs() - persistenceStartedAt
+      logSearchFlowEvent('guided_finalize_persistence_failed', {
+        route: '/api/search/finalize',
+        searchId: supportSearchId,
+        query: sanitizedDiscoveryContext.normalizedQuery,
+        persistenceMs: roundTimingDuration(persistenceDuration),
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
+      throw error
+    }
+
+    const totalDuration = nowMs() - requestStartedAt
 
     logSearchFlowEvent('guided_finalize_completed', {
       route: '/api/search/finalize',
@@ -736,6 +752,7 @@ export async function handleFinalizeSelection(request, response) {
       requestMode,
       cacheMs: roundTimingDuration(cacheLookupDuration),
       haikuMs: roundTimingDuration(haikuDuration),
+      persistenceMs: roundTimingDuration(persistenceDuration),
       productDetailsMs: null,
       totalMs: roundTimingDuration(totalDuration),
       haikuUsage: haikuResult.usage || null,
@@ -764,6 +781,7 @@ export async function handleFinalizeSelection(request, response) {
           body: roundTimingDuration(body.bodyReadDuration || 0),
           cache: roundTimingDuration(cacheLookupDuration),
           haiku: roundTimingDuration(haikuDuration),
+          persistence: roundTimingDuration(persistenceDuration),
           productDetails: null,
           total: roundTimingDuration(totalDuration),
         },
@@ -809,6 +827,7 @@ export async function handleFinalizeSelection(request, response) {
         { name: 'body', duration: body.bodyReadDuration || 0 },
         { name: 'cache', duration: cacheLookupDuration },
         { name: 'haiku', duration: haikuDuration },
+        { name: 'persistence', duration: persistenceDuration },
         { name: 'total', duration: totalDuration },
       ],
     })
