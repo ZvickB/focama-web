@@ -37,12 +37,18 @@ async function get(path) {
 }
 
 async function post(path, body) {
+  const startedAt = performance.now()
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return { status: res.status, headers: res.headers, body: await res.json().catch(() => null) }
+  return {
+    status: res.status,
+    headers: res.headers,
+    body: await res.json().catch(() => null),
+    durationMs: Math.round(performance.now() - startedAt),
+  }
 }
 
 // ─── 1. Server is alive ────────────────────────────────────────────
@@ -243,12 +249,24 @@ describeE2E('E2E discovery flow', () => {
 
   it('finalize returns 6 picks', async () => {
     expect(discoveryToken, 'No discoveryToken from discover step').toBeTruthy()
-    const { status, body } = await post('/api/search/finalize', {
+    const { status, body, durationMs, headers } = await post('/api/search/finalize', {
       query,
       discoveryToken,
       followUpNotes: 'for office work',
     })
+    const timing = parseServerTiming(headers)
+
     expect(status).toBe(200)
     expect(body.results?.length).toBe(6)
+    expect(timing.persistence).toBeTypeOf('number')
+    console.table([{
+      request: 'guided finalize',
+      clientMs: durationMs,
+      serverTotalMs: timing.total ?? null,
+      cacheMs: timing.cache ?? null,
+      haikuMs: timing.haiku ?? null,
+      persistenceMs: timing.persistence ?? null,
+      resultCount: body.results?.length ?? 0,
+    }])
   }, 30_000)
 })
