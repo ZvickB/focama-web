@@ -312,7 +312,7 @@ export async function generateQueryQualityReview(
         model,
         store: false,
         reasoning: {
-          effort: 'minimal',
+          effort: 'low',
         },
         input: [
           {

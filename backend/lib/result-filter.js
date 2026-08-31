@@ -29,13 +29,6 @@ const STOP_WORDS = new Set([
   'at',
   'from',
 ])
-// These describe the product, not a named make or model. Keeping them out of
-// identifier detection means a normal search such as "watch" stays broad.
-const GENERIC_PRODUCT_TOKENS = new Set([
-  'accessory', 'bag', 'bags', 'book', 'books', 'camera', 'case', 'cases', 'cover', 'covers',
-  'dress', 'guitar', 'headphone', 'headphones', 'laptop', 'phone', 'phones', 'shoe', 'shoes',
-  'stroller', 'strollers', 'tablet', 'tablets', 'watch', 'watches',
-])
 const REFERENCE_CONTENT_PATTERN = /\b(book|books|calendar|guide|history|magazine|manual|poster|print)\b/i
 const DUPLICATE_FAMILY_STOP_WORDS = new Set([
   ...STOP_WORDS,
@@ -303,29 +296,18 @@ function getExplicitIdentifierRequirement(productQuery, candidates) {
 
   const brands = [...structuredBrands.values()]
   const brandTokens = new Set(brands.flat())
-  const modelTokensWithDigits = queryTokens.filter((token) => (
+  // Plain words are too ambiguous to enforce before AI ranking: a word such
+  // as "undershirt" can describe the requested product while Amazon calls an
+  // exact match a "T-Shirt". Only compact alphanumeric identifiers provide
+  // enough deterministic evidence to remove same-brand candidates here.
+  // Natural-language model names and product descriptors remain visible to
+  // the ranker, which can apply the full query without shrinking the pool.
+  const modelTokens = queryTokens.filter((token) => (
     !brandTokens.has(token) &&
-    !GENERIC_PRODUCT_TOKENS.has(token) &&
     // Alphanumeric strings with a digit are explicit model-like identifiers
     // (for example WH1000XM5 or Q30), unlike a plain size such as "42".
     /[a-z]/.test(token) && /\d/.test(token)
   ))
-  // A named model can be a word ("Rolex Submariner"), not only an SKU-like
-  // token. Treat one as explicit only when the provider's structured brand
-  // evidence also shows that word in a matching-brand listing.
-  const modelTokensFromBrandEvidence = brands.length > 0
-    ? queryTokens.filter((token) => (
-      !brandTokens.has(token) &&
-      !GENERIC_PRODUCT_TOKENS.has(token) &&
-      token.length >= 3 &&
-      candidates.some((item) => {
-        const itemText = normalizedText(`${item?.title || ''} ${item?.brand || ''}`)
-        return brands.some((brand) => containsTokenSequence(itemText, brand)) &&
-          containsTokenSequence(itemText, [token])
-      })
-    ))
-    : []
-  const modelTokens = [...new Set([...modelTokensWithDigits, ...modelTokensFromBrandEvidence])]
 
   return {
     brands,

@@ -14,7 +14,7 @@ flowchart TD
         B["GET rainforest-discover
         checks cache · returns candidatePool + discoveryToken"]
         C["GET refine
-        returns follow-up question
+        Luna returns follow-up question
         fallback: local generic prompt"]
     end
 
@@ -67,7 +67,7 @@ flowchart TD
 
 | Rule | One line |
 |---|---|
-| Candidate pool is server-owned | Browser sends token · finalize reconstructs from snapshot; clear named brands/models are hard-filtered before AI selection |
+| Candidate pool is server-owned | Browser sends token · finalize reconstructs from snapshot; structured brands and compact alphanumeric model IDs are hard-filtered before AI selection, while plain-language model/product words remain for AI ranking |
 | Session trust stays server-owned | Preview does not await persistence; recent-token finalize briefly polls if needed and never trusts the browser candidate pool |
 | Shortlist stays at 6 | Preview can be broader · guided output is always 6; a false Haiku specific-brand decision favors no more than two models per brand where credible alternatives exist, while explicit named-brand queries override it |
 | Finalize is thin | Haiku locks in the blocking path using product fit before quality confidence, value, variety, and Amazon position · product detail stays async |

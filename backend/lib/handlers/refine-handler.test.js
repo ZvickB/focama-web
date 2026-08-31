@@ -32,7 +32,7 @@ vi.mock('../server-helpers.js', () => ({
   roundTimingDuration: (value) => value,
 }))
 
-import { handleRefinementPrompt } from './refine-handler.js'
+import { getRefinementModel, handleRefinementPrompt } from './refine-handler.js'
 
 function createDeferred() {
   let resolve
@@ -80,6 +80,20 @@ describe('refine handler query moderation ordering', () => {
       CLAUDE_API_KEY: 'claude-key',
     })[name] || '')
     mocks.moderateQuery.mockReturnValue({ outcome: 'allow' })
+  })
+
+  it('defaults refinement to Luna without inheriting the legacy generic model', () => {
+    mocks.getEnv.mockImplementation((name) => (name === 'OPENAI_MODEL' ? 'gpt-5-mini' : ''))
+
+    expect(getRefinementModel()).toBe('gpt-5.6-luna')
+  })
+
+  it('preserves the explicit refinement model override', () => {
+    mocks.getEnv.mockImplementation((name) => (
+      name === 'OPENAI_REFINEMENT_MODEL' ? 'test-refinement-model' : ''
+    ))
+
+    expect(getRefinementModel()).toBe('test-refinement-model')
   })
 
   it('starts refinement in parallel but withholds the response when moderation blocks', async () => {

@@ -21,7 +21,7 @@ describe('refinement assistant', () => {
     vi.clearAllMocks()
   })
 
-  it('uses OpenAI mini first for structured prompt text and chip suggestions', async () => {
+  it('uses OpenAI Luna first for structured prompt text and chip suggestions', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -68,7 +68,7 @@ describe('refinement assistant', () => {
     )
     expect(anthropicMocks.create).not.toHaveBeenCalled()
     const [, request] = fetchMock.mock.calls[0]
-    expect(JSON.parse(request.body).model).toBe('gpt-5-mini')
+    expect(JSON.parse(request.body).model).toBe('gpt-5.6-luna')
     expect(result).toEqual(
       expect.objectContaining({
         prompt: 'What matters most: budget, portability, or comfort?',
@@ -85,13 +85,13 @@ describe('refinement assistant', () => {
           reasoningTokens: 10,
         },
         provider: 'openai',
-        model: 'gpt-5-mini',
+        model: 'gpt-5.6-luna',
         fallbackFrom: null,
       }),
     )
   })
 
-  it('falls back to Haiku when OpenAI mini fails', async () => {
+  it('falls back to Haiku when OpenAI Luna fails', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       text: async () => 'temporary openai outage',
@@ -144,7 +144,7 @@ describe('refinement assistant', () => {
         alternatePrompt: 'How often do you expect to use it?',
         provider: 'anthropic',
         model: 'claude-haiku-4-5-20251001',
-        fallbackFrom: 'gpt-5-mini',
+        fallbackFrom: 'gpt-5.6-luna',
       }),
     )
   })
@@ -209,7 +209,7 @@ describe('refinement assistant', () => {
         reasoningTokens: 10,
       },
       provider: 'openai',
-      model: 'gpt-5-mini',
+      model: 'gpt-5.6-luna',
       fallbackFrom: null,
       queryFraming: {
         version: 1,
@@ -235,7 +235,7 @@ describe('refinement assistant', () => {
     const [, request] = fetchMock.mock.calls[0]
     const parsedBody = JSON.parse(request.body)
 
-    expect(parsedBody.reasoning.effort).toBe('minimal')
+    expect(parsedBody.reasoning.effort).toBe('low')
     expect(parsedBody.text.format.name).toBe('question_fast')
     expect(parsedBody.text.format.schema.required).toEqual([
       'prompt',

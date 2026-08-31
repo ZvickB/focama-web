@@ -149,11 +149,11 @@ export async function generateRetryAdvice(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model,
-      store: false,
-      reasoning: {
-        effort: 'minimal',
-      },
+        model,
+        store: false,
+        reasoning: {
+          effort: 'low',
+        },
       input: [
         {
           role: 'system',

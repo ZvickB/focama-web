@@ -234,7 +234,7 @@ async function callStructuredQueryFraming(
         model,
         store: false,
         reasoning: {
-          effort: 'minimal',
+          effort: 'low',
         },
         input: [
           {

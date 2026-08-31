@@ -20,7 +20,7 @@ import {
 } from '../server-helpers.js'
 
 export function getRefinementModel() {
-  return getEnv('OPENAI_REFINEMENT_MODEL') || getEnv('OPENAI_MODEL') || DEFAULT_REFINEMENT_MODEL
+  return getEnv('OPENAI_REFINEMENT_MODEL') || DEFAULT_REFINEMENT_MODEL
 }
 
 export function getHaikuRefinementModel() {

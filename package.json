@@ -12,6 +12,8 @@
     "cache:full-response": "node backend/scripts/save-serpapi-full-response.js",
     "experiment:sensitive-images": "node experiments/sensitive-image-classification/evaluate-images.js",
     "test:smoke:haiku-luna": "node --env-file=.env backend/scripts/smoke-haiku-luna.js",
+    "test:smoke:fallback-quality": "node --env-file=.env backend/scripts/smoke-deterministic-fallback.js",
+    "test:benchmark:ai-payloads": "node --env-file=.env backend/scripts/benchmark-ai-payloads.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -24,7 +26,7 @@
     "test:smoke:cache-ui:live": "node backend/scripts/smoke-cache-ui-live.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.91.1",
+    "@anthropic-ai/sdk": "^0.122.0",
     "@sentry/node": "^10.52.0",
     "@supabase/supabase-js": "^2.99.3",
     "@tanstack/react-query": "^5.94.5",

@@ -55,7 +55,7 @@ describe('query quality review', () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe(OPENAI_RESPONSES_ENDPOINT)
     expect(request.signal).toBeInstanceOf(AbortSignal)
-    expect(parsedBody.reasoning.effort).toBe('minimal')
+    expect(parsedBody.reasoning.effort).toBe('low')
     expect(parsedBody.text.format.name).toBe('query_quality_review')
     expect(parsedBody.text.format.schema.required).toEqual([
       'classification',

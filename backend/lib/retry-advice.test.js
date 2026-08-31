@@ -52,7 +52,7 @@ describe('retry advice', () => {
     const [, request] = fetchMock.mock.calls[0]
     const parsedBody = JSON.parse(request.body)
 
-    expect(parsedBody.reasoning.effort).toBe('minimal')
+    expect(parsedBody.reasoning.effort).toBe('low')
     expect(parsedBody.text.format.name).toBe('retry_advice')
     expect(parsedBody.text.format.schema.properties).not.toHaveProperty('recommendation')
     expect(parsedBody.text.format.schema.required).toEqual(['suggested_query', 'rationale'])
