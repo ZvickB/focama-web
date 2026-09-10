@@ -374,14 +374,14 @@ export function ResultsSectionFallback({
           Updating your picks
         </h2>
         <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
-          We&apos;re using what you changed to build a more focused set of options.
+          We&apos;re using the refined search and the details you already shared to build a stronger set.
         </p>
         <div className="mt-6 rounded-[22px] border border-primary/15 bg-white/90 p-4 text-left">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-            Improved search we&apos;re using
+            Refined search we&apos;re using
           </p>
           <p className="mt-2 text-base font-semibold leading-6 text-primary">{retrySearchQuery}</p>
-          <p className="mt-3 text-sm leading-5 text-slate-600">Based on your Improve picks feedback.</p>
+          <p className="mt-3 text-sm leading-5 text-slate-600">Your earlier requirements stay attached while this search runs.</p>
         </div>
         <div className="mt-5 flex items-center justify-center gap-2 text-sm font-medium text-slate-600" role="status">
           <span className="flex gap-1" aria-hidden="true">

@@ -31,6 +31,8 @@ services:
         sync: false
       - key: SUPABASE_SECRET_KEY
         sync: false
+      - key: OPENAI_SELECTOR_MODEL
+        value: gpt-5.6-terra
       - key: OPENAI_REFINEMENT_MODEL
         value: gpt-5.6-luna
       - key: OPENAI_FINALIZE_MODEL

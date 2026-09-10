@@ -30,16 +30,24 @@ flowchart TD
     E -->|token ready| G
 
     G --> H["POST finalize
-    rate-limited · Haiku locks shortlist
-    rebuilds pool from discovery snapshot"]
+    rate-limited · server checks provable hard constraints
+    Terra defines AI-ranked primaries + reserves
+    Haiku fallback on OpenAI failure"]
 
     H --> I{selection strategy}
     I -->|haiku_lock| J[6 picks locked]
-    I -->|haiku_lock_topped_up| J
-    I -->|rules_fallback| J
+    I -->|haiku_lock_reserve_promoted| J
+    I -->|haiku_lock_partial| K[Fewer eligible picks]
+    I -->|haiku_lock_empty| K
 
     J --> L[Cards render immediately
     image · price · rating · source-specific CTA]
+    K --> L
+    K --> U[Recovery card shows refined query
+    and preserved details]
+    U -->|Find better matches| V[Refresh discovery
+    auto-finalize with preserved context]
+    V --> H
 
     J --> M[Async enrichment starts
     after finalize responds]
@@ -69,8 +77,9 @@ flowchart TD
 |---|---|
 | Candidate pool is server-owned | Browser sends token · finalize reconstructs from snapshot; structured brands and compact alphanumeric model IDs are hard-filtered before AI selection, while plain-language model/product words remain for AI ranking |
 | Session trust stays server-owned | Preview does not await persistence; recent-token finalize briefly polls if needed and never trusts the browser candidate pool |
-| Shortlist stays at 6 | Preview can be broader · guided output is always 6; a false Haiku specific-brand decision favors no more than two models per brand where credible alternatives exist, while explicit named-brand queries override it |
-| Finalize is thin | Haiku locks in the blocking path using product fit before quality confidence, value, variety, and Amazon position · product detail stays async |
+| Shortlist targets up to 6 | Preview can be broader · server-owned price/exclusion/year-model checks filter the whole pre-selector pool and record rejections · guided output promotes only AI-ranked high-confidence reserves and returns fewer than 6 when that frontier runs out · broader semantic requirements are not yet independently proved |
+| Short-list recovery is one step | Web shows the refined query and preserved details · accepting refreshes discovery and auto-finalizes without another question |
+| Finalize is thin | Terra defines the AI-ranked primary/reserve frontier; Haiku is the provider fallback in the blocking path using product fit before quality confidence, value, variety, and Amazon position · product detail stays async |
 | Preview ≠ focused picks | `Just show me results` is not the guided shortlist |
 | Enrichment explains, not reranks | Async work adds hero/alternative fit reasons and caveats · winners don't change |
 | Amazon-first UX, flexible internals | Current UI may name Amazon when Amazon is the active source · backend/provider logic and normalized product data stay flexible |

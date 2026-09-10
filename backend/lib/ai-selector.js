@@ -3,9 +3,11 @@ import {
   RANKING_PREFERENCES,
   normalizeRankingPreference,
 } from '../../shared/ranking-preference.js'
+import { MAX_PRODUCT_QUERY_LENGTH } from '../../shared/search-input.js'
 
 export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses'
 export const DEFAULT_HAIKU_MODEL = 'claude-haiku-4-5-20251001'
+export const DEFAULT_SELECTOR_MODEL = 'gpt-5.6-terra'
 export const DEFAULT_REFINEMENT_MODEL = 'gpt-5.6-luna'
 export const DEFAULT_FINALIZE_MODEL = 'gpt-5.6-luna'
 const DESCRIPTION_BOILERPLATE_TOKENS = new Set([
@@ -274,6 +276,9 @@ async function requestStructuredSelection(
     responseName,
     apiKey,
     model,
+    maxOutputTokens,
+    systemPrompt =
+      'You are a trusted shopping assistant helping a real person make a purchase decision. Return only the structured output.',
   },
   fetchImpl,
 ) {
@@ -287,14 +292,14 @@ async function requestStructuredSelection(
     body: JSON.stringify({
       model,
       store: false,
+      ...(Number.isFinite(maxOutputTokens) ? { max_output_tokens: maxOutputTokens } : {}),
       reasoning: {
         effort: 'low',
       },
       input: [
         {
           role: 'system',
-          content:
-            'You are a trusted shopping assistant helping a real person make a purchase decision. Return only the structured output.',
+          content: systemPrompt,
         },
         {
           role: 'user',
@@ -431,13 +436,15 @@ function buildMiniPreferenceGuidance(rankingPreference) {
   return ''
 }
 
-function buildNanoLockAndBadgesPrompt({
+export function buildNanoLockAndBadgesPrompt({
   candidatePool,
   finalResultLimit,
   rankingPreference = RANKING_PREFERENCES.BALANCED,
   allowOptionalAlternatives = false,
 }) {
   const desiredCount = Math.min(finalResultLimit, candidatePool.candidates.length)
+  const coreCount = Math.min(6, desiredCount)
+  const reserveCount = Math.max(0, desiredCount - coreCount)
   const preference = normalizeRankingPreference(rankingPreference)
   const brandDecisionLines = [
     'Brand decision:',
@@ -488,7 +495,7 @@ function buildNanoLockAndBadgesPrompt({
     '1. User context defines eligibility. Treat explicit user context as requirements, not soft preferences. This includes quantity, package format, budget, compatibility, size, material, style, diet/allergy/safety needs, exclusions, "must have" features, and similar purchase requirements.',
     '2. First identify candidates that appear to satisfy the explicit user context. Select final picks from those eligible candidates whenever possible.',
     '3. A lower-rated eligible candidate beats a higher-rated ineligible candidate. Ratings, review count, trust score, price, and marketplace strength are only tie-breakers after eligibility and product relevance.',
-    '4. If fewer than the requested number of eligible candidates exist, fill the remaining slots with the closest acceptable alternatives. Prefer alternatives that violate the fewest or least important user-context requirements and still clearly match the original product query.',
+    '4. Never fill a slot with a candidate that violates an explicit user requirement. If fewer than the requested number are eligible, return fewer picks.',
     '5. Match the Product query exactly before optimizing quality. Do not reward a high rating if the item is the wrong product type, accessory-only, bundle mismatch, refill/part, or irrelevant variant.',
     '6. If the query names a brand/model, treat it as a strong preference and fill matching eligible slots first. Only use other brands/models when matching candidates are weak, duplicated, unavailable, or clearly worse for the user context.',
     '7. Choose genuinely different products. Never count a colorway, finish, seller, or cosmetic variant of the same model as another recommendation. Different models, generations, capacities, widths, feature tiers, or use cases are valid alternatives. Use duplicateFamilyKey, title similarity, source, and attributes to spot duplicates.',
@@ -498,8 +505,8 @@ function buildNanoLockAndBadgesPrompt({
     ...brandDecisionLines,
     rankingStrategy.summary,
     allowOptionalAlternatives
-      ? `Return exactly 6 strongest core picks first with role "core" and confidence "high". You may then add up to ${Math.max(0, desiredCount - 6)} alternatives with role "alternative" only when they are genuinely credible, fitting substitutes; every alternative must also have confidence "high". Do not pad alternatives with weaker, wrong-type, or merely cheap products.`
-      : `Return exactly ${desiredCount} high-confidence picks unless fewer than 4 candidates genuinely fit the product query and user context. Only in that case, return the 0-3 credible picks and do not pad with close-but-wrong alternatives. When returning fewer than 4 picks, provide a concise improved search phrase that combines the product query with the user context; otherwise return an empty suggested_query.`,
+      ? `Return up to ${coreCount} strongest eligible picks first with role "core" and confidence "high". Then return up to ${reserveCount} additional ranked reserves with role "alternative" and confidence "high". Every core pick and reserve must satisfy all explicit user requirements; return fewer rather than pad with a requirement violation, wrong product type, or merely cheap option. When fewer than 4 eligible core picks exist, provide a concise, self-contained improved search phrase no longer than ${MAX_PRODUCT_QUERY_LENGTH} characters that combines the product query with every explicit must-have from the user context; otherwise return an empty suggested_query.`
+      : `Return up to ${desiredCount} high-confidence picks that satisfy all explicit requirements. Return fewer rather than pad with a requirement violation, wrong product type, or merely cheap option. When fewer than 4 eligible picks exist, provide a concise, self-contained improved search phrase no longer than ${MAX_PRODUCT_QUERY_LENGTH} characters that combines the product query with every explicit must-have from the user context; otherwise return an empty suggested_query.`,
     'Reference candidates only by the provided index numbers. Preserve your chosen order from best overall fit to weakest acceptable fit.',
     '',
     `Product query: ${candidatePool.query}`,
@@ -510,7 +517,7 @@ function buildNanoLockAndBadgesPrompt({
   ].join('\n')
 }
 
-function buildHaikuShortlistTool(candidateCount) {
+export function buildHaikuShortlistTool(candidateCount) {
   const validIndices = Array.from({ length: candidateCount }, (_entry, index) => index + 1)
 
   return {
@@ -534,12 +541,143 @@ function buildHaikuShortlistTool(candidateCount) {
             additionalProperties: false,
           },
         },
-        suggested_query: { type: 'string', maxLength: 200 },
+        suggested_query: { type: 'string', maxLength: MAX_PRODUCT_QUERY_LENGTH },
         specific_brand: { type: 'boolean' },
       },
       required: ['picks', 'suggested_query', 'specific_brand'],
       additionalProperties: false,
     },
+  }
+}
+
+function normalizeShortlistSelection({
+  candidates,
+  desiredCount,
+  input,
+  model,
+  usage,
+  preserveAllMatches = false,
+  logLabel = 'selector-lock',
+}) {
+  const picks = Array.isArray(input?.picks) ? input.picks : []
+  const suggestedQuery = String(input?.suggested_query || '')
+    .trim()
+    .slice(0, MAX_PRODUCT_QUERY_LENGTH)
+  const specificBrand = input?.specific_brand === true
+  const seen = new Set()
+  const lockedIds = []
+  const coreIds = []
+  const alternativeIds = []
+  const brandById = {}
+  const rejectedIndices = []
+
+  console.log(`[${logLabel}] picks count:`, picks.length, 'desired:', desiredCount)
+
+  for (const pick of picks) {
+    const index = Number(pick?.index)
+    if (!Number.isInteger(index) || index < 1 || index > candidates.length) {
+      rejectedIndices.push({ index: pick?.index ?? null, reason: 'not_in_pool' })
+      continue
+    }
+    if (seen.has(index)) {
+      rejectedIndices.push({ index, reason: 'duplicate' })
+      continue
+    }
+
+    const id = String(candidates[index - 1].id)
+    const brand = String(pick?.brand || '').replace(/\s+/g, ' ').trim().slice(0, 80)
+    if (pick?.confidence !== 'high') {
+      rejectedIndices.push({ index, reason: 'not_high_confidence' })
+      continue
+    }
+
+    lockedIds.push(id)
+    if (pick?.role === 'alternative') alternativeIds.push(id)
+    else coreIds.push(id)
+    if (brand) brandById[id] = brand
+    seen.add(index)
+    if (!preserveAllMatches && lockedIds.length >= desiredCount) break
+  }
+
+  if (rejectedIndices.length > 0) {
+    console.log(`[${logLabel}] rejected indices:`, JSON.stringify(rejectedIndices))
+  }
+  console.log(`[${logLabel}] locked:`, lockedIds.length, '/', desiredCount, JSON.stringify(lockedIds))
+
+  return {
+    model,
+    lockedIds,
+    coreIds,
+    alternativeIds,
+    brandById,
+    suggestedQuery,
+    specificBrand,
+    rejectedIndices,
+    usage,
+  }
+}
+
+export async function openAiLockWinnersAndBadges(
+  {
+    candidatePool,
+    finalResultLimit,
+    apiKey,
+    model = DEFAULT_SELECTOR_MODEL,
+    rankingPreference = RANKING_PREFERENCES.BALANCED,
+    allowOptionalAlternatives = false,
+  },
+  fetchImpl = fetch,
+) {
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is missing from the root .env file.')
+  }
+
+  const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
+  if (candidates.length === 0) {
+    return {
+      model,
+      provider: 'openai',
+      fallbackUsed: false,
+      lockedIds: [],
+      coreIds: [],
+      alternativeIds: [],
+      suggestedQuery: '',
+      usage: null,
+    }
+  }
+
+  const desiredCount = Math.min(finalResultLimit, candidates.length)
+  const preference = normalizeRankingPreference(rankingPreference)
+  const prompt = buildNanoLockAndBadgesPrompt({
+    candidatePool,
+    finalResultLimit,
+    rankingPreference,
+    allowOptionalAlternatives,
+  })
+  const schema = buildHaikuShortlistTool(candidates.length).input_schema
+  const { parsed, usage } = await requestStructuredSelection({
+    prompt,
+    schema,
+    responseName: 'submit_shortlist',
+    apiKey,
+    model,
+    maxOutputTokens: 4096,
+    systemPrompt:
+      'You are a careful shopping ranker. Follow user constraints exactly and return only the requested structured output.',
+  }, fetchImpl)
+
+  return {
+    ...normalizeShortlistSelection({
+      candidates,
+      desiredCount,
+      input: parsed,
+      model,
+      usage,
+      preserveAllMatches: preference === RANKING_PREFERENCES.LOWEST_PRICE,
+      logLabel: 'openai-lock',
+    }),
+    provider: 'openai',
+    fallbackUsed: false,
   }
 }
 
@@ -652,7 +790,13 @@ export async function haikuLockWinnersAndBadges(
   const candidates = Array.isArray(candidatePool?.candidates) ? candidatePool.candidates : []
 
   if (candidates.length === 0) {
-    return { model: DEFAULT_HAIKU_MODEL, lockedIds: [], suggestedQuery: '', usage: null }
+    return {
+      model: DEFAULT_HAIKU_MODEL,
+      provider: 'anthropic',
+      lockedIds: [],
+      suggestedQuery: '',
+      usage: null,
+    }
   }
 
   const desiredCount = Math.min(finalResultLimit, candidates.length)
@@ -668,7 +812,7 @@ export async function haikuLockWinnersAndBadges(
   const anthropic = new Anthropic({ apiKey })
   const message = await anthropic.messages.create({
     model: DEFAULT_HAIKU_MODEL,
-    max_tokens: preference === RANKING_PREFERENCES.LOWEST_PRICE ? 512 : 256,
+    max_tokens: preference === RANKING_PREFERENCES.LOWEST_PRICE || allowOptionalAlternatives ? 512 : 256,
     temperature: 0,
     system:
       'You are a careful shopping ranker. Follow user constraints exactly and respond only through the submit_shortlist tool.',
@@ -680,63 +824,65 @@ export async function haikuLockWinnersAndBadges(
   const toolUseBlock = message.content?.find(
     (block) => block?.type === 'tool_use' && block?.name === shortlistTool.name,
   )
-  const picks = Array.isArray(toolUseBlock?.input?.picks) ? toolUseBlock.input.picks : []
-  const suggestedQuery = String(toolUseBlock?.input?.suggested_query || '').trim().slice(0, 200)
-  const specificBrand = toolUseBlock?.input?.specific_brand === true
-  const seen = new Set()
-  const lockedIds = []
-  const coreIds = []
-  const alternativeIds = []
-  const brandById = {}
-  const rejectedIndices = []
+  return {
+    ...normalizeShortlistSelection({
+      candidates,
+      desiredCount,
+      input: toolUseBlock?.input,
+      model: DEFAULT_HAIKU_MODEL,
+      usage: {
+        inputTokens: message.usage?.input_tokens ?? 0,
+        outputTokens: message.usage?.output_tokens ?? 0,
+      },
+      preserveAllMatches: preference === RANKING_PREFERENCES.LOWEST_PRICE,
+      logLabel: 'haiku-lock',
+    }),
+    provider: 'anthropic',
+  }
+}
 
-  console.log('[haiku-lock] tool picks count:', picks.length, 'desired:', desiredCount)
-
-  for (const pick of picks) {
-    const index = Number(pick?.index)
-    if (!Number.isInteger(index) || index < 1 || index > candidates.length) {
-      rejectedIndices.push({ index: pick?.index ?? null, reason: 'not_in_pool' })
-      continue
+export async function lockWinnersAndBadges(
+  {
+    candidatePool,
+    finalResultLimit,
+    openAiApiKey,
+    claudeApiKey,
+    model = DEFAULT_SELECTOR_MODEL,
+    rankingPreference = RANKING_PREFERENCES.BALANCED,
+    allowOptionalAlternatives = false,
+  },
+  fetchImpl = fetch,
+) {
+  if (openAiApiKey) {
+    try {
+      return await openAiLockWinnersAndBadges({
+        candidatePool,
+        finalResultLimit,
+        apiKey: openAiApiKey,
+        model,
+        rankingPreference,
+        allowOptionalAlternatives,
+      }, fetchImpl)
+    } catch {
+      if (!claudeApiKey) throw new Error('The OpenAI selector failed and CLAUDE_API_KEY is unavailable.')
+      console.warn(`[selector-lock] ${model} failed; using ${DEFAULT_HAIKU_MODEL} fallback.`)
     }
-    if (seen.has(index)) {
-      rejectedIndices.push({ index, reason: 'duplicate' })
-      continue
-    }
-    const id = String(candidates[index - 1].id)
-    const brand = String(pick?.brand || '').replace(/\s+/g, ' ').trim().slice(0, 80)
-    if (pick?.role === 'alternative') {
-      if (pick?.confidence !== 'high') {
-        rejectedIndices.push({ index, reason: 'alternative_not_high_confidence' })
-        continue
-      }
-      lockedIds.push(id)
-      alternativeIds.push(id)
-    } else {
-      lockedIds.push(id)
-      coreIds.push(id)
-    }
-    if (brand) brandById[id] = brand
-    seen.add(index)
-    if (preference !== RANKING_PREFERENCES.LOWEST_PRICE && lockedIds.length >= desiredCount) break
+  } else if (!claudeApiKey) {
+    throw new Error('OPENAI_API_KEY and CLAUDE_API_KEY are both missing from the root .env file.')
   }
 
-  if (rejectedIndices.length > 0) {
-    console.log('[haiku-lock] rejected indices:', JSON.stringify(rejectedIndices))
-  }
-  console.log('[haiku-lock] locked:', lockedIds.length, '/', desiredCount, JSON.stringify(lockedIds))
+  const fallback = await haikuLockWinnersAndBadges({
+    candidatePool,
+    finalResultLimit,
+    apiKey: claudeApiKey,
+    rankingPreference,
+    allowOptionalAlternatives,
+  })
 
   return {
-    model: DEFAULT_HAIKU_MODEL,
-    lockedIds,
-    coreIds,
-    alternativeIds,
-    brandById,
-    suggestedQuery,
-    specificBrand,
-    usage: {
-      inputTokens: message.usage?.input_tokens ?? 0,
-      outputTokens: message.usage?.output_tokens ?? 0,
-    },
+    ...fallback,
+    primaryModel: model,
+    fallbackUsed: true,
   }
 }
 

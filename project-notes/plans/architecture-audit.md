@@ -35,7 +35,7 @@ No P0 issue was confirmed. Most findings are P2. The finalize-boundary refactor,
 
 - `backend/lib/handlers/`: HTTP-level discovery, refine, finalize, enrichment, diagnostics, analytics, account deletion, feedback, price comparison, product detail, and price-watch handlers.
 - `backend/lib/rainforest-pipeline.js`: current Amazon retrieval and normalization path.
-- `backend/lib/ai-selector.js`: shortlist selection prompts, schemas, parsing, deterministic fallback/top-up, and mini-enrichment-related AI behavior.
+- `backend/lib/ai-selector.js`: shortlist eligibility/ranking prompts, strict primary/reserve schemas and parsing, and mini-enrichment-related AI behavior.
 - `backend/lib/content-moderation.js` plus sensitive-image modules: deterministic query/result policy, OpenAI moderation, and Sightengine shadow/reveal processing.
 - `backend/lib/storage/`: Supabase client and table-focused persistence adapters.
 - `backend/lib/price-comparison/` and `backend/lib/price-watch/`: focused product comparison and price-watch provider/email logic.

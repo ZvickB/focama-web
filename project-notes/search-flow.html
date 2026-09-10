@@ -513,15 +513,19 @@
         <article class="step">
           <div class="step-id"><span>5</span></div>
           <div>
-            <h3>Finalize Locks The 6 Winners</h3>
+            <h3>Finalize Locks Up To 6 Winners</h3>
             <div class="tag-row">
               <span class="tag api">POST /api/search/finalize</span>
               <span class="tag blocking">Shortlist response</span>
             </div>
             <p>
-              Finalize validates the body, rate limits by IP, resolves the discovery snapshot,
-              trims notes, then asks Haiku to lock the shortlist. The fallback path is
-              deterministic, and partial valid Haiku output is topped up rather than discarded.
+              Finalize validates the body, rate limits by IP, resolves the discovery snapshot, and
+              filters provable price, explicit exclusion, and year/model conflicts before asking Haiku
+              for up to six high-confidence primary picks followed by ranked reserves. Finalize may
+              promote only those returned reserves and returns fewer picks when the frontier runs out.
+              Broader semantic constraints are not yet independently proved. When a first finalize has
+              fewer than four strong picks plus a valid refined query, web shows the query and preserved
+              details; accepting it refreshes discovery and automatically finalizes without another question.
             </p>
             <div class="detail-grid">
               <div class="detail green">
@@ -529,12 +533,15 @@
                 <p><code>selection.strategy: 'haiku_lock'</code></p>
               </div>
               <div class="detail blue">
-                <strong>Recoverable partial path</strong>
-                <p><code>selection.strategy: 'haiku_lock_topped_up'</code></p>
+                <strong>AI-ranked reserve path</strong>
+                <p><code>selection.strategy: 'haiku_lock_reserve_promoted'</code></p>
               </div>
               <div class="detail amber">
-                <strong>Fallback path</strong>
-                <p><code>selection.mode: 'rules_fallback'</code> when Haiku yields nothing usable.</p>
+                <strong>Short eligible frontier</strong>
+                <p>
+                  <code>selection.strategy: 'haiku_lock_partial'</code> without raw padding. A valid
+                  first-finalize recovery suggestion can launch one-step refreshed replacement picks.
+                </p>
               </div>
             </div>
           </div>
@@ -748,18 +755,19 @@
           </article>
           <article class="rule-card">
             <div class="rc-rank">Rule 2</div>
-            <h3>Shortlist stays at 6</h3>
+            <h3>Shortlist targets up to 6</h3>
             <p>
-              Preview can show a broader discovery set, but the guided product output is still the
-              final six picks.
+              Preview can show a broader discovery set. Server-owned provable checks filter the whole
+              pre-selector pool, and guided finalize promotes only AI-ranked high-confidence reserves.
+              It returns fewer picks when that frontier runs out.
             </p>
           </article>
           <article class="rule-card">
             <div class="rc-rank">Rule 3</div>
             <h3>Finalize is thin on purpose</h3>
             <p>
-              Haiku locks the shortlist in the blocking path. Product-detail fetches and mini
-              enrichment stay off that critical path.
+              Terra defines the AI-ranked primary/reserve frontier; Haiku is the provider fallback in the blocking path.
+              Product-detail fetches and mini enrichment stay off that critical path.
             </p>
           </article>
           <article class="rule-card">

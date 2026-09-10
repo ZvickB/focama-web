@@ -2018,14 +2018,22 @@ export function useGuidedSearch() {
 
     if (!isValid || !normalizedQuery) return false
 
+    const preservedFollowUpNotes = followUpNotes.trim()
+
     trackSearchEvent('candidate_recovery_accepted', {
+      preservedContextLength: preservedFollowUpNotes.length,
       suggestedQueryLength: normalizedQuery.length,
     })
     setProductQuery(normalizedQuery)
     startGuidedSearch(normalizedQuery, {
+      autoFinalizeAfterDiscovery: true,
       cacheMode: 'refresh',
       preserveFollowUpNotes: true,
       reuseAnalytics: true,
+      retryFinalizeContext: {
+        followUpNotes: preservedFollowUpNotes,
+        rejectionFeedback: '',
+      },
       retrySearchQueryValue: normalizedQuery,
       searchEventName: 'candidate_recovery_search_started',
     })

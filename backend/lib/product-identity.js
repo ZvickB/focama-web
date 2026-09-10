@@ -89,10 +89,13 @@ function modelTokens(title) {
   const values = tokens(title)
   const capacity = new Set(capacityTokens(title))
 
-  return values.filter((token, index) => {
+  return values.filter((token) => {
     if (capacity.has(token)) return false
     if (/^[a-z]+\d+[a-z0-9]*$/.test(token)) return true
-    if (/^\d+$/.test(token) && index > 0 && values[index - 1].length > 2) return true
+    // Plain numbers in marketplace titles are usually measurements, quantities,
+    // years, or feature values. They are not strong enough to identify a model.
+    // Plain-number model names still collapse when their otherwise-identical
+    // titles differ only by a cosmetic token (for example, Pegasus 41 colors).
     return false
   })
 }

@@ -8,7 +8,8 @@ import {
 import { detectHardConstraint, resolveSelectedProductForDisplay } from './useGuidedSearch.js'
 
 describe('detectHardConstraint', () => {
-  it.each([
+  it('recognizes supported dietary and community-language hard constraints', () => {
+    const cases = [
     ['kosher cookies', 'jewish_kosher', 'kosher'],
     ['must be pareve', 'jewish_kosher', 'pareve'],
     ['parve chocolate chips', 'jewish_kosher', 'parve'],
@@ -23,12 +24,15 @@ describe('detectHardConstraint', () => {
     ['gluten-free pasta', 'dietary_allergy', 'gluten free'],
     ['gluten free pasta', 'dietary_allergy', 'gluten free'],
     ['glutenfree pasta', 'dietary_allergy', 'gluten free'],
-  ])('detects %s', (text, category, matchedTerm) => {
-    expect(detectHardConstraint(text)).toEqual({
-      category,
-      matchedTerm,
-      shouldRefresh: true,
-    })
+    ]
+
+    for (const [text, category, matchedTerm] of cases) {
+      expect(detectHardConstraint(text), text).toEqual({
+        category,
+        matchedTerm,
+        shouldRefresh: true,
+      })
+    }
   })
 
   it('does not refresh for soft preferences', () => {

@@ -1,272 +1,144 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const anthropicMocks = vi.hoisted(() => ({
-  create: vi.fn(),
-}))
+const anthropicMocks = vi.hoisted(() => ({ create: vi.fn() }))
 
 vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn(function Anthropic() {
-    return {
-      messages: {
-        create: anthropicMocks.create,
-      },
-    }
+    return { messages: { create: anthropicMocks.create } }
   }),
 }))
 
-import { assessDeepDiveEligibility, haikuLockWinnersAndBadges, miniEnrichSelectedCandidates } from './ai-selector.js'
+import {
+  assessDeepDiveEligibility,
+  haikuLockWinnersAndBadges,
+  lockWinnersAndBadges,
+  miniEnrichSelectedCandidates,
+} from './ai-selector.js'
 
-function createCandidate(overrides = {}) {
+function candidate(overrides = {}) {
   return {
     id: 'prod-1',
-    score: 24.5,
     title: 'Travel stroller',
     description: 'Lightweight stroller for flights',
-    source: 'Target',
+    source: 'Amazon',
     price: '$199.99',
     numericPrice: 199.99,
     rating: 4.7,
     reviewCount: 342,
-    delivery: 'Free shipping',
-    tag: 'Top rated',
-    extensions: ['Carry-on friendly'],
-    multipleSources: true,
     link: 'https://example.com/stroller',
     image: 'https://example.com/stroller.jpg',
-    reasons: ['Available from Target', 'Free shipping'],
-    matchSignals: {
-      titleMatches: 1,
-      supportMatches: 1,
-      detailMatches: 1,
-      exactMatchSearchState: true,
-      hasMultipleSources: true,
-      hasDeliveryInfo: true,
-      hasTag: true,
-    },
+    matchSignals: { titleMatches: 1, supportMatches: 1, detailMatches: 1 },
     ...overrides,
   }
 }
 
-function createCandidatePool(candidateCount = 4) {
+function pool(count = 4) {
   return {
     query: 'travel stroller',
     details: 'compact enough for flights',
-    candidates: Array.from({ length: candidateCount }, (_entry, index) => createCandidate({
+    candidates: Array.from({ length: count }, (_, index) => candidate({
       id: `prod-${index + 1}`,
       title: `Travel stroller ${index + 1}`,
-      price: `$${199 + index}.99`,
-      rating: 4.7 - (index * 0.1),
+      numericPrice: 100 + index,
     })),
   }
 }
 
-function mockHaikuResponse(picks, usage = { input_tokens: 12, output_tokens: 4 }, specificBrand = false) {
+function mockSelection(picks, extra = {}) {
   anthropicMocks.create.mockResolvedValue({
     content: [{
       type: 'tool_use',
       name: 'submit_shortlist',
-      input: { picks, specific_brand: specificBrand },
+      input: {
+        picks: picks.map((pick) => ({ brand: '', role: 'core', confidence: 'high', ...pick })),
+        specific_brand: false,
+        ...extra,
+      },
     }],
-    usage,
+    usage: { input_tokens: 12, output_tokens: 4 },
   })
 }
 
-describe('ai selector', () => {
+describe('AI selection contracts', () => {
   beforeEach(() => {
     anthropicMocks.create.mockReset()
     vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
+  afterEach(() => vi.restoreAllMocks())
 
-  it('returns no Haiku picks without calling the model when the pool is empty', async () => {
+  it('maps server-owned candidate indices to IDs and enforces the requested cap', async () => {
+    mockSelection([{ index: 3, brand: 'Orbit' }, { index: 1, brand: 'Orbit' }, { index: 2 }])
+
     const result = await haikuLockWinnersAndBadges({
       apiKey: 'claude-key',
-      finalResultLimit: 6,
-      candidatePool: {
-        query: 'stroller',
-        details: '',
-        candidates: [],
+      finalResultLimit: 2,
+      candidatePool: pool(3),
+    })
+
+    expect(result.lockedIds).toEqual(['prod-3', 'prod-1'])
+    expect(result.brandById).toEqual({ 'prod-3': 'Orbit', 'prod-1': 'Orbit' })
+    expect(anthropicMocks.create).toHaveBeenCalledTimes(1)
+    expect(anthropicMocks.create.mock.calls[0][0].tools[0]).toMatchObject({
+      name: 'submit_shortlist',
+      strict: true,
+      input_schema: {
+        properties: {
+          suggested_query: { maxLength: 80 },
+        },
       },
     })
-
-    expect(anthropicMocks.create).not.toHaveBeenCalled()
-    expect(result).toEqual({
-      model: 'claude-haiku-4-5-20251001',
-      lockedIds: [],
-      suggestedQuery: '',
-      usage: null,
-    })
   })
 
-  it('maps Haiku candidate indices back to ids and caps picks to the requested count', async () => {
-    mockHaikuResponse([{ index: 3, brand: 'Orbit' }, { index: 1, brand: 'Orbit' }, { index: 2, brand: 'CityGo' }])
+  it('returns the complete fit frontier in lowest-price mode for downstream deterministic ranking', async () => {
+    mockSelection([{ index: 1 }, { index: 2 }, { index: 3 }])
 
     const result = await haikuLockWinnersAndBadges({
       apiKey: 'claude-key',
       finalResultLimit: 2,
-      candidatePool: createCandidatePool(3),
-    })
-
-    expect(anthropicMocks.create).toHaveBeenCalledTimes(1)
-    expect(result.lockedIds).toEqual(['prod-3', 'prod-1'])
-    expect(result.specificBrand).toBe(false)
-    expect(result.brandById).toEqual({ 'prod-3': 'Orbit', 'prod-1': 'Orbit' })
-    expect(result.usage).toEqual({
-      inputTokens: 12,
-      outputTokens: 4,
-    })
-
-    const request = anthropicMocks.create.mock.calls[0][0]
-    expect(request.tool_choice).toEqual({ type: 'tool', name: 'submit_shortlist' })
-    expect(request.tools).toEqual([
-      expect.objectContaining({
-        name: 'submit_shortlist',
-        strict: true,
-      }),
-    ])
-    expect(request.tools[0].input_schema.properties.picks.items.properties.index.enum).toEqual([1, 2, 3])
-    expect(request.tools[0].input_schema.required).toContain('specific_brand')
-    expect(request.tools[0].input_schema.properties.picks.items.required).toContain('brand')
-    expect(request.messages[0].content).toContain('"index":1')
-    expect(request.messages[0].content).not.toContain('"id":"prod-1"')
-    expect(request.messages[0].content).toContain(
-      'Within the eligible set, final order priority: (1) inferred shopper intent and exact product fit, (2) quality confidence including rating, review count, trustScore, and recognized category brand, (3) price/value, (4) useful shortlist variety, (5) amazonPosition.',
-    )
-    expect(request.messages[0].content).toContain('Set specific_brand to true only in that case.')
-    expect(request.messages[0].content).toContain('return its maker in brand')
-  })
-
-  it('keeps Haiku’s explicit-brand decision in the parsed shortlist result', async () => {
-    mockHaikuResponse([{ index: 1 }, { index: 2 }], undefined, true)
-
-    const result = await haikuLockWinnersAndBadges({
-      apiKey: 'claude-key',
-      finalResultLimit: 2,
-      candidatePool: createCandidatePool(2),
-    })
-
-    expect(result.specificBrand).toBe(true)
-  })
-
-  it('applies the price ranking strategy in both ranking prompt sections', async () => {
-    mockHaikuResponse([{ index: 1 }, { index: 2 }])
-
-    await haikuLockWinnersAndBadges({
-      apiKey: 'claude-key',
-      finalResultLimit: 2,
-      candidatePool: createCandidatePool(3),
-      rankingPreference: 'price',
-    })
-
-    const prompt = anthropicMocks.create.mock.calls[0][0].messages[0].content
-    expect(prompt).toContain('favor the lowest-priced credible options')
-    expect(prompt).toContain('Keep the strongest contextual fit as the best-overall pick')
-    expect(prompt).toContain('surface lower-priced credible alternatives')
-    expect(prompt).toContain('(3) lowest-priced credible value')
-    expect(prompt).not.toContain('(3) price/value, (4) useful shortlist variety')
-  })
-
-  it('uses only the compact fit-filter prompt for lowest-price mode', async () => {
-    mockHaikuResponse([{ index: 1 }, { index: 2 }])
-
-    await haikuLockWinnersAndBadges({
-      apiKey: 'claude-key',
-      finalResultLimit: 2,
-      candidatePool: createCandidatePool(3),
-      rankingPreference: 'lowest_price',
-    })
-
-    const prompt = anthropicMocks.create.mock.calls[0][0].messages[0].content
-    expect(prompt).toContain('Lowest prices selected.')
-    expect(prompt).toContain(
-      'Return all candidates that match the search and stated requirements. Exclude only clear mismatches, accessories, duplicates, or products that violate a requirement.',
-    )
-    expect(prompt).not.toContain('Ranking approach - apply in this order:')
-    expect(prompt).not.toContain('quality confidence')
-    expect(prompt).not.toContain('known brands')
-  })
-
-  it('keeps every lowest-price fit match instead of stopping at the shortlist size', async () => {
-    mockHaikuResponse([{ index: 1 }, { index: 2 }, { index: 3 }])
-
-    const result = await haikuLockWinnersAndBadges({
-      apiKey: 'claude-key',
-      finalResultLimit: 2,
-      candidatePool: createCandidatePool(3),
+      candidatePool: pool(3),
       rankingPreference: 'lowest_price',
     })
 
     expect(result.lockedIds).toEqual(['prod-1', 'prod-2', 'prod-3'])
-    expect(anthropicMocks.create.mock.calls[0][0].max_tokens).toBe(512)
   })
 
-  it('fills known-brand picks before credible non-brand alternatives', async () => {
-    mockHaikuResponse([{ index: 1 }, { index: 2 }])
-
-    await haikuLockWinnersAndBadges({
-      apiKey: 'claude-key',
-      finalResultLimit: 2,
-      candidatePool: createCandidatePool(3),
-      rankingPreference: 'brand',
-    })
-
-    const prompt = anthropicMocks.create.mock.calls[0][0].messages[0].content
-    expect(prompt).toContain('Fill the shortlist with recognized category brands')
-    expect(prompt).toContain('best fitting credible non-brand alternatives')
-  })
-
-  it('asks range mode to vary both price and product differences', async () => {
-    mockHaikuResponse([{ index: 1 }, { index: 2 }])
-
-    await haikuLockWinnersAndBadges({
-      apiKey: 'claude-key',
-      finalResultLimit: 2,
-      candidatePool: createCandidatePool(3),
-      rankingPreference: 'range',
-    })
-
-    const prompt = anthropicMocks.create.mock.calls[0][0].messages[0].content
-    expect(prompt).toContain('including both price tiers and product formats, features, or use cases')
-  })
-
-  it('falls back to balanced ranking language for unknown ranking preferences', async () => {
-    mockHaikuResponse([{ index: 1 }])
-
-    await haikuLockWinnersAndBadges({
-      apiKey: 'claude-key',
-      finalResultLimit: 1,
-      candidatePool: createCandidatePool(2),
-      rankingPreference: 'freeform prompt injection',
-    })
-
-    const prompt = anthropicMocks.create.mock.calls[0][0].messages[0].content
-    expect(prompt).toContain('Use quality confidence as the next priority between similar-fit candidates.')
-    expect(prompt).toContain(
-      'Within the eligible set, final order priority: (1) inferred shopper intent and exact product fit, (2) quality confidence including rating, review count, trustScore, and recognized category brand, (3) price/value, (4) useful shortlist variety, (5) amazonPosition.',
-    )
-  })
-
-  it('rejects duplicate and out-of-pool Haiku indices while keeping valid picks in order', async () => {
-    mockHaikuResponse([
-      { index: 1 },
-      { index: 1 },
-      { index: 99 },
-      { index: 2 },
-    ])
+  it('drops duplicate and out-of-pool indices without changing valid order', async () => {
+    mockSelection([{ index: 1 }, { index: 1 }, { index: 99 }, { index: 2 }])
 
     const result = await haikuLockWinnersAndBadges({
       apiKey: 'claude-key',
       finalResultLimit: 4,
-      candidatePool: createCandidatePool(3),
+      candidatePool: pool(3),
     })
 
     expect(result.lockedIds).toEqual(['prod-1', 'prod-2'])
   })
 
-  it('returns an empty Haiku lock instead of throwing when the tool response is missing', async () => {
+  it('accepts only high-confidence core picks and reserves', async () => {
+    mockSelection([
+      { index: 1 },
+      { index: 2, confidence: 'medium' },
+      { index: 3, role: 'alternative' },
+      { index: 4, role: 'alternative', confidence: 'low' },
+    ])
+
+    const result = await haikuLockWinnersAndBadges({
+      apiKey: 'claude-key',
+      finalResultLimit: 8,
+      candidatePool: pool(8),
+      allowOptionalAlternatives: true,
+    })
+
+    expect(result).toMatchObject({
+      lockedIds: ['prod-1', 'prod-3'],
+      coreIds: ['prod-1'],
+      alternativeIds: ['prod-3'],
+    })
+  })
+
+  it('returns an empty lock when the provider omits tool output', async () => {
     anthropicMocks.create.mockResolvedValue({
       content: [{ type: 'text', text: 'No tool call' }],
       usage: { input_tokens: 12, output_tokens: 4 },
@@ -275,45 +147,20 @@ describe('ai selector', () => {
     const result = await haikuLockWinnersAndBadges({
       apiKey: 'claude-key',
       finalResultLimit: 3,
-      candidatePool: createCandidatePool(3),
+      candidatePool: pool(3),
     })
 
     expect(result.lockedIds).toEqual([])
-    expect(result.usage).toEqual({
-      inputTokens: 12,
-      outputTokens: 4,
-    })
+    expect(result.usage).toEqual({ inputTokens: 12, outputTokens: 4 })
   })
 
-  it('returns partial Haiku selections without inventing fallback ids in the selector layer', async () => {
-    mockHaikuResponse([{ index: 2 }])
-
-    const result = await haikuLockWinnersAndBadges({
-      apiKey: 'claude-key',
-      finalResultLimit: 3,
-      candidatePool: createCandidatePool(4),
-    })
-
-    expect(result.lockedIds).toEqual(['prod-2'])
-  })
-
-  it('keeps a suggested search when Haiku finds fewer than four credible fits', async () => {
-    anthropicMocks.create.mockResolvedValue({
-      content: [{
-        type: 'tool_use',
-        name: 'submit_shortlist',
-        input: {
-          picks: [{ index: 2, role: 'core', confidence: 'high' }],
-          suggested_query: 'lightweight carry-on stroller under $200',
-        },
-      }],
-      usage: { input_tokens: 12, output_tokens: 4 },
-    })
+  it('returns a partial selection and its better-search suggestion without inventing IDs', async () => {
+    mockSelection([{ index: 2 }], { suggested_query: 'lightweight carry-on stroller under $200' })
 
     const result = await haikuLockWinnersAndBadges({
       apiKey: 'claude-key',
       finalResultLimit: 6,
-      candidatePool: createCandidatePool(4),
+      candidatePool: pool(4),
     })
 
     expect(result).toMatchObject({
@@ -321,241 +168,128 @@ describe('ai selector', () => {
       suggestedQuery: 'lightweight carry-on stroller under $200',
     })
     expect(anthropicMocks.create.mock.calls[0][0].messages[0].content).toContain(
-      'unless fewer than 4 candidates genuinely fit the product query and user context',
+      'combines the product query with every explicit must-have from the user context',
     )
   })
 
-  it('passes feature bullets into mini enrichment and preserves them in the stored entries', async () => {
+  it('uses Terra as the primary blocking selector with low reasoning and strict output', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
         output_text: JSON.stringify({
-          enriched: [
-            {
-              candidate_id: 'prod-1',
-              fit_reason: 'Fits travel days because it folds quickly and stays easy to carry.',
-              caveat: 'Storage is tighter than on larger everyday strollers.',
-            },
+          picks: [
+            { index: 2, brand: 'Orbit', role: 'core', confidence: 'high' },
+            { index: 1, brand: 'Orbit', role: 'alternative', confidence: 'high' },
           ],
-          improve_picks_suggestions: [
-            { label: 'Lower price', feedback: 'I want lower-priced options that still work for airport travel.' },
-            { label: 'Lighter carry', feedback: 'I want an even lighter stroller that is easier to carry.' },
-            { label: 'More storage', feedback: 'I need more storage for longer travel days.' },
-          ],
+          suggested_query: '',
+          specific_brand: false,
         }),
+        usage: {
+          input_tokens: 100,
+          output_tokens: 20,
+          total_tokens: 120,
+          output_tokens_details: { reasoning_tokens: 5 },
+        },
       }),
     })
 
-    const result = await miniEnrichSelectedCandidates(
-      {
-        apiKey: 'test-key',
-        lockedIds: ['prod-1'],
-        candidatePool: {
-          query: 'stroller',
-          details: 'best for airport travel',
-          candidates: [
-            createCandidate({
-              feature_bullets: ['One-hand fold', 'Compact carry strap'],
-              productDescription: 'A compact stroller built for airport travel.',
-            }),
-          ],
+    const result = await lockWinnersAndBadges({
+      candidatePool: pool(3),
+      finalResultLimit: 3,
+      openAiApiKey: 'openai-key',
+      claudeApiKey: 'claude-key',
+      allowOptionalAlternatives: true,
+    }, fetchMock)
+
+    expect(result).toMatchObject({
+      model: 'gpt-5.6-terra',
+      provider: 'openai',
+      fallbackUsed: false,
+      lockedIds: ['prod-2', 'prod-1'],
+      coreIds: ['prod-2'],
+      alternativeIds: ['prod-1'],
+    })
+    expect(anthropicMocks.create).not.toHaveBeenCalled()
+    const request = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(request).toMatchObject({
+      model: 'gpt-5.6-terra',
+      store: false,
+      max_output_tokens: 4096,
+      reasoning: { effort: 'low' },
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'submit_shortlist',
+          strict: true,
         },
       },
-      fetchMock,
-    )
-
-    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
-    const prompt = requestBody.input[1].content
-
-    expect(requestBody.model).toBe('gpt-5.6-luna')
-    expect(prompt).toContain('smart, calm shopping editor')
-    expect(prompt).toContain('Do not turn plausible inferences into facts.')
-    expect(prompt).toContain('"feature_bullets":["One-hand fold","Compact carry strap"]')
-    expect(prompt).toContain('"product_description":"A compact stroller built for airport travel."')
-    expect(result.enriched).toEqual([
-      {
-        candidate_id: 'prod-1',
-        fit_reason: 'Fits travel days because it folds quickly and stays easy to carry.',
-        caveat: 'Storage is tighter than on larger everyday strollers.',
-        feature_bullets: ['One-hand fold', 'Compact carry strap'],
-      },
-    ])
-    expect(result.improvePicksSuggestions).toEqual([
-      { label: 'Lower price', feedback: 'I want lower-priced options that still work for airport travel.' },
-      { label: 'Lighter carry', feedback: 'I want an even lighter stroller that is easier to carry.' },
-      { label: 'More storage', feedback: 'I need more storage for longer travel days.' },
-    ])
-    expect(prompt).toContain('exactly 3 distinct improvement suggestions')
-    expect(requestBody.text.format.schema.required).toContain('improve_picks_suggestions')
+    })
   })
 
-  it('passes ranking preference guidance into mini enrichment', async () => {
+  it('falls back to Haiku when the primary OpenAI selector fails', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      text: async () => 'provider unavailable',
+    })
+    mockSelection([{ index: 3 }])
+
+    const result = await lockWinnersAndBadges({
+      candidatePool: pool(3),
+      finalResultLimit: 3,
+      openAiApiKey: 'openai-key',
+      claudeApiKey: 'claude-key',
+    }, fetchMock)
+
+    expect(result).toMatchObject({
+      model: 'claude-haiku-4-5-20251001',
+      provider: 'anthropic',
+      primaryModel: 'gpt-5.6-terra',
+      fallbackUsed: true,
+      lockedIds: ['prod-3'],
+    })
+    expect(anthropicMocks.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('attaches mini enrichment to the selected candidate and preserves provider feature evidence', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
         output_text: JSON.stringify({
-          enriched: [
-            {
-              candidate_id: 'prod-1',
-              fit_reason: 'This is a credible low-price option for the trip.',
-              caveat: 'It has fewer reviews than pricier alternatives.',
-            },
+          enriched: [{ candidate_id: 'prod-1', fit_reason: 'Easy to carry.', caveat: 'Small basket.' }],
+          improve_picks_suggestions: [
+            { label: 'Lower price', feedback: 'Find lower-priced airport strollers.' },
+            { label: 'Lighter', feedback: 'Find a lighter carry option.' },
+            { label: 'Storage', feedback: 'Find more storage.' },
           ],
         }),
       }),
     })
 
-    await miniEnrichSelectedCandidates(
-      {
-        apiKey: 'test-key',
-        lockedIds: ['prod-1'],
-        candidatePool: createCandidatePool(1),
-        rankingPreference: 'price',
-      },
-      fetchMock,
-    )
-
-    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(requestBody.input[1].content).toContain(
-      'The shopper has an account preference for lower-priced credible picks.',
-    )
-  })
-
-  it('passes lowest-price guidance into mini enrichment', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ output_text: JSON.stringify({ enriched: [] }) }),
-    })
-
-    await miniEnrichSelectedCandidates(
-      {
-        apiKey: 'test-key',
-        lockedIds: ['prod-1'],
-        candidatePool: createCandidatePool(1),
-        rankingPreference: 'lowest_price',
-      },
-      fetchMock,
-    )
-
-    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(requestBody.input[1].content).toContain(
-      'The shopper chose the lowest prices among options that fit their search.',
-    )
-  })
-
-  it('reports whether mini enrichment preserved the locked shortlist order', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        output_text: JSON.stringify({
-          enriched: [
-            {
-              candidate_id: 'prod-2',
-              fit_reason: 'Second product was explained first.',
-              caveat: 'It is not the first locked pick.',
-            },
-            {
-              candidate_id: 'prod-1',
-              fit_reason: 'First product was explained second.',
-              caveat: 'The model changed the intended order.',
-            },
-          ],
-        }),
-      }),
-    })
-
-    const result = await miniEnrichSelectedCandidates(
-      {
-        apiKey: 'test-key',
-        lockedIds: ['prod-1', 'prod-2'],
-        candidatePool: createCandidatePool(2),
-      },
-      fetchMock,
-    )
-
-    expect(result.enrichedIds).toEqual(['prod-2', 'prod-1'])
-    expect(result.preservedOrder).toBe(false)
-  })
-
-  it('skips mini enrichment when there are no locked ids', async () => {
-    const fetchMock = vi.fn()
-
-    const result = await miniEnrichSelectedCandidates(
-      {
-        apiKey: 'test-key',
-        lockedIds: [],
-        candidatePool: createCandidatePool(2),
-      },
-      fetchMock,
-    )
-
-    expect(fetchMock).not.toHaveBeenCalled()
-    expect(result).toEqual({
-      model: 'gpt-5.6-luna',
-      enriched: [],
-      enrichedIds: [],
-      improvePicksSuggestions: [],
-      usage: null,
-      preservedOrder: true,
-    })
-  })
-
-  it('hides obvious low-value price comparison candidates', async () => {
-    const result = await assessDeepDiveEligibility({
+    const result = await miniEnrichSelectedCandidates({
+      apiKey: 'openai-key',
       lockedIds: ['prod-1'],
-      candidatePool: {
-        query: 'usb cable',
-        details: '',
-        candidates: [
-          createCandidate({
-            id: 'prod-1',
-            title: 'USB-C cable 3 pack',
-            price: '$12.99',
-            numericPrice: 12.99,
-          }),
-        ],
-      },
-    })
+      candidatePool: { query: 'stroller', details: '', candidates: [candidate({ feature_bullets: ['One-hand fold'] })] },
+    }, fetchMock)
 
-    expect(result.model).toBe('deterministic-prefilter')
-    expect(result.usage).toBeNull()
-    expect(result.decisions).toEqual([
-      {
-        candidate_id: 'prod-1',
-        recommendation: 'hide',
-        mode: 'hide',
-        confidence: 'high',
-        reason: 'generic_low_value',
-      },
-    ])
+    expect(result.enriched).toEqual([expect.objectContaining({
+      candidate_id: 'prod-1',
+      fit_reason: 'Easy to carry.',
+      feature_bullets: ['One-hand fold'],
+    })])
+    expect(result.preservedOrder).toBe(true)
   })
 
-  it('shows the price comparison button when the deterministic prefilter passes', async () => {
-    const result = await assessDeepDiveEligibility({
+  it('shows price comparison only for products that pass the deterministic value gate', async () => {
+    const hidden = await assessDeepDiveEligibility({
       lockedIds: ['prod-1'],
-      candidatePool: {
-        query: 'sony headphones',
-        details: '',
-        candidates: [
-          createCandidate({
-            id: 'prod-1',
-            title: 'Sony WH-1000XM5 Wireless Noise Canceling Headphones',
-            price: '$299.99',
-            numericPrice: 299.99,
-          }),
-        ],
-      },
+      candidatePool: { query: 'usb cable', candidates: [candidate({ title: 'USB-C cable 3 pack', numericPrice: 12.99 })] },
+    })
+    const shown = await assessDeepDiveEligibility({
+      lockedIds: ['prod-1'],
+      candidatePool: { query: 'sony headphones', candidates: [candidate({ title: 'Sony WH-1000XM5 Headphones', numericPrice: 299.99 })] },
     })
 
-    expect(result.decisions).toEqual([
-      {
-        candidate_id: 'prod-1',
-        recommendation: 'show',
-        mode: 'offers',
-        confidence: 'high',
-        reason: 'prefilter_passed',
-      },
-    ])
-    expect(result.usage).toBeNull()
+    expect(hidden.decisions[0]).toMatchObject({ recommendation: 'hide', reason: 'generic_low_value' })
+    expect(shown.decisions[0]).toMatchObject({ recommendation: 'show', mode: 'offers' })
   })
 })

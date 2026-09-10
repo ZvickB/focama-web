@@ -4,8 +4,37 @@ import { areSameProductFamily, hasExplicitBrandRequest, selectDistinctCandidates
 
 const candidate = (id, brandName, title) => ({ id, brandName, title })
 
+const rainforestCurtainRodCandidates = [
+  {
+    id: 'B0CP7NHRTG',
+    haikuBrand: 'KAMANINA',
+    title: 'KAMANINA Curtain Rods 32 to 144 Inch with Decorative Round Finials, Silver | 7/8 Inch Curtain Rod for Windows 72 to 144 Inch, Adjustable Long Drapery Rods, for Kitchen, Bedroom, Living Room, Office',
+  },
+  {
+    id: 'B0CR689CJ5',
+    haikuBrand: 'KAMANINA',
+    title: 'KAMANINA Silver Curtain Rods for Windows 72-144 Inch Heavy Duty Drapery Rod | 1 In Adjustable, 6-12 Feet Long, Window Treatment Rods for Sliding Glass Door, Grommet Curtains, Decorative Crystal Finials',
+  },
+  {
+    id: 'B0CP7RJX46',
+    haikuBrand: 'KAMANINA',
+    title: 'KAMANINA Silver Curtain Rod for Windows 72 to 144 Inch, Long Heavy Duty | 1 Inch Diameter, Adjustable Single Drapery Rods, for Kitchen, Bedroom, Living Room, Decorative Square Finials, 32-144 Inch',
+  },
+  {
+    id: 'B0FRM9Z58N',
+    haikuBrand: 'YaFex',
+    title: 'YaFex Curtain Rods 32-144 Inch, Heavy Duty 1 Inch Adjustable Curtain Rod for Windows, Silver Extra Long Window Treatment Rods, Modern Design, Easy Installation',
+  },
+  {
+    id: 'B0G43RM1QZ',
+    haikuBrand: 'YaFex',
+    title: 'YaFex Heavy Duty Curtain Rods 32-150 Inch, 1 Inch Adjustable Silver Curtain Rod for Windows, Extra Long Window Treatment Rods with Aluminium Finials, Easy Installation',
+  },
+]
+
 describe('product identity smoke cases', () => {
-  it.each([
+  it('distinguishes models and meaningful variants while collapsing cosmetic variants', () => {
+    const cases = [
     ['collapses Soundcore Q20i colorways', candidate('q20i-black', 'soundcore', 'soundcore by Anker Q20i Hybrid ANC Headphones Black'), candidate('q20i-pink', 'soundcore', 'soundcore by Anker Q20i Hybrid ANC Headphones Pink'), true],
     ['collapses Soundcore Q30 colorways despite marketing copy', candidate('q30-black', 'soundcore', 'soundcore by Anker Life Q30 Hybrid ANC Headphones Black'), candidate('q30-white', 'soundcore', 'soundcore by Anker Q30 Hybrid ANC Headphones White'), true],
     ['keeps Q20i and Q30 as distinct models', candidate('q20i', 'soundcore', 'soundcore by Anker Q20i Hybrid ANC Headphones'), candidate('q30', 'soundcore', 'soundcore by Anker Q30 Hybrid ANC Headphones'), false],
@@ -15,8 +44,11 @@ describe('product identity smoke cases', () => {
     ['keeps regular and wide shoe fits distinct', candidate('pegasus-regular', 'Nike', 'Nike Pegasus 41 Running Shoes Regular'), candidate('pegasus-wide', 'Nike', 'Nike Pegasus 41 Running Shoes Wide'), false],
     ['collapses Sony WH-1000XM5 colorways', candidate('sony-black', 'Sony', 'Sony WH-1000XM5 Headphones Black'), candidate('sony-silver', 'Sony', 'Sony WH-1000XM5 Headphones Silver'), true],
     ['keeps major feature tiers distinct', candidate('qc', 'Bose', 'Bose QuietComfort Headphones'), candidate('qc-ultra', 'Bose', 'Bose QuietComfort Ultra Headphones'), false],
-  ])('%s', (_name, left, right, expected) => {
-    expect(areSameProductFamily(left, right)).toBe(expected)
+    ]
+
+    for (const [name, left, right, expected] of cases) {
+      expect(areSameProductFamily(left, right), name).toBe(expected)
+    }
   })
 
   it('keeps unique Haiku picks first and appends pool replacements', () => {
@@ -31,6 +63,22 @@ describe('product identity smoke cases', () => {
       fallbackCandidates: [q20iBlack, q20iPink, q30White, jbl, shokz],
       limit: 4,
     }).map((item) => item.id)).toEqual(['q20i-black', 'q30-white', 'jbl', 'shokz'])
+  })
+
+  it('keeps distinct Supabase Rainforest curtain rods that share only measurements', () => {
+    expect(areSameProductFamily(
+      rainforestCurtainRodCandidates[0],
+      rainforestCurtainRodCandidates[1],
+    )).toBe(false)
+    expect(areSameProductFamily(
+      rainforestCurtainRodCandidates[3],
+      rainforestCurtainRodCandidates[4],
+    )).toBe(false)
+
+    expect(selectDistinctCandidates({
+      preferredCandidates: rainforestCurtainRodCandidates,
+      limit: rainforestCurtainRodCandidates.length,
+    }).map((item) => item.id)).toEqual(rainforestCurtainRodCandidates.map((item) => item.id))
   })
 
   it('caps a brand only when the caller requests brand variety', () => {

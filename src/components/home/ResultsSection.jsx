@@ -207,6 +207,7 @@ export function ResultsSection({
   hasCompletedFinalize = false,
   hasFinalResults,
   hasStartedSearch,
+  followUpNotes = '',
   improvePicksSuggestions = [],
   isEnrichmentSettled = false,
   isFinalizing,
@@ -270,6 +271,8 @@ export function ResultsSection({
   const orderedPreviousResults = previousResults
   const recoverySuggestion = validateSuggestedSearchQuery(String(candidateRecovery?.suggestedQuery || '').trim())
   const recoverySuggestedQuery = recoverySuggestion.isValid ? recoverySuggestion.normalizedQuery : ''
+  const recoveryMatchCount = Math.max(0, Number(candidateRecovery?.goodCandidateCount) || 0)
+  const preservedRecoveryDetails = String(followUpNotes || '').trim()
   const candidateRecoveryKey = `${submittedQuery}:${recoverySuggestedQuery}`
   const shouldShowCandidateRecovery =
     hasFinalResults && recoverySuggestedQuery && dismissedCandidateRecoveryKey !== candidateRecoveryKey
@@ -719,13 +722,21 @@ export function ResultsSection({
         <>
           {shouldShowCandidateRecovery ? (
             <div className="rounded-[28px] border border-primary/20 bg-[#eef7f6] p-5 shadow-[0_24px_64px_-50px_rgba(15,97,117,0.28)]">
-              <p className="text-lg font-medium text-slate-900">These are the strongest matches we found.</p>
+              <p className="text-lg font-medium text-slate-900">
+                We found only {recoveryMatchCount} strong {recoveryMatchCount === 1 ? 'match' : 'matches'}.
+              </p>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                A more specific search may uncover better options for what you told us.
+                We can try a sharper search without making you enter your requirements again.
               </p>
               <div className="mt-4 rounded-[22px] border border-primary/15 bg-white/85 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Suggested search</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Refined search</p>
                 <p className="mt-2 text-base font-semibold leading-6 text-primary">{recoverySuggestedQuery}</p>
+                {preservedRecoveryDetails ? (
+                  <div className="mt-3 border-t border-primary/10 pt-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Keeping your details</p>
+                    <p className="mt-1 text-sm leading-5 text-slate-600">{preservedRecoveryDetails}</p>
+                  </div>
+                ) : null}
               </div>
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <Button type="button" className="h-11 rounded-[18px] bg-primary px-5 text-primary-foreground hover:bg-primary/90" onClick={() => onFindBetterMatches(recoverySuggestedQuery)}>
@@ -738,6 +749,9 @@ export function ResultsSection({
                   Keep these picks
                 </button>
               </div>
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                The refined search runs automatically and replaces this shortlist.
+              </p>
             </div>
           ) : null}
         {!INLINE_IMPROVE_PICKS || !hasDisplayedResults || shouldShowCandidateRecovery ? (

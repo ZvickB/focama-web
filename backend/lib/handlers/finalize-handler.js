@@ -6,7 +6,8 @@ import {
 } from '../../../shared/ranking-preference.js'
 import {
   DEFAULT_FINALIZE_MODEL,
-  haikuLockWinnersAndBadges,
+  DEFAULT_SELECTOR_MODEL,
+  lockWinnersAndBadges,
 } from '../ai-selector.js'
 import { createFinalizeFastContract, toFinalizeFastCard } from '../layered-contracts.js'
 import { DEFAULT_RATE_LIMIT_CONFIG, getClientIpAddress, takeRateLimitToken } from '../rate-limit.js'
@@ -32,6 +33,7 @@ import {
   filterNonNewConditionCandidates,
   sanitizeFinalizeCandidate,
 } from './finalize-candidate.js'
+import { filterCandidatesByProvableConstraints } from '../provable-constraint-guard.js'
 import { composePreferenceShortlist } from '../ranking-preference-policy.js'
 import {
   FINALIZE_BODY_LIMIT_BYTES,
@@ -296,9 +298,10 @@ export async function handleFinalizeSelection(request, response) {
 
   const supportSearchId = truncateText(body?.searchId, 120) || null
   const openAiApiKey = getEnv('OPENAI_API_KEY')
+  const claudeApiKey = getEnv('CLAUDE_API_KEY')
   const rankingPreference = normalizeRankingPreference(body?.rankingPreference)
 
-  if (!openAiApiKey) {
+  if (!openAiApiKey && !claudeApiKey) {
     logSearchFlowEvent('guided_finalize_configuration_error', {
       route: '/api/search/finalize',
       searchId: supportSearchId,
@@ -307,9 +310,11 @@ export async function handleFinalizeSelection(request, response) {
       stage: 'backend_response_sent',
       status: 'failed',
       finalStatus: 'provider_error',
-      errorMessage: 'OpenAI API is not configured.',
+      errorMessage: 'No shortlist AI provider is configured.',
     })
-    sendJson(response, 500, { error: 'OPENAI_API_KEY is missing from the root .env file.' })
+    sendJson(response, 500, {
+      error: 'OPENAI_API_KEY and CLAUDE_API_KEY are both missing from the root .env file.',
+    })
     return
   }
 
@@ -480,6 +485,11 @@ export async function handleFinalizeSelection(request, response) {
     productQuery: sanitizedDiscoveryContext.normalizedQuery,
     userContext: refinedDetails,
   }).candidates
+  const provableConstraintValidation = filterCandidatesByProvableConstraints({
+    candidates: conditionEligibleCandidates,
+    productQuery: sanitizedDiscoveryContext.normalizedQuery,
+    userContext: [candidatePool.details, refinedDetails].filter(Boolean).join('. '),
+  })
   const hasPrimeRequirement = hasPrimeDeliveryRequirement(
     sanitizedDiscoveryContext.normalizedQuery,
     followUpNotes,
@@ -487,11 +497,16 @@ export async function handleFinalizeSelection(request, response) {
     priorities.join(' '),
   )
   const primeEligibleCandidates = hasPrimeRequirement
-    ? conditionEligibleCandidates.filter((candidate) => candidate.isPrime)
+    ? provableConstraintValidation.candidates.filter((candidate) => candidate.isPrime)
     : []
   const eligibleCandidates = primeEligibleCandidates.length > 0
     ? primeEligibleCandidates
-    : conditionEligibleCandidates
+    : provableConstraintValidation.candidates
+  const constraintValidation = {
+    ...provableConstraintValidation.constraints,
+    rejectedCount: provableConstraintValidation.rejections.length,
+    rejections: provableConstraintValidation.rejections,
+  }
 
   const nextCandidatePool = {
     ...candidatePool,
@@ -503,6 +518,11 @@ export async function handleFinalizeSelection(request, response) {
   }
 
   if (retryCount > 0 && nextCandidatePool.candidates.length === 0) {
+    const retryExhaustedDetails = excludedCandidateIds.length > 0
+      ? 'No new candidates remained after excluding the previously rejected picks.'
+      : constraintValidation.rejectedCount > 0
+        ? 'No candidates remained after applying the shopper requirements to the refined search.'
+        : 'No candidates remained for the refined search.'
     const finalizeFast = buildFinalizeFastResponseContract({
       query: sanitizedDiscoveryContext.normalizedQuery,
       discoveryToken: sanitizedDiscoveryContext.discoveryToken,
@@ -518,6 +538,7 @@ export async function handleFinalizeSelection(request, response) {
       searchId: supportSearchId,
       query: sanitizedDiscoveryContext.normalizedQuery,
       candidateCount: 0,
+      constraintValidation,
       retryCount,
       requestMode,
       cacheMs: roundTimingDuration(cacheLookupDuration),
@@ -536,7 +557,8 @@ export async function handleFinalizeSelection(request, response) {
         requestMode,
         shortlistLocked: finalizeFast.shortlistLocked,
         selectedCandidateIds: finalizeFast.selectedCandidateIds,
-        details: 'No new candidates remained after excluding the previously rejected picks.',
+        constraintValidation,
+        details: retryExhaustedDetails,
       },
     }, {
       serverTiming: [
@@ -554,34 +576,41 @@ export async function handleFinalizeSelection(request, response) {
       finalStatus: 'empty',
       resultCountAfterInternalFilters: 0,
       retryCount,
+      metadata: {
+        constraintActiveCount: constraintValidation.activeCount,
+        constraintRejectedCount: constraintValidation.rejectedCount,
+      },
     })
     return
   }
 
   try {
-    const haikuStartedAt = nowMs()
+    const selectorStartedAt = nowMs()
     const usesPreferencePolicy = isActiveRankingPreference(rankingPreference)
-    const haikuResult = await haikuLockWinnersAndBadges({
+    const selectorResult = await lockWinnersAndBadges({
       candidatePool: nextCandidatePool,
-      finalResultLimit: usesPreferencePolicy
-        ? Math.min(12, nextCandidatePool.candidates.length)
-        : LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
-      apiKey: getEnv('CLAUDE_API_KEY'),
+      finalResultLimit: Math.min(
+        12,
+        Math.max(LIVE_RESULT_FILTER_CONFIG.finalResultLimit, nextCandidatePool.candidates.length),
+      ),
+      openAiApiKey,
+      claudeApiKey,
+      model: getEnv('OPENAI_SELECTOR_MODEL') || DEFAULT_SELECTOR_MODEL,
       rankingPreference: usesPreferencePolicy ? RANKING_PREFERENCES.BALANCED : rankingPreference,
-      ...(usesPreferencePolicy ? { allowOptionalAlternatives: true } : {}),
+      allowOptionalAlternatives: true,
     })
-    const haikuDuration = nowMs() - haikuStartedAt
-    tokenUsageByStage.finalize = haikuResult.usage || null
+    const selectorDuration = nowMs() - selectorStartedAt
+    tokenUsageByStage.finalize = selectorResult.usage || null
 
     const candidateById = new Map(
       nextCandidatePool.candidates.map((c) => [String(c.id), c]),
     )
-    const seenHaikuIds = new Set()
-    const fitFrontierIds = haikuResult.lockedIds
+    const seenSelectorIds = new Set()
+    const fitFrontierIds = selectorResult.lockedIds
       .filter((id) => {
         const normalizedId = String(id)
-        if (seenHaikuIds.has(normalizedId)) return false
-        seenHaikuIds.add(normalizedId)
+        if (seenSelectorIds.has(normalizedId)) return false
+        seenSelectorIds.add(normalizedId)
         return candidateById.has(normalizedId)
       })
     const composition = usesPreferencePolicy
@@ -592,52 +621,64 @@ export async function handleFinalizeSelection(request, response) {
         rankingPreference,
       })
       : { ids: fitFrontierIds, policy: 'balanced' }
-    const haikuCandidates = composition.ids
+    const reportedCoreIds = Array.isArray(selectorResult.coreIds)
+      ? selectorResult.coreIds
+      : selectorResult.lockedIds
+    const selectorCoreIds = new Set(
+      reportedCoreIds
+        .map((id) => String(id))
+        .filter((id) => candidateById.has(id)),
+    )
+    const selectorCandidates = composition.ids
       .map((id) => {
         const normalizedId = String(id)
         const candidate = candidateById.get(normalizedId)
         if (!candidate) return null
 
-        const haikuBrand = String(haikuResult.brandById?.[normalizedId] || '').trim()
+        const haikuBrand = String(selectorResult.brandById?.[normalizedId] || '').trim()
         return haikuBrand ? { ...candidate, haikuBrand } : candidate
       })
       .filter(Boolean)
+    const selectorCoreCandidates = selectorCandidates.filter((candidate) =>
+      selectorCoreIds.has(String(candidate.id)),
+    )
 
     const targetResultCount = Math.min(
       LIVE_RESULT_FILTER_CONFIG.finalResultLimit,
       nextCandidatePool.candidates.length,
     )
-    const specificBrand = haikuResult.specificBrand || hasExplicitBrandRequest(
+    const specificBrand = selectorResult.specificBrand || hasExplicitBrandRequest(
       nextCandidatePool.query,
-      [...nextCandidatePool.candidates, ...haikuCandidates],
+      [...nextCandidatePool.candidates, ...selectorCandidates],
     )
     const maxPerBrand = specificBrand ? undefined : 2
     let brandCapOverflowCount = 0
     const onBrandOverflow = () => {
       brandCapOverflowCount += 1
     }
-    const haikuResults = haikuCandidates.map((candidate) => toFinalizeFastCard(candidate))
+    const selectorResults = selectorCandidates.map((candidate) => toFinalizeFastCard(candidate))
+    const selectorAlternativeIds = new Set(
+      (Array.isArray(selectorResult.alternativeIds) ? selectorResult.alternativeIds : [])
+        .map((id) => String(id)),
+    )
 
-    const suggestedQuery = String(haikuResult.suggestedQuery || '').trim()
+    const suggestedQuery = String(selectorResult.suggestedQuery || '').trim()
     const { isValid: hasValidSuggestedQuery, normalizedQuery: normalizedSuggestedQuery } =
       suggestedQuery ? validateSuggestedSearchQuery(suggestedQuery) : { isValid: false, normalizedQuery: '' }
     const needsBetterSearch =
       retryCount === 0 &&
-      haikuResults.length < 4 &&
+      selectorCoreCandidates.length < 4 &&
       hasValidSuggestedQuery &&
       normalizedSuggestedQuery.toLowerCase() !== sanitizedDiscoveryContext.normalizedQuery.toLowerCase()
 
-    let selectedCandidates = selectDistinctCandidates({
-      fallbackCandidates: nextCandidatePool.candidates,
-      limit: targetResultCount,
-    })
-    let selectionStrategy = 'rules_fallback'
-    let flowPath = 'nano_lock_fallback'
+    let selectedCandidates = []
+    let selectionStrategy = 'haiku_lock_empty'
+    let flowPath = 'haiku_lock_empty'
     let miniEnrichmentStatus = 'skipped'
 
     if (needsBetterSearch) {
       selectedCandidates = selectDistinctCandidates({
-        preferredCandidates: haikuCandidates,
+        preferredCandidates: selectorCoreCandidates,
         limit: targetResultCount,
         maxPerBrand,
         onBrandOverflow,
@@ -645,26 +686,26 @@ export async function handleFinalizeSelection(request, response) {
       selectionStrategy = 'haiku_lock_partial_recovery'
       flowPath = 'haiku_lock_partial_recovery'
       miniEnrichmentStatus = 'running_async'
-    } else if (haikuResults.length > 0) {
+    } else if (selectorResults.length > 0) {
       selectedCandidates = selectDistinctCandidates({
-        preferredCandidates: haikuCandidates,
-        fallbackCandidates: nextCandidatePool.candidates,
+        preferredCandidates: selectorCandidates,
         limit: targetResultCount,
         maxPerBrand,
         onBrandOverflow,
       })
-      const haikuCandidateIds = new Set(haikuCandidates.map((candidate) => String(candidate.id)))
-      const didTopUp = selectedCandidates.some((candidate) => !haikuCandidateIds.has(String(candidate.id)))
-      if (haikuResults.length >= targetResultCount) {
+      const didPromoteReserve = selectedCandidates.some((candidate) =>
+        selectorAlternativeIds.has(String(candidate.id)),
+      )
+      if (selectedCandidates.length >= targetResultCount) {
         selectionStrategy = usesPreferencePolicy
-          ? `haiku_fit_frontier_${composition.policy}${didTopUp ? '_topped_up' : ''}`
-          : didTopUp ? 'haiku_lock_topped_up' : 'haiku_lock'
+          ? `haiku_fit_frontier_${composition.policy}${didPromoteReserve ? '_reserve_promoted' : ''}`
+          : didPromoteReserve ? 'haiku_lock_reserve_promoted' : 'haiku_lock'
         flowPath = usesPreferencePolicy
-          ? didTopUp ? 'haiku_fit_frontier_policy_topped_up' : 'haiku_fit_frontier_policy'
-          : didTopUp ? 'haiku_lock_topped_up' : 'haiku_lock'
+          ? didPromoteReserve ? 'haiku_fit_frontier_policy_reserve_promoted' : 'haiku_fit_frontier_policy'
+          : didPromoteReserve ? 'haiku_lock_reserve_promoted' : 'haiku_lock'
       } else {
-        selectionStrategy = usesPreferencePolicy ? `haiku_fit_frontier_${composition.policy}_topped_up` : 'haiku_lock_topped_up'
-        flowPath = usesPreferencePolicy ? 'haiku_fit_frontier_policy_topped_up' : 'haiku_lock_topped_up'
+        selectionStrategy = usesPreferencePolicy ? `haiku_fit_frontier_${composition.policy}_partial` : 'haiku_lock_partial'
+        flowPath = usesPreferencePolicy ? 'haiku_fit_frontier_policy_partial' : 'haiku_lock_partial'
       }
 
       miniEnrichmentStatus = 'running_async'
@@ -677,7 +718,7 @@ export async function handleFinalizeSelection(request, response) {
     }
 
     const selectedCandidateIds = results.map((item) => item.id)
-    const usedHaikuSelection = haikuResults.length > 0
+    const usedAiSelection = true
 
     if (process.env.NODE_ENV !== 'production') {
       recordRecentFinalization({
@@ -685,7 +726,7 @@ export async function handleFinalizeSelection(request, response) {
         details: refinedDetails || sanitizedDiscoveryContext.latestUserContext || '',
         results,
         strategy: selectionStrategy,
-        model: usedHaikuSelection ? haikuResult.model : null,
+        model: usedAiSelection ? selectorResult.model : null,
         timestamp: new Date().toISOString(),
       })
     }
@@ -696,7 +737,7 @@ export async function handleFinalizeSelection(request, response) {
       latestUserContext: refinedDetails,
       results,
       selectedCandidateIds,
-      model: usedHaikuSelection ? haikuResult.model : '',
+      model: usedAiSelection ? selectorResult.model : '',
       strategy: selectionStrategy,
     })
     const persistenceStartedAt = nowMs()
@@ -715,12 +756,16 @@ export async function handleFinalizeSelection(request, response) {
           !Array.isArray(resolvedDiscoveryContext.cachedEntry.selection)
             ? resolvedDiscoveryContext.cachedEntry.selection
             : {}),
-          mode: usedHaikuSelection ? 'ai' : 'rules_fallback',
+          mode: usedAiSelection ? 'ai' : 'rules_fallback',
           strategy: selectionStrategy,
-          model: usedHaikuSelection ? haikuResult.model : null,
+          model: usedAiSelection ? selectorResult.model : null,
+          selectorProvider: selectorResult.provider || null,
+          selectorFallbackUsed: Boolean(selectorResult.fallbackUsed),
+          primarySelectorModel: selectorResult.primaryModel || selectorResult.model || null,
           selectedCandidateIds: finalizeFast.selectedCandidateIds,
           rankingPreference,
           brandVariety,
+          constraintValidation,
           finalizedAt: new Date().toISOString(),
         },
         source: 'guided_finalize_selection',
@@ -746,25 +791,30 @@ export async function handleFinalizeSelection(request, response) {
       searchId: supportSearchId,
       query: sanitizedDiscoveryContext.normalizedQuery,
       candidateCount: nextCandidatePool.candidates.length,
+      candidateCountBeforeConstraints: conditionEligibleCandidates.length,
       finalCount: results.length,
       retryCount,
       metadata: brandVariety,
+      constraintValidation,
       requestMode,
       cacheMs: roundTimingDuration(cacheLookupDuration),
-      haikuMs: roundTimingDuration(haikuDuration),
+      selectorMs: roundTimingDuration(selectorDuration),
+      haikuMs: roundTimingDuration(selectorDuration),
       persistenceMs: roundTimingDuration(persistenceDuration),
       productDetailsMs: null,
       totalMs: roundTimingDuration(totalDuration),
-      haikuUsage: haikuResult.usage || null,
-      rankingOwner: usedHaikuSelection
-        ? selectionStrategy === 'haiku_lock'
-          ? 'haiku_lock'
-          : 'haiku_lock_topped_up'
+      selectorUsage: selectorResult.usage || null,
+      haikuUsage: selectorResult.usage || null,
+      selectorProvider: selectorResult.provider || null,
+      selectorFallbackUsed: Boolean(selectorResult.fallbackUsed),
+      primarySelectorModel: selectorResult.primaryModel || selectorResult.model || null,
+      rankingOwner: usedAiSelection
+        ? 'ai_guarded_frontier'
         : 'deterministic_fallback',
-      selectionMode: usedHaikuSelection ? 'ai' : 'rules_fallback',
+      selectionMode: usedAiSelection ? 'ai' : 'rules_fallback',
       selectionStrategy,
       flowPath,
-      finalizeModel: haikuResult.model,
+      finalizeModel: selectorResult.model,
       finalizeModelPath: hasContextSignals ? 'context_added' : 'baseline',
       rankingPreference,
     })
@@ -773,14 +823,18 @@ export async function handleFinalizeSelection(request, response) {
       debug: {
         finalizeFastLayer: finalizeFast.layer,
         flowPath,
-        finalizeModel: haikuResult.model,
+        finalizeModel: selectorResult.model,
+        selectorProvider: selectorResult.provider || null,
+        selectorFallbackUsed: Boolean(selectorResult.fallbackUsed),
+        primarySelectorModel: selectorResult.primaryModel || selectorResult.model || null,
         finalizeModelPath: hasContextSignals ? 'context_added' : 'baseline',
         requestMode,
         miniEnrichmentStatus,
         stageLatencyMs: {
           body: roundTimingDuration(body.bodyReadDuration || 0),
           cache: roundTimingDuration(cacheLookupDuration),
-          haiku: roundTimingDuration(haikuDuration),
+          selector: roundTimingDuration(selectorDuration),
+          haiku: roundTimingDuration(selectorDuration),
           persistence: roundTimingDuration(persistenceDuration),
           productDetails: null,
           total: roundTimingDuration(totalDuration),
@@ -793,40 +847,47 @@ export async function handleFinalizeSelection(request, response) {
       results,
       selection: {
         layer: finalizeFast.layer,
-        mode: usedHaikuSelection ? 'ai' : 'rules_fallback',
+        mode: usedAiSelection ? 'ai' : 'rules_fallback',
         strategy: selectionStrategy,
-        model: usedHaikuSelection ? haikuResult.model : null,
+        model: usedAiSelection ? selectorResult.model : null,
+        selectorProvider: selectorResult.provider || null,
+        selectorFallbackUsed: Boolean(selectorResult.fallbackUsed),
+        primarySelectorModel: selectorResult.primaryModel || selectorResult.model || null,
         modelPath: hasContextSignals ? 'context_added' : 'baseline',
         specificBrand,
         rankingPreference,
         candidateRecovery: needsBetterSearch
           ? {
-            goodCandidateCount: haikuResults.length,
+            goodCandidateCount: selectedCandidates.length,
             suggestedQuery: normalizedSuggestedQuery,
           }
           : null,
         requestMode,
         shortlistLocked: finalizeFast.shortlistLocked,
-        usage: usedHaikuSelection ? haikuResult.usage || null : null,
+        usage: usedAiSelection ? selectorResult.usage || null : null,
         selectedCandidateIds: finalizeFast.selectedCandidateIds,
+        constraintValidation,
         details: selectionStrategy === 'haiku_lock_partial_recovery'
           ? 'Fewer than four strong matches were found. The remaining candidates were not used to pad the shortlist.'
           : selectionStrategy === 'haiku_lock'
-          ? 'Haiku locked the shortlist. Product details and mini enrichment are running async.'
-          : selectionStrategy === 'haiku_lock_topped_up'
-            ? 'Haiku locked part of the shortlist. The remaining picks were topped up from deterministic fallback, and product details plus mini enrichment are running async.'
-            : 'Rules-based fallback was used.',
+          ? 'The AI selector locked the shortlist. Product details and mini enrichment are running async.'
+          : selectionStrategy.includes('reserve_promoted')
+            ? 'The AI selector locked the shortlist and AI-ranked reserves that passed server-owned constraint checks replaced removed picks. Product details and mini enrichment are running async.'
+            : selectionStrategy.includes('partial')
+              ? 'Only AI-ranked picks that passed server-owned constraint checks were returned; the shortlist was not padded from the raw candidate pool.'
+              : 'The AI selector returned no picks that passed server-owned constraint checks, so the shortlist was not padded from the raw candidate pool.',
         flowPath,
         miniEnrichmentStatus,
       },
       usage: {
-        haiku: haikuResult.usage || null,
+        selector: selectorResult.usage || null,
+        haiku: selectorResult.usage || null,
       },
     }, {
       serverTiming: [
         { name: 'body', duration: body.bodyReadDuration || 0 },
         { name: 'cache', duration: cacheLookupDuration },
-        { name: 'haiku', duration: haikuDuration },
+        { name: 'haiku', duration: selectorDuration },
         { name: 'persistence', duration: persistenceDuration },
         { name: 'total', duration: totalDuration },
       ],
@@ -840,11 +901,15 @@ export async function handleFinalizeSelection(request, response) {
       finalStatus: 'success',
       resultCountAfterInternalFilters: results.length,
       retryCount,
-      metadata: brandVariety,
+      metadata: {
+        ...brandVariety,
+        constraintActiveCount: constraintValidation.activeCount,
+        constraintRejectedCount: constraintValidation.rejectedCount,
+      },
     })
 
     // Fire off product details and mini enrichment async; do not block the response.
-    if (usedHaikuSelection) {
+    if (usedAiSelection && selectedCandidateIds.length > 0) {
       const miniModel = getEnv('OPENAI_FINALIZE_MODEL') || DEFAULT_FINALIZE_MODEL
       const rainforestApiKey = getEnv('RAINFOREST_API_KEY')
 
@@ -930,6 +995,8 @@ export async function handleFinalizeSelection(request, response) {
       searchId: supportSearchId,
       query: sanitizedDiscoveryContext.normalizedQuery,
       candidateCount: nextCandidatePool.candidates.length,
+      candidateCountBeforeConstraints: conditionEligibleCandidates.length,
+      constraintValidation,
       retryCount,
       requestMode,
       totalMs: roundTimingDuration(nowMs() - requestStartedAt),

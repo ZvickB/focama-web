@@ -403,7 +403,13 @@ function FinalizeHistoryInspector() {
         <div className="space-y-2">
           {entries.map((entry, index) => {
             const isOpen = expandedIndex === index
-            const strategyLabel = entry.strategy === 'haiku_lock' ? 'Haiku' : entry.strategy === 'haiku_lock_topped_up' ? 'Haiku + top-up' : entry.strategy === 'rules_fallback' ? 'Rules fallback' : entry.strategy || '—'
+            const strategyLabel = entry.strategy === 'haiku_lock'
+              ? 'Haiku'
+              : entry.strategy?.includes('reserve_promoted')
+                ? 'Haiku + eligible reserve'
+                : entry.strategy?.includes('partial')
+                  ? 'Haiku partial'
+                  : entry.strategy || '—'
             return (
               <div key={`${entry.query}-${entry.timestamp}`} className="rounded-[20px] border border-stone-200/80 bg-white/90 overflow-hidden">
                 <button
