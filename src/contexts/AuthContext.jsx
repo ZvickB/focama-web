@@ -5,22 +5,9 @@ import { AuthContext } from '@/contexts/useAuth.js'
 import { createRemoteHistoryStore } from '@/lib/history/remoteHistoryStore.js'
 import { setHistoryStore } from '@/lib/history/historyStore.js'
 import { localHistoryStore, readLocalHistoryEntries } from '@/lib/history/localHistoryStore.js'
+import { migrateLocalHistoryToAccount } from '@/lib/history/migrateLocalHistory.js'
 import { loadRemoteRankingPreference, saveRemoteRankingPreference } from '@/lib/preferences/rankingPreferenceStore.js'
 import { normalizeRankingPreference, RANKING_PREFERENCES } from '../../shared/ranking-preference.js'
-
-async function migrateLocalHistoryToAccount(remoteHistoryStore) {
-  const localEntries = await localHistoryStore.list()
-
-  if (localEntries.length === 0) {
-    return
-  }
-
-  for (const entry of localEntries) {
-    await remoteHistoryStore.save(entry)
-  }
-
-  await localHistoryStore.clear()
-}
 
 function isPasswordRecoveryUrl() {
   if (typeof window === 'undefined') return false
@@ -93,7 +80,7 @@ export function AuthProvider({ children }) {
 
       try {
         if (readLocalHistoryEntries().length > 0) {
-          await migrateLocalHistoryToAccount(remoteHistoryStore)
+          await migrateLocalHistoryToAccount(remoteHistoryStore, localHistoryStore)
           if (!isCancelled) {
             setHistoryStore(remoteHistoryStore)
           }
