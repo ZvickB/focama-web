@@ -114,44 +114,32 @@ function createFakeSupabase(initialRows = []) {
 }
 
 describe('computePriceWatchEligibility', () => {
-  it('marks a threshold drop eligible', () => {
-    const result = computePriceWatchEligibility(
+  it('distinguishes threshold drops, target hits, and unavailable prices', () => {
+    const thresholdDrop = computePriceWatchEligibility(
       { baselinePrice: 100, targetPrice: null, thresholdPct: 5 },
       { currentPrice: 94 },
     )
+    const targetHit = computePriceWatchEligibility(
+      { baselinePrice: 100, targetPrice: 90, thresholdPct: 20 },
+      { currentPrice: 90 },
+    )
+    const unavailable = computePriceWatchEligibility(
+      { baselinePrice: 100, targetPrice: null, thresholdPct: 5 },
+      { currentPrice: null, unavailableReason: 'out_of_stock' },
+    )
 
-    expect(result).toEqual(expect.objectContaining({
+    expect(thresholdDrop).toEqual(expect.objectContaining({
       eligible: true,
       meetsPct: true,
       meetsTarget: false,
       reason: 'would_notify',
     }))
-    expect(result.dropPct).toBe(6)
-  })
-
-  it('marks an absolute target hit eligible', () => {
-    const result = computePriceWatchEligibility(
-      { baselinePrice: 100, targetPrice: 90, thresholdPct: 20 },
-      { currentPrice: 90 },
-    )
-
-    expect(result).toEqual(expect.objectContaining({
+    expect(targetHit).toEqual(expect.objectContaining({
       eligible: true,
       meetsPct: false,
       meetsTarget: true,
     }))
-  })
-
-  it('skips missing prices instead of treating them as a drop', () => {
-    const result = computePriceWatchEligibility(
-      { baselinePrice: 100, targetPrice: null, thresholdPct: 5 },
-      { currentPrice: null, unavailableReason: 'out_of_stock' },
-    )
-
-    expect(result).toEqual(expect.objectContaining({
-      eligible: false,
-      reason: 'out_of_stock',
-    }))
+    expect(unavailable).toMatchObject({ eligible: false, reason: 'out_of_stock' })
   })
 })
 

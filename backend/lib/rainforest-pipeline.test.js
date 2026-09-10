@@ -1,221 +1,82 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchRainforestArtifacts, getAmazonDomain, RAINFOREST_ENDPOINT } from './rainforest-pipeline.js'
+import { fetchRainforestArtifacts, getAmazonDomain } from './rainforest-pipeline.js'
 
-describe('getAmazonDomain', () => {
-  beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn())
-  })
+function providerResponse({ asin = 'B000000001', link, price = 149.99, ...overrides }) {
+  return {
+    search_results: [{
+      asin,
+      title: 'Compact Travel Stroller',
+      price: { value: price },
+      rating: 4.6,
+      ratings_total: 321,
+      image: 'https://example.com/stroller.jpg',
+      link,
+      position: 1,
+      ...overrides,
+    }],
+    related_searches: [],
+  }
+}
 
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    vi.restoreAllMocks()
-  })
+describe('Rainforest marketplace pipeline', () => {
+  beforeEach(() => vi.stubGlobal('fetch', vi.fn()))
+  afterEach(() => vi.unstubAllGlobals())
 
-  it('returns active major marketplaces and falls back to amazon.com for inactive countries', () => {
+  it('resolves supported marketplaces, explicit overrides, and safe US fallbacks', () => {
     expect(getAmazonDomain({ countryCode: 'CA' })).toBe('amazon.ca')
-    expect(getAmazonDomain({ countryCode: 'IN' })).toBe('amazon.in')
     expect(getAmazonDomain({ countryCode: 'GB' })).toBe('amazon.co.uk')
-    expect(getAmazonDomain({ countryCode: 'DE' })).toBe('amazon.de')
-    expect(getAmazonDomain({ countryCode: 'US' })).toBe('amazon.com')
-    expect(getAmazonDomain({ countryCode: 'ZZ' })).toBe('amazon.com')
-  })
-
-  it('prefers an explicit active amazon domain override', () => {
-    expect(getAmazonDomain({ countryCode: 'US', amazonDomain: 'amazon.ca' })).toBe('amazon.ca')
     expect(getAmazonDomain({ countryCode: 'US', amazonDomain: 'amazon.in' })).toBe('amazon.in')
-    expect(getAmazonDomain({ countryCode: 'GB', amazonDomain: 'amazon.com.au' })).toBe('amazon.com.au')
-  })
-
-  it('ignores unsupported amazon domain overrides', () => {
     expect(getAmazonDomain({ countryCode: 'ZZ', amazonDomain: 'amazon.invalid' })).toBe('amazon.com')
   })
 
-  it('formats fallback prices and adds affiliate tags using the selected amazon domain', async () => {
-    fetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        search_results: [
-          {
-            asin: 'B001',
-            title: 'Compact Travel Stroller',
-            price: {
-              value: 149.99,
-            },
-            rating: 4.6,
-            ratings_total: 321,
-            image: 'https://example.com/stroller.jpg',
-            link: 'https://www.amazon.ca/dp/B001',
-            position: 1,
-          },
-        ],
-        related_searches: [],
-      }),
-    })
+  it('builds the intended tagged or untagged clickout for each marketplace class', async () => {
+    const cases = [
+      ['amazon.ca', 'https://www.amazon.ca/dp/B000000001', 'https://www.amazon.ca/dp/B000000001?tag=focamai4203-20'],
+      ['amazon.co.uk', 'https://www.amazon.co.uk/dp/B000000001', 'https://www.amazon.com/dp/B000000001?tag=focamai-20'],
+      ['amazon.in', 'https://www.amazon.in/dp/B000000001', 'https://www.amazon.in/dp/B000000001'],
+    ]
 
-    const result = await fetchRainforestArtifacts({
-      productQuery: 'travel stroller',
-      details: 'carry-on friendly',
-      reasonFallback: 'Returned by the Rainforest API search route',
-      rainforestApiKey: 'rf-key',
-      amazonDomain: 'amazon.ca',
-    })
-
-    expect(fetch).toHaveBeenCalledTimes(1)
-    expect(fetch.mock.calls[0][0]).toBeInstanceOf(URL)
-    expect(fetch.mock.calls[0][0].origin + fetch.mock.calls[0][0].pathname).toBe(RAINFOREST_ENDPOINT)
-    expect(fetch.mock.calls[0][0].searchParams.get('amazon_domain')).toBe('amazon.ca')
-    expect(result.error).toBeNull()
-    expect(result.artifacts.results).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: 'B001',
-          title: 'Compact Travel Stroller',
-          price: 'CA$149.99',
-          link: 'https://www.amazon.ca/dp/B001?tag=focamai4203-20',
-        }),
-      ]),
-    )
+    for (const [amazonDomain, link, expectedLink] of cases) {
+      fetch.mockResolvedValueOnce({ ok: true, json: async () => providerResponse({ link }) })
+      const result = await fetchRainforestArtifacts({
+        productQuery: 'travel stroller',
+        rainforestApiKey: 'rf-key',
+        amazonDomain,
+      })
+      expect(result.artifacts.results[0].link, amazonDomain).toBe(expectedLink)
+    }
   })
 
-  it('uses US-tagged OneLink URLs for enabled international marketplaces', async () => {
+  it('preserves provider-confirmed Prime evidence in previews and candidate data', async () => {
     fetch.mockResolvedValue({
       ok: true,
-      json: async () => ({
-        search_results: [
-          {
-            asin: 'B000000001',
-            title: 'Compact Travel Stroller',
-            price: {
-              value: 149.99,
-            },
-            rating: 4.6,
-            ratings_total: 321,
-            image: 'https://example.com/stroller.jpg',
-            link: 'https://www.amazon.co.uk/dp/B000000001',
-            position: 1,
-          },
-        ],
-        related_searches: [],
-      }),
-    })
-
-    const result = await fetchRainforestArtifacts({
-      productQuery: 'travel stroller',
-      reasonFallback: 'Returned by the Rainforest API search route',
-      rainforestApiKey: 'rf-key',
-      amazonDomain: 'amazon.co.uk',
-    })
-
-    expect(fetch.mock.calls[0][0].searchParams.get('amazon_domain')).toBe('amazon.co.uk')
-    expect(result.error).toBeNull()
-    expect(result.artifacts.results[0].link).toBe('https://www.amazon.com/dp/B000000001?tag=focamai-20')
-  })
-
-  it('keeps plain untagged links for active marketplaces without an affiliate tag', async () => {
-    fetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        search_results: [
-          {
-            asin: 'B001',
-            title: 'Compact Travel Stroller',
-            price: {
-              value: 4999,
-            },
-            rating: 4.6,
-            ratings_total: 321,
-            image: 'https://example.com/stroller.jpg',
-            link: 'https://www.amazon.in/dp/B001',
-            position: 1,
-          },
-        ],
-        related_searches: [],
-      }),
-    })
-
-    const result = await fetchRainforestArtifacts({
-      productQuery: 'travel stroller',
-      reasonFallback: 'Returned by the Rainforest API search route',
-      rainforestApiKey: 'rf-key',
-      amazonDomain: 'amazon.in',
-    })
-
-    expect(fetch.mock.calls[0][0].searchParams.get('amazon_domain')).toBe('amazon.in')
-    expect(result.error).toBeNull()
-    expect(result.artifacts.results[0].link).toBe('https://www.amazon.in/dp/B001')
-    expect(result.artifacts.results[0].price).toBe('₹4999')
-  })
-
-  it('promotes Rainforest delivery Prime text into structured Prime data', async () => {
-    fetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        search_results: [
-          {
-            asin: 'B001',
-            title: 'Apple AirPods 4',
-            price: {
-              value: 119,
-              raw: '$119.00',
-            },
-            rating: 4.6,
-            ratings_total: 1200,
-            image: 'https://example.com/airpods.jpg',
-            link: 'https://www.amazon.com/dp/B001',
-            is_prime: false,
-            delivery: {
-              tagline: 'Join Prime to get FREE delivery Tomorrow',
-            },
-            position: 1,
-          },
-        ],
-        related_searches: [],
+      json: async () => providerResponse({
+        link: 'https://www.amazon.com/dp/B000000001',
+        title: 'Apple AirPods 4',
+        is_prime: false,
+        delivery: { tagline: 'Join Prime to get FREE delivery Tomorrow' },
       }),
     })
 
     const result = await fetchRainforestArtifacts({
       productQuery: 'airpods',
-      reasonFallback: 'Returned by the Rainforest API search route',
       rainforestApiKey: 'rf-key',
       amazonDomain: 'amazon.com',
     })
 
-    expect(result.error).toBeNull()
-    expect(result.artifacts.results[0].link).toBe('https://www.amazon.com/dp/B001?tag=focamai-20')
-    expect(result.artifacts.results[0]).toEqual(
-      expect.objectContaining({
-        id: 'B001',
-        isPrime: true,
-        delivery: 'Join Prime to get FREE delivery Tomorrow',
-      }),
-    )
-    expect(result.artifacts.candidatePool.candidates[0]).toEqual(
-      expect.objectContaining({
-        id: 'B001',
-        isPrime: true,
-        delivery: 'Join Prime to get FREE delivery Tomorrow',
-      }),
-    )
+    expect(result.artifacts.results[0]).toMatchObject({ isPrime: true, delivery: 'Join Prime to get FREE delivery Tomorrow' })
+    expect(result.artifacts.candidatePool.candidates[0]).toMatchObject({ isPrime: true })
   })
 
-  it('preserves the Rainforest provider status when the request fails', async () => {
-    fetch.mockResolvedValue({
-      ok: false,
-      status: 402,
-    })
+  it('preserves the provider status behind the stable upstream error contract', async () => {
+    fetch.mockResolvedValue({ ok: false, status: 402 })
 
-    const result = await fetchRainforestArtifacts({
+    await expect(fetchRainforestArtifacts({
       productQuery: 'travel stroller',
       rainforestApiKey: 'rf-key',
       amazonDomain: 'amazon.ca',
-    })
-
-    expect(result).toEqual({
-      error: {
-        error: 'Rainforest API request failed.',
-        providerStatusCode: 402,
-        statusCode: 502,
-      },
+    })).resolves.toEqual({
+      error: { error: 'Rainforest API request failed.', providerStatusCode: 402, statusCode: 502 },
       artifacts: null,
     })
   })

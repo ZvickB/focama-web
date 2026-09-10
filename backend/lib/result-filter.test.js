@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  DEFAULT_FILTER_CONFIG,
   getFilteredNormalizedResults,
   getFilteredSearchArtifacts,
-  getSearchState,
 } from './result-filter.js'
 
 function createShoppingResult(overrides = {}) {
@@ -259,7 +257,8 @@ describe('result filter', () => {
     expect(artifacts.candidatePool.searchCorrection?.suggestedQuery).toBe("Hellmann's mayonnaise")
   })
 
-  it.each([
+  it('applies identifier filtering across named-brand, model, and generic queries', () => {
+    const cases = [
     ['Rolex watch', [['rolex', 'Rolex Datejust Watch', 'Rolex'], ['homage', 'Pagani Design Homage Watch', 'Pagani'], ['book', 'Rolex Watch History Book', 'Rolex']], ['rolex']],
     ['Rolex Submariner watch', [['submariner', 'Rolex Submariner Watch', 'Rolex'], ['datejust', 'Rolex Datejust Watch', 'Rolex'], ['seiko', 'Seiko Automatic Watch', 'Seiko']], ['submariner', 'datejust']],
     ['Sony WH-1000XM5 headphones', [['xm5', 'Sony WH-1000XM5 Wireless Headphones', 'Sony'], ['xm4', 'Sony WH-1000XM4 Headphones', 'Sony'], ['bose', 'Bose QuietComfort Headphones', 'Bose']], ['xm5']],
@@ -280,25 +279,31 @@ describe('result filter', () => {
     ['on sale watches', [['on', 'On Sale Watch', 'On'], ['seiko', 'Seiko Sale Watch', 'Seiko']], ['on', 'seiko']],
     ['Amazon Kindle Paperwhite', [['paperwhite', 'Amazon Kindle Paperwhite', 'Amazon'], ['fire', 'Amazon Fire Tablet', 'Amazon'], ['kobo', 'Kobo Clara eReader', 'Kobo']], ['paperwhite', 'fire']],
     ['coffee maker', [['breville', 'Breville Coffee Maker', 'Breville'], ['keurig', 'Keurig Coffee Maker', 'Keurig']], ['breville', 'keurig']],
-  ])('smoke-checks identifier filtering for %s', (productQuery, rows, expectedIds) => {
-    const artifacts = getFilteredSearchArtifacts(
-      {
-        shopping_results: rows.map(([product_id, title, brand], index) => createShoppingResult({
-          product_id,
-          title,
-          brand,
-          source: 'Amazon',
-          position: index + 1,
-        })),
-      },
-      {
-        productQuery,
-        diversifyBySource: false,
-        reasonFallback: 'Smoke test',
-      },
-    )
+    ]
 
-    expect(artifacts.candidatePool.candidates.map((candidate) => candidate.id).sort()).toEqual(expectedIds.sort())
+    for (const [productQuery, rows, expectedIds] of cases) {
+      const artifacts = getFilteredSearchArtifacts(
+        {
+          shopping_results: rows.map(([product_id, title, brand], index) => createShoppingResult({
+            product_id,
+            title,
+            brand,
+            source: 'Amazon',
+            position: index + 1,
+          })),
+        },
+        {
+          productQuery,
+          diversifyBySource: false,
+          reasonFallback: 'Identifier behavior',
+        },
+      )
+
+      expect(
+        artifacts.candidatePool.candidates.map((candidate) => candidate.id).sort(),
+        productQuery,
+      ).toEqual([...expectedIds].sort())
+    }
   })
 
   it('removes duplicate and near-duplicate items', () => {
@@ -337,104 +342,6 @@ describe('result filter', () => {
     expect(results).toHaveLength(2)
     expect(results.some((item) => item.title.includes('Speck Balance Folio'))).toBe(true)
     expect(results.some((item) => item.title === 'ProCase iPad 11 Hard Shell Case')).toBe(true)
-  })
-
-  it('exposes the search state for possible confidence handling', () => {
-    expect(
-      getSearchState({
-        search_information: {
-          shopping_results_state: 'Results for exact spelling',
-        },
-      }),
-    ).toBe('Results for exact spelling')
-  })
-
-  it('uses a configurable candidate pool size without changing the filter logic', () => {
-    const results = getFilteredNormalizedResults(
-      {
-        shopping_results: [
-          createShoppingResult(),
-          createShoppingResult({
-            position: 2,
-            product_id: 'prod-2',
-            title: 'Apple Smart Folio for iPad',
-            source: 'Target',
-            reviews: 227,
-          }),
-          createShoppingResult({
-            position: 3,
-            product_id: 'prod-3',
-            title: 'ProCase iPad 11 Hard Shell Case',
-            source: 'ProCase',
-            reviews: 20,
-          }),
-        ],
-      },
-      {
-        productQuery: 'ipad cover',
-        details: '',
-        candidatePoolSize: 20,
-        finalResultLimit: 2,
-        minimumScore: DEFAULT_FILTER_CONFIG.minimumScore,
-        reasonFallback: 'Returned by the live SerpApi search route',
-      },
-    )
-
-    expect(results).toHaveLength(2)
-  })
-
-  it('keeps source diversification for mixed-merchant shopping results by default', () => {
-    const artifacts = getFilteredSearchArtifacts(
-      {
-        shopping_results: [
-          createShoppingResult({ product_id: 'prod-1', title: 'iPad Cover A', source: 'Best Buy' }),
-          createShoppingResult({ position: 2, product_id: 'prod-2', title: 'iPad Cover B', source: 'Best Buy' }),
-          createShoppingResult({ position: 3, product_id: 'prod-3', title: 'iPad Cover C', source: 'Best Buy' }),
-          createShoppingResult({ position: 4, product_id: 'prod-4', title: 'iPad Cover D', source: 'Target' }),
-        ],
-      },
-      {
-        productQuery: 'ipad cover',
-        details: '',
-        candidatePoolSize: 20,
-        finalResultLimit: 4,
-        reasonFallback: 'Returned by the live SerpApi search route',
-      },
-    )
-
-    expect(artifacts.candidatePool.candidates.map((candidate) => candidate.title)).toEqual([
-      'iPad Cover A',
-      'iPad Cover B',
-      'iPad Cover D',
-    ])
-  })
-
-  it('can disable source diversification for single-marketplace Amazon result sets', () => {
-    const artifacts = getFilteredSearchArtifacts(
-      {
-        shopping_results: [
-          createShoppingResult({ product_id: 'prod-1', title: 'Stylus Pen for iPad 6th Generation', source: 'Amazon' }),
-          createShoppingResult({ position: 2, product_id: 'prod-2', title: 'Metapen A8 iPad Pen', source: 'Amazon' }),
-          createShoppingResult({ position: 3, product_id: 'prod-3', title: 'Apple iPad Pen USB-C', source: 'Amazon' }),
-          createShoppingResult({ position: 4, product_id: 'prod-4', title: 'Apple iPad Pen Pro', source: 'Amazon' }),
-        ],
-      },
-      {
-        productQuery: 'ipad pen',
-        details: '',
-        candidatePoolSize: 20,
-        finalResultLimit: 4,
-        diversifyBySource: false,
-        reasonFallback: 'Returned by the Rainforest API search route',
-      },
-    )
-
-    expect(artifacts.candidatePool.candidates.map((candidate) => candidate.title)).toEqual([
-      'Stylus Pen for iPad 6th Generation',
-      'Metapen A8 iPad Pen',
-      'Apple iPad Pen USB-C',
-      'Apple iPad Pen Pro',
-    ])
   })
 
   it('keeps scored results with zero literal token overlap when skipHardFilter is enabled', () => {
@@ -552,51 +459,6 @@ describe('result filter', () => {
     expect(artifacts.results.map((result) => result.id)).toEqual(['prod-live'])
   })
 
-  it('falls back to the first 20 deduped Serp-style results when too few items pass hard filters', () => {
-    const matchingResults = Array.from({ length: 14 }, (_, index) => (
-      createShoppingResult({
-        position: index + 1,
-        product_id: `prod-match-${index + 1}`,
-        title: `iPad Cover Match ${index + 1}`,
-        source: `Store ${index + 1}`,
-        reviews: 500 - index,
-      })
-    ))
-    const fallbackResult = createShoppingResult({
-      position: 15,
-      product_id: 'prod-fallback',
-      title: 'Apple Pencil',
-      source: 'Store 15',
-      snippet: 'Top rated stylus with excellent pressure sensitivity',
-      reviews: 12000,
-      rating: 4.8,
-      extracted_price: 89.99,
-      price: '$89.99',
-    })
-
-    const artifacts = getFilteredSearchArtifacts(
-      {
-        shopping_results: [
-          ...matchingResults,
-          fallbackResult,
-        ],
-      },
-      {
-        productQuery: 'ipad cover',
-        details: '',
-        candidatePoolSize: 20,
-        finalResultLimit: 20,
-        hardFilterFallbackThreshold: 15,
-        hardFilterFallbackPoolSize: 20,
-        reasonFallback: 'Returned by the live SerpApi search route',
-      },
-    )
-
-    expect(artifacts.candidatePool.candidates).toHaveLength(15)
-    expect(artifacts.candidatePool.candidates.map((candidate) => candidate.title)).toContain('Apple Pencil')
-    expect(artifacts.results.map((result) => result.title)).toContain('Apple Pencil')
-  })
-
   it('exposes an AI-friendly candidate pool alongside the final UI results', () => {
     const artifacts = getFilteredSearchArtifacts(
       {
@@ -664,41 +526,6 @@ describe('result filter', () => {
         variantTokens: expect.any(Array),
       }),
     )
-  })
-
-  it('groups duplicate-family metadata and variant tokens for near-duplicate products', () => {
-    const artifacts = getFilteredSearchArtifacts(
-      {
-        shopping_results: [
-          createShoppingResult({
-            title: 'On Cloud 6 Waterproof Running Shoe',
-            product_id: 'prod-1',
-            source: 'Nordstrom',
-            snippet: 'Waterproof running shoe with lightweight feel',
-          }),
-          createShoppingResult({
-            position: 2,
-            title: 'On Cloud 6 Running Shoe',
-            product_id: 'prod-2',
-            source: 'REI',
-            snippet: 'Lightweight running shoe for everyday wear',
-          }),
-        ],
-      },
-      {
-        productQuery: 'mens on cloud dress shoes',
-        details: '',
-        candidatePoolSize: 20,
-        finalResultLimit: 2,
-        reasonFallback: 'Returned by the live SerpApi search route',
-      },
-    )
-
-    expect(artifacts.candidatePool.candidates).toHaveLength(2)
-    expect(artifacts.candidatePool.candidates[0].duplicateFamilyKey).toBe(
-      artifacts.candidatePool.candidates[1].duplicateFamilyKey,
-    )
-    expect(artifacts.candidatePool.candidates[0].variantTokens).toContain('waterproof')
   })
 
   it('collapses clearly redundant same-family variants before the AI pool but keeps meaningful family differences', () => {

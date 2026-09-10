@@ -18,18 +18,17 @@ function createHandler({ deleteUser, verifyToken }) {
   })
 }
 
-it.each([
-  ['missing', 'missing_token'],
-  ['invalid', 'invalid_token'],
-])('rejects a %s authorization token', async (_label, reason) => {
-  const deleteUser = vi.fn()
-  const response = responseRecorder()
-  const handler = createHandler({ deleteUser, verifyToken: vi.fn().mockResolvedValue({ ok: false, reason }) })
+it('rejects missing and invalid authorization without attempting deletion', async () => {
+  for (const reason of ['missing_token', 'invalid_token']) {
+    const deleteUser = vi.fn()
+    const response = responseRecorder()
+    const handler = createHandler({ deleteUser, verifyToken: vi.fn().mockResolvedValue({ ok: false, reason }) })
 
-  await handler({ headers: {} }, response)
+    await handler({ headers: {} }, response)
 
-  expect(response.statusCode).toBe(401)
-  expect(deleteUser).not.toHaveBeenCalled()
+    expect(response.statusCode, reason).toBe(401)
+    expect(deleteUser, reason).not.toHaveBeenCalled()
+  }
 })
 
 describe('authenticated account deletion', () => {

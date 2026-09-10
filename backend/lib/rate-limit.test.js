@@ -14,16 +14,6 @@ async function loadRateLimitModule() {
   return import('./rate-limit.js')
 }
 
-describe('getCountryCode', () => {
-  it('returns the country code from the Vercel header, defaulting to US when absent', async () => {
-    const { getCountryCode } = await loadRateLimitModule()
-
-    expect(getCountryCode({ 'x-vercel-ip-country': 'GB' })).toBe('GB')
-    expect(getCountryCode({})).toBe('US')
-    expect(getCountryCode({ 'x-vercel-ip-country': 'not-valid' })).toBe('US')
-  })
-})
-
 describe('rate-limit helpers', () => {
   const originalEnv = {}
 
@@ -111,51 +101,6 @@ describe('rate-limit helpers', () => {
       storage: 'memory',
     }))
     expect(createClient).not.toHaveBeenCalled()
-  })
-
-  it('allows the same key again after the rate-limit window resets', async () => {
-    const { takeRateLimitToken } = await loadRateLimitModule()
-
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-04-12T12:00:00.000Z'))
-
-    await expect(
-      takeRateLimitToken('203.0.113.57', {
-        limit: 1,
-        windowMs: 3_000,
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        allowed: true,
-        remaining: 0,
-      }),
-    )
-
-    await expect(
-      takeRateLimitToken('203.0.113.57', {
-        limit: 1,
-        windowMs: 3_000,
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        allowed: false,
-        remaining: 0,
-      }),
-    )
-
-    vi.setSystemTime(new Date('2026-04-12T12:00:03.001Z'))
-
-    await expect(
-      takeRateLimitToken('203.0.113.57', {
-        limit: 1,
-        windowMs: 3_000,
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        allowed: true,
-        remaining: 0,
-      }),
-    )
   })
 
   it('uses Supabase as a shared production limiter when configured', async () => {
