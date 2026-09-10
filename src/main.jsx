@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import './index.css'
 import App from './App.jsx'
+import AppUpdatePrompt from './components/AppUpdatePrompt.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { AuthProvider } from './contexts/AuthContext.jsx'
 
@@ -18,6 +19,7 @@ createRoot(document.getElementById('root')).render(
           <AuthProvider>
             <App />
           </AuthProvider>
+          <AppUpdatePrompt />
           <Analytics />
         </BrowserRouter>
       </QueryClientProvider>

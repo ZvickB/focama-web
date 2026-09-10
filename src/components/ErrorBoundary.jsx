@@ -1,15 +1,33 @@
 import { Component } from 'react'
 
+const CHUNK_RELOAD_KEY = 'focamai_chunk_reload_attempted_at'
+const CHUNK_RELOAD_COOLDOWN_MS = 60_000
+
 function isChunkLoadError(error) {
   const message = error instanceof Error ? error.message : String(error || '')
   const name = error instanceof Error ? error.name : ''
 
   return (
     name === 'ChunkLoadError' ||
-    /chunk/i.test(message) ||
+    /loading (?:css )?chunk [\d-]+ failed/i.test(message) ||
     /dynamically imported module/i.test(message) ||
-    /failed to fetch/i.test(message)
+    /importing a module script failed/i.test(message)
   )
+}
+
+function shouldAutomaticallyReload(error) {
+  if (!isChunkLoadError(error)) return false
+
+  try {
+    const lastAttempt = Number(window.sessionStorage.getItem(CHUNK_RELOAD_KEY) || 0)
+    if (Date.now() - lastAttempt < CHUNK_RELOAD_COOLDOWN_MS) return false
+    window.sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()))
+  } catch {
+    // Without a durable loop guard, keep the manual recovery screen.
+    return false
+  }
+
+  return true
 }
 
 export default class ErrorBoundary extends Component {
@@ -24,6 +42,10 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, errorInfo) {
     console.error('[ErrorBoundary] Unhandled UI error', error, errorInfo)
+
+    if (shouldAutomaticallyReload(error)) {
+      window.location.reload()
+    }
   }
 
   handleReload = () => {
@@ -41,7 +63,7 @@ export default class ErrorBoundary extends Component {
         ? 'We had trouble loading this part of Focamai.'
         : 'Something went wrong.'
       const description = chunkLoadFailed
-        ? 'This can happen after an update or a spotty connection. Reloading usually pulls in the newest app files.'
+        ? 'Focamai could not finish applying an update. Reload the page to pull in the newest app files.'
         : 'Reload the page to restart the app. If that does not work, head back home and start fresh.'
 
       return (

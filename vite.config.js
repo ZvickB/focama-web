@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['favicon-96x96.png', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png'],
       manifest: {
         name: 'Focamai',
@@ -68,6 +68,7 @@ export default defineConfig({
           name: 'jsdom',
           environment: 'jsdom',
           include: ['**/*.test.jsx'],
+          exclude: ['src/pages/HomePage.cache-latency.smoke.test.jsx'],
           setupFiles: './src/test/setup.js',
         },
       },

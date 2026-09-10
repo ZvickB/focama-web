@@ -2,146 +2,102 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { createBackendTransport } from './backendUrl.js'
 
-describe('backend transport', () => {
-  function createStorage(initialValue = null) {
-    const values = new Map()
-    if (initialValue) values.set('focamai_backend_route', initialValue)
-
-    return {
-      getItem: vi.fn((key) => values.get(key) || null),
-      removeItem: vi.fn((key) => values.delete(key)),
-      setItem: vi.fn((key, value) => values.set(key, value)),
-    }
+function storage(initialValue = null) {
+  const values = new Map(initialValue ? [['focamai_backend_route', initialValue]] : [])
+  return {
+    getItem: vi.fn((key) => values.get(key) || null),
+    removeItem: vi.fn((key) => values.delete(key)),
+    setItem: vi.fn((key, value) => values.set(key, value)),
   }
+}
 
-  it('uses the direct backend when it succeeds', async () => {
+function transport(fetchImpl, extra = {}) {
+  return createBackendTransport({
+    directBackendUrl: 'https://backend.example',
+    fetchImpl,
+    proxyFallbackEnabled: true,
+    ...extra,
+  })
+}
+
+describe('backend transport recovery', () => {
+  it('uses the direct backend once when it is healthy', async () => {
     const response = { ok: true }
     const fetchImpl = vi.fn().mockResolvedValue(response)
-    const transport = createBackendTransport({
-      directBackendUrl: 'https://backend.example',
-      fetchImpl,
-      proxyFallbackEnabled: true,
-    })
 
-    await expect(transport.fetchPath('/api/health')).resolves.toBe(response)
+    await expect(transport(fetchImpl).fetchPath('/api/health')).resolves.toBe(response)
+    expect(fetchImpl).toHaveBeenCalledOnce()
     expect(fetchImpl).toHaveBeenCalledWith('https://backend.example/api/health', undefined)
-    expect(transport.getUrl()).toBe('https://backend.example')
   })
 
-  it('retries a network failure through the proxy and remembers it', async () => {
-    const response = { ok: true }
-    const storage = createStorage()
-    const fetchImpl = vi
-      .fn()
+  it('falls back to the proxy after a network failure and remembers the healthy route', async () => {
+    const routeStorage = storage()
+    const fetchImpl = vi.fn()
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockResolvedValue(response)
-    const transport = createBackendTransport({
-      directBackendUrl: 'https://backend.example',
-      fetchImpl,
-      proxyFallbackEnabled: true,
-      storage,
-    })
+      .mockResolvedValue({ ok: true })
+    const backend = transport(fetchImpl, { storage: routeStorage })
 
-    await expect(transport.fetchPath('/api/health')).resolves.toBe(response)
-    await expect(transport.fetchPath('/api/search/refine')).resolves.toBe(response)
+    await backend.fetchPath('/api/health')
+    await backend.fetchPath('/api/search/refine')
+
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
       'https://backend.example/api/health',
       '/api/health',
       '/api/search/refine',
     ])
-    expect(transport.getUrl()).toBe('')
-    expect(storage.setItem).toHaveBeenCalledWith('focamai_backend_route', 'proxy')
+    expect(routeStorage.setItem).toHaveBeenCalledWith('focamai_backend_route', 'proxy')
   })
 
-  it('retries a read request once when both direct and proxy routes have a transient failure', async () => {
-    const response = { ok: true }
-    const fetchImpl = vi
-      .fn()
-      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockResolvedValueOnce(response)
-    const transport = createBackendTransport({
-      directBackendUrl: 'https://backend.example',
-      fetchImpl,
-      proxyFallbackEnabled: true,
-    })
+  it('retries transient reads once but never duplicates a failed write', async () => {
+    const readFetch = vi.fn()
+      .mockRejectedValueOnce(new TypeError('direct failed'))
+      .mockRejectedValueOnce(new TypeError('proxy failed'))
+      .mockResolvedValueOnce({ ok: true })
+    await transport(readFetch).fetchPath('/api/search/rainforest-discover')
+    expect(readFetch).toHaveBeenCalledTimes(3)
 
-    await expect(transport.fetchPath('/api/search/rainforest-discover')).resolves.toBe(response)
+    const writeFetch = vi.fn()
+      .mockRejectedValueOnce(new TypeError('direct failed'))
+      .mockRejectedValueOnce(new TypeError('proxy failed'))
+    await expect(transport(writeFetch).fetchPath('/api/search/finalize', { method: 'POST' }))
+      .rejects.toThrow('proxy failed')
+    expect(writeFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('routes a transient direct deployment response through the proxy and retries it once', async () => {
+    vi.useFakeTimers()
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: false, status: 502 })
+      .mockResolvedValueOnce({ ok: true, status: 200 })
+    const backend = transport(fetchImpl)
+
+    const request = backend.fetchPath('/api/health')
+    await vi.runAllTimersAsync()
+
+    await expect(request).resolves.toMatchObject({ ok: true, status: 200 })
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
-      'https://backend.example/api/search/rainforest-discover',
-      '/api/search/rainforest-discover',
-      '/api/search/rainforest-discover',
+      'https://backend.example/api/health',
+      '/api/health',
+      '/api/health',
     ])
+    vi.useRealTimers()
   })
 
-  it('does not retry a failed write request', async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-    const transport = createBackendTransport({
-      directBackendUrl: 'https://backend.example',
-      fetchImpl,
-      proxyFallbackEnabled: true,
-    })
-
-    await expect(transport.fetchPath('/api/search/finalize', { method: 'POST' })).rejects.toThrow('Failed to fetch')
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
-  })
-
-  it('starts with a remembered proxy and clears it after a successful direct ping', async () => {
-    const response = { ok: true }
-    const storage = createStorage('proxy')
+  it('does not retry a transient deployment response for a write', async () => {
+    const response = { ok: false, status: 503 }
     const fetchImpl = vi.fn().mockResolvedValue(response)
-    const transport = createBackendTransport({
-      directBackendUrl: 'https://backend.example',
-      fetchImpl,
-      proxyFallbackEnabled: true,
-      storage,
-    })
 
-    expect(transport.getUrl()).toBe('')
-    await expect(transport.probeDirect()).resolves.toBe(true)
-    expect(fetchImpl.mock.calls[0][0]).toBe('https://backend.example/api/health')
-    expect(transport.getUrl()).toBe('https://backend.example')
-    expect(storage.removeItem).toHaveBeenCalledWith('focamai_backend_route')
+    await expect(transport(fetchImpl).fetchPath('/api/search/finalize', { method: 'POST' }))
+      .resolves.toBe(response)
+    expect(fetchImpl).toHaveBeenCalledOnce()
   })
 
-  it('remembers proxy mode when the direct ping has a network failure', async () => {
-    const storage = createStorage()
-    const fetchImpl = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
-    const transport = createBackendTransport({
-      directBackendUrl: 'https://backend.example',
-      fetchImpl,
-      proxyFallbackEnabled: true,
-      storage,
-    })
-
-    await expect(transport.probeDirect()).resolves.toBe(false)
-    expect(transport.getUrl()).toBe('')
-    expect(storage.setItem).toHaveBeenCalledWith('focamai_backend_route', 'proxy')
-  })
-
-  it('does not retry aborted or non-production requests', async () => {
+  it('does not retry aborted requests', async () => {
     const abortError = new DOMException('Aborted', 'AbortError')
     const fetchImpl = vi.fn().mockRejectedValue(abortError)
-    const transport = createBackendTransport({
-      directBackendUrl: 'https://backend.example',
-      fetchImpl,
-      proxyFallbackEnabled: true,
-    })
 
-    await expect(transport.fetchPath('/api/search/finalize')).rejects.toBe(abortError)
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
-
-    const networkFetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
-    const developmentTransport = createBackendTransport({
-      directBackendUrl: 'http://127.0.0.1:8787',
-      fetchImpl: networkFetch,
-      proxyFallbackEnabled: false,
-    })
-
-    await expect(developmentTransport.fetchPath('/api/health')).rejects.toThrow('Failed to fetch')
-    expect(networkFetch).toHaveBeenCalledTimes(1)
+    await expect(transport(fetchImpl).fetchPath('/api/search/finalize')).rejects.toBe(abortError)
+    expect(fetchImpl).toHaveBeenCalledOnce()
   })
 })

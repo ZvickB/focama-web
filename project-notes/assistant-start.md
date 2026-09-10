@@ -24,6 +24,7 @@ Focamai helps a user name the product they want, answer one short follow-up, and
 - Frontend deploy: Vercel.
 - Backend deploy: Render, starting from `backend/express-server.js`.
 - The frontend calls the Render backend directly through `VITE_BACKEND_URL` (falling back to the active Render origin if that build-time variable is missing), then retries browser-level network failures through same-origin Vercel rewrites and remembers the healthy route.
+- Frontend PWA updates are prompt-based so a new worker cannot discard lazy chunks still needed by an open tab. A ready update appears as a small `Refresh now` / `Later` prompt; residual chunk-load failures auto-reload once with a 60-second loop guard. Safe backend reads also retry transient `502`/`503`/`504` deployment responses through the proxy path and once after 750 ms.
 - `api/geo.js` intentionally stays on Vercel so the UI can use Vercel geolocation headers.
 - KAILA has been removed from this repo and Render service; Focamai no longer mounts `/kaila`.
 

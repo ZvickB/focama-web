@@ -5,6 +5,8 @@ const CONFIGURED_BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://foca
 const DIRECT_BACKEND_URL = CONFIGURED_BACKEND_URL
 const PROXY_BACKEND_URL = ''
 const PROXY_PREFERENCE_KEY = 'focamai_backend_route'
+const TRANSIENT_DEPLOY_STATUSES = new Set([502, 503, 504])
+const TRANSIENT_RETRY_DELAY_MS = 750
 
 function isRetryableNetworkError(error) {
   return error instanceof TypeError && error.name !== 'AbortError'
@@ -13,6 +15,14 @@ function isRetryableNetworkError(error) {
 function canRetryRequest(options) {
   const method = String(options?.method || 'GET').toUpperCase()
   return method === 'GET' || method === 'HEAD'
+}
+
+function isTransientDeployResponse(response) {
+  return TRANSIENT_DEPLOY_STATUSES.has(Number(response?.status))
+}
+
+function waitForTransientRetry() {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, TRANSIENT_RETRY_DELAY_MS))
 }
 
 export function createBackendTransport({
@@ -61,11 +71,37 @@ export function createBackendTransport({
     return runFetch(url, options)
   }
 
+  async function retryTransientReadResponse(url, options, response) {
+    if (!canRetryRequest(options) || !isTransientDeployResponse(response)) {
+      return response
+    }
+
+    await waitForTransientRetry()
+    return runFetch(url, options)
+  }
+
   async function fetchPath(path, options) {
     const requestUrl = `${getUrl()}${path}`
 
     try {
-      return await runFetch(requestUrl, options)
+      const response = await runFetch(requestUrl, options)
+
+      if (
+        !isTransientDeployResponse(response) ||
+        !canRetryRequest(options) ||
+        !canUseProxyFallback() ||
+        preferProxyForSession
+      ) {
+        return retryTransientReadResponse(requestUrl, options, response)
+      }
+
+      const proxyUrl = `${PROXY_BACKEND_URL}${path}`
+      const proxyResponse = await runFetch(proxyUrl, options)
+      const recoveredResponse = await retryTransientReadResponse(proxyUrl, options, proxyResponse)
+      if (!isTransientDeployResponse(recoveredResponse)) {
+        setProxyPreference(true)
+      }
+      return recoveredResponse
     } catch (error) {
       if (!canUseProxyFallback() || preferProxyForSession || !isRetryableNetworkError(error)) {
         return retryReadRequest(requestUrl, options, error)
